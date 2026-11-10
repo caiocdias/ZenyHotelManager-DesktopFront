@@ -69,18 +69,18 @@ O front fica preso a um commit da `main` do servidor, com o contrato copiado e u
 
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
-| H1 | O compose do servidor aceita um override de projeto, imagem, porta e endereço sem editar o arquivo original. Para tirar o `build:` no pacote, `!reset` do Compose v2.24+ | Seria preciso copiar e editar o compose dentro do pacote | E01 |
-| H2 | O `docker build` do servidor roda no Docker Desktop do Windows a partir do `git archive` | O pacote passaria a levar a imagem pronta (`docker save`), construída no notebook | E01 |
-| H3 | O oasdiff por Docker serve para o pré-voo, como no script do servidor | O pré-voo cairia para comparação por hash, sem classificar a mudança | E01 |
-| H4 | As chaves do `.env` podem ser geradas por script conforme o README do servidor | Geração manual documentada no `LEIA-ME` | E01 |
+| H1 | O compose do servidor aceita um override de projeto, imagem, porta e endereço sem editar o arquivo original. Para tirar o `build:` no pacote, `!reset` do Compose v2.24+ | Seria preciso copiar e editar o compose dentro do pacote | E01 — **confirmada (2026-11-10)** para projeto, imagem, porta e endereço: `ports: !override` e `docker compose config` real contra o compose do commit fixado. O `build:` **fica** no override (D1 do plano da E01), porque o ADR 0003 constrói a imagem no Windows; com a imagem carregada por `docker load`, o `up -d` não reconstrói |
+| H2 | O `docker build` do servidor roda no Docker Desktop do Windows a partir do `git archive` | O pacote passaria a levar a imagem pronta (`docker save`), construída no notebook | E01 — **aberta**: depende do usuário rodar o fluxo 1 do `LEIA-ME` no Windows, na parada da E01 |
+| H3 | O oasdiff por Docker serve para o pré-voo, como no script do servidor | O pré-voo cairia para comparação por hash, sem classificar a mudança | E01 — **confirmada (2026-11-10)**: contra o servidor real, `igual (código 0)` na `main` e `aditivo (código 11)` a partir de `60080b7c5585`; o breaking (12) foi demonstrado no servidor falso, porque o servidor proíbe breaking em `/api/v1` |
+| H4 | As chaves do `.env` podem ser geradas por script conforme o README do servidor | Geração manual documentada no `LEIA-ME` | E01 — **confirmada (2026-11-10)**: `tools/server-env/gen-env.sh`, autocontido; no Windows roda em `alpine:3.22@sha256:49340b34…` com `apk add bash openssl` (D3) |
 
 ## Definição global de pronto
 
-- [ ] `api/server-pin.properties` e `api/openapi.yaml` conferem com a `main` do servidor no commit escolhido.
-- [ ] `tools/server-drift.sh` distingue igual, aditivo e breaking, com códigos de saída documentados.
+- [x] `api/server-pin.properties` e `api/openapi.yaml` conferem com a `main` do servidor no commit escolhido.
+- [x] `tools/server-drift.sh` distingue igual, aditivo e breaking, com códigos de saída documentados.
 - [ ] O ambiente `zeny-front` sobe com readiness `UP`, numa das máquinas, sem tocar no projeto `zeny`.
 - [ ] O pacote do Windows sobe o servidor seguindo só o `LEIA-ME`.
-- [ ] O README do front lista os comandos dos scripts.
+- [x] O README do front lista os comandos dos scripts.
 
 ## Protocolo de execução
 
@@ -204,14 +204,14 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] O `sha256sum api/openapi.yaml` é igual a `contract_sha256` e igual ao hash de `git -C <servidor> show <commit>:api/openapi.yaml`.
-- [ ] `tools/server-drift.sh` sai com o código de "igual" logo após a fixação. Contra um commit anterior do servidor, passado por parâmetro ou variável, distingue aditivo de breaking.
-- [ ] `tools/server-env/up.sh` sobe o projeto `zeny-front`, e `curl -fsS http://localhost:8088/actuator/health/readiness` responde `UP`. Isso vale no notebook, se houver memória; senão, no Windows pelo `LEIA-ME`, com a evidência dada pelo usuário.
-- [ ] Com `zeny-front` no ar, `docker compose -p zeny ps` e as imagens `zeny-hotel-manager:dev` ficam como estavam antes, sem nada criado nem alterado no projeto `zeny`.
-- [ ] `tools/server-env/down.sh` remove só containers e volumes de `zeny-front`.
-- [ ] `git -C /home/caio/repos/ZenyHotelManager status --porcelain` e `git -C /home/caio/repos/ZenyHotelManager worktree list` ficam iguais antes e depois da etapa.
-- [ ] Nenhum segredo versionado: `git ls-files` não lista `.env` e o `.env.example` não tem chave real.
-- [ ] O `package.sh` gera `build/demo-package/` com `LEIA-ME.md`, e o usuário sobe o servidor no Windows seguindo só o `LEIA-ME`, conferido pelo usuário na parada da etapa.
+- [x] O `sha256sum api/openapi.yaml` é igual a `contract_sha256` e igual ao hash de `git -C <servidor> show <commit>:api/openapi.yaml`.
+- [x] `tools/server-drift.sh` sai com o código de "igual" logo após a fixação. Contra um commit anterior do servidor, passado por parâmetro ou variável, distingue aditivo de breaking.
+- [ ] `tools/server-env/up.sh` sobe o projeto `zeny-front`, e `curl -fsS http://localhost:8088/actuator/health/readiness` responde `UP`. Isso vale no notebook, se houver memória; senão, no Windows pelo `LEIA-ME`, com a evidência dada pelo usuário. *(Aguarda o usuário: `MemAvailable` de 4,2 GiB, abaixo do limiar de 6 GiB do plano, impediu o build da api no notebook.)*
+- [x] Com `zeny-front` no ar, `docker compose -p zeny ps` e as imagens `zeny-hotel-manager:dev` ficam como estavam antes, sem nada criado nem alterado no projeto `zeny`. *(Validado com `db`, `storage` e `storage-init` no ar, sem a api.)*
+- [x] `tools/server-env/down.sh` remove só containers e volumes de `zeny-front`.
+- [x] `git -C /home/caio/repos/ZenyHotelManager status --porcelain` e `git -C /home/caio/repos/ZenyHotelManager worktree list` ficam iguais antes e depois da etapa.
+- [x] Nenhum segredo versionado: `git ls-files` não lista `.env` e o `.env.example` não tem chave real.
+- [ ] O `package.sh` gera `build/demo-package/` com `LEIA-ME.md`, e o usuário sobe o servidor no Windows seguindo só o `LEIA-ME`, conferido pelo usuário na parada da etapa. *(O pacote foi gerado; falta a conferência do usuário no Windows.)*
 
 **Validação obrigatória:**
 
@@ -238,15 +238,49 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-10):** implementação completa, revisada e integrada à `main`. A etapa continua `#em-andamento` aguardando a **parada humana**: o usuário roda o `LEIA-ME` no Windows e devolve a evidência da readiness. Ao receber `{"status":"UP"}`, o próximo orquestrador marca `#concluida`. Se falhar, a correção entra como rodada nova desta etapa.
+- **Plano:** [`docs/superpowers/plans/2026-11-10-m0-sincronizacao-e01.md`](../superpowers/plans/2026-11-10-m0-sincronizacao-e01.md). Revisão de arquitetura: aprovado com notas em 2 rodadas (`revisor-arquitetura`, opus).
+- **Commits:** `abe64cd..59c62d3` na branch `roadmap/m0-sincronizacao`, 8 tasks:
+  - Task 1, base, `common.sh` e harness: `7aefaf4..e6d06af`;
+  - Task 2, pin: `e6d06af..6aa34ef`;
+  - Task 3, pré-voo: `6aa34ef..2d6775b`;
+  - Task 4, `gen-env`: `1d1f6c8..4bae8a0`;
+  - Task 5, lib e override: `3bf02bb..2d6775b`;
+  - Task 6, up/down: `7dad5e1..d4aedca`;
+  - Task 7, pacote: `4bae8a0..3ed1192`;
+  - Task 8, README e pedidos: `d4aedca..c344bc0`;
+  - onda final: `f640e90`, `59c62d3`.
+- **Revisão final** (`revisor-seguranca`, opus): primeiro bloqueada pela falta de varredura da `alpine:3.22` e por três Importantes (primeiro uso no README, evidência real do `down.sh`, CVEs do oasdiff). Depois da onda única de correção, a re-revisão aprovou com ressalvas: "Ready to merge: Yes". Suíte: 16 arquivos, 0 falhas, 0 casos pulados. `check_test_integrity.py --base abe64cd`: sem apontamentos.
+- **Critérios verificados:**
+  - Pin: `ca9f9e2f9808c74c98154f1e8e60381fecbf1b5d`, sha256 `79362dac5589a0ed837027ff7afa49a32be5a25c6a546bc21e39dd8f446873a1`, que confere com a cópia e com o `git show` do servidor.
+  - Pré-voo real: `igual (código 0)` contra a `main`; `aditivo (código 11)` com `--base e8b7303~1`. O breaking (12) foi demonstrado no servidor falso.
+  - Isolamento: `db`, `storage` e `storage-init` de `zeny-front` ficaram healthy. Com eles no ar, o projeto `zeny` e as imagens `zeny-hotel-manager:dev 6e9ea80a5355`/`:latest 9dc240957611` ficaram inalterados. O `down.sh -v` real removeu só os 3 containers, os volumes `zeny-front_db-data` e `zeny-front_storage-data` e a rede `zeny-front_default`.
+  - Servidor: `status --porcelain` igual ao snapshot inicial. O `worktree list` tem os mesmos caminhos e branches; o HEAD do worktree do orquestrador do servidor avançou por conta dele.
+  - Segredos: `git ls-files` não lista nenhum `.env`; os seis segredos do `.env.example` estão vazios.
+  - Pacote: `build/demo-package/` gerado no checkout principal, sem `.env`.
+  - **Pendentes, com o usuário:** readiness da api e o fluxo do `LEIA-ME` no Windows.
+- **Decisões para o usuário** (já tomadas pela opção recomendada; revisáveis):
+  1. D1, desfecho da H1: o override **mantém** o `build:`, contra o texto "override sem `build`" deste roadmap. O ADR 0003 manda construir no Windows. Custo se errado: um `up -d` sem a imagem dispara o build, que leva minutos e precisa de internet.
+  2. D2: `ZENY_HTTP_ADDRESS` tem padrão `127.0.0.1` no notebook e `0.0.0.0` no pacote, pelo marcador do override; o `.env.example` deixa endereço e endpoint vazios. O ADR 0003 punha `0.0.0.0` no override para os dois.
+  3. D3, desfecho da H4: o `.env` é gerado no Windows com `docker run alpine:3.22@sha256:49340b34…`. A imagem tem 1 CVE Critical, no zlib (ALPINE-CVE-2026-4738, corrigida no zlib 1.4-r0), e foi aceita porque o container é efêmero e só roda `openssl` local. Rever quando houver Alpine com zlib 1.4.
+  4. A imagem do oasdiff (`tufin/oasdiff:v1.33.0@sha256:6263a96d…`, a mesma do CI do servidor) tem 48 vulnerabilidades conhecidas (9 Critical), todas com correção. Foi aceita porque roda com `--network none`, specs só leitura e entrada confiável. Recomendação: atualizar junto com o servidor, ou divergir via `OASDIFF_IMAGE`.
+  5. D5: o estado de máquina fica no checkout principal do front (`.server/<commit>/`, `.server/<commit>.override.yaml`, `.server/zeny-front.env`, `build/demo-package/`), autoignorado. **Nunca rode `git clean` no checkout principal**: o `.env` tem as chaves presas ao volume.
+  6. O `down.sh` derruba sempre pelo nome do projeto, sem `-f` e sem `.env`. A readiness exige o `status` de topo `UP`.
+  7. A imagem `alpine:3.22` foi baixada só para a varredura e removida em seguida.
+- **Notas para a próxima etapa:**
+  - Na parada, o usuário segue `build/demo-package/LEIA-ME.md` no Windows: Compose ≥ 2.24.4, gerar o `.env`, `build`, `up -d`, readiness com `curl.exe`. Isso fecha H2 e os dois critérios pendentes.
+  - O pré-voo agora existe (`tools/server-drift.sh`): toda execução de roadmap do front começa por ele.
+  - A M1 E07 preenche `app/` no pacote.
+  - Os Menores adiados (ver o ledger da etapa, resumido na mensagem do lote) incluem:
+    - zeros à esquerda em `ZENY_UP_TIMEOUT`;
+    - `.gitattributes` (`api/openapi.yaml -text`, `*.sh eol=lf`), recomendado antes de qualquer clone no Windows;
+    - pontos de progresso do `openssl` no stderr do `gen-env.sh`;
+    - asserts em subshell nos testes.
+  - As ondas paralelas não funcionam com a sessão do orquestrador isolada num worktree, porque os subagentes não escrevem em outros worktrees: as tasks rodaram em série no worktree da etapa.
 
 ---
 
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`), com a rodada 1. As rodadas seguintes entram como etapas novas, pelo `development-roadmap` em modo atualização.
+- 2026-11-10 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (readiness no Windows). H1, H3 e H4 confirmadas; H2 aberta.
