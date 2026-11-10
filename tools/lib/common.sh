@@ -42,13 +42,24 @@ server_repo() {
 
 # srv_git ARGS... : git no servidor, só com subcomandos de leitura.
 srv_git() {
-  local sub="${1:-}" repo
+  local sub="${1:-}" repo arg
   case "$sub" in
     rev-parse | cat-file | show | archive | diff) ;;
     *) die 2 "subcomando git não permitido no servidor: $sub" ;;
   esac
-  repo="$(server_repo)" || exit "$?"
   shift
+  # Opções que gravam arquivo ou executam programa ferem a invariante de só-leitura.
+  # `--o*` cobre abreviações de --output; `-[!-]*o*` cobre -o, -oARQ e atalhos agrupados (-vo).
+  for arg in "$@"; do
+    case "$arg" in
+      --o* | --remote* | --exec* | --ext* | -o* | -[!-]*o*)
+        # return (não exit): os testes do testador chamam srv_git no shell principal e esperam retorno 2.
+        printf 'erro: opção git não permitida no servidor: %s\n' "$arg" >&2
+        return 2
+        ;;
+    esac
+  done
+  repo="$(server_repo)" || exit "$?"
   git -C "$repo" "$sub" "$@"
 }
 
@@ -68,10 +79,14 @@ pin_file() {
 
 # pin_get KEY : valor de KEY no pin; exit 3 se arquivo ou chave faltarem.
 pin_get() {
-  local key="$1" file k v
+  local key="$1" file line k v
   file="$(pin_file)" || exit "$?"
   [[ -f "$file" ]] || die 3 "pin do servidor não encontrado: $file"
-  while IFS='=' read -r k v || [[ -n "$k" ]]; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" == *=* ]] || continue
+    k="${line%%=*}"
+    v="${line#*=}"
     if [[ "$k" == "$key" ]]; then
       printf '%s\n' "$v"
       return 0
