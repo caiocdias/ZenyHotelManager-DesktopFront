@@ -11,8 +11,17 @@ commit="$(pin_get commit)" || exit "$?"
 tag="$(server_tag)" || exit "$?"
 tree="$(ensure_server_tree)" || exit "$?"
 
-ensure_state_dir "$main/build"
 pkg="$main/build/demo-package"
+
+# Antes de criar ou apagar qualquer coisa: build e build/demo-package, se existirem, são diretórios reais
+# (symlink é recusado) e o caminho físico fica dentro do checkout principal.
+for p in "$main/build" "$pkg"; do
+  if [[ -e "$p" || -L "$p" ]]; then
+    { [[ -d "$p" && ! -L "$p" ]] && [[ "$(cd "$p" && pwd -P)" == "$(cd "$main" && pwd -P)"/* ]]; } ||
+      die 2 "caminho do pacote inseguro (não é um diretório real dentro do checkout): $p"
+  fi
+done
+ensure_state_dir "$main/build"
 
 # O único rm -rf do script: só o diretório do pacote, dentro do checkout principal.
 if [[ "$pkg" != "$main"/build/demo-package || -L "$pkg" ]]; then

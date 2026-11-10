@@ -16,6 +16,7 @@ fi
 images=()
 while IFS= read -r line; do
   img="${line#*image:}"
+  img="${img%%#*}"
   img="${img//[[:space:]\"\']/}"
   [[ -n "$img" ]] || continue
   [[ "$img" == "zeny-hotel-manager:dev" ]] && img="zeny-hotel-manager:$tag"
