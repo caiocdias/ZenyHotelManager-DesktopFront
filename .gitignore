@@ -1,0 +1,10 @@
+.server/
+build/
+.env
+.gradle/
+.kotlin/
+.idea/
+*.iml
+out/
+local.properties
+.claude/worktrees/
