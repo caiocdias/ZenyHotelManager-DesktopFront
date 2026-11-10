@@ -21,7 +21,8 @@
 - **Commit curto** = os 12 primeiros caracteres do SHA completo (determinístico; não `git rev-parse --short`).
 - `ZENY_SERVER_REPO` tem padrão `../ZenyHotelManager` **relativo ao checkout principal do front** (o diretório pai de `git rev-parse --path-format=absolute --git-common-dir`), para valer também dentro de worktrees em `.claude/worktrees/`.
 - Imagem do oasdiff: `tufin/oasdiff:v1.33.0@sha256:6263a96dd2ef0726c54e21fea9b8e1607eac4841add0079324b424c1f52b819c` (a mesma do `.github/scripts/check-api-breaking.sh` do servidor), sobrescrevível por `OASDIFF_IMAGE`, sempre com `--network none`.
-- **Estado de máquina fica no checkout principal do front** (`front_main_checkout`), nunca no worktree, porque o projeto `zeny-front` e os volumes dele são da máquina inteira e o worktree é removido no fim do lote: a árvore extraída (`.server/<commit>/`), o override renderizado (`.server/<commit>.override.yaml`, fora da árvore extraída), o `.env` real (`tools/server-env/.env`) e o pacote (`build/demo-package/`). Os scripts e o pin vêm do worktree em que o script está (`front_root`).
+- **Estado de máquina fica no checkout principal do front** (`front_main_checkout`), nunca no worktree, porque o projeto `zeny-front` e os volumes dele são da máquina inteira e o worktree é removido no fim do lote: a árvore extraída (`.server/<commit>/`), o override renderizado (`.server/<commit>.override.yaml`, fora da árvore extraída), o `.env` real (`.server/zeny-front.env`) e o pacote (`build/demo-package/`). Os scripts e o pin vêm do worktree em que o script está (`front_root`).
+- **Estado de máquina se autoignora**, sem depender do `.gitignore` versionado (que só chega ao checkout principal no merge): quem cria `.server/` ou `build/` grava neles um `.gitignore` com `*` se ainda não existir. `git status --porcelain` do checkout principal fica vazio depois de qualquer script. Nunca use `git clean` no checkout principal: ele apagaria o `.env` com as chaves presas ao volume.
 - REF vindo do usuário (opção ou variável) é resolvido uma vez com `rev-parse --verify --end-of-options "REF^{commit}"`; REF que começa com `-` é recusado (exit 2); depois disso só SHAs vão a outros subcomandos.
 - Testes nunca apontam para o servidor real, exceto os casos marcados "real", que só leem e se pulam por caso (`skip_case`) quando o repositório ou o pin real não existem. Testes que escrevem (`api/`, `.server/`, `build/`, `.env`) rodam numa cópia temporária do front (`make_fake_front`), nunca no worktree.
 - `tests/lib/fixtures.sh` e `tests/lib/assert.sh` ficam congelados depois da Task 1: tasks seguintes não os editam (helpers próprios ficam no arquivo de teste da task).
@@ -83,7 +84,7 @@ Testes: um `tests/test_<script>.sh` por task.
 
 ### Task 1: Base do repositório, biblioteca comum e harness de testes
 
-Estimativa: 35 min · Depende de: nenhuma · Risco: alto (é o guarda de só-leitura do servidor)
+Estimativa: 45 min · Depende de: nenhuma · Risco: alto (é o guarda de só-leitura do servidor)
 
 **Files:**
 - Create: `.gitignore`, `tools/lib/common.sh`
@@ -188,7 +189,7 @@ Estimativa: 45 min · Depende de: Task 1 (formato do pin está na Task 2) · Ris
   - a primeira linha da saída é `Pré-voo: base <curto> × alvo <curto> (<REF do alvo>)`; a última é `Resultado: <igual|avançou sem mudança no contrato|aditivo|breaking> (código N)`;
   - quando base ≠ alvo, lista os arquivos alterados em `docker/` entre os dois (`srv_git diff --name-only base alvo -- docker/`) sob `Ambiente do servidor alterado:` (ou `Ambiente do servidor sem mudanças.`), para a próxima rodada revisar `tools/server-env/`;
   - REFs resolvidos por `resolve_server_ref`;
-  - antes do oasdiff, `docker image inspect "$OASDIFF_IMAGE"` (sem pull); falhou → código 2 com `erro: imagem do oasdiff indisponível (…)`, para o daemon parado ou a imagem ausente nunca chegarem à classificação;
+  - antes do oasdiff, `docker image inspect "$OASDIFF_IMAGE"` (sem pull); falhou → código 2 com `erro: imagem do oasdiff indisponível (…); com internet: docker pull "<imagem>"`, para o daemon parado ou a imagem ausente nunca chegarem à classificação;
   - oasdiff como no script do servidor: os dois contratos em diretório temporário (`mktemp -d`, removido por `trap`, com `chmod -R a+rX` antes do `docker run`, como na linha 48 do script do servidor), `docker run --rm --network none -v "<tmp>:/specs:ro" -w /specs "$OASDIFF_IMAGE" breaking base/api/openapi.yaml api/openapi.yaml --match-path '^/api/v1(/|$)' --fail-on ERR --allow-external-refs=false --format text --lang pt-br`; exit 0 → aditivo, exit 1 → breaking, qualquer outro → código 2 com `erro: oasdiff falhou (exit N)`;
   - só leitura: toda chamada ao servidor passa por `srv_git`.
 
@@ -221,7 +222,7 @@ Estimativa: 35 min · Depende de: Task 1, Task 2 · Risco: alto (segredos)
 **Interfaces:**
 - Consumes: só o teste usa `tools/lib/common.sh` e o pin real da Task 2 (caso "real"). **O `gen-env.sh` é autocontido**: não carrega `common.sh`, não chama git e acha o modelo pelo próprio diretório (`$(dirname "$0")/.env.example`), porque roda no pacote do Windows, dentro do Alpine, fora de qualquer repositório.
 - Produces:
-  - `tools/server-env/.env.example`: as mesmas variáveis, na mesma ordem, do `docker/.env.example` do servidor no commit fixado, com os comentários adaptados ao front, e estas diferenças: `ZENY_HTTP_PORT=8088`, `ZENY_STORAGE_PUBLIC_ENDPOINT=http://localhost:8088`, nota sobre `ZENY_HTTP_ADDRESS=0.0.0.0` (rede, mobile) e `ZENY_STORAGE_PUBLIC_ENDPOINT=http://<IP>:8088` (o endereço que o app enxerga, senão as URLs assinadas não abrem). Segredos vazios: `ZENY_ENCRYPTION_KEYS`, `ZENY_JWT_KEYS`, `ZENY_ADMIN_PASSWORD`, `ZENY_STORAGE_ROOT_PASSWORD`, `ZENY_STORAGE_SECRET_KEY`, `ZENY_FCM_CREDENTIALS`.
+  - `tools/server-env/.env.example`: as mesmas variáveis, na mesma ordem, do `docker/.env.example` do servidor no commit fixado, com os comentários adaptados ao front, e estas diferenças: `ZENY_HTTP_PORT=8088`; `ZENY_HTTP_ADDRESS=` **vazio** (o padrão vem do override: `127.0.0.1` no notebook, `0.0.0.0` no pacote; o `:-` do compose trata vazio como ausente) e `ZENY_STORAGE_PUBLIC_ENDPOINT=` **vazio** (padrão `http://localhost:<ZENY_HTTP_PORT>` pelo override), cada um com comentário dizendo de onde vem o padrão; nota sobre `ZENY_HTTP_ADDRESS=0.0.0.0` (rede, mobile) e `ZENY_STORAGE_PUBLIC_ENDPOINT=http://<IP>:8088` (o endereço que o app enxerga, senão as URLs assinadas não abrem). Segredos vazios: `ZENY_ENCRYPTION_KEYS`, `ZENY_JWT_KEYS`, `ZENY_ADMIN_PASSWORD`, `ZENY_STORAGE_ROOT_PASSWORD`, `ZENY_STORAGE_SECRET_KEY`, `ZENY_FCM_CREDENTIALS`.
   - `tools/server-env/gen-env.sh [--force] [--address ADDR] [--public-endpoint URL] DEST`: copia o `.env.example` vizinho para DEST (criado com `umask 077`, modo 600) preenchendo os cinco primeiros segredos acima, com os geradores do README do servidor:
     - `ZENY_ENCRYPTION_KEYS=dev:$(openssl rand -base64 32)`;
     - `ZENY_JWT_KEYS=dev:<RSA 3072, PKCS#8 DER, base64 numa linha>` (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'`);
@@ -236,7 +237,7 @@ Estimativa: 35 min · Depende de: Task 1, Task 2 · Risco: alto (segredos)
   - segunda geração sem `--force` → exit 2 e arquivo idêntico ao primeiro (`cmp`); com `--force` → 0;
   - `--address 0.0.0.0 --public-endpoint http://192.168.0.20:8088` grava as duas linhas;
   - stdout+stderr não contêm nenhum dos valores gerados;
-  - `.env.example` do front: `ZENY_HTTP_PORT=8088`, os seis segredos vazios;
+  - `.env.example` do front: `ZENY_HTTP_PORT=8088`, `ZENY_HTTP_ADDRESS=` e `ZENY_STORAGE_PUBLIC_ENDPOINT=` vazios, os seis segredos vazios;
   - `gen-env.sh` copiado com o `.env.example` para um diretório temporário fora de qualquer repositório git, rodado de lá com `PATH` sem `git` → exit 0 e `.env` gerado;
   - **real** (`skip_case` se o servidor ou o pin não existirem): a sequência de nomes de variáveis do `.env.example` do front, na ordem do arquivo, é igual à do `docker/.env.example` do servidor no commit do pin (`srv_git show <commit>:docker/.env.example`).
 - [ ] **Step 2:** `bash tests/run.sh tests/test_gen_env.sh` → FAIL.
@@ -259,9 +260,10 @@ Estimativa: 40 min · Depende de: Task 1 · Risco: alto (isolamento do ambiente 
   - `server_tag` — `short_commit "$(pin_get commit)"`.
   - `server_tree_dir` — `$(front_main_checkout)/.server/<commit completo>` (estado de máquina, D5).
   - `override_file` — `$(front_main_checkout)/.server/<commit completo>.override.yaml` (fora da árvore extraída, que fica intocada depois de extraída).
-  - `ensure_server_tree` — se `server_tree_dir` não existe, extrai `srv_git archive --format=tar <commit>` num temporário irmão e renomeia (nunca deixa árvore parcial); depois confere `sha256sum <árvore>/api/openapi.yaml` = `contract_sha256` (senão `die 3`). Imprime o caminho.
+  - `ensure_state_dir DIR` — cria DIR (`.server/` ou `build/` do checkout principal) e, se não houver, grava `DIR/.gitignore` com `*`.
+  - `ensure_server_tree` — chama `ensure_state_dir` para `.server/`; se `server_tree_dir` não existe, extrai `srv_git archive --format=tar <commit>` num temporário irmão e renomeia (nunca deixa árvore parcial); depois confere `sha256sum <árvore>/api/openapi.yaml` = `contract_sha256` (senão `die 3`). Imprime o caminho.
   - `render_override DEST DEFAULT_ADDRESS` — copia `compose.override.yaml` trocando `@SERVER_TAG@` por `server_tag` e `@DEFAULT_ADDRESS@` por DEFAULT_ADDRESS (`127.0.0.1` no notebook; o pacote usa `0.0.0.0`, D2).
-  - `env_file` — `${ZENY_FRONT_ENV_FILE:-$(front_main_checkout)/tools/server-env/.env}`.
+  - `env_file` — `${ZENY_FRONT_ENV_FILE:-$(front_main_checkout)/.server/zeny-front.env}`.
   - `env_get KEY [DEFAULT]` — valor de `^KEY=` no `env_file` lido com `awk` (sem `source`), ou DEFAULT.
   - `compose ARGS...` — `docker compose -p "$ZENY_FRONT_PROJECT" -f <árvore>/docker/compose.yaml -f "$(override_file)" --env-file "$(env_file)" ARGS...`, garantindo `ensure_server_tree` e `render_override "$(override_file)" 127.0.0.1` antes.
 - Produces (`tools/server-env/compose.override.yaml`, modelo com marcadores):
@@ -280,6 +282,7 @@ Estimativa: 40 min · Depende de: Task 1 · Risco: alto (isolamento do ambiente 
 - [ ] **Step 1: Teste falhando `tests/test_server_env_lib.sh`** (front falso com `write_fake_pin` de `FAKE_C1`, servidor falso, `write_test_env`):
   - `ensure_server_tree` cria `.server/<FAKE_C1>/docker/compose.yaml` na raiz do front falso; segunda chamada não reextrai (mtime igual);
   - chamado de um worktree do front falso (`git worktree add`), `server_tree_dir`, `override_file` e `env_file` apontam para o checkout principal do front falso; depois de `git worktree remove`, a árvore e o `.env` continuam lá;
+  - num front falso **sem** `.gitignore`, depois de `ensure_server_tree`, `render_override` e de gravar `.server/zeny-front.env`, `git status --porcelain` do front falso fica vazio; um `.server/.gitignore` já existente com outro conteúdo não é sobrescrito;
   - árvore com `api/openapi.yaml` alterado → `die 3`;
   - `env_get ZENY_HTTP_PORT 8088` lê `9099` de um env file com `ZENY_HTTP_PORT=9099` e uma linha `$(touch pwned)` que não é executada;
   - `compose config --format json` (Docker real; `skip_case` se `docker compose version` falhar): `.name == "zeny-front"`; `.services.api.image == "zeny-hotel-manager:<12 de FAKE_C1>"`; `.services.proxy.ports` com um único item, `published == "8088"` e `host_ip == "127.0.0.1"`; com `ZENY_HTTP_ADDRESS=0.0.0.0` no env file, `host_ip == "0.0.0.0"`; sem `ZENY_STORAGE_PUBLIC_ENDPOINT` no env file, `.services.api.environment.ZENY_STORAGE_PUBLIC_ENDPOINT == "http://localhost:8088"`, e com `ZENY_HTTP_PORT=9099`, `"http://localhost:9099"`;
@@ -329,7 +332,7 @@ Estimativa: 45 min · Depende de: Task 4, Task 5, Task 6 · Risco: alto (exclus�
 **Interfaces:**
 - Consumes: `lib.sh` (`ensure_server_tree`, `render_override`, `server_tag`, `pin_get`), `.env.example` e `gen-env.sh` (Task 4).
 - Produces:
-  - `tools/server-env/package.sh`: recria `$(front_main_checkout)/build/demo-package/` (apaga só esse diretório, depois de conferir que o caminho a apagar termina em `/build/demo-package` e fica dentro de `front_main_checkout`) com:
+  - `tools/server-env/package.sh`: chama `ensure_state_dir` para `build/` e recria `$(front_main_checkout)/build/demo-package/` (apaga só esse diretório, depois de conferir que o caminho a apagar termina em `/build/demo-package` e fica dentro de `front_main_checkout`) com:
     - `server/` = cópia da árvore do commit fixado;
     - `compose.override.yaml` renderizado com `render_override … 0.0.0.0` (D2);
     - `.env.example` e `gen-env.sh`;
@@ -350,9 +353,10 @@ Estimativa: 45 min · Depende de: Task 4, Task 5, Task 6 · Risco: alto (exclus�
 - [ ] **Step 1: Teste falhando `tests/test_package.sh`** (front falso com pin de `FAKE_C1`, servidor falso, stub de docker):
   - `package.sh` cria os itens listados; `server/docker/compose.yaml` igual ao do commit; `LEIA-ME.md` sem marcador `@…@` e contendo o SHA de `FAKE_C1`; `compose.override.yaml` com `zeny-hotel-manager:<tag>`;
   - `compose.override.yaml` do pacote com padrão de endereço `0.0.0.0`;
-  - com `tools/server-env/.env` presente no front falso, o pacote não tem nenhum arquivo `.env` (`find -name .env` vazio);
+  - com `.server/zeny-front.env` e um `tools/server-env/.env` presentes no front falso, o pacote não tem nenhum `.env` nem `*.env` (`find` por `.env` e `*.env` vazio);
   - segunda execução apaga arquivo estranho deixado em `build/demo-package/` e não toca em `build/outro/`;
-  - `bash <pacote>/gen-env.sh <tmp>/.env` rodado com cwd num diretório temporário fora de qualquer repositório git → exit 0;
+  - `bash <pacote>/gen-env.sh <tmp>/.env` rodado com cwd num diretório temporário fora de qualquer repositório git → exit 0; com esse `.env` (gerado do `.env.example` do pacote, sem `--address`) e o override do pacote, `docker compose -p zeny-front -f <pacote>/server/docker/compose.yaml -f <pacote>/compose.override.yaml --env-file <tmp>/.env config --format json` (Docker real; `skip_case` sem `docker compose`) → `host_ip == "0.0.0.0"` e `ZENY_STORAGE_PUBLIC_ENDPOINT == "http://localhost:8088"`;
+  - depois do `package.sh`, `git status --porcelain` do front falso sem `.gitignore` fica vazio (`build/.gitignore` criado);
   - `save-images.sh` com `STUB_IMAGE_PRESENT=1`: o log tem um único `save -o …` com as quatro imagens `zeny-hotel-manager:<tag>`, `postgres:18`, `pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, `caddy:2.11-alpine`, sem `:dev`; com `STUB_IMAGE_PRESENT=0` → exit 2 e nenhum `save`.
 - [ ] **Step 2:** `bash tests/run.sh` → FAIL em `test_package.sh`.
 - [ ] **Step 3: Implementar os três arquivos.**
@@ -370,7 +374,7 @@ Estimativa: 20 min · Depende de: Task 7 · Risco: normal
 **Interfaces:**
 - Consumes: os nomes, opções e códigos de saída dos scripts das Tasks 2–7.
 - Produces:
-  - `README.md` (pt-BR): o que é o projeto (cliente desktop do Zeny Hotel Manager, Compose Multiplatform, ainda sem código do app até a M1); onde estão o design, os ADRs e os roadmaps; o servidor fixado (`api/server-pin.properties`) e a regra de só-leitura; onde fica o estado de máquina (`.server/`, `tools/server-env/.env`, `build/demo-package/` no checkout principal, mesmo rodando de um worktree); tabela "Para quê | Comando" com `tools/server-pin.sh`, `tools/server-drift.sh` (com a tabela de códigos 0/10/11/12/2/3), `tools/server-env/gen-env.sh`, `up.sh`, `down.sh`, `package.sh`, `save-images.sh` e `bash tests/run.sh`; variáveis `ZENY_SERVER_REPO`, `ZENY_DRIFT_BASE`, `ZENY_DRIFT_TARGET`, `ZENY_FRONT_ENV_FILE`, `ZENY_UP_TIMEOUT`, `OASDIFF_IMAGE`.
+  - `README.md` (pt-BR): o que é o projeto (cliente desktop do Zeny Hotel Manager, Compose Multiplatform, ainda sem código do app até a M1); onde estão o design, os ADRs e os roadmaps; o servidor fixado (`api/server-pin.properties`) e a regra de só-leitura; onde fica o estado de máquina (`.server/` com a árvore, o override e o `.env` real `.server/zeny-front.env`, e `build/demo-package/`, no checkout principal mesmo rodando de um worktree, autoignorados; nunca `git clean` lá); tabela "Para quê | Comando" com `tools/server-pin.sh`, `tools/server-drift.sh` (com a tabela de códigos 0/10/11/12/2/3), `tools/server-env/gen-env.sh`, `up.sh`, `down.sh`, `package.sh`, `save-images.sh` e `bash tests/run.sh`; variáveis `ZENY_SERVER_REPO`, `ZENY_DRIFT_BASE`, `ZENY_DRIFT_TARGET`, `ZENY_FRONT_ENV_FILE`, `ZENY_UP_TIMEOUT`, `OASDIFF_IMAGE`.
   - `docs/pedidos-servidor.md`: as regras do design §8 e do ADR 0005 (captura `ZenyHotelManager - pedido do front PF-NN <título>` com motivo, operação, etapa, commit fixado e prioridade; estados `aberto`, `aceito`, `entregue`, `recusado`; etapa dependente `#bloqueada` com desbloqueio "PF-NN entregue e sincronizado pelo M0"; resposta "atende PF-NN"; antes de 17/11 nenhuma etapa depende de pedido) e a tabela vazia `| PF-NN | título | estado | captura | etapa do front | commit de entrega |`.
 
 - [ ] **Step 1: Teste falhando `tests/test_docs.sh`:** todo `tools/**/*.sh` executável aparece no `README.md` pelo caminho relativo; o README contém os seis códigos do pré-voo; `docs/pedidos-servidor.md` contém o cabeçalho exato da tabela acima.
@@ -387,6 +391,7 @@ Estimativa: 20 min · Depende de: Task 7 · Risco: normal
 - `tools/server-drift.sh` no worktree, servidor real → código 0.
 - `tools/server-drift.sh --base <ancestral da main real cujo api/openapi.yaml difere do fixado>` → código 11, com a saída colada no handoff (H3 com o contrato real). O 12 fica demonstrado pelo servidor falso, porque o servidor proíbe breaking em `/api/v1`; o handoff diz isso.
 - `tools/server-env/up.sh` + `curl -fsS http://localhost:8088/actuator/health/readiness` → `UP` no notebook só se `MemAvailable` ≥ 6 GiB no momento (leitura registrada no ledger; sem a imagem, o `up.sh` dispara o build do Gradle com heap de 2 GB); senão, registrado e validado no Windows pelo usuário, na parada da etapa. Com `zeny-front` no ar, `docker compose -p zeny ps` e `docker images zeny-hotel-manager` comparados ao snapshot inicial; depois `down.sh -v` e conferência de que só sumiram recursos `zeny-front`.
+- `git status --porcelain` do checkout principal vazio depois da validação, sem `git clean` (o `.env` real fica em `.server/zeny-front.env`).
 - No fechamento, registrar D1–D5 no roadmap ("Hipóteses e decisões em aberto": desfecho de H1–H4) e no handoff da E01 ("Decisões para o usuário").
 - `git -C /home/caio/repos/ZenyHotelManager status --porcelain` e `worktree list` → idênticos ao snapshot inicial.
 - `git ls-files | grep -E '(^|/)\.env$'` → vazio.
