@@ -227,7 +227,7 @@ Estimativa: 35 min · Depende de: Task 1, Task 2 · Risco: alto (segredos)
     - `ZENY_ENCRYPTION_KEYS=dev:$(openssl rand -base64 32)`;
     - `ZENY_JWT_KEYS=dev:<RSA 3072, PKCS#8 DER, base64 numa linha>` (`openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 | openssl pkcs8 -topk8 -nocrypt -outform DER | base64 | tr -d '\n'`);
     - `ZENY_ADMIN_PASSWORD` = `openssl rand -base64 18`; `ZENY_STORAGE_ROOT_PASSWORD` e `ZENY_STORAGE_SECRET_KEY` = `openssl rand -base64 24`.
-    `--address` define `ZENY_HTTP_ADDRESS`; `--public-endpoint` define `ZENY_STORAGE_PUBLIC_ENDPOINT`. A troca de linha é por chave inteira (`^CHAVE=`), sem `sed` com o valor no padrão (base64 tem `/` e `+`). DEST existente sem `--force` → exit 2 com DEST intacto. Falha do `chmod 600` (bind mount do Windows, sem permissões POSIX) vira aviso no stderr, não erro. Nunca imprime valor de segredo; imprime só `Gerado DEST (segredos: <lista de chaves>)`. Usa só `bash`, `openssl`, `base64`, `tr`, `awk`, `mktemp`, `chmod`, `mv` (roda no Alpine, pelo `LEIA-ME`).
+    `--address` define `ZENY_HTTP_ADDRESS`; `--public-endpoint` define `ZENY_STORAGE_PUBLIC_ENDPOINT`. A troca de linha é por chave inteira (`^CHAVE=`), sem `sed` com o valor no padrão (base64 tem `/` e `+`). DEST existente sem `--force` → exit 2 com DEST intacto. Diretório de DEST inexistente → exit 2 (o script não cria diretórios). Falha do `chmod 600` (bind mount do Windows, sem permissões POSIX) vira aviso no stderr, não erro. Nunca imprime valor de segredo; imprime só `Gerado DEST (segredos: <lista de chaves>)`. Usa só `bash`, `openssl`, `base64`, `tr`, `awk`, `mktemp`, `chmod`, `mv` (roda no Alpine, pelo `LEIA-ME`).
 
 - [ ] **Step 1: Teste falhando `tests/test_gen_env.sh`:**
   - gera em `$tmp/.env`: os cinco segredos não vazios; modo `600`; demais linhas iguais ao modelo;
@@ -305,12 +305,12 @@ Estimativa: 40 min · Depende de: Task 5 · Risco: alto (isolamento; outro orque
 **Interfaces:**
 - Consumes: `tools/server-env/lib.sh` (Task 5).
 - Produces:
-  - `tools/server-env/up.sh [--build]`: `die 2` com a instrução `tools/server-env/gen-env.sh <caminho de env_file>` se `env_file` não existir; constrói (`compose build api`) se `docker image inspect zeny-hotel-manager:<tag>` falhar ou com `--build`; `compose up -d`; depois consulta `http://<host>:<porta>/actuator/health/readiness` a cada 5 s até a resposta conter `"status":"UP"` ou passar `ZENY_UP_TIMEOUT` (padrão 600 s) → exit 1 com a última resposta e a dica `docker compose -p zeny-front logs api`. Porta = `env_get ZENY_HTTP_PORT 8088`; host = `127.0.0.1` se `env_get ZENY_HTTP_ADDRESS` for vazio, `127.0.0.1` ou `0.0.0.0`, senão o próprio endereço. Sucesso imprime `zeny-front no ar em http://<host>:<porta> (servidor <tag>)`.
+  - `tools/server-env/up.sh [--build]`: primeiro `ensure_state_dir "$(front_main_checkout)/.server"` (para o `.env` gerado na primeira vez já nascer ignorado); depois `die 2` com a instrução `tools/server-env/gen-env.sh <caminho de env_file>` se `env_file` não existir; constrói (`compose build api`) se `docker image inspect zeny-hotel-manager:<tag>` falhar ou com `--build`; `compose up -d`; depois consulta `http://<host>:<porta>/actuator/health/readiness` a cada 5 s até a resposta conter `"status":"UP"` ou passar `ZENY_UP_TIMEOUT` (padrão 600 s) → exit 1 com a última resposta e a dica `docker compose -p zeny-front logs api`. Porta = `env_get ZENY_HTTP_PORT 8088`; host = `127.0.0.1` se `env_get ZENY_HTTP_ADDRESS` for vazio, `127.0.0.1` ou `0.0.0.0`, senão o próprio endereço. Sucesso imprime `zeny-front no ar em http://<host>:<porta> (servidor <tag>)`.
   - `tools/server-env/down.sh [-v|--volumes]`: `compose down` (com `-v` só se pedido). Sem árvore extraída, `docker compose -p zeny-front down [-v]` rodado a partir de um diretório temporário vazio (para nenhum `compose.yaml` do cwd entrar). Imprime o que removeu.
 - Regra: nenhuma chamada ao Docker cita outro projeto que não `zeny-front`, nem `zeny-hotel-manager:dev`.
 
 - [ ] **Step 1: Teste falhando `tests/test_up_down.sh`** (front falso com `write_fake_pin` de `FAKE_C1`, servidor falso, `write_test_env`, `install_docker_stub`):
-  - sem env file → exit 2 e mensagem cita `gen-env.sh`; nenhuma chamada ao `docker`;
+  - sem env file → exit 2 e mensagem cita `gen-env.sh`; nenhuma chamada ao `docker`; `.server/.gitignore` já existe no front falso depois dessa chamada;
   - `STUB_IMAGE_PRESENT=0` → o log tem `build api` antes de `up -d`; `STUB_IMAGE_PRESENT=1` → sem `build`; `--build` → com `build`;
   - `STUB_CURL_BODY='{"status":"UP"}'` → exit 0 e a URL consultada é `http://127.0.0.1:8088/actuator/health/readiness`; com `ZENY_HTTP_PORT=9099` → porta 9099; com `ZENY_HTTP_ADDRESS=0.0.0.0` → host `127.0.0.1`; com `ZENY_HTTP_ADDRESS=192.168.0.20` → host `192.168.0.20`;
   - `STUB_CURL_BODY='{"status":"DOWN"}'` e `ZENY_UP_TIMEOUT=1` → exit 1;
@@ -394,4 +394,15 @@ Estimativa: 20 min · Depende de: Task 7 · Risco: normal
 - `git status --porcelain` do checkout principal vazio depois da validação, sem `git clean` (o `.env` real fica em `.server/zeny-front.env`).
 - No fechamento, registrar D1–D5 no roadmap ("Hipóteses e decisões em aberto": desfecho de H1–H4) e no handoff da E01 ("Decisões para o usuário").
 - `git -C /home/caio/repos/ZenyHotelManager status --porcelain` e `worktree list` → idênticos ao snapshot inicial.
-- `git ls-files | grep -E '(^|/)\.env$'` → vazio.
+- `git ls-files | grep -E '\.env$'` → vazio (`.env.example` não casa).
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2 (rodada 0 bloqueado com I1–I9; rodada 1 bloqueado com N1–N2; rodada 2 aprovado com notas).
+- **Revisor:** `revisor-arquitetura`, modelo opus (o mais capaz disponível).
+- **Notas Menores:**
+  - M1: o front não tem `docs/ARCHITECTURE.md`; o plano foi julgado contra a spec da etapa, o design e os ADRs 0002, 0003 e 0005.
+  - Mn3 (incorporada): o `up.sh` cria `.server/.gitignore` antes de mandar gerar o `.env`; o `gen-env.sh` não cria diretórios.
+  - Mn4 (incorporada): a conferência de segredos versionados pega qualquer `*.env`.
+  - Não verificado pelo revisor (depende de execução): interpolação aninhada no Compose v2.24.4 do Windows, exit codes do oasdiff em erro de carga (o caso da spec malformada mostra), `up -d` com `build:` e imagem carregada no Docker Desktop (validação do usuário).
