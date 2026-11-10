@@ -82,6 +82,7 @@ assert_eq "synced_at=2026-11-10T00:00:00Z" "$(sed -n 3p "$pin")" "pin: synced_at
 
 assert_eq "$FAKE_C3" "$(in_front "$tmp/front2" pin_get commit)" "pin_get commit"
 assert_exit 3 "pin_get chave ausente -> 3" -- in_front "$tmp/front2" pin_get inexistente
+rm -f "$tmp/front/api/server-pin.properties"   # o front falso copia api/ real; a asserção exige pin ausente
 assert_exit 3 "pin_get arquivo ausente -> 3" -- in_front "$tmp/front" pin_get commit
 
 short="$(short_commit "$FAKE_C4")"

@@ -79,6 +79,7 @@ mkdir -p "$wt/api"
 printf 'commit=%s\n' "$FAKE_C2" >"$wt/api/server-pin.properties"
 assert_eq "$FAKE_C2" "$(in_front "$wt" pin_get commit)" "pin_get lê o pin do worktree"
 assert_eq "$wt/api/server-pin.properties" "$(in_front "$wt" pin_file)" "pin_file é do worktree"
+rm -f "$tmp/front/api/server-pin.properties"   # o front falso copia api/ real; a asserção exige pin ausente no principal
 assert_exit 3 "pin do worktree não vaza para o checkout principal" -- in_front "$tmp/front" pin_get commit
 assert_eq "$FAKE_C4" "$(cd / && ZENY_SERVER_REPO="$srv" in_front "$wt" resolve_server_ref main)" "resolve_server_ref a partir de worktree"
 
