@@ -293,13 +293,16 @@ reset_logs
 ZENY_UP_TIMEOUT=0 assert_exit 0 "timeout 0 com UP imediato sobe" -- run_script "$f_r" up.sh
 
 # valores inválidos: nunca laço infinito (limite de 20 s por `timeout`).
-for v in abc -5 1.5 " " "0x10"; do
+pwn_t="$tmp/PWNED_TIMEOUT"
+for v in abc -5 1.5 " " "0x10" "a[\$(touch $pwn_t)]" "1+1"; do
   reset_logs
   t0=$SECONDS
-  STUB_CURL_BODY='{"status":"DOWN"}' ZENY_UP_TIMEOUT="$v" assert_exit 1 "ZENY_UP_TIMEOUT='$v' termina com falha (sem laço infinito)" -- \
+  STUB_CURL_BODY='{"status":"DOWN"}' ZENY_UP_TIMEOUT="$v" assert_exit 2 "ZENY_UP_TIMEOUT='$v' é erro de uso (exit 2, sem laço infinito)" -- \
     timeout 20 env PATH="$stubpath" bash "$f_r/tools/server-env/up.sh"
   dt=$((SECONDS - t0))
   assert_eq "1" "$((dt < 19 ? 1 : 0))" "ZENY_UP_TIMEOUT='$v' não fica preso (levou ${dt}s)"
+  assert_eq "no" "$([[ -e "$pwn_t" ]] && echo yes || echo no)" "ZENY_UP_TIMEOUT='$v' não executa nada"
+  assert_eq "" "$(cat "$dlog")" "ZENY_UP_TIMEOUT='$v' inválido não chega ao docker"
 done
 
 # falha de curl (conexão recusada) também respeita o tempo e mostra pt-BR.
