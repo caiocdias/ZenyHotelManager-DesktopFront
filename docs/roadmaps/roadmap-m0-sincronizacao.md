@@ -162,11 +162,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Fixação do servidor e ambiente isolado (rodada 1) | #pendente | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
+| E01 | Fixação do servidor e ambiente isolado (rodada 1) | #em-andamento | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
 
 ---
 
-## E01 — Fixação do servidor e ambiente isolado (rodada 1) — #pendente
+## E01 — Fixação do servidor e ambiente isolado (rodada 1) — #em-andamento
 
 **Objetivo:** criar o mecanismo de fixação do servidor e o ambiente isolado em que todo gate do front roda. Ao fim, o servidor sobe como `zeny-front`, a partir do commit fixado, no notebook ou no Windows.
 
