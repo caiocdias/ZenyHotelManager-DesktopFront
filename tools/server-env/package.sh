@@ -48,6 +48,8 @@ cat >"$pkg/images/LEIA-ME.txt" <<'TXT'
 Para pré-carregar as imagens do servidor (uso sem internet), gere zeny-server-images.tar
 nesta pasta com tools/server-env/save-images.sh (no notebook, com as imagens já presentes)
 e, no Windows, rode: docker load -i images\zeny-server-images.tar
+Rode save-images.sh DEPOIS de package.sh: o package.sh recria build/demo-package/ e apaga
+um images/zeny-server-images.tar anterior.
 TXT
 
 # Salvaguarda: segredos nunca entram no pacote.

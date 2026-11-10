@@ -44,7 +44,7 @@ O ambiente usa sempre o projeto compose `zeny-front`, a imagem `zeny-hotel-manag
 | Gravar as imagens do servidor num `.tar` (padrão: `build/demo-package/images/zeny-server-images.tar`) | `tools/server-env/save-images.sh [OUT]` |
 | Rodar os testes (`bash -n`, `shellcheck` se existir, e `tests/test_*.sh`) | `bash tests/run.sh [ARQUIVO...]` |
 
-Primeiro uso do ambiente: `tools/server-env/gen-env.sh .server/zeny-front.env` (no checkout principal) e depois `tools/server-env/up.sh`. O `down.sh` sempre atinge só o projeto `zeny-front` e funciona sem `.env`.
+Primeiro uso do ambiente: rode `tools/server-env/up.sh`; na primeira vez ele cria `.server/` e imprime o comando exato do `gen-env.sh` (com o caminho absoluto). Rode esse comando e depois o `up.sh` de novo. O `save-images.sh` deve rodar depois do `package.sh`, porque o `package.sh` recria `build/demo-package/` e apaga um `images/zeny-server-images.tar` anterior. O `down.sh` sempre atinge só o projeto `zeny-front` e funciona sem `.env`.
 
 ### Códigos de saída do `tools/server-drift.sh`
 

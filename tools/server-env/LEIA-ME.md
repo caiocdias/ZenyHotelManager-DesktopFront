@@ -14,7 +14,7 @@ Atenção: o servidor fala HTTP puro. Use apenas em rede confiável. Nunca use `
 Gere o `.env` sem precisar de bash no Windows (substitua `<IP do Windows>` pelo IP desta máquina na rede). O endereço de escuta `0.0.0.0` já é o padrão do `compose.override.yaml` deste pacote:
 
 ```powershell
-docker run --rm -v "${PWD}:/w" -w /w alpine:3.22 sh -c "apk add --no-cache bash openssl >/dev/null && bash gen-env.sh --public-endpoint http://<IP do Windows>:8088 .env"
+docker run --rm -v "${PWD}:/w" -w /w alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f sh -c "apk add --no-cache bash openssl >/dev/null && bash gen-env.sh --public-endpoint http://<IP do Windows>:8088 .env"
 ```
 
 Guarde uma cópia do `.env` fora da pasta do pacote: a chave de cifragem e a senha root do MinIO valem enquanto o volume existir, e perdê-las inutiliza os dados.
@@ -50,7 +50,16 @@ docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.y
 3. Compare os nomes das variáveis do `.env` com os do `.env.example` novo e acrescente ao `.env` as que faltarem.
 4. Rode `build` e `up -d` (comandos da seção 1).
 
-## 3. Recriar a demo
+## 3. Parar e recriar a demo
+
+Parar sem apagar nada (os dados da demo continuam nos volumes):
+
+```powershell
+docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env down
+```
+
+Recriar a demo do zero. Atenção: `down -v` apaga banco e arquivos da demo.
+
 
 ```powershell
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env down -v
@@ -65,6 +74,12 @@ Para outras máquinas da rede acessarem a porta 8088, abra o PowerShell como adm
 
 ```powershell
 New-NetFirewallRule -DisplayName "Zeny front 8088" -Direction Inbound -Protocol TCP -LocalPort 8088 -Action Allow -Profile Private -RemoteAddress LocalSubnet
+```
+
+A regra só vale em redes da categoria Private. Confira a categoria da rede com `Get-NetConnectionProfile`; se estiver Public, a regra não se aplica e as outras máquinas não alcançam a porta 8088, sem nenhum aviso. Para mudar para Private:
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias <nome> -NetworkCategory Private
 ```
 
 Para remover a regra:

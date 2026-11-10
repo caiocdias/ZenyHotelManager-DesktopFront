@@ -12,6 +12,9 @@ for arg in "$@"; do
   esac
 done
 
+timeout="${ZENY_UP_TIMEOUT:-600}"
+[[ "$timeout" =~ ^[0-9]+$ ]] || die 2 "ZENY_UP_TIMEOUT deve ser um número inteiro de segundos"
+
 main="$(front_main_checkout)" || exit "$?"
 ensure_state_dir "$main/.server"
 
@@ -33,7 +36,6 @@ case "$address" in
 esac
 url="http://$host:$port"
 
-timeout="${ZENY_UP_TIMEOUT:-600}"
 deadline=$((SECONDS + timeout))
 last=""
 while :; do

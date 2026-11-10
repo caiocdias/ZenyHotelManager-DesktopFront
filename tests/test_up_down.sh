@@ -134,4 +134,17 @@ while IFS= read -r l; do
 done <"$dlog"
 assert_eq "0" "$bad" "toda chamada compose usa -p zeny-front; nada de -p zeny nem :dev"
 
+# --- ZENY_UP_TIMEOUT validado (nunca avaliado como expressão aritmética) ---
+mkdir -p "$tmp/cwdt"
+for bad in 'a[$(touch pwned)]' 1.5 abc -3 ''; do
+  [[ -n "$bad" ]] || continue
+  reset_logs
+  assert_exit 2 "ZENY_UP_TIMEOUT inválido ($bad) sai com 2" -- \
+    bash -c 'cd "$1" && PATH="$2" ZENY_UP_TIMEOUT="$3" bash "$4/tools/server-env/up.sh"' _ "$tmp/cwdt" "$stubpath" "$bad" "$front"
+  assert_contains "$ASSERT_OUT" "ZENY_UP_TIMEOUT deve ser um número inteiro de segundos" "mensagem de timeout inválido ($bad)"
+  assert_eq "" "$(cat "$dlog")" "timeout inválido não chama o docker ($bad)"
+done
+assert_eq "" "$(ls -A "$tmp/cwdt")" "timeout malicioso não cria nada"
+assert_eq "no" "$([[ -e "$front/pwned" || -e /pwned ]] && echo yes || echo no)" "nenhum arquivo pwned"
+
 finish
