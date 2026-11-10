@@ -45,16 +45,27 @@ while (($# > 0)); do
 done
 [[ -n "$dest" ]] || usage
 
+# Quebra de linha no valor criaria linhas novas (injeção de variáveis) no .env.
+nl=$'\n'
+cr=$'\r'
+for v in "$address" "$endpoint"; do
+  if [[ "$v" == *"$nl"* || "$v" == *"$cr"* ]]; then
+    fail "valor com quebra de linha recusado"
+  fi
+done
+
 template="$(dirname "$0")/.env.example"
 [[ -f "$template" ]] || fail "modelo não encontrado: $template" 3
 [[ -d "$(dirname "$dest")" ]] || fail "diretório de destino inexistente: $(dirname "$dest")"
-if [[ -e "$dest" && "$force" != 1 ]]; then
-  fail "$dest já existe (use --force para sobrescrever)"
+if [[ -e "$dest" || -L "$dest" ]]; then
+  [[ -f "$dest" ]] || fail "$dest existe e não é um arquivo regular"
+  [[ "$force" == 1 ]] || fail "$dest já existe (use --force para sobrescrever)"
 fi
 
 umask 077
 tmpfile="$(mktemp "$dest.XXXXXX")" || fail "não foi possível criar arquivo temporário junto de $dest" 3
-trap 'rm -f "$tmpfile"' EXIT
+claimed=
+trap 'rm -f "$tmpfile"; [[ -z "$claimed" ]] || rm -f "$claimed"' EXIT
 
 # Os geradores abaixo são os do README do servidor.
 enc="dev:$(openssl rand -base64 32)" || fail "openssl falhou" 3
@@ -93,6 +104,13 @@ GEN_ENCRYPTION_KEYS="$enc" GEN_JWT_KEYS="$jwt" GEN_ADMIN_PASSWORD="$admin" \
 
 if ! chmod 600 "$tmpfile" 2>/dev/null; then
   echo "gen-env: aviso: não foi possível aplicar chmod 600 em $dest (sem permissões POSIX?)" >&2
+fi
+if [[ "$force" != 1 ]]; then
+  # Criação exclusiva (noclobber = O_EXCL): se outra execução publicou antes, esta sai com 2.
+  if ! (set -o noclobber; : >"$dest") 2>/dev/null; then
+    fail "$dest já existe (use --force para sobrescrever)"
+  fi
+  claimed="$dest"
 fi
 mv -f "$tmpfile" "$dest" || fail "não foi possível gravar $dest" 3
 trap - EXIT
