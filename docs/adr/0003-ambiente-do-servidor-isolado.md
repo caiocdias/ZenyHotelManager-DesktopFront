@@ -19,7 +19,7 @@ Se o front subisse esse compose como está, um rebuild ou um `down -v` do orques
 - Servidor e app da demo rodam juntos no Windows (decisão do usuário). A imagem do servidor é construída lá (chamada do arquiteto), porque o `Dockerfile` do servidor roda o Gradle dentro do Docker e o notebook não tem memória para isso.
 - **`tools/server-env/package.sh`** (no notebook) monta o pacote para o Windows:
   - o `git archive` do commit fixado (ADR 0002);
-  - o override do front, com imagem `zeny-hotel-manager:<commit curto>`, porta 8088 e `ZENY_HTTP_ADDRESS=0.0.0.0`;
+  - o override do front, com imagem `zeny-hotel-manager:<commit curto>`, porta 8088 e `ZENY_HTTP_ADDRESS=0.0.0.0` como padrão no pacote. No notebook, o mesmo override tem padrão `127.0.0.1`, e o `.env` pode sobrescrever nos dois (confirmado pelo usuário em 2026-11-10, M0 E01, D2). O override mantém o `build:` do compose do servidor, para a imagem ser construída no Windows (confirmado pelo usuário em 2026-11-10, M0 E01, D1);
   - um `.env.example`;
   - os JARs do app e do `demo-seed`;
   - um `LEIA-ME.md` em PowerShell: `build`, `up`, recriar a demo e abrir o app.
