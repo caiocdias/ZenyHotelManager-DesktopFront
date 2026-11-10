@@ -22,14 +22,14 @@ O repositório do servidor é **só leitura** para o front: só `rev-parse`, `sh
 
 O ambiente do servidor é da máquina, não do worktree. Por isso tudo isto fica no **checkout principal** do front, mesmo quando o script roda de um worktree:
 
-- `.server/<commit curto>/`: árvore do servidor extraída do commit fixado (commit curto = 12 primeiros caracteres do SHA);
-- `.server/<commit curto>.override.yaml`: override do compose renderizado;
+- `.server/<commit>/`: árvore do servidor extraída do commit fixado (SHA completo, 40 caracteres);
+- `.server/<commit>.override.yaml`: override do compose renderizado;
 - `.server/zeny-front.env`: o `.env` real, com chaves e senhas (nunca vai para o Git);
 - `build/demo-package/`: o pacote do Windows.
 
 `.server/` e `build/` se autoignoram (cada um tem um `.gitignore` com `*`). **Nunca rode `git clean` no checkout principal**: apagaria o `.env`, cujas chaves estão presas ao volume do banco.
 
-O ambiente usa sempre o projeto compose `zeny-front`, a imagem `zeny-hotel-manager:<commit curto>` e a porta 8088 por padrão. Nunca toca o projeto `zeny` nem a imagem `:dev`.
+O ambiente usa sempre o projeto compose `zeny-front`, a imagem `zeny-hotel-manager:<commit curto>` (commit curto = 12 primeiros caracteres do SHA, só na tag da imagem) e a porta 8088 por padrão. Nunca toca o projeto `zeny` nem a imagem `:dev`.
 
 ## Comandos
 
