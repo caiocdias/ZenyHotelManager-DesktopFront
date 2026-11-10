@@ -4,9 +4,14 @@
 #
 # Uso: tools/server-drift.sh [--base REF] [--target REF]
 #   --base REF     commit de partida (ou ZENY_DRIFT_BASE). Padrão: `commit` do pin
-#                  (api/server-pin.properties). Com --base o pin não é lido nem conferido.
+#                  (api/server-pin.properties). Com base explícita (opção ou variável) o pin
+#                  não é lido nem conferido.
 #   --target REF   commit de chegada (ou ZENY_DRIFT_TARGET). Padrão: main do servidor.
 #   -h, --help     mostra esta ajuda.
+#
+# Precedência: a opção vence a variável de ambiente; variável vazia conta como ausente;
+# valor vazio ou faltando numa opção é erro de uso (código 2). ZENY_DRIFT_BASE, como --base,
+# dispensa o pin.
 #
 # Códigos de saída:
 #   0   igual: base e alvo são o mesmo commit
@@ -38,6 +43,7 @@ while (($# > 0)); do
       ;;
     --base | --target)
       (($# >= 2)) || die 2 "opção $1 exige um valor"
+      [[ -n "$2" ]] || die 2 "opção $1 exige um valor não vazio"
       if [[ "$1" == --base ]]; then base_ref="$2"; else target_ref="$2"; fi
       shift 2
       ;;
@@ -49,7 +55,9 @@ target_ref="${target_ref:-main}"
 # Base padrão = pin; só então o pin é conferido.
 if [[ -z "$base_ref" ]]; then
   base_ref="$(pin_get commit)" || exit "$?"
+  [[ -n "$base_ref" ]] || die 3 "pin incompleto: commit vazio"
   expected_sha="$(pin_get contract_sha256)" || exit "$?"
+  [[ -n "$expected_sha" ]] || die 3 "pin incompleto: contract_sha256 vazio"
   local_contract="$(front_root)/api/openapi.yaml"
   [[ -f "$local_contract" ]] || die 3 "contrato local não encontrado: $local_contract"
   actual_sha="$(sha256sum "$local_contract" | cut -d' ' -f1)"
@@ -74,7 +82,7 @@ fi
 changed="$(srv_git diff --name-only "$base" "$target" -- docker/)" || exit 2
 if [[ -n "$changed" ]]; then
   printf 'Ambiente do servidor alterado:\n'
-  printf '  %s\n' $changed
+  while IFS= read -r path; do printf '  %s\n' "$path"; done <<<"$changed"
   printf 'Revise tools/server-env/ na próxima rodada.\n'
 else
   printf 'Ambiente do servidor sem mudanças.\n'
