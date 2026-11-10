@@ -43,10 +43,13 @@ ensure_server_tree() {
       rm -rf "$tmp"
       die 2 "falha ao extrair o commit $commit do servidor"
     fi
-    mv "$tmp" "$tree" || {
+    # mktemp cria 0700; a árvore segue o umask, pois os containers leem os bind mounts com outros uids.
+    chmod "$(printf '%o' $((0777 & ~$(umask))))" "$tmp"
+    # -T: nunca entra num destino existente (extração concorrente); nesse caso descarta o temporário.
+    if ! mv -T "$tmp" "$tree" 2>/dev/null; then
       rm -rf "$tmp"
-      die 1 "falha ao instalar a árvore $tree"
-    }
+      [[ -d "$tree" ]] || die 1 "falha ao instalar a árvore $tree"
+    fi
   fi
   expected="$(pin_get contract_sha256)" || exit "$?"
   actual="$(sha256sum "$tree/api/openapi.yaml" 2>/dev/null | cut -d' ' -f1)"
@@ -55,13 +58,23 @@ ensure_server_tree() {
   printf '%s\n' "$tree"
 }
 
+# _replace_all TEXT MARKER VALUE : troca MARKER por VALUE literalmente (sem interpretar & nem barras).
+_replace_all() {
+  local text="$1" marker="$2" value="$3" out=""
+  while [[ "$text" == *"$marker"* ]]; do
+    out+="${text%%"$marker"*}$value"
+    text="${text#*"$marker"}"
+  done
+  printf '%s' "$out$text"
+}
+
 # render_override DEST DEFAULT_ADDRESS
 render_override() {
   local dest="$1" address="$2" tag content
   tag="$(server_tag)" || exit "$?"
   content="$(<"$_SERVER_ENV_DIR/compose.override.yaml")"
-  content="${content//@SERVER_TAG@/$tag}"
-  content="${content//@DEFAULT_ADDRESS@/$address}"
+  content="$(_replace_all "$content" @SERVER_TAG@ "$tag")"
+  content="$(_replace_all "$content" @DEFAULT_ADDRESS@ "$address")"
   printf '%s\n' "$content" >"$dest"
 }
 
@@ -80,7 +93,8 @@ env_get() {
   if [[ -f "$file" ]]; then
     value="$(awk -v k="$key" '
       { sub(/\r$/, "") }
-      index($0, k "=") == 1 { print "F" substr($0, length(k) + 2); exit }
+      index($0, k "=") == 1 { v = "F" substr($0, length(k) + 2) }
+      END { if (v != "") print v }
     ' "$file")"
     if [[ "$value" == F* ]]; then
       printf '%s\n' "${value#F}"
