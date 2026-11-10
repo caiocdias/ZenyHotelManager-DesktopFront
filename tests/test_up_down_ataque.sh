@@ -181,12 +181,22 @@ assert_contains "$(cat "$dlog")" "-p zeny-front " "variáveis hostis: ainda cham
 check_isolation "$dlog" "variáveis hostis (COMPOSE_PROJECT_NAME/ZENY_FRONT_PROJECT) não trocam o projeto"
 assert_not_contains "$(cat "$dlog")" "/nao/existe" "COMPOSE_FILE hostil não aparece no argv"
 
-# Com árvore: -f explícito vence COMPOSE_FILE; todo compose tem -f do compose do commit fixado.
+# build/up usam -f da árvore do checkout principal; down e down -v (ruling D1) só-projeto: sem -f nem --env-file.
+seen_bu=0 seen_down=0
 while IFS= read -r l; do
   [[ "$l" == *" compose "* && "$l" != *"image inspect"* ]] || continue
-  [[ "$l" == *"-f $f_h/.server/$FAKE_C1/docker/compose.yaml -f $f_h/.server/$FAKE_C1.override.yaml "* ]] ||
-    _assert_fail "com árvore, compose usa -f da árvore do checkout principal" "linha: $l"
+  if [[ "$l" == *" build "* || "$l" == *" up "* ]]; then
+    seen_bu=$((seen_bu + 1))
+    [[ "$l" == *"-f $f_h/.server/$FAKE_C1/docker/compose.yaml -f $f_h/.server/$FAKE_C1.override.yaml "* ]] ||
+      _assert_fail "build/up usam -f da árvore do checkout principal" "linha: $l"
+  elif [[ "$l" == *" down"* ]]; then
+    seen_down=$((seen_down + 1))
+    [[ "$l" == *" -f "* || "$l" == *"--env-file"* ]] &&
+      _assert_fail "down/down -v não têm -f nem --env-file" "linha: $l"
+  fi
 done <"$dlog"
+assert_eq "1" "$((seen_bu >= 2 ? 1 : 0))" "o log tem build e up para conferir"
+assert_eq "1" "$((seen_down >= 2 ? 1 : 0))" "o log tem down e down -v para conferir"
 
 # Sem árvore: o diretório vazio existe para que nenhum compose.yaml entre; COMPOSE_FILE no
 # ambiente derrota esse propósito (o docker lê COMPOSE_FILE quando não há -f).
