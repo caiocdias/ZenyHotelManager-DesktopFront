@@ -25,6 +25,7 @@ fi
 compose up -d || die 1 "falha ao subir o projeto $ZENY_FRONT_PROJECT"
 
 port="$(env_get ZENY_HTTP_PORT 8088)"
+port="${port:-8088}"
 address="$(env_get ZENY_HTTP_ADDRESS)"
 case "$address" in
   "" | 127.0.0.1 | 0.0.0.0) host=127.0.0.1 ;;
@@ -36,8 +37,10 @@ timeout="${ZENY_UP_TIMEOUT:-600}"
 deadline=$((SECONDS + timeout))
 last=""
 while :; do
-  last="$(curl -fsS --max-time 5 "$url/actuator/health/readiness" 2>&1)"
-  if [[ "$last" =~ \"status\"[[:space:]]*:[[:space:]]*\"UP\" ]]; then
+  last="$(curl -fsS --max-time 5 "$url/actuator/health/readiness")"
+  compact="${last//[[:space:]]/}"
+  # Só o status de topo conta: o corpo tem de começar com {"status":"UP".
+  if [[ "$compact" == '{"status":"UP"'* ]]; then
     printf '%s no ar em %s (servidor %s)\n' "$ZENY_FRONT_PROJECT" "$url" "$tag"
     exit 0
   fi

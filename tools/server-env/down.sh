@@ -12,17 +12,13 @@ for arg in "$@"; do
   esac
 done
 
-tree="$(server_tree_dir)" || exit "$?"
-if [[ -d "$tree" ]]; then
-  compose down "${args[@]}" || die 1 "falha ao derrubar o projeto $ZENY_FRONT_PROJECT"
-else
-  # Sem árvore extraída: diretório vazio, para nenhum compose.yaml do cwd entrar.
-  empty="$(mktemp -d)" || die 1 "não foi possível criar diretório temporário"
-  (cd "$empty" && docker compose -p "$ZENY_FRONT_PROJECT" down "${args[@]}")
-  code=$?
-  rmdir "$empty"
-  ((code == 0)) || die 1 "falha ao derrubar o projeto $ZENY_FRONT_PROJECT"
-fi
+# Só o projeto, de um diretório vazio e sem COMPOSE_FILE/COMPOSE_PROFILES: derrubar não depende
+# de segredos, do .env nem da árvore extraída.
+empty="$(mktemp -d)" || die 1 "não foi possível criar diretório temporário"
+(cd "$empty" && env -u COMPOSE_FILE -u COMPOSE_PROFILES docker compose -p "$ZENY_FRONT_PROJECT" down "${args[@]}")
+code=$?
+rmdir "$empty"
+((code == 0)) || die 1 "falha ao derrubar o projeto $ZENY_FRONT_PROJECT"
 if ((${#args[@]})); then
   printf 'projeto %s removido, com os volumes\n' "$ZENY_FRONT_PROJECT"
 else
