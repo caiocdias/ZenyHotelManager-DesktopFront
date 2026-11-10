@@ -16,7 +16,7 @@ O front fala com um commit específico do servidor, registrado em `api/server-pi
 
 Hoje: `ca9f9e2f9808c74c98154f1e8e60381fecbf1b5d`.
 
-O repositório do servidor é **só leitura** para o front: só `rev-parse`, `show` e `archive`. Nada de `checkout`, `worktree add`, `fetch` ou arquivos novos lá. Se faltar algo na API, o front abre um pedido (veja `docs/pedidos-servidor.md`) em vez de remendar o servidor.
+O repositório do servidor é **só leitura** para o front: só `rev-parse`, `cat-file`, `show`, `archive` e `diff`. Nada de `checkout`, `worktree add`, `fetch` ou arquivos novos lá. Se faltar algo na API, o front abre um pedido (veja `docs/pedidos-servidor.md`) em vez de remendar o servidor.
 
 ## Estado de máquina
 
