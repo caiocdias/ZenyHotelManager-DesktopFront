@@ -23,8 +23,12 @@ for proibido in 'base' 'java' 'application' 'kotlin' 'clean' 'buildDirectory'; d
   assert_not_contains "$sem_alias" "$proibido" "raiz não usa $proibido"
 done
 
-mapfile -t kts < <(find "$ROOT" -name '*.gradle.kts' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.claude/*' -not -path '*/.git/*' | sort)
-literais="$(grep -nE '^[^/]*("[^"]*:[0-9]+\.[0-9]+[^"]*"|\<version[[:space:]]*(=|\()?[[:space:]]*"[^"]*[0-9])' "${kts[@]}" 2>/dev/null)"
+# Caminhos relativos à raiz: o worktree mora sob .claude/, e uma exclusão '*/.claude/*' contra o caminho
+# absoluto descartaria todos os arquivos. Só o .claude da raiz (worktrees aninhados) fica de fora.
+mapfile -t kts < <(cd "$ROOT" && find . -name '*.gradle.kts' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path './.claude/*' -not -path './.git/*' | sort)
+if [[ "${#kts[@]}" -lt 7 ]]; then _assert_fail "acha ao menos 7 *.gradle.kts (raiz, settings e cinco módulos)" "achou ${#kts[@]}: ${kts[*]}"; fi
+# /dev/null evita que o grep leia o stdin se a lista vier vazia.
+literais="$(cd "$ROOT" && grep -nE '^[^/]*("[^"]*:[0-9]+\.[0-9]+[^"]*"|\<version[[:space:]]*(=|\()?[[:space:]]*"[^"]*[0-9])' /dev/null "${kts[@]}" 2>/dev/null)"
 assert_eq "" "$literais" "nenhum *.gradle.kts com versão literal (coordenada ou plugin)"
 
 props="$(cat "$ROOT/gradle.properties" 2>/dev/null)"
