@@ -64,4 +64,9 @@ fun PhoneField(
     label: String,
     error: String? = null,
     modifier: Modifier = Modifier,
-) = ParsedTextField(value, { onValueChange(PhoneInput.mask(it)) }, label, error, modifier, PhoneInput::parse)
+) = ParsedTextField(
+    value,
+    { onValueChange(PhoneInput.mask(it)) },
+    FieldSpec(label, error, PhoneInput::parse),
+    modifier,
+)

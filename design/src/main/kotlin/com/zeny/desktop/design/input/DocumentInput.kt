@@ -126,4 +126,9 @@ fun DocumentField(
     label: String,
     error: String? = null,
     modifier: Modifier = Modifier,
-) = ParsedTextField(value, { onValueChange(DocumentInput.mask(it)) }, label, error, modifier, DocumentInput::parse)
+) = ParsedTextField(
+    value,
+    { onValueChange(DocumentInput.mask(it)) },
+    FieldSpec(label, error, DocumentInput::parse),
+    modifier,
+)

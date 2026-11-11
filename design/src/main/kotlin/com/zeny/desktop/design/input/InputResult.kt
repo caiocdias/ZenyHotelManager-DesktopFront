@@ -23,6 +23,13 @@ sealed interface InputResult<out T> {
     data object Empty : InputResult<Nothing>
 }
 
+/** Rótulo, erro do formulário e interpretação do texto de um [ParsedTextField]. */
+internal data class FieldSpec(
+    val label: String,
+    val error: String?,
+    val parse: (String) -> InputResult<*>,
+)
+
 /**
  * Campo de texto que mostra [error] (o do formulário) ou, depois que o campo perdeu o foco,
  * a mensagem de [InputResult.Invalid] do texto atual.
@@ -31,11 +38,10 @@ sealed interface InputResult<out T> {
 internal fun ParsedTextField(
     value: String,
     onValueChange: (String) -> Unit,
-    label: String,
-    error: String?,
+    spec: FieldSpec,
     modifier: Modifier,
-    parse: (String) -> InputResult<*>,
 ) {
+    val (label, error, parse) = spec
     var touched by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
     val localError = if (touched) (parse(value) as? InputResult.Invalid)?.message else null

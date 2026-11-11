@@ -40,4 +40,4 @@ fun DateField(
     label: String,
     error: String? = null,
     modifier: Modifier = Modifier,
-) = ParsedTextField(value, onValueChange, label, error, modifier, DateInput::parse)
+) = ParsedTextField(value, onValueChange, FieldSpec(label, error, DateInput::parse), modifier)
