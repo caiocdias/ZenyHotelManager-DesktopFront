@@ -67,7 +67,16 @@ class AuthenticatorTest {
     private val store = TokenStore().apply { set(Tokens("A1", "R1", "s1", "u1", true)) }
     private val refresher = RotatingRefresher()
     private val ended = CopyOnWriteArrayList<String?>()
-    private val auth = Authenticator(store, refresher, scope) { ended += it }
+    private val endedSessions = CopyOnWriteArrayList<String>()
+    private val auth = Authenticator(store, refresher, scope, ::recordEnd)
+
+    private fun recordEnd(
+        code: String?,
+        sessionId: String,
+    ) {
+        ended += code
+        endedSessions += sessionId
+    }
 
     @AfterTest
     fun tearDown() = scope.cancel()
@@ -132,6 +141,7 @@ class AuthenticatorTest {
             assertEquals(List(3) { null }, callers.awaitAll())
             assertNull(store.current())
             assertEquals(listOf<String?>("REFRESH_TOKEN_REUSED"), ended.toList())
+            assertEquals(listOf("s1"), endedSessions.toList())
         }
 
     @Test
@@ -195,7 +205,8 @@ class AuthenticatorTest {
                         throw ApiError.Problem(401, "REFRESH_TOKEN_REUSED", null, emptyList())
                     },
                     scope,
-                ) { ended += it }
+                    ::recordEnd,
+                )
             val caller = async(start = CoroutineStart.UNDISPATCHED) { rejecting.refreshAfterRejection("A1") }
 
             store.set(Tokens("B1", "S1", "s2", "u2", false))
@@ -279,4 +290,31 @@ class AuthenticatorTest {
             assertEquals(List(5) { "A2" }, callers.awaitAll())
             assertEquals(listOf("R1"), refresher.received.toList())
         }
+
+    @Test
+    fun flightReleasesTheLastPairWhenItEnds() =
+        runTest(timeout = 5.seconds) {
+            assertEquals("A2", auth.refreshAfterRejection(store.current()!!)?.accessToken)
+            store.clear()
+
+            assertNull(privateField("inFlight"))
+            assertNull(privateField("inFlightOrigin"))
+        }
+
+    @Test
+    fun rejectedFlightAlsoReleasesTheLastPair() =
+        runTest(timeout = 5.seconds) {
+            store.set(Tokens("A0", "R0", "s1", "u1", false))
+
+            assertNull(auth.refreshAfterRejection(store.current()!!))
+
+            assertNull(privateField("inFlight"))
+            assertNull(privateField("inFlightOrigin"))
+        }
+
+    private fun privateField(name: String): Any? =
+        Authenticator::class.java
+            .getDeclaredField(name)
+            .apply { isAccessible = true }
+            .get(auth)
 }

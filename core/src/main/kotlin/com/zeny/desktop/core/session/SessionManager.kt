@@ -91,6 +91,21 @@ class SessionManager(
         }
     }
 
+    /**
+     * O `onSessionEnded` do `Authenticator`, que já limpou o store: só passa a `Ended` se o estado ativo é da
+     * sessão `sessionId` (o aviso de uma sessão antiga não derruba a atual).
+     */
+    fun sessionEnded(
+        @Suppress("UNUSED_PARAMETER") code: String?,
+        sessionId: String,
+    ) {
+        synchronized(lock) {
+            if ((_state.value as? SessionState.Active)?.sessionId == sessionId) {
+                _state.value = SessionState.Ended(SESSION_ENDED_MESSAGE)
+            }
+        }
+    }
+
     private fun activate(tokens: Tokens): SessionState.Active =
         SessionState.Active(tokens.userId, tokens.sessionId, tokens.passwordChangeRequired).also { _state.value = it }
 }

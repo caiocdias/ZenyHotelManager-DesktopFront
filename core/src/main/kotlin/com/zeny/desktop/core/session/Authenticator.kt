@@ -4,9 +4,11 @@ import com.zeny.desktop.core.error.ApiError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /** Troca o par atual por um novo; lança `ApiError` (por exemplo `Problem` `401 REFRESH_TOKEN_REUSED`, ou `Network`). */
 fun interface TokenRefresher {
@@ -15,15 +17,27 @@ fun interface TokenRefresher {
 
 /**
  * Dono do refresh: todo refresh do `core` passa pelo voo único daqui. O refresh roda no `scope` do `core`
- * (com `SupervisorJob`), então quem espera e é cancelado só deixa de esperar; o par novo é gravado mesmo assim.
- * `ApiError.Network` chega a todos que esperam e mantém a sessão; qualquer outro `ApiError` a encerra.
+ * (com `SupervisorJob`), então quem espera e é cancelado só deixa de esperar; o par novo é gravado mesmo assim,
+ * mas só se o `TokenStore` ainda guarda o par usado no refresh (logout ou novo login no meio descartam o par).
+ * `ApiError.Network` chega a todos que esperam e mantém a sessão. Qualquer outro `ApiError` encerra a sessão
+ * (limpa o store e chama `onSessionEnded(code, sessionId)` uma vez), só se o store ainda guarda o par usado.
+ * Exceções que não são `ApiError` chegam a quem espera sem encerrar a sessão. Terminado o voo, o
+ * `Authenticator` não guarda par nenhum.
  */
 class Authenticator(
     private val store: TokenStore,
     private val refresher: TokenRefresher,
     private val scope: CoroutineScope,
-    private val onSessionEnded: (code: String?) -> Unit,
+    private val onSessionEnded: (code: String?, sessionId: String) -> Unit,
 ) {
+    /** Só para testes: o aviso sem o `sessionId`, na forma do brief. */
+    internal constructor(
+        store: TokenStore,
+        refresher: TokenRefresher,
+        scope: CoroutineScope,
+        onSessionEnded: (code: String?) -> Unit,
+    ) : this(store, refresher, scope, { code, _ -> onSessionEnded(code) })
+
     private val mutex = Mutex()
     private var inFlight: Deferred<Tokens?>? = null
     private var inFlightOrigin: Tokens? = null
@@ -43,11 +57,8 @@ class Authenticator(
     suspend fun refreshAfterRejection(rejected: Tokens): Tokens? =
         flight(isRejected = { it === rejected }, sameSession = { it.sessionId == rejected.sessionId }).await()
 
-    /**
-     * Forma do brief, só pelo access token: não distingue sessões (um token de outra sessão conta como antigo
-     * da atual). O `AuthPlugin` usa a forma com `Tokens`.
-     */
-    suspend fun refreshAfterRejection(rejectedAccessToken: String): String? =
+    /** Só para testes; não distingue sessões (um token de outra sessão conta como antigo da atual). */
+    internal suspend fun refreshAfterRejection(rejectedAccessToken: String): String? =
         flight(isRejected = { it.accessToken == rejectedAccessToken }, sameSession = { true }).await()?.accessToken
 
     /** Espera o refresh em voo, se houver, e faz um novo pelo voo único, com o refresh token já girado. */
@@ -64,7 +75,7 @@ class Authenticator(
         rejected: Tokens,
         code: String?,
     ) {
-        if (store.clearIfSession(rejected.sessionId)) onSessionEnded(code)
+        if (store.clearIfSession(rejected.sessionId)) onSessionEnded(code, rejected.sessionId)
     }
 
     /**
@@ -79,13 +90,25 @@ class Authenticator(
         mutex.withLock {
             val active = inFlight?.takeIf { it.isActive }
             val current = store.current()
-            if (current == null || !sameSession(current)) return@withLock completed(null)
+            if (current == null) {
+                inFlight = null
+                inFlightOrigin = null
+                return@withLock completed(null)
+            }
+            if (!sameSession(current)) return@withLock completed(null)
             if (active != null && inFlightOrigin === current) return@withLock active
             if (!isRejected(current)) return@withLock completed(current)
-            scope.async { refresh(current) }.also {
-                inFlight = it
-                inFlightOrigin = current
-            }
+            val flight =
+                scope.async {
+                    try {
+                        refresh(current)
+                    } finally {
+                        release(current)
+                    }
+                }
+            inFlight = flight
+            inFlightOrigin = current
+            flight
         }
 
     /**
@@ -99,8 +122,19 @@ class Authenticator(
         } catch (e: ApiError.Network) {
             throw e
         } catch (e: ApiError) {
-            if (store.replaceIf(current, null)) onSessionEnded(codeOf(e))
+            if (store.replaceIf(current, null)) onSessionEnded(codeOf(e), current.sessionId)
             null
+        }
+
+    /** Esquece o voo que terminou, para o último par não ficar guardado aqui (logout inclusive). */
+    private suspend fun release(origin: Tokens) =
+        withContext(NonCancellable) {
+            mutex.withLock {
+                if (inFlightOrigin === origin) {
+                    inFlight = null
+                    inFlightOrigin = null
+                }
+            }
         }
 
     /** `CompletableDeferred(null)` cairia no construtor com `parent: Job?` e nunca completaria. */

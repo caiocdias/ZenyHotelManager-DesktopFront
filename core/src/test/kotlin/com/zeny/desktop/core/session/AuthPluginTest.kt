@@ -47,7 +47,12 @@ class AuthPluginTest {
     private val store = TokenStore().apply { set(Tokens("A1", "R1", "s1", "u1", false)) }
     private val refresher = RotatingRefresher()
     private val ended = CopyOnWriteArrayList<String?>()
-    private val auth = Authenticator(store, refresher, scope) { ended += it }
+    private val endedSessions = CopyOnWriteArrayList<String>()
+    private val auth =
+        Authenticator(store, refresher, scope) { code, sessionId ->
+            ended += code
+            endedSessions += sessionId
+        }
     private val requests = CopyOnWriteArrayList<HttpRequestData>()
 
     @AfterTest
@@ -129,12 +134,14 @@ class AuthPluginTest {
             for (code in listOf("ACCOUNT_DISABLED", "SOMETHING_NEW")) {
                 store.set(Tokens("A1", "R1", "s1", "u1", false))
                 ended.clear()
+                endedSessions.clear()
                 requests.clear()
                 val hotel = HotelApi(api { problem(code) })
 
                 val response = hotel.getHotel()
 
                 assertEquals(listOf<String?>(code), ended.toList())
+                assertEquals(listOf("s1"), endedSessions.toList())
                 assertEquals(1, requests.size)
                 assertEquals(0, refresher.calls)
                 assertNull(store.current())
@@ -178,6 +185,7 @@ class AuthPluginTest {
             assertEquals(listOf("Bearer A2"), requests[1].authorization)
             assertEquals(1, refresher.calls)
             assertEquals(listOf<String?>("UNAUTHENTICATED"), ended.toList())
+            assertEquals(listOf("s1"), endedSessions.toList())
             assertNull(store.current())
         }
 
