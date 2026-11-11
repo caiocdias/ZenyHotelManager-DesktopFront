@@ -129,6 +129,9 @@ fun DocumentField(
 ) = ParsedTextField(
     value,
     onValueChange,
-    FieldSpec(label, error, DocumentInput::parse, DocumentInput::mask, Char::isLetterOrDigit),
+    FieldSpec(label, error, DocumentInput::parse, DocumentInput::mask, {
+        it in '0'..'9' || it in 'A'..'Z' ||
+            it in 'a'..'z'
+    }),
     modifier,
 )

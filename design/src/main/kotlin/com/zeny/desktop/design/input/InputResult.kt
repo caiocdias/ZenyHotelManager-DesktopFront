@@ -76,14 +76,16 @@ internal fun ParsedTextField(
             value = field,
             onValueChange = { typed ->
                 val masked = mask(typed.text)
-                val cursor =
-                    if (masked == typed.text) {
-                        typed.selection.end
-                    } else {
-                        cursorAfter(masked, typed.text.take(typed.selection.end).count(significant), significant)
-                    }
-                field = TextFieldValue(masked, TextRange(cursor))
-                onValueChange(masked)
+                val textChanged = typed.text != field.text
+                if (masked == typed.text) {
+                    // Só a seleção ou a composição mudou (ou o texto já estava formatado): preserva tudo.
+                    field = typed
+                    if (textChanged) onValueChange(masked)
+                } else {
+                    val before = typed.text.take(typed.selection.end).count(significant)
+                    field = TextFieldValue(masked, TextRange(cursorAfter(masked, before, significant)))
+                    onValueChange(masked)
+                }
             },
             label = { Text(label) },
             singleLine = true,

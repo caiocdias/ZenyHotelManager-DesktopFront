@@ -57,4 +57,22 @@ class DataTableEmptyTest {
             waitForIdle()
             onNodeWithTag("table-empty").assertTextEquals("Nada aqui.")
         }
+
+    @Test
+    fun hidesMessageWhileFilteringWithMorePagesToLoad() =
+        runComposeUiTest {
+            val state =
+                TableState(
+                    { CursorPager<EmptyRow>(2) { _, _ -> Page(listOf(EmptyRow(1), EmptyRow(2)), "next") } },
+                ) { it.id }
+            // Com filtro a próxima página não vem sozinha: só a primeira carga acontece.
+            state.filter = "zzz"
+            setContent {
+                ZenyTheme { Box(Modifier.width(400.dp).height(200.dp)) { DataTable(state, rowColumns) } }
+            }
+            waitUntil(timeoutMillis = EMPTY_WAIT_MS) { state.rows.isNotEmpty() }
+            waitForIdle()
+            onNodeWithTag("load-more").assertExists()
+            onNodeWithTag("table-empty").assertDoesNotExist()
+        }
 }

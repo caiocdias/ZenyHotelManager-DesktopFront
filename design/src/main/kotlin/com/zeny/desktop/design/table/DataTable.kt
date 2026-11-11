@@ -159,8 +159,8 @@ private fun <T> Footer(
     onLoad: () -> Unit,
 ) {
     val error = state.error
-    // Antes da primeira carga (sem linhas e com mais por vir) a lista não "terminou vazia".
-    val finishedEmpty = noVisibleRows && !state.loading && error == null && !(state.rows.isEmpty() && state.hasMore)
+    // Com mais páginas por vir (inclusive antes da primeira carga) a lista ainda não terminou.
+    val finishedEmpty = noVisibleRows && !state.loading && error == null && !state.hasMore
     if (finishedEmpty) Text(emptyMessage, Modifier.padding(vertical = 8.dp).testTag("table-empty"))
     when {
         state.loading -> {
