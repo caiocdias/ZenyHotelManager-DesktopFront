@@ -45,4 +45,10 @@ for m in sdk core design app demo-seed; do
   assert_file "$ROOT/$m/build.gradle.kts" "build.gradle.kts de $m"
 done
 
+# Fronteira com o sdk (ADR 0008): o core expõe o sdk por api(); app e design só chegam a ele pelo core.
+assert_contains "$(cat "$ROOT/core/build.gradle.kts" 2>/dev/null)" 'api(project(":sdk"))' "core expõe o sdk por api(project(\":sdk\"))"
+for m in app design; do
+  assert_not_contains "$(cat "$ROOT/$m/build.gradle.kts" 2>/dev/null)" 'project(":sdk")' "$m não depende do sdk direto"
+done
+
 finish

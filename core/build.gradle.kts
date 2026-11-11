@@ -1,1 +1,17 @@
-// Módulo core: configurado pelas tarefas seguintes.
+plugins {
+    alias(libs.plugins.kotlin.jvm)
+}
+
+kotlin {
+    jvmToolchain(25)
+}
+
+dependencies {
+    api(project(":sdk"))
+
+    testImplementation(libs.kotlin.test.junit5)
+}
+
+tasks.test {
+    useJUnitPlatform()
+}
