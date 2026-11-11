@@ -98,6 +98,17 @@ done
 proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)|io\.ktor\.client|de\.quati\.ogen\.client' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
 assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client, .util, io.ktor.client nem de.quati.ogen.client"
 
+# Task 10 da E02: o acesso cru às operações do sdk (`@RawSdkAccess`, ADR 0008) é só do core e do demo-seed.
+# app e design não citam a anotação, nem por @OptIn, nem por optIn/-opt-in no build.gradle.kts.
+raw_usos="$(cd "$ROOT" && grep -rnE 'RawSdkAccess' /dev/null $(ls -d app/src design/src app/build.gradle.kts design/build.gradle.kts 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$raw_usos" "app e design não citam RawSdkAccess (nem @OptIn, nem optIn/-opt-in no build)"
+raw_kt="$ROOT/core/src/main/kotlin/com/zeny/desktop/core/RawSdkAccess.kt"
+assert_file "$raw_kt" "o core declara a anotação RawSdkAccess"
+raw_ativo="$(sed -E 's@^\s*//.*$@@' "$raw_kt" 2>/dev/null)"
+assert_contains "$raw_ativo" 'annotation class RawSdkAccess' "RawSdkAccess é uma annotation class"
+assert_contains "$raw_ativo" '@RequiresOptIn' "RawSdkAccess é @RequiresOptIn"
+assert_contains "$raw_ativo" 'RequiresOptIn.Level.ERROR' "RawSdkAccess exige opt-in no nível ERROR (não WARNING)"
+
 # Task 10: travamento estrito. Cada módulo tem gradle.lockfile (a raiz não tem configuração resolvível, e o
 # Gradle não grava lockfile vazio); o classpath dos plugins e o das settings também têm o seu.
 for d in sdk core design app demo-seed; do

@@ -88,6 +88,33 @@ printf 'val c = de.quati.ogen.client.ktor.HttpClientOgen()\n' >"$plantado/design
 assert_contains "$(varre_proibidos "$plantado")" "de.quati.ogen.client.ktor.HttpClientOgen" "a varredura de fronteira acha nome qualificado de de.quati.ogen.client em design/src"
 rm -rf "$plantado"
 
+# E02 Task 10: `RawSdkAccess` (acesso cru, ADR 0008) fora de app e design, inclusive o opt-in no build.gradle.kts.
+varre_raw() {
+  local base="$1" d f
+  local -a arquivos=()
+  for d in app/src design/src; do
+    [[ -d "$base/$d" ]] || continue
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
+  done
+  for f in app/build.gradle.kts design/build.gradle.kts; do
+    [[ -f "$base/$f" ]] && arquivos+=("$base/$f")
+  done
+  grep -nE 'RawSdkAccess' /dev/null "${arquivos[@]}" 2>/dev/null
+}
+assert_eq "" "$(varre_raw "$ROOT")" "app e design (fontes e build.gradle.kts) sem RawSdkAccess"
+plantado="$(mktemp -d)"
+mkdir -p "$plantado/app/src/main/kotlin" "$plantado/design/src/main/kotlin"
+printf '@OptIn(RawSdkAccess::class)\nfun f() = Unit\n' >"$plantado/app/src/main/kotlin/F.kt"
+assert_contains "$(varre_raw "$plantado")" "@OptIn(RawSdkAccess::class)" "a varredura de RawSdkAccess acha @OptIn em app/src"
+rm "$plantado/app/src/main/kotlin/F.kt"
+printf 'kotlin {\n  compilerOptions {\n    optIn.add("com.zeny.desktop.core.RawSdkAccess")\n  }\n}\n' >"$plantado/app/build.gradle.kts"
+assert_contains "$(varre_raw "$plantado")" 'optIn.add("com.zeny.desktop.core.RawSdkAccess")' "a varredura de RawSdkAccess acha optIn.add num app/build.gradle.kts"
+printf 'freeCompilerArgs.add("-opt-in=com.zeny.desktop.core.RawSdkAccess")\n' >"$plantado/design/build.gradle.kts"
+assert_contains "$(varre_raw "$plantado")" '-opt-in=com.zeny.desktop.core.RawSdkAccess' "a varredura de RawSdkAccess acha -opt-in num design/build.gradle.kts"
+printf 'import com.zeny.desktop.core.RawSdkAccess\n' >"$plantado/design/src/main/kotlin/G.kt"
+assert_contains "$(varre_raw "$plantado")" "G.kt:1:import com.zeny.desktop.core.RawSdkAccess" "a varredura de RawSdkAccess acha import em design/src"
+rm -rf "$plantado"
+
 # --- 4. Módulos: grafo e plugins por módulo (design §6.1) --------------------------------------------------
 kts() { sem_comentario "$ROOT/$1/build.gradle.kts"; }
 for m in sdk core design app demo-seed; do
