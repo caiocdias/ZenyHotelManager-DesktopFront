@@ -44,10 +44,21 @@ class SessionManager(
     ): SessionState.Active {
         val request = LoginRequest(DeviceRequest(id = settings.deviceId, name = deviceName), login, password)
         val tokens = executor.execute { iam.login(request, it.headers) }.value.toTokens()
-        settings.lastLogin = login
+        rememberLastLogin(login)
         return synchronized(lock) {
             store.set(tokens)
             activate(tokens)
+        }
+    }
+
+    /** Melhor esforço: preferências que falham (disco cheio, sem permissão) não derrubam um login já aceito. */
+    private fun rememberLastLogin(login: String) {
+        try {
+            settings.lastLogin = login
+        } catch (
+            @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
+        ) {
+            // O último login é só conveniência de preenchimento.
         }
     }
 

@@ -67,6 +67,14 @@ fun jarDirectory(anchor: Class<*>): Path? {
             @Suppress("SwallowedException") e: FileSystemNotFoundException,
         ) {
             null
+        } catch (
+            @Suppress("SwallowedException") e: IllegalArgumentException,
+        ) {
+            null
+        } catch (
+            @Suppress("SwallowedException") e: SecurityException,
+        ) {
+            null
         }
     return path?.takeIf { Files.isRegularFile(it) }?.parent
 }
