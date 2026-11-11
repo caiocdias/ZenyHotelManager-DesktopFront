@@ -1,0 +1,13 @@
+# Política de fim de linha. A lista é explícita, sem `* text=auto`.
+# Fora desta lista, o core.autocrlf do Windows continua convertendo texto para CRLF
+# no checkout; por isso, todo arquivo novo lido por bash ou Docker sem extensão .sh
+# entra nela (na M1 E01: `gradlew text eol=lf` e `*.bat text eol=crlf`).
+
+# Contrato do servidor: cópia byte a byte, o sha256 é o contract_sha256 do pin.
+api/openapi.yaml -text
+
+# Lidos por bash e Docker: sempre LF, também no checkout do Windows.
+*.sh text eol=lf
+api/server-pin.properties text eol=lf
+tools/server-env/.env.example text eol=lf
+tools/server-env/compose.override.yaml text eol=lf
