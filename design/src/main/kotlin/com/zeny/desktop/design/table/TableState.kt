@@ -40,7 +40,7 @@ data class Column<T>(
  */
 class TableState<T>(
     private val pagerFactory: () -> CursorPager<T>,
-    private val key: (T) -> Any,
+    val key: (T) -> Any,
 ) {
     private val mutex = Mutex()
 
