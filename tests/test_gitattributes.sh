@@ -35,11 +35,16 @@ _clone_windows() {
 attr="$(_g -C "$ROOT" check-attr text eol -- api/openapi.yaml)"
 assert_contains "$attr" "api/openapi.yaml: text: unset" "openapi.yaml sem normalização de texto"
 for f in tools/server-drift.sh tools/server-env/gen-env.sh tests/lib/assert.sh \
-  api/server-pin.properties tools/server-env/.env.example tools/server-env/compose.override.yaml; do
+  api/server-pin.properties tools/server-env/.env.example tools/server-env/compose.override.yaml gradlew; do
   attr="$(_g -C "$ROOT" check-attr text eol -- "$f")"
   assert_contains "$attr" "$f: text: set" "$f é texto"
   assert_contains "$attr" "$f: eol: lf" "$f usa eol=lf"
 done
+
+attr="$(_g -C "$ROOT" check-attr text eol -- gradlew.bat)"
+assert_contains "$attr" "gradlew.bat: eol: crlf" "gradlew.bat usa eol=crlf"
+attr="$(_g -C "$ROOT" check-attr text eol -- gradle/wrapper/gradle-wrapper.jar)"
+assert_contains "$attr" "gradle/wrapper/gradle-wrapper.jar: text: unset" "gradle-wrapper.jar é binário"
 
 # checkout Windows
 _clone_windows 1
@@ -59,6 +64,14 @@ for f in api/server-pin.properties tools/server-env/.env.example tools/server-en
     assert_eq "sem CR" "sem CR" "$f do clone sem CR"
   fi
 done
+if grep -q $'\r' "$c/gradlew"; then
+  assert_eq "sem CR" "com CR" "gradlew do clone sem CR"
+else
+  assert_eq "sem CR" "sem CR" "gradlew do clone sem CR"
+fi
+assert_eq "0" "$(grep -vc $'\r$' "$c/gradlew.bat")" "gradlew.bat do clone com CR em toda linha"
+assert_eq "$(sha256sum "$ROOT/gradle/wrapper/gradle-wrapper.jar" | cut -d' ' -f1)" \
+  "$(sha256sum "$c/gradle/wrapper/gradle-wrapper.jar" | cut -d' ' -f1)" "gradle-wrapper.jar do clone igual ao da árvore"
 assert_eq "" "$(_g -C "$c" status --porcelain)" "clone sem alterações pendentes"
 
 # controle negativo: sem .gitattributes, o autocrlf converte para CRLF

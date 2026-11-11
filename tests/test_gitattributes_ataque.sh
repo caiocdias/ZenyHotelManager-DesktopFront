@@ -108,7 +108,7 @@ done < <(git -C "$ROOT" ls-files -z)
 esperado=""
 while IFS= read -r -d '' f; do
   case "$f" in
-    *.sh | api/openapi.yaml | api/server-pin.properties | tools/server-env/.env.example | tools/server-env/compose.override.yaml)
+    *.sh | gradlew | *.bat | *.jar | api/openapi.yaml | api/server-pin.properties | tools/server-env/.env.example | tools/server-env/compose.override.yaml)
       esperado+="$f " ;;
   esac
 done < <(git -C "$ROOT" ls-files -z)
@@ -123,8 +123,10 @@ done <"$ROOT/.gitattributes"
 com_cr=""
 while IFS= read -r -d '' f; do
   [[ "$f" == api/openapi.yaml ]] && continue
+  # binário (text: unset) não entra na checagem de CR
+  [[ "$(_g -C "$ROOT" check-attr text -- "$f")" == *"text: unset" ]] && continue
   git -C "$ROOT" cat-file blob "HEAD:$f" | grep -q $'\r' && com_cr+="$f "
 done < <(git -C "$ROOT" ls-files -z)
-assert_eq "" "$com_cr" "nenhum blob do HEAD (exceto contrato) com CR"
+assert_eq "" "$com_cr" "nenhum blob do HEAD (exceto contrato e binários) com CR"
 
 finish
