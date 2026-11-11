@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.design.theme.ZenyTheme
+import kotlinx.coroutines.CompletableDeferred
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -88,6 +89,32 @@ class DataTableUiTest {
         }
 
     @Test
+    fun firstPageSurvivesASlowFetch() =
+        runComposeUiTest {
+            var fetches = 0
+            val reply = CompletableDeferred<Page<Item>>()
+            val state =
+                TableState({
+                    CursorPager<Item>(PAGE_SIZE) { _, _ ->
+                        fetches++
+                        reply.await()
+                    }
+                }) { it.id }
+            setContent {
+                ZenyTheme {
+                    Box(Modifier.width(400.dp).height(200.dp)) { DataTable(state, columns) }
+                }
+            }
+            waitUntil(timeoutMillis = WAIT_MS) { fetches == 1 }
+            waitForIdle()
+            reply.complete(Page((0 until PAGE_SIZE).map(::Item), null))
+            waitUntil(timeoutMillis = WAIT_MS) { state.rows.isNotEmpty() }
+            waitForIdle()
+            assertEquals(1, fetches)
+            assertEquals(PAGE_SIZE, state.rows.size)
+        }
+
+    @Test
     fun clickingARowCallsOnRowClickWithItsItem() =
         runComposeUiTest {
             val state = TableState(Server()::pager) { it.id }
@@ -121,6 +148,8 @@ class DataTableUiTest {
             waitForIdle()
             assertEquals(1, server.fetches)
             onNodeWithTag("table-list").performScrollToIndex(state.visibleRows(columns).size)
+            waitForIdle()
+            assertEquals(1, server.fetches)
             onNodeWithTag("load-more").performClick()
             waitUntil(timeoutMillis = WAIT_MS) { state.rows.size == PAGE_SIZE * 2 }
             assertEquals(2, server.fetches)

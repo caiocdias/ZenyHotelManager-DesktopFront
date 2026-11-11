@@ -16,7 +16,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -44,8 +46,12 @@ fun <T> DataTable(
     val filtering = state.filter.isNotBlank()
     val needsFirstPage = state.rows.isEmpty() && state.hasMore && state.error == null && !state.loading
 
-    LaunchedEffect(state, needsFirstPage) {
-        if (needsFirstPage) state.loadMore()
+    // A chave do efeito não pode ser `needsFirstPage`: `loadMore` o zera e o Compose cancelaria a própria carga.
+    val firstPageNeeded by rememberUpdatedState(needsFirstPage)
+    LaunchedEffect(state) {
+        snapshotFlow { firstPageNeeded }
+            .filter { it }
+            .collect { state.loadMore() }
     }
     LaunchedEffect(state, listState, filtering) {
         if (filtering) return@LaunchedEffect

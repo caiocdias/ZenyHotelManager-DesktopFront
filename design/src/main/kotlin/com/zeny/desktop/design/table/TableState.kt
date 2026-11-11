@@ -36,6 +36,7 @@ data class Column<T>(
  *   Um `reload` cancelado antes de começar ainda reinicia a listagem, sem pedir página.
  * - Linha cuja `key` já foi carregada é ignorada; página sem nenhuma linha nova encerra a listagem.
  * - `ApiError` do `fetch` fica em `error` e as linhas ficam; tentar de novo pede o mesmo cursor.
+ * - `key` é pública para a `DataTable` identificar as linhas (tags e chaves da lista).
  * - `sort` e `filter` valem sobre as linhas já carregadas e nunca pedem página.
  */
 class TableState<T>(
