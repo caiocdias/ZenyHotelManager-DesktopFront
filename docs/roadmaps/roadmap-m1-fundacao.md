@@ -77,7 +77,7 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 |---|---|---|---|
 | H1 | Compose Multiplatform 1.12.x (estável em agosto de 2026) compila e roda com Kotlin 2.4 e JDK 25 — **confirmada na E01** (1.12.2, Kotlin 2.4.21, JDK 25.0.5) | Ajustar versões (Kotlin ou JDK alvo de bytecode) na própria E01 | E01 |
 | H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` — **confirmada na E01** com o ogen 0.16.1 (ADR 0007); o openapi-generator 7.27.0 não cumpriu | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
-| H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **Linux confirmado na E01**; Windows aguarda o usuário na parada da E01 | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
+| H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **confirmada na E01**: Linux pelo orquestrador; Windows pelo usuário em 2026-11-11 (`java -jar zeny-desktop.jar` abriu a janela normalmente) | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
 | H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
 | D1 | **Decidido pelo usuário em 2026-11-11 (entrevista da parada da E01):** fronteira `core`/`sdk` pela opção (b) da ADR 0008 — `core` expõe o `sdk` por `api`, as features usam os modelos gerados e o `ForbiddenImport` barra as classes de operação — **fechando a brecha**: barrar também `io.ktor.client.*` e `de.quati.ogen.client.*` em `app` e `design` | Ajuste do `config/detekt/detekt.yml` e da varredura de nome qualificado ainda não feito: entra no plano da E02 | E02 em diante |
 | D2 | **Decidido pelo usuário em 2026-11-11:** depois do `403 APPROVAL_REQUIRED`, a repetição com `X-Approval-Token` usa uma **nova** `Idempotency-Key`, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede continua com a mesma chave. Substitui o "mesma chave" do design §6.2 e do critério da E02 | A E02 testa a nova chave na repetição aprovada; o design §6.2 fica para o arquiteto atualizar | E02, E04 |
@@ -178,7 +178,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #em-andamento | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
+| E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
 | E02 | Núcleo HTTP e sessão | #pendente | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #pendente | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
@@ -188,7 +188,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Esqueleto Gradle, SDK gerado e JAR multiplataforma — #em-andamento
+## E01 — Esqueleto Gradle, SDK gerado e JAR multiplataforma — #concluida
 
 **Objetivo:** projeto Gradle com os módulos `sdk`, `core`, `design`, `app` e `demo-seed`. O `sdk` é gerado de `api/openapi.yaml` por um gerador escolhido com critério explícito. Uma janela "Zeny Hotel Manager" abre com `./gradlew run`, e um JAR único roda no Linux e no Windows.
 
@@ -213,12 +213,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] `./gradlew build` verde num clone limpo.
-- [ ] O `sdk` gerado compila o contrato inteiro, sem excluir operações.
-- [ ] A ADR 0007 registra o gerador, mostrando o critério do design §9 item a item, com evidência: um teste do `sdk`, ou do `core` usando o `sdk`, que lê o `ETag` de uma resposta, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` numa chamada e desserializa um valor desconhecido de `x-extensible-enum` sem falhar.
-- [ ] `./gradlew run` abre a janela com o título "Zeny Hotel Manager".
-- [ ] O JAR abre a janela com `java -jar` no Linux. No Windows, o usuário confere na parada da etapa.
-- [ ] Os comandos oficiais estão no `README.md` e no `CLAUDE.md`.
+- [x] `./gradlew build` verde num clone limpo.
+- [x] O `sdk` gerado compila o contrato inteiro, sem excluir operações.
+- [x] A ADR 0007 registra o gerador, mostrando o critério do design §9 item a item, com evidência: um teste do `sdk`, ou do `core` usando o `sdk`, que lê o `ETag` de uma resposta, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` numa chamada e desserializa um valor desconhecido de `x-extensible-enum` sem falhar.
+- [x] `./gradlew run` abre a janela com o título "Zeny Hotel Manager".
+- [x] O JAR abre a janela com `java -jar` no Linux. No Windows, o usuário confere na parada da etapa.
+- [x] Os comandos oficiais estão no `README.md` e no `CLAUDE.md`.
 
 **Validação obrigatória:**
 
@@ -243,7 +243,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-11):** implementada, revisada e integrada à `main`. Fica `#em-andamento` aguardando a parada humana: o JAR no Windows e a confirmação das decisões abaixo. O próximo orquestrador marca `#concluida` com a evidência do usuário.
+- **Estado (2026-11-11):** `#concluida`. Implementada, revisada e integrada à `main`; a parada humana fechou com as decisões D1 a D3 confirmadas na entrevista e o JAR conferido pelo usuário no Windows.
 - **Plano:** [`docs/superpowers/plans/2026-11-10-m1-fundacao-e01.md`](../superpowers/plans/2026-11-10-m1-fundacao-e01.md), com 11 tarefas.
   - A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: o `./gradlew --stop` derrubava os daemons do servidor) e aprovou com notas na rodada 1.
 - **Commits:** `9d1fb5e..26306a0` na branch `roadmap/m1-fundacao`, cada um com o trailer `Soul:`.
@@ -258,10 +258,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **O `sdk` gerado compila o contrato inteiro:** ogen 0.16.1 gera 303 métodos de operação para 303 `operationId`, conferido por `SdkAttackTest.everyOperationInTheContractHasAGeneratedMethod`. O código gerado fica em `sdk/build/` e não é versionado.
   - **A ADR 0007 registra o gerador item a item:** [`docs/adr/0007-gerador-do-sdk.md`](../adr/0007-gerador-do-sdk.md). A evidência permanente é `SdkCriteriaTest`: lê o `ETag`, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` cada um exatamente uma vez, aceita enum extensível desconhecido e propriedade desconhecida, e mantém dinheiro, data e instante exatos na leitura e na escrita.
   - **`./gradlew run` abre a janela "Zeny Hotel Manager":** conferido com `xwininfo` (`"Zeny Hotel Manager": ("com-zeny-desktop-app-MainKt" …) 800x563`).
-  - **O JAR abre a janela com `java -jar` no Linux:** o JAR é `app/build/libs/zeny-desktop.jar` (59.420.229 bytes, gerado por `./gradlew :app:desktopJar`). Do clone limpo, ele abriu a janela `"Zeny Hotel Manager"` sem nada em stderr. O `verifyDesktopJar` (ligado ao `check`) exige os nativos do Skia de Linux x64 e Windows x64. **No Windows: pendente, é a conferência do usuário nesta parada.**
+  - **O JAR abre a janela com `java -jar` no Linux:** o JAR é `app/build/libs/zeny-desktop.jar` (59.420.229 bytes, gerado por `./gradlew :app:desktopJar`). Do clone limpo, ele abriu a janela `"Zeny Hotel Manager"` sem nada em stderr. O `verifyDesktopJar` (ligado ao `check`) exige os nativos do Skia de Linux x64 e Windows x64. **No Windows: conferido pelo usuário em 2026-11-11 — `java -jar zeny-desktop.jar` abriu a tela normalmente.**
   - **Os comandos oficiais estão no `README.md` e no `CLAUDE.md`,** e o `tests/test_docs.sh` exige a mesma tabela nos dois.
   - **Validação:** lint `./gradlew ktlintCheck detekt` verde.
-- **Respostas do usuário na entrevista (2026-11-11):** fronteira `core`/`sdk` pela opção (b), fechando a brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1); nova `Idempotency-Key` na repetição após aprovação, como diz o contrato (D2); ogen confirmado (D3). Ver "Hipóteses e decisões em aberto". A conferência do JAR no Windows continua pendente.
+- **Respostas do usuário na entrevista (2026-11-11):** fronteira `core`/`sdk` pela opção (b), fechando a brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1); nova `Idempotency-Key` na repetição após aprovação, como diz o contrato (D2); ogen confirmado (D3). Ver "Hipóteses e decisões em aberto". O JAR no Windows foi conferido pelo usuário no mesmo dia (H3 confirmada).
 - **Decisões para o usuário** (tomadas pela opção recomendada; as três de arquitetura já confirmadas na entrevista, as demais revisáveis):
   - **Gerador do SDK:** ogen 0.16.1, e não openapi-generator 7.27.0, que não compila o contrato com kotlinx no `jvm-ktor`. O ogen é 0.x, de um mantenedor só, e a versão saiu 4 dias antes da adoção. Plano B na ADR 0007.
   - **Fronteira `core`/`sdk`:** ADR 0008, aceita (D1). O `core` expõe o `sdk` por `api` e o `ForbiddenImport` barra as classes de operação em `app` e `design`. A brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` foi decidida: fechar, com o ajuste do lint no plano da E02.
@@ -631,3 +631,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-11 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (JAR no Windows e decisões da fronteira `core`/`sdk` e da `Idempotency-Key`). H1 e H2 confirmadas; H3 confirmada no Linux.
+- 2026-11-11 — E01 `#concluida` (`claude --agent orquestrador`): o usuário conferiu o JAR no Windows; H3 confirmada. Pré-voo do lote: aditivo (código 11).
