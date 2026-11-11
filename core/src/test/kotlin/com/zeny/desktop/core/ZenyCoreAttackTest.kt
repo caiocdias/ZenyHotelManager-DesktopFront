@@ -36,6 +36,7 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.PrintStream
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.prefs.Preferences
@@ -446,8 +447,11 @@ class ZenyCoreAttackTest {
         runTest(timeout = 5.seconds) {
             val server = FakeZenyServer()
             val failRefresh = AtomicBoolean(true)
+            // O 502 sai daqui, sem chegar ao servidor falso (que só registra o que chega a ele): o cliente conta aqui.
+            val sentRefreshes = CopyOnWriteArrayList<HttpRequestData>()
             val engine =
                 around(server) { request, proceed ->
+                    if (request.path() == REFRESH) sentRefreshes += request
                     if (request.path() == REFRESH && failRefresh.getAndSet(false)) {
                         respond(
                             "<html><body><h1>502 Bad Gateway</h1></body></html>",
@@ -468,12 +472,14 @@ class ZenyCoreAttackTest {
             assertIs<SessionState.Active>(core.session.state.value)
             assertEquals(200, core.me().status)
             assertIs<SessionState.Active>(core.session.state.value)
-            val refreshes = server.requests.filter { it.path() == REFRESH }
-            assertEquals(2, refreshes.size)
-            for (refresh in refreshes) {
+            // O cliente mandou dois refreshes, os dois com o R1: o do 502 e o que renovou.
+            assertEquals(2, sentRefreshes.size, "refreshes enviados pelo cliente")
+            for (refresh in sentRefreshes) {
                 val body = refresh.bodyText()
                 assertTrue("\"R1\"" in body, "refresh sem o R1: $body")
             }
+            // Só o segundo chegou ao servidor, que girou o par uma vez só.
+            assertEquals(1, server.count(REFRESH), "refreshes que chegaram ao servidor")
         }
 
     /** Espera em tempo real: o trabalho do `ZenyCore` roda em `Dispatchers.IO`, fora do relógio do `runTest`. */
