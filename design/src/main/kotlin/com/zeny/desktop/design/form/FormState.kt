@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.core.error.ApiError
-import com.zeny.desktop.core.error.FieldError
 
 /**
  * Um campo de formulário. O erro do servidor aparece na hora; o local só depois de `touched`.
@@ -36,8 +35,6 @@ class FormField(
     }
 
     internal fun touch() = onBlur()
-
-    internal fun matches(path: String): Boolean = path == name || path in serverPaths
 }
 
 class FormState(
@@ -52,20 +49,47 @@ class FormState(
         return fields.all { it.validate(it.text) == null }
     }
 
-    /** Substitui os erros do servidor anteriores pelos de [error]. */
+    /**
+     * Substitui os erros do servidor anteriores pelos de [error]. Regras:
+     * - só um `Problem` com `fieldErrors` é distribuído; qualquer outro erro, ou um `Problem` sem
+     *   `fieldErrors`, vira `formError` com o `userMessage`;
+     * - o campo é achado por igualdade exata (com maiúsculas) do `field`: o `name` tem precedência
+     *   sobre o `serverPaths` de qualquer campo, e só então vale o primeiro `serverPaths` que casa;
+     * - várias mensagens do mesmo campo aparecem todas, separadas por quebra de linha;
+     * - o erro sem campo casado vai para `formError` (só a `message`, sem `field` nem `code`);
+     * - mensagem em branco nunca é exibida: vira o `userMessage` do problema em `formError`, uma vez.
+     */
     fun applyServerErrors(error: ApiError) {
         clearServerErrors()
-        if (error is ApiError.Problem && error.fieldErrors.isNotEmpty()) {
-            val unmatched = mutableListOf<FieldError>()
-            for (fieldError in error.fieldErrors) {
-                val target = fields.firstOrNull { it.matches(fieldError.field) }
-                if (target == null) unmatched += fieldError else target.serverError = fieldError.message
-            }
-            formError = unmatched.takeIf { it.isNotEmpty() }?.joinToString("\n") { it.message }
-        } else {
+        if (error !is ApiError.Problem || error.fieldErrors.isEmpty()) {
             formError = error.userMessage
+            return
         }
+        val byField = linkedMapOf<FormField, MutableList<String>>()
+        val general = mutableListOf<String>()
+        var blankSeen = false
+        for (fieldError in error.fieldErrors) {
+            if (fieldError.message.isBlank()) {
+                blankSeen = true
+                continue
+            }
+            val target = findField(fieldError.field)
+            if (target ==
+                null
+            ) {
+                general += fieldError.message
+            } else {
+                byField.getOrPut(target) { mutableListOf() } +=
+                    fieldError.message
+            }
+        }
+        if (blankSeen && general.isEmpty() && byField.isEmpty()) general += error.userMessage
+        byField.forEach { (field, messages) -> field.serverError = messages.joinToString("\n") }
+        formError = general.takeIf { it.isNotEmpty() }?.joinToString("\n")
     }
+
+    private fun findField(path: String): FormField? =
+        fields.firstOrNull { it.name == path } ?: fields.firstOrNull { path in it.serverPaths }
 
     fun clearServerErrors() {
         fields.forEach { it.serverError = null }
