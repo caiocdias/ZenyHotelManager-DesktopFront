@@ -22,7 +22,8 @@ Opção (b). O `core` declara `api(project(":sdk"))`; `app` e `design` não cita
 ## Consequências
 
 - As features usam os modelos gerados diretamente, sem camada de mapeamento.
-- O `ForbiddenImport` das classes de operação em `app` e `design` entra na Task 9; até lá, a regra vale por convenção.
+- O `ForbiddenImport` em `config/detekt/detekt.yml` barra `com.zeny.desktop.sdk.client`, `com.zeny.desktop.sdk.util` e `com.zeny.desktop.sdk.util.model` em `app` e `design`. A varredura de nome qualificado em `tests/test_gradle_layout.sh` e `tests/test_etapa_ataque.sh` cobre o uso sem `import`.
 - O `demo-seed` pode depender do `sdk` (pelo `core`) na E05, para o acesso amplo de que precisa.
 - Trocar para (a) depois custa fachadas no `core` para cada modelo usado pelas features.
+- Brecha: o `ForbiddenImport` não barra `io.ktor.client.*` nem `de.quati.ogen.client.*`. Como `sdk/build.gradle.kts` exporta Ktor e ogen por `api(...)` e o `core` reexporta o `sdk` por `api`, `app` e `design` conseguem montar um `HttpClient` e falar com o servidor sem passar pelo `core`. Fechar essa brecha, acrescentando esses pacotes ao `ForbiddenImport`, é decisão do usuário, junto com a escolha entre (a), (b) e (c).
 - Um teste estático (`tests/test_gradle_layout.sh`) fixa que o `core` expõe o `sdk` por `api` e que `app` e `design` não o citam.
