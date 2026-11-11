@@ -23,8 +23,9 @@ for proibido in 'base' 'java' 'application' 'kotlin' 'clean' 'buildDirectory'; d
   assert_not_contains "$sem_alias" "$proibido" "raiz não usa $proibido"
 done
 
-literais="$(grep -nE '"[^"]*:[0-9]+\.[0-9]+[^"]*"' "$ROOT"/*.gradle.kts "$ROOT"/*/build.gradle.kts 2>/dev/null)"
-assert_eq "" "$literais" "nenhum *.gradle.kts com versão literal"
+mapfile -t kts < <(find "$ROOT" -name '*.gradle.kts' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path '*/.claude/*' -not -path '*/.git/*' | sort)
+literais="$(grep -nE '^[^/]*("[^"]*:[0-9]+\.[0-9]+[^"]*"|\<version[[:space:]]*(=|\()?[[:space:]]*"[^"]*[0-9])' "${kts[@]}" 2>/dev/null)"
+assert_eq "" "$literais" "nenhum *.gradle.kts com versão literal (coordenada ou plugin)"
 
 props="$(cat "$ROOT/gradle.properties" 2>/dev/null)"
 for linha in \
