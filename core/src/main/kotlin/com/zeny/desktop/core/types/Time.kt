@@ -7,6 +7,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
+private val BUSINESS_DATE_FORMAT = Regex("""^\d{4}-\d{2}-\d{2}$""")
+
 /** Data de negócio (`YYYY-MM-DD`), sem conversão de fuso. */
 @JvmInline
 value class BusinessDate(
@@ -15,12 +17,14 @@ value class BusinessDate(
     fun toApi(): String = value.format(DateTimeFormatter.ISO_LOCAL_DATE)
 
     companion object {
-        fun parse(text: String): BusinessDate =
-            try {
+        fun parse(text: String): BusinessDate {
+            require(BUSINESS_DATE_FORMAT.matches(text)) { "Data inválida." }
+            return try {
                 BusinessDate(LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE))
             } catch (_: DateTimeException) {
                 throw IllegalArgumentException("Data inválida.")
             }
+        }
     }
 }
 
