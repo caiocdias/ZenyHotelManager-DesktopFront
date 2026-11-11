@@ -188,7 +188,9 @@ for adr in 0007-gerador-do-sdk 0008-fronteira-core-sdk; do
 done
 assert_contains $'\n'"$(cat "$ROOT/docs/adr/0008-fronteira-core-sdk.md")"$'\n' $'\n## Alternativas\n' "ADR 0008 tem a seção Alternativas"
 assert_contains $'\n'"$(cat "$ROOT/docs/adr/0007-gerador-do-sdk.md")"$'\n' $'\n## Alternativas descartadas\n' "ADR 0007 tem a seção Alternativas descartadas"
-assert_contains "$(cat "$ROOT/docs/adr/0008-fronteira-core-sdk.md")" "proposta" "ADR 0008 segue como proposta até o usuário confirmar"
+estado_0008="$(grep -m1 '^- Estado: ' "$ROOT/docs/adr/0008-fronteira-core-sdk.md" 2>/dev/null)"
+assert_contains "$estado_0008" "aceita" "ADR 0008 está aceita (linha de Estado)"
+assert_contains "$estado_0008" "confirmada pelo usuário" "ADR 0008 registra a confirmação do usuário (linha de Estado)"
 
 # ADR 0007: todo teste permanente que a tabela cita existe como função de teste no sdk.
 adr7="$(cat "$ROOT/docs/adr/0007-gerador-do-sdk.md" 2>/dev/null)"
