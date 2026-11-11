@@ -38,18 +38,35 @@ object ContractErrorCodes {
         return wordPattern.findAll(list).map { it.value }.toSet()
     }
 
+    private fun startsDescription(
+        line: String,
+        inOperation: Boolean,
+        inResponses: Boolean,
+    ): Boolean {
+        val level = indent(line)
+        val atDescription = inOperation && line.trim().startsWith("description:")
+        return atDescription && (level == 6 || (inResponses && level == 10))
+    }
+
+    /** `description` da operação (indent 6) e de cada resposta (indent 10, dentro de `responses:`). */
     private fun operationCodes(lines: List<String>): Set<String> {
         val descriptions = mutableListOf<StringBuilder>()
         var inOperation = false
-        var inDescription = false
+        var inResponses = false
+        var descriptionLevel = -1
         for (line in lines.subList(lines.indexOf("paths:") + 1, lines.indexOf("components:"))) {
             val level = indent(line)
+            if (line.isNotBlank() && level <= descriptionLevel) descriptionLevel = -1
             if (line.isNotBlank() && level <= 6) {
                 if (level <= 4) inOperation = level == 4 && line.trim().removeSuffix(":") in methods
-                inDescription = inOperation && level == 6 && line.trim().startsWith("description:")
-                if (inDescription) descriptions += StringBuilder()
+                inResponses = inOperation && level == 6 && line.trim() == "responses:"
             }
-            if (inDescription) descriptions.last().append(line).append('\n')
+            val starts = startsDescription(line, inOperation, inResponses)
+            if (starts) {
+                descriptionLevel = level
+                descriptions += StringBuilder()
+            }
+            if (descriptionLevel >= 0) descriptions.last().append(line).append('\n')
         }
         val found = descriptions.flatMap { d -> codePattern.findAll(unfold(d.toString())).map { it.value } }
         return found.toSet() - enumValues(lines)

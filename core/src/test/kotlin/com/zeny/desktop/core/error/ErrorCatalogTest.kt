@@ -64,7 +64,7 @@ class ErrorCatalogTest {
         println("CONTRACT_CODES_BEGIN")
         codes.sorted().forEach { println(it) }
         println("CONTRACT_CODES_END")
-        assertEquals(349, codes.size)
+        assertEquals(353, codes.size)
         assertTrue(codes.containsAll(common), "faltam comuns: ${common - codes.toSet()}")
     }
 

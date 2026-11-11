@@ -52,10 +52,19 @@ object ErrorCatalog {
 
     fun message(code: String): String? = messages[code]
 
-    @Suppress("UnusedParameter") // `status` faz parte da API; o catálogo hoje decide só por código e detalhe.
+    private val bareIdentifier = Regex("^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$")
+
+    // `status` faz parte da API; o catálogo hoje decide só por código e detalhe.
+    @Suppress("UnusedParameter")
     fun userMessage(
         status: Int,
         code: String?,
         detail: String?,
-    ): String = code?.let(::message) ?: detail?.takeIf { it.isNotBlank() } ?: GENERIC_MESSAGE
+    ): String = code?.let(::message) ?: detail?.takeIf(::isShowable) ?: GENERIC_MESSAGE
+
+    /** Detalhe em texto de pessoa: não vazio, sem JSON cru e sem código cru. */
+    private fun isShowable(detail: String): Boolean {
+        val text = detail.trim()
+        return text.isNotEmpty() && !text.startsWith("{") && !text.startsWith("[") && !bareIdentifier.matches(text)
+    }
 }
