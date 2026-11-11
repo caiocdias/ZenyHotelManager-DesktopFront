@@ -175,7 +175,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #pendente | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
+| E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #em-andamento | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
 | E02 | Núcleo HTTP e sessão | #pendente | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #pendente | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
@@ -185,7 +185,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Esqueleto Gradle, SDK gerado e JAR multiplataforma — #pendente
+## E01 — Esqueleto Gradle, SDK gerado e JAR multiplataforma — #em-andamento
 
 **Objetivo:** projeto Gradle com os módulos `sdk`, `core`, `design`, `app` e `demo-seed`. O `sdk` é gerado de `api/openapi.yaml` por um gerador escolhido com critério explícito. Uma janela "Zeny Hotel Manager" abre com `./gradlew run`, e um JAR único roda no Linux e no Windows.
 
