@@ -262,10 +262,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **Os comandos oficiais estão no `README.md` e no `CLAUDE.md`,** e o `tests/test_docs.sh` exige a mesma tabela nos dois.
   - **Validação:** lint `./gradlew ktlintCheck detekt` verde.
 - **Respostas do usuário na entrevista (2026-11-11):** fronteira `core`/`sdk` pela opção (b), fechando a brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1); nova `Idempotency-Key` na repetição após aprovação, como diz o contrato (D2); ogen confirmado (D3). Ver "Hipóteses e decisões em aberto". A conferência do JAR no Windows continua pendente.
-- **Decisões para o usuário** (tomadas pela opção recomendada, revisáveis):
+- **Decisões para o usuário** (tomadas pela opção recomendada; as três de arquitetura já confirmadas na entrevista, as demais revisáveis):
   - **Gerador do SDK:** ogen 0.16.1, e não openapi-generator 7.27.0, que não compila o contrato com kotlinx no `jvm-ktor`. O ogen é 0.x, de um mantenedor só, e a versão saiu 4 dias antes da adoção. Plano B na ADR 0007.
-  - **Fronteira `core`/`sdk`:** ADR 0008, proposta. O `core` expõe o `sdk` por `api` e o `ForbiddenImport` barra as classes de operação em `app` e `design`. Há uma brecha conhecida: `io.ktor.client.*` e `de.quati.ogen.client.*` não são barrados. **Decisão de arquitetura: entrevista.**
-  - **`Idempotency-Key` no reenvio após aprovação:** o design §6.2 e a E02 dizem "a mesma chave", mas o contrato diz "outra chave" em algumas operações (por exemplo, `cancelReservation`). **Decisão de arquitetura: entrevista, antes da E02.**
+  - **Fronteira `core`/`sdk`:** ADR 0008, aceita (D1). O `core` expõe o `sdk` por `api` e o `ForbiddenImport` barra as classes de operação em `app` e `design`. A brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` foi decidida: fechar, com o ajuste do lint no plano da E02.
+  - **`Idempotency-Key` na repetição após aprovação:** decidido (D2): nova chave, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede mantém a chave. O critério da E02 já foi ajustado; o design §6.2 (e as menções nos roadmaps M2 e M4) ficam para o arquiteto alinhar.
   - **Enum fechado com valor novo derruba a resposta inteira** (`JsonConvertException`). Aceito na M1 porque o servidor está fixado; o `core` deve traduzir isso numa mensagem de "versão incompatível".
   - **Vulnerabilidades no build:** o classpath dos plugins tinha 7 vulnerabilidades High (guava, jackson e handlebars, que chegam pelo ogen e pelo openapi-generator) e a configuração do ktlint trazia o logback com Low. Elas foram corrigidas por constraints no `buildscript` (jackson-bom 2.22.3, guava 33.7.2-jre, handlebars 4.5.2 e logback 1.5.34). O catálogo registra os motivos e a condição de saída.
   - **Travamento de dependências:** estrito, com lockfiles em todos os projetos e no classpath dos plugins, seguindo o precedente do servidor. A regravação é `./gradlew resolveAndLockAll --write-locks`.
@@ -297,7 +297,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - **Sessão:** login (com os dados do dispositivo, cujo id é persistido), refresh em voo único sob requisições concorrentes, logout, troca de senha, expiração e revogação. Tokens só em memória.
 - **Pipeline HTTP:** `Authorization`, `Idempotency-Key` por intenção, `ETag`/`If-Match` com `412` tipado e paginação por cursor.
 - **Erros:** problema RFC 9457 vira um erro tipado com `code`, `detail` e `errors[]`. Há um catálogo `code → mensagem pt-BR` para os códigos já presentes no contrato, com o `detail` como reserva.
-- **`APPROVAL_REQUIRED`:** vira um erro tipado com `action`, `permission`, `resourceRef` e `limit`. O `core` oferece uma operação que repete a chamada com `X-Approval-Token` e a mesma `Idempotency-Key`.
+- **`APPROVAL_REQUIRED`:** vira um erro tipado com `action`, `permission`, `resourceRef` e `limit`. O `core` oferece uma operação que repete a chamada com `X-Approval-Token` e uma **nova** `Idempotency-Key` (decisão D2 do usuário, 2026-11-11; o reenvio por falha de rede mantém a chave).
 - **Tipos:** `Money` sobre `BigDecimal`, data de negócio e instante no fuso do hotel.
 - **Enum extensível:** um utilitário que resolve o rótulo e devolve "Outro (VALOR)" para o desconhecido.
 - **Endereço do servidor:** resolução da URL base pela precedência do design §6.3 (valor salvo, `ZENY_SERVER_URL`, `.env` ao lado do JAR, `http://localhost:8088`).
@@ -308,7 +308,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - [ ] Teste: 5 requisições concorrentes com access token vencido → um único `POST /api/v1/auth/refresh`, e todas concluem.
 - [ ] Teste: `401 UNAUTHENTICATED` → refresh e repetição. Outro `401` → evento de "sessão encerrada", sem repetição.
-- [ ] Teste: `403 APPROVAL_REQUIRED` → erro tipado com os quatro campos. A repetição envia `X-Approval-Token` e a **mesma** `Idempotency-Key`.
+- [ ] Teste: `403 APPROVAL_REQUIRED` → erro tipado com os quatro campos. A repetição envia `X-Approval-Token` e uma **nova** `Idempotency-Key` (D2); um reenvio por falha de rede mantém a chave.
 - [ ] Teste: `412` → erro tipado de conflito.
 - [ ] Teste: valor desconhecido de enum extensível → rótulo "Outro (VALOR)", sem exceção.
 - [ ] Teste: os tokens não aparecem em nenhum arquivo escrito pelo app, nem nas preferências, nem em log.
@@ -320,7 +320,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** a descrição `info` do contrato e a ARCHITECTURE §7 e §8.1 do servidor definem a semântica de cada `401` e `403`. Leia-as, não deduza. **Decisão D2 do usuário (2026-11-11):** o critério "A repetição envia `X-Approval-Token` e a **mesma** `Idempotency-Key`" fica substituído por "…e uma **nova** `Idempotency-Key`" (o reenvio por falha de rede mantém a chave). **Decisão D1:** acrescentar `io.ktor.client.*` e `de.quati.ogen.client.*` ao `ForbiddenImport` de `app` e `design` (e à varredura de nome qualificado dos testes). Leia também as "Notas para a próxima etapa" do handoff da E01.
+**Notas para o plano:** a descrição `info` do contrato e a ARCHITECTURE §7 e §8.1 do servidor definem a semântica de cada `401` e `403`. Leia-as, não deduza. **Decisão D2 do usuário (2026-11-11):** a repetição após aprovação usa uma **nova** `Idempotency-Key` (escopo e critério acima já ajustados). **Decisão D1:** acrescentar `io.ktor.client.*` e `de.quati.ogen.client.*` ao `ForbiddenImport` de `app` e `design` (e à varredura de nome qualificado dos testes). Leia também as "Notas para a próxima etapa" do handoff da E01.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
