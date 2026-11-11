@@ -183,9 +183,15 @@ class ProblemMapperAttackTest {
 
     @Test
     fun bomPrefixedBodyNeverThrows() {
-        val body = "{\"code\":\"UNAUTHENTICATED\"}"
-        assertIs<ApiError>(ProblemMapper.fromBody(401, body))
-        ProblemMapper.problemCode(body)
+        // O BOM vai por escape: um U+FEFF literal no fonte some sem aviso em editores e no ktlint.
+        val body = "﻿{\"code\":\"UNAUTHENTICATED\",\"detail\":\"Token vencido.\"}"
+        assertEquals('﻿', body.first())
+
+        // Resultado atual, fixado: o parser recusa o BOM, o corpo conta como ilegível e o 401 vira `Unexpected`
+        // (sem `code`), em vez de `Problem(401, UNAUTHENTICATED)`.
+        val error = assertIs<ApiError.Unexpected>(ProblemMapper.fromBody(401, body))
+        assertEquals(401, error.status)
+        assertNull(ProblemMapper.problemCode(body))
     }
 
     @Test

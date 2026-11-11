@@ -114,6 +114,21 @@ supressao_optin="$(cd "$ROOT" && grep -rnE 'OPT_IN_USAGE' /dev/null $(ls -d app/
 assert_eq "" "$supressao_optin" "app e design não suprimem o erro de opt-in (OPT_IN_USAGE_ERROR)"
 raw_raiz="$(cd "$ROOT" && grep -rnE 'RawSdkAccess' /dev/null $(ls -d build.gradle.kts settings.gradle.kts gradle.properties buildSrc build-logic 2>/dev/null) 2>/dev/null)"
 assert_eq "" "$raw_raiz" "a raiz do build não faz opt-in de RawSdkAccess para os subprojetos"
+# Revisão final da E02: fonte Java em app ou design contornaria a cerca, porque o javac ignora `@RequiresOptIn`
+# (RawSdkAccess) e enxerga `internal` do core como público. app e design são só Kotlin, versionado ou não.
+java_em() {
+  local raiz="$1" dirs=() d
+  for d in app/src design/src; do [[ -d "$raiz/$d" ]] && dirs+=("$d"); done
+  ((${#dirs[@]} > 0)) || return 0
+  (cd "$raiz" && find "${dirs[@]}" -type f -iname '*.java' | sort)
+}
+assert_eq "" "$(java_em "$ROOT")" "nenhum *.java sob app/src e design/src (Java ignora @RequiresOptIn e internal)"
+sonda_java="$(mktemp -d)"
+mkdir -p "$sonda_java/app/src/main/java/com/zeny" "$sonda_java/design/src/main/kotlin"
+printf 'class F {}\n' >"$sonda_java/app/src/main/java/com/zeny/F.java"
+printf 'class G {}\n' >"$sonda_java/design/src/main/kotlin/G.JAVA"
+assert_eq $'app/src/main/java/com/zeny/F.java\ndesign/src/main/kotlin/G.JAVA' "$(java_em "$sonda_java")" "a varredura de *.java acha fonte Java em app/src e em design/src (extensão em qualquer caixa)"
+rm -rf "$sonda_java"
 
 # Task 10: travamento estrito. Cada módulo tem gradle.lockfile (a raiz não tem configuração resolvível, e o
 # Gradle não grava lockfile vazio); o classpath dos plugins e o das settings também têm o seu.
