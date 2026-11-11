@@ -227,17 +227,29 @@ class FormStateAttackTest {
     @Test
     fun blankMessageDoesNotProduceEmptyBanner() {
         val state = FormState(listOf(FormField("name", "Nome")))
-        state.applyServerErrors(problem(FieldError("x", "A", "")))
-        val shown = state.formError
-        assertTrue(shown == null || shown.isNotBlank(), "formError vazio: '$shown'")
+        val error = problem(FieldError("x", "A", ""))
+        state.applyServerErrors(error)
+        assertEquals(error.userMessage, state.formError)
     }
 
     @Test
     fun blankMessageForMatchedFieldDoesNotLeaveSilentErrorState() {
         val price = FormField("price", "Preço")
         val state = FormState(listOf(price))
-        state.applyServerErrors(problem(FieldError("price", "A", "")))
-        val shown = price.error
-        assertTrue(shown == null || shown.isNotBlank(), "error vazio: '$shown'")
+        val error = problem(FieldError("price", "A", "  "))
+        state.applyServerErrors(error)
+        assertNull(price.error)
+        assertEquals(error.userMessage, state.formError)
+    }
+
+    @Test
+    fun blankMessageIsDroppedWhenAnotherFieldHasValidError() {
+        val price = FormField("price", "Preço")
+        val name = FormField("name", "Nome")
+        val state = FormState(listOf(price, name))
+        state.applyServerErrors(problem(FieldError("price", "A", ""), FieldError("name", "B", "nome inválido")))
+        assertEquals("nome inválido", name.error)
+        assertNull(price.error)
+        assertNull(state.formError)
     }
 }
