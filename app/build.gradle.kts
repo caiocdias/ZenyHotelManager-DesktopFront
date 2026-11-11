@@ -97,6 +97,13 @@ val desktopJar = tasks.register<Jar>("desktopJar") {
 
 val desktopJarFile = desktopJar.flatMap { it.archiveFile }
 
+// Os testes de inspeção leem o JAR que o build produz, não um que por acaso exista.
+tasks.test {
+    dependsOn(desktopJar)
+    inputs.file(desktopJarFile)
+    systemProperty("zeny.desktopJar", desktopJarFile.get().asFile.absolutePath)
+}
+
 val verifyDesktopJar = tasks.register("verifyDesktopJar") {
     group = "verification"
     description = "Confere o JAR único do app: Main-Class, nativos do Skia, sem assinaturas e serviços fundidos."
@@ -127,6 +134,9 @@ val verifyDesktopJar = tasks.register("verifyDesktopJar") {
             val mainClass = zip.getEntry("META-INF/MANIFEST.MF")
                 ?.let { Manifest(zip.getInputStream(it)).mainAttributes.getValue("Main-Class") }
             if (mainClass.isNullOrBlank()) problems += "Main-Class ausente no manifesto"
+            val nativeAccess = zip.getEntry("META-INF/MANIFEST.MF")
+                ?.let { Manifest(zip.getInputStream(it)).mainAttributes.getValue("Enable-Native-Access") }
+            if (nativeAccess != "ALL-UNNAMED") problems += "Enable-Native-Access: ALL-UNNAMED ausente no manifesto"
             listOf("libskiko-linux-x64.so", "skiko-windows-x64.dll").forEach { lib ->
                 if (names.none { it == lib || it.endsWith("/$lib") }) problems += "nativo ausente: $lib"
             }
