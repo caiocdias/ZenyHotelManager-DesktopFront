@@ -20,3 +20,7 @@ style:
         reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'
       - value: 'com.zeny.desktop.sdk.util.model.*'
         reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'
+      - value: 'io.ktor.client.*'
+        reason: 'Cliente HTTP só pelo core (ADR 0008, decisão D1).'
+      - value: 'de.quati.ogen.client.*'
+        reason: 'Cliente HTTP só pelo core (ADR 0008, decisão D1).'
