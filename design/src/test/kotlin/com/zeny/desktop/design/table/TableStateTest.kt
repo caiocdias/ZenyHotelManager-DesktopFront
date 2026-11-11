@@ -4,6 +4,7 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -310,6 +311,37 @@ class TableStateTest {
             new.replies[0].complete(page(100, "novo"))
             runCurrent()
             assertEquals((100 until 150).toList(), state.rows)
+        }
+
+    @Test
+    fun cancelledReloadLeavesTheRestartToTheNewerOne() =
+        runTest(timeout = 5.seconds) {
+            val old = HeldFetch<Int>()
+            val new = HeldFetch<Int>()
+            val unused = HeldFetch<Int>()
+            val pagers = RecordingPagers(listOf(old, new, unused))
+            val state = TableState(pagers::next) { it }
+            pagers.state = state
+
+            launch { state.loadMore() }
+            runCurrent()
+            // Os dois pedem o reload e esperam o lock; o primeiro é cancelado ainda na fila.
+            val cancelled = launch(start = CoroutineStart.UNDISPATCHED) { state.reload() }
+            val newer = launch(start = CoroutineStart.UNDISPATCHED) { state.reload() }
+            cancelled.cancel()
+            runCurrent()
+
+            // O mais novo cuida da listagem: o cancelado termina sem esperar a página dele e sem reiniciar nada.
+            assertTrue(cancelled.isCancelled && cancelled.isCompleted)
+            assertEquals(1, pagers.seenOnReplace.size)
+            assertEquals(listOf<String?>(null), new.cursors)
+            new.replies[0].complete(page(100, "novo"))
+            runCurrent()
+
+            assertTrue(newer.isCompleted)
+            assertEquals((100 until 150).toList(), state.rows)
+            assertTrue(unused.cursors.isEmpty())
+            assertFalse(state.loading)
         }
 
     @Test

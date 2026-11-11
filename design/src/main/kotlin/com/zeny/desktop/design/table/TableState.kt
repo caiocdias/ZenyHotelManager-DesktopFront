@@ -6,13 +6,16 @@ import androidx.compose.runtime.setValue
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.CursorPager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
 
 /** Uma coluna da tabela; sem `comparator`, a coluna não ordena. */
@@ -30,6 +33,7 @@ data class Column<T>(
  * - Uma carga por vez: `loadMore` com carga em andamento retorna sem pedir outra página.
  * - `reload` descarta a carga em andamento (a página dela nunca entra), troca o pager pela `pagerFactory`
  *   e carrega a primeira página. Só o `fetch` é cancelado, nunca a corrotina de quem chamou `loadMore`.
+ *   Um `reload` cancelado antes de começar ainda reinicia a listagem, sem pedir página.
  * - Linha cuja `key` já foi carregada é ignorada; página sem nenhuma linha nova encerra a listagem.
  * - `ApiError` do `fetch` fica em `error` e as linhas ficam; tentar de novo pede o mesmo cursor.
  * - `sort` e `filter` valem sobre as linhas já carregadas e nunca pedem página.
@@ -39,9 +43,15 @@ class TableState<T>(
     private val key: (T) -> Any,
 ) {
     private val mutex = Mutex()
+
+    /** Número do último `reload` pedido; sobe fora do `mutex`, no instante do pedido. */
     private val generation = AtomicLong()
-    private val keys = HashSet<Any>()
+
+    // Só mudam com o `mutex` travado. `pagerGeneration` é o `reload` que criou o `pager`: uma carga é atual
+    // enquanto nenhum `reload` foi pedido depois dele.
     private var pager = pagerFactory()
+    private var pagerGeneration = 0L
+    private val keys = HashSet<Any>()
 
     @Volatile
     private var inFlight: Job? = null
@@ -83,58 +93,85 @@ class TableState<T>(
     suspend fun loadMore() {
         if (!mutex.tryLock()) return
         try {
-            if (hasMore) load(generation.get())
+            // A geração vem do pager, não do contador: um reload pedido depois do `tryLock` já a torna velha.
+            if (isCurrent(pagerGeneration) && hasMore) load(pagerGeneration)
         } finally {
             mutex.unlock()
         }
     }
 
     suspend fun reload() {
+        // Antes do lock, nada de estado observável: só o pedido e o cancelamento do fetch em voo.
         val gen = generation.incrementAndGet()
         inFlight?.cancel()
-        mutex.withLock {
-            if (gen != generation.get()) return
-            pager = pagerFactory()
-            keys.clear()
-            rows = emptyList()
-            error = null
-            hasMore = true
-            load(gen)
+        var started = false
+        try {
+            mutex.withLock {
+                started = true
+                if (!isCurrent(gen)) return
+                restart(gen)
+                load(gen)
+            }
+        } catch (e: CancellationException) {
+            // Cancelado na fila do lock: a carga que este pedido descartou não volta, então a listagem
+            // recomeça sem página, a menos que um reload mais novo já cuide dela (aí nem espera o lock).
+            if (!started && isCurrent(gen)) {
+                withContext(NonCancellable) { mutex.withLock { if (isCurrent(gen)) restartIdle(gen) } }
+            }
+            throw e
         }
     }
 
-    /** Chamada com o `mutex` travado. */
+    private fun isCurrent(gen: Long) = gen == generation.get()
+
+    private fun restart(gen: Long) {
+        pager = pagerFactory()
+        pagerGeneration = gen
+        keys.clear()
+        rows = emptyList()
+        error = null
+        hasMore = true
+    }
+
+    private fun restartIdle(gen: Long) {
+        restart(gen)
+        loading = false
+    }
+
+    /** Chamada com o `mutex` travado; `loading`, `error` e `rows` só mudam enquanto [gen] é atual. */
     private suspend fun load(gen: Long) {
         loading = true
         error = null
         try {
-            val items =
-                try {
-                    fetchPage()
-                } catch (e: CancellationException) {
-                    // Cancelada pelo `reload`: quem chamou segue ativo e a carga termina sem efeito.
-                    currentCoroutineContext().ensureActive()
-                    if (gen == generation.get()) throw e
-                    return
-                }
-            if (gen != generation.get()) return
-            append(items)
+            val items = fetchPage(gen) ?: return
+            if (isCurrent(gen)) append(items)
         } catch (e: ApiError) {
-            if (gen == generation.get()) error = e
+            if (isCurrent(gen)) error = e
         } finally {
-            if (gen == generation.get()) loading = false
+            if (isCurrent(gen)) loading = false
         }
     }
 
-    private suspend fun fetchPage(): List<T> =
-        coroutineScope {
-            val fetch = async { pager.next() }
-            inFlight = fetch
-            try {
-                fetch.await()
-            } finally {
-                inFlight = null
+    /** A próxima página, ou `null` quando um reload a descartou. */
+    private suspend fun fetchPage(gen: Long): List<T>? =
+        try {
+            coroutineScope {
+                val fetch = async(start = CoroutineStart.LAZY) { pager.next() }
+                // Registra antes de conferir: ou o reload acha este fetch e o cancela, ou o pedido dele já
+                // aparece aqui e o fetch nem começa.
+                inFlight = fetch
+                if (!isCurrent(gen)) fetch.cancel()
+                try {
+                    fetch.await()
+                } finally {
+                    inFlight = null
+                }
             }
+        } catch (e: CancellationException) {
+            // Quem chamou foi cancelado, ou o próprio fetch lançou: propaga. Só o reload termina sem efeito.
+            currentCoroutineContext().ensureActive()
+            if (isCurrent(gen)) throw e
+            null
         }
 
     private fun append(items: List<T>) {
