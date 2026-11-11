@@ -62,9 +62,9 @@ object ProblemMapper {
         obj: JsonObject,
         detail: String?,
     ): ApiError.ApprovalRequired? {
-        val action = obj.string("action")
-        val permission = obj.string("permission")
-        val resourceRef = obj.string("resourceRef")
+        val action = obj.string("action")?.takeIf { it.isNotBlank() }
+        val permission = obj.string("permission")?.takeIf { it.isNotBlank() }
+        val resourceRef = obj.string("resourceRef")?.takeIf { it.isNotBlank() }
         if (action == null || permission == null || resourceRef == null) return null
         val limit = (obj["limit"] as? JsonObject)?.let(::limitOf)
         return ApiError.ApprovalRequired(action, permission, resourceRef, limit, detail)
