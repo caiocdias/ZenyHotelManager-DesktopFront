@@ -15,13 +15,15 @@ import kotlin.test.assertTrue
  * Sem o JAR, os testes são pulados: rode `./gradlew :app:desktopJar` antes.
  */
 class DesktopJarTest {
-    private val jarFile: File? = generateSequence(File("").absoluteFile) { it.parentFile }
-        .flatMap { sequenceOf(File(it, "build/libs/zeny-desktop.jar"), File(it, "app/build/libs/zeny-desktop.jar")) }
-        .firstOrNull { it.isFile }
+    // O Gradle passa o caminho absoluto do JAR que ele gerou. Sem a propriedade (IDE), pula;
+    // com a propriedade e sem o arquivo, falha.
+    private val jarPath: String? = System.getProperty("zeny.desktopJar")
 
     private fun <T> withJar(block: (ZipFile) -> T): T {
-        assumeTrue(jarFile != null, "app/build/libs/zeny-desktop.jar não existe; rode :app:desktopJar")
-        return ZipFile(jarFile!!).use(block)
+        assumeTrue(jarPath != null, "-Dzeny.desktopJar não definido; rode pelo Gradle (:app:test)")
+        val file = File(jarPath!!)
+        assertTrue(file.isFile, "JAR indicado por zeny.desktopJar não existe: $jarPath")
+        return ZipFile(file).use(block)
     }
 
     private fun lines(text: String) = text.lines().map { it.substringBefore('#').trim() }.filter { it.isNotEmpty() }
