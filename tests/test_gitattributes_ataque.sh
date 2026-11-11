@@ -108,7 +108,7 @@ done < <(git -C "$ROOT" ls-files -z)
 esperado=""
 while IFS= read -r -d '' f; do
   case "$f" in
-    *.sh | gradlew | *.bat | *.jar | api/openapi.yaml | api/server-pin.properties | tools/server-env/.env.example | tools/server-env/compose.override.yaml)
+    *.sh | *.lockfile | gradlew | *.bat | *.jar | api/openapi.yaml | api/server-pin.properties | tools/server-env/.env.example | tools/server-env/compose.override.yaml)
       esperado+="$f " ;;
   esac
 done < <(git -C "$ROOT" ls-files -z)
