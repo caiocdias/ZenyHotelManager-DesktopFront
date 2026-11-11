@@ -51,4 +51,10 @@ for m in app design; do
   assert_not_contains "$(cat "$ROOT/$m/build.gradle.kts" 2>/dev/null)" 'project(":sdk")' "$m não depende do sdk direto"
 done
 
+# Task 7: o app embarca os nativos de Linux e Windows (a Task 8 empacota os dois), nunca currentOs.
+app_kts="$(cat "$ROOT/app/build.gradle.kts" 2>/dev/null)"
+assert_contains "$app_kts" 'linux_x64' "app depende dos nativos linux_x64"
+assert_contains "$app_kts" 'windows_x64' "app depende dos nativos windows_x64"
+assert_not_contains "$app_kts" 'currentOs' "app não usa currentOs"
+
 finish
