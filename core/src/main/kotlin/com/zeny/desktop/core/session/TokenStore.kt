@@ -33,9 +33,12 @@ class TokenStore {
         next: Tokens?,
     ): Boolean = tokens.compareAndSet(expected, next)
 
-    /** Limpa só se o access atual ainda é o recusado; `true` quando limpou. */
-    internal fun clearIfAccess(accessToken: String): Boolean {
-        val current = tokens.get() ?: return false
-        return current.accessToken == accessToken && tokens.compareAndSet(current, null)
+    /** Limpa só se o par atual é da sessão `sessionId`; `true` quando limpou. */
+    internal fun clearIfSession(sessionId: String): Boolean {
+        while (true) {
+            val current = tokens.get()
+            if (current == null || current.sessionId != sessionId) return false
+            if (tokens.compareAndSet(current, null)) return true
+        }
     }
 }

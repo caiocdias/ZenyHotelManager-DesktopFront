@@ -234,4 +234,49 @@ class AuthenticatorTest {
         assertFalse("refresh-secreto" in text)
         assertTrue("s1" in text)
     }
+
+    @Test
+    fun rejectionFromAnotherSessionReturnsNull() =
+        runTest(timeout = 5.seconds) {
+            val firstUser = store.current()!!
+            store.clear()
+            store.set(Tokens("B1", "S1", "s2", "u2", false))
+
+            assertNull(auth.refreshAfterRejection(firstUser))
+
+            assertEquals("B1", store.current()?.accessToken)
+            assertEquals(0, refresher.calls)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun rejectionAfterLogoutReturnsNull() =
+        runTest(timeout = 5.seconds) {
+            val firstUser = store.current()!!
+            store.clear()
+
+            assertNull(auth.refreshAfterRejection(firstUser))
+            assertEquals(0, refresher.calls)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun rejectionOfRotatedPairOfSameSessionReturnsCurrent() =
+        runTest(timeout = 5.seconds) {
+            val sent = store.current()!!
+            auth.refreshAfterRejection(sent)
+
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
+            assertEquals(1, refresher.calls)
+        }
+
+    @Test
+    fun rejectionOfCurrentPairRefreshesThroughTheSingleFlight() =
+        runTest(timeout = 5.seconds) {
+            val sent = store.current()!!
+            val callers = List(5) { async(Dispatchers.Default) { auth.refreshAfterRejection(sent)?.accessToken } }
+
+            assertEquals(List(5) { "A2" }, callers.awaitAll())
+            assertEquals(listOf("R1"), refresher.received.toList())
+        }
 }

@@ -26,36 +26,66 @@ class Authenticator(
 ) {
     private val mutex = Mutex()
     private var inFlight: Deferred<Tokens?>? = null
+    private var inFlightOrigin: Tokens? = null
 
     /** O access atual, sem refresh. */
     fun accessToken(): String? = store.current()?.accessToken
 
-    /** Se o token atual já é outro, devolve o atual sem refresh; senão entra no voo único. `null`: sem sessão. */
+    /** O par atual, que o `AuthPlugin` guarda para saber de que sessão é a requisição. */
+    internal fun currentTokens(): Tokens? = store.current()
+
+    /**
+     * Reação ao `401 UNAUTHENTICATED` dado ao par `rejected` (o que a requisição usou):
+     * - o store guarda o mesmo par: entra no voo único;
+     * - guarda outro par da mesma sessão (já girado): devolve o atual, sem refresh;
+     * - está vazio ou é de outra sessão (logout, novo login): `null`, sem refresh e sem encerrar nada.
+     */
+    suspend fun refreshAfterRejection(rejected: Tokens): Tokens? =
+        flight(isRejected = { it === rejected }, sameSession = { it.sessionId == rejected.sessionId }).await()
+
+    /**
+     * Forma do brief, só pelo access token: não distingue sessões (um token de outra sessão conta como antigo
+     * da atual). O `AuthPlugin` usa a forma com `Tokens`.
+     */
     suspend fun refreshAfterRejection(rejectedAccessToken: String): String? =
-        flight(rejectedAccessToken).await()?.accessToken
+        flight(isRejected = { it.accessToken == rejectedAccessToken }, sameSession = { true }).await()?.accessToken
 
     /** Espera o refresh em voo, se houver, e faz um novo pelo voo único, com o refresh token já girado. */
     suspend fun forceRefresh(): Tokens? {
         mutex.withLock { inFlight }?.join()
-        return flight(rejectedAccessToken = null).await()
+        return flight(isRejected = { true }, sameSession = { true }).await()
     }
 
-    /** Encerra a sessão pelo `401` dado ao `rejectedAccessToken`, se ele ainda é o atual (avisa uma vez só). */
+    /**
+     * Encerra a sessão pelo `401` dado ao par `rejected`, se o store ainda guarda um par da mesma sessão
+     * (avisa uma vez só). Store vazio ou de outra sessão: nada a encerrar.
+     */
     internal fun endSession(
-        rejectedAccessToken: String,
+        rejected: Tokens,
         code: String?,
     ) {
-        if (store.clearIfAccess(rejectedAccessToken)) onSessionEnded(code)
+        if (store.clearIfSession(rejected.sessionId)) onSessionEnded(code)
     }
 
-    private suspend fun flight(rejectedAccessToken: String?): Deferred<Tokens?> =
+    /**
+     * Sob o `Mutex`, decide entre o voo em curso, o par atual, `null` ou um voo novo a partir do par atual.
+     * O voo é olhado antes do store: o voo grava o par novo antes de completar, então voo inativo garante
+     * store já atualizado (na ordem inversa, um par lido antes da gravação abriria um segundo refresh).
+     */
+    private suspend fun flight(
+        isRejected: (Tokens) -> Boolean,
+        sameSession: (Tokens) -> Boolean,
+    ): Deferred<Tokens?> =
         mutex.withLock {
-            inFlight?.takeIf { it.isActive }?.let { return@withLock it }
+            val active = inFlight?.takeIf { it.isActive }
             val current = store.current()
-            if (current == null || (rejectedAccessToken != null && current.accessToken != rejectedAccessToken)) {
-                return@withLock CompletableDeferred(current)
+            if (current == null || !sameSession(current)) return@withLock completed(null)
+            if (active != null && inFlightOrigin === current) return@withLock active
+            if (!isRejected(current)) return@withLock completed(current)
+            scope.async { refresh(current) }.also {
+                inFlight = it
+                inFlightOrigin = current
             }
-            scope.async { refresh(current) }.also { inFlight = it }
         }
 
     /**
@@ -72,6 +102,10 @@ class Authenticator(
             if (store.replaceIf(current, null)) onSessionEnded(codeOf(e))
             null
         }
+
+    /** `CompletableDeferred(null)` cairia no construtor com `parent: Job?` e nunca completaria. */
+    private fun completed(tokens: Tokens?): Deferred<Tokens?> =
+        CompletableDeferred<Tokens?>().apply { complete(tokens) }
 
     private fun codeOf(error: ApiError): String? =
         when (error) {

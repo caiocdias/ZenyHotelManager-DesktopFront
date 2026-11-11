@@ -8,9 +8,11 @@ import com.zeny.desktop.core.http.ogenBase
 import com.zeny.desktop.sdk.client.HotelApi
 import com.zeny.desktop.sdk.client.IamApi
 import com.zeny.desktop.sdk.client.MetaApi
+import com.zeny.desktop.sdk.client.ReservationsApi
 import com.zeny.desktop.sdk.model.ChangePasswordRequest
 import com.zeny.desktop.sdk.model.DeviceRequest
 import com.zeny.desktop.sdk.model.LoginRequest
+import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import de.quati.ogen.client.ktor.HttpClientOgen
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -33,6 +35,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlin.uuid.Uuid
 
 // O refresh roda em threads reais (Dispatchers.Default), como no escopo do core.
 @Suppress("InjectDispatcher")
@@ -176,5 +179,118 @@ class AuthPluginTest {
             assertEquals(1, refresher.calls)
             assertEquals(listOf<String?>("UNAUTHENTICATED"), ended.toList())
             assertNull(store.current())
+        }
+
+    /** Logout de u1 e login de u2 enquanto a chamada de u1 está no servidor. */
+    private fun switchToSecondUser() {
+        store.clear()
+        store.set(Tokens("B1", "S1", "s2", "u2", false))
+    }
+
+    private fun assertSecondUserSessionIntact() {
+        assertEquals("B1", store.current()?.accessToken)
+        assertEquals(0, refresher.calls)
+        assertTrue(ended.isEmpty())
+    }
+
+    @Test
+    fun staleSessionRejectionIsNotRetriedWithNewSessionToken() =
+        runTest(timeout = 5.seconds) {
+            val hotel =
+                HotelApi(
+                    api {
+                        switchToSecondUser()
+                        problem("UNAUTHENTICATED")
+                    },
+                )
+
+            val response = hotel.getHotel()
+
+            assertEquals(401, response.raw.status.value)
+            assertEquals(listOf("Bearer A1"), requests.single().authorization)
+            assertSecondUserSessionIntact()
+        }
+
+    @Test
+    fun staleSessionRejectionOfWriteIsNotRetriedWithNewSessionToken() =
+        runTest(timeout = 5.seconds) {
+            val reservations =
+                ReservationsApi(
+                    api {
+                        switchToSecondUser()
+                        problem("UNAUTHENTICATED")
+                    },
+                )
+
+            val response =
+                reservations.cancelReservation(
+                    id = Uuid.parse(id),
+                    idempotencyKey = "chave-1",
+                    reservationCancelRequest =
+                        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = true),
+                )
+
+            assertEquals(401, response.raw.status.value)
+            assertEquals(listOf("Bearer A1"), requests.single().authorization)
+            assertSecondUserSessionIntact()
+        }
+
+    @Test
+    fun staleSessionOtherUnauthorizedKeepsNewSession() =
+        runTest(timeout = 5.seconds) {
+            val hotel =
+                HotelApi(
+                    api {
+                        switchToSecondUser()
+                        problem("ACCOUNT_DISABLED")
+                    },
+                )
+
+            val response = hotel.getHotel()
+
+            assertEquals(401, response.raw.status.value)
+            assertEquals(1, requests.size)
+            assertSecondUserSessionIntact()
+        }
+
+    @Test
+    fun rotatedPairOfSameSessionIsReusedWithoutRefresh() =
+        runTest(timeout = 5.seconds) {
+            val hotel =
+                HotelApi(
+                    api { request ->
+                        if (request.authorization == listOf("Bearer A1")) {
+                            store.set(Tokens("A2", "R2", "s1", "u1", false))
+                            problem("UNAUTHENTICATED")
+                        } else {
+                            json(hotelJson)
+                        }
+                    },
+                )
+
+            val response = hotel.getHotel()
+
+            assertEquals(200, response.raw.status.value)
+            assertEquals(listOf("Bearer A2"), requests[1].authorization)
+            assertEquals(0, refresher.calls)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun otherUnauthorizedForRotatedPairEndsSameSession() =
+        runTest(timeout = 5.seconds) {
+            val hotel =
+                HotelApi(
+                    api {
+                        store.set(Tokens("A2", "R2", "s1", "u1", false))
+                        problem("ACCOUNT_DISABLED")
+                    },
+                )
+
+            hotel.getHotel()
+
+            assertEquals(1, requests.size)
+            assertNull(store.current())
+            assertEquals(listOf<String?>("ACCOUNT_DISABLED"), ended.toList())
         }
 }
