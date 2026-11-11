@@ -3,6 +3,7 @@ package com.zeny.desktop.design.feedback
 import androidx.compose.material3.SnackbarVisuals
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.types.ExtensibleEnumLabels
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -11,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class FeedbackTest {
     private val labels = ExtensibleEnumLabels(mapOf("DIRTY" to "Suja"))
     private val tones = mapOf("DIRTY" to StatusTone.WARNING)

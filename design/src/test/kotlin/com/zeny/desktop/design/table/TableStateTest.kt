@@ -5,6 +5,7 @@ import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -77,6 +78,7 @@ private data class Guest(
     val name: String,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class TableStateTest {
     @Test
     fun concurrentLoadMoreFetchesOnce() =
