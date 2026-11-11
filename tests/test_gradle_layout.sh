@@ -15,11 +15,15 @@ aliases="$(grep -c 'alias(' <<<"$raiz")"
 sem_apply="$(grep 'alias(' <<<"$raiz" | grep -vc 'apply false')"
 assert_eq "0" "$sem_apply" "todo alias(...) da raiz termina em apply false"
 if [[ "$aliases" -eq 0 ]]; then _assert_fail "raiz declara plugins" "nenhum alias(...) encontrado"; fi
-# O bloco `subprojects { ... }` (lint, Task 9) é a única configuração permitida além dos aliases.
-bloco="$(awk '/^subprojects *\{/{d=1} d{print} d&&/^\}/{d=0}' <<<"$raiz")"
-raiz_sem_bloco="$(awk '/^subprojects *\{/{d=1} !d{print} d&&/^\}/{d=0}' <<<"$raiz")"
-outros="$(grep -vE '^\s*(alias\(.*\) apply false|plugins *\{|\}|//.*)?\s*$' <<<"$raiz_sem_bloco")"
-assert_eq "" "$outros" "raiz só tem alias(...) apply false e o bloco subprojects"
+# Blocos permitidos além dos aliases: `subprojects { ... }` (lint, Task 9), `buildscript { ... }` e
+# `allprojects { ... }` (travamento de dependências, Task 10). Nenhum outro.
+bloco_de() { awk -v nome="$1" '$0 ~ "^"nome" *\\{"{d=1} d{print} d&&/^\}/{d=0}' <<<"$raiz"; }
+bloco="$(bloco_de subprojects)"
+bloco_buildscript="$(bloco_de buildscript)"
+bloco_allprojects="$(bloco_de allprojects)"
+raiz_sem_blocos="$(awk '/^(subprojects|buildscript|allprojects) *\{/{d=1} !d{print} d&&/^\}/{d=0}' <<<"$raiz")"
+outros="$(grep -vE '^\s*(alias\(.*\) apply false|plugins *\{|\}|//.*)?\s*$' <<<"$raiz_sem_blocos")"
+assert_eq "" "$outros" "raiz só tem alias(...) apply false e os blocos subprojects, buildscript e allprojects"
 
 sem_alias="$(grep -vE '^\s*alias\(' <<<"$raiz")"
 # Sem diferença entre maiúsculas e minúsculas (`BasePlugin`, `Delete`), só neste trecho.
@@ -30,6 +34,10 @@ done
 # Dentro de subprojects, nada que alcance a raiz: plugin nela (cria `clean`) ou tarefa Delete (atinge build/).
 for proibido in 'rootProject.apply' 'rootProject.plugins' 'rootProject.pluginManager' 'rootProject.tasks' 'allprojects' 'Delete'; do
   assert_not_contains "$bloco" "$proibido" "bloco subprojects não usa $proibido"
+done
+# O allprojects só trava dependências e registra resolveAndLockAll: nada de plugin nem `clean` na raiz.
+for proibido in 'apply(' 'plugins' 'pluginManager' 'Delete' '"clean"' 'clean('; do
+  assert_not_contains "$bloco_allprojects" "$proibido" "bloco allprojects não usa $proibido"
 done
 shopt -u nocasematch
 
@@ -84,5 +92,16 @@ done
 # O ForbiddenImport só olha `import`: nada de nome totalmente qualificado do sdk de operações em app/design.
 proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
 assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client nem .util"
+
+# Task 10: travamento estrito. Cada módulo tem gradle.lockfile (a raiz não tem configuração resolvível, e o
+# Gradle não grava lockfile vazio); o classpath dos plugins e o das settings também têm o seu.
+for d in sdk core design app demo-seed; do
+  assert_file "$ROOT/$d/gradle.lockfile" "gradle.lockfile de $d"
+done
+assert_file "$ROOT/buildscript-gradle.lockfile" "buildscript-gradle.lockfile da raiz"
+assert_file "$ROOT/settings-gradle.lockfile" "settings-gradle.lockfile da raiz"
+assert_contains "$bloco_buildscript" 'LockMode.STRICT' "buildscript trava o classpath dos plugins em modo estrito"
+assert_contains "$bloco_allprojects" 'LockMode.STRICT' "allprojects trava em modo estrito"
+assert_contains "$bloco_allprojects" 'resolveAndLockAll' "allprojects registra resolveAndLockAll"
 
 finish

@@ -1,3 +1,15 @@
+// Travamento de dependências: o grafo resolvido de cada projeto fica em gradle.lockfile, e o classpath dos
+// plugins do build em buildscript-gradle.lockfile; o osv-scanner da revisão
+// final lê esses arquivos. O modo estrito falha o build para versão fora do lockfile, dependência nova ou
+// configuração sem lock state. Versão menor no catálogo é ignorada em favor da travada, sem aviso; por isso
+// regrave os lockfiles no mesmo commit que muda o catálogo ou um plugin: `./gradlew resolveAndLockAll --write-locks`.
+buildscript {
+    dependencyLocking {
+        lockAllConfigurations()
+        lockMode = LockMode.STRICT
+    }
+}
+
 plugins {
     alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.kotlin.compose) apply false
@@ -35,5 +47,24 @@ subprojects {
     // (com resolução de tipos) também entram, como no servidor.
     tasks.matching { it.name == "check" }.configureEach {
         dependsOn(tasks.matching { it.name == "detektMain" || it.name == "detektTest" })
+    }
+}
+
+// Mesmo travamento e a tarefa de regravação em todos os projetos, a raiz inclusive: `--write-locks` só
+// grava o projeto cuja tarefa resolve as configurações. A raiz não aplica plugin a si mesma.
+allprojects {
+    dependencyLocking {
+        lockAllConfigurations()
+        lockMode = LockMode.STRICT
+    }
+
+    tasks.register("resolveAndLockAll") {
+        notCompatibleWithConfigurationCache("Resolve configurações em tempo de execução")
+        doFirst {
+            require(gradle.startParameter.isWriteDependencyLocks) { "Rode com --write-locks" }
+        }
+        doLast {
+            configurations.filter { it.isCanBeResolved }.forEach { it.resolve() }
+        }
     }
 }
