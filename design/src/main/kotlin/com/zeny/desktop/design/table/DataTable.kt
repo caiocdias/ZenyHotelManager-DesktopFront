@@ -40,6 +40,7 @@ fun <T> DataTable(
     columns: List<Column<T>>,
     onRowClick: (T) -> Unit = {},
     modifier: Modifier = Modifier,
+    emptyMessage: String = "Nenhum registro encontrado.",
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -69,6 +70,7 @@ fun <T> DataTable(
             .collect { state.loadMore() }
     }
 
+    val visibleRows = state.visibleRows(columns)
     Column(modifier) {
         OutlinedTextField(
             value = state.filter,
@@ -78,10 +80,17 @@ fun <T> DataTable(
         )
         HeaderRow(state, columns)
         LazyColumn(Modifier.weight(1f).testTag("table-list"), listState) {
-            items(state.visibleRows(columns), key = state.key) { row ->
+            items(visibleRows, key = state.key) { row ->
                 DataRow(row, columns, onRowClick, Modifier.testTag("row-${state.key(row)}"))
             }
-            item { Footer(state, filtering) { scope.launch { loadOrRetry(state) } } }
+            item {
+                Footer(
+                    state,
+                    filtering,
+                    visibleRows.isEmpty(),
+                    emptyMessage,
+                ) { scope.launch { loadOrRetry(state) } }
+            }
         }
     }
 }
@@ -145,9 +154,14 @@ private fun <T> DataRow(
 private fun <T> Footer(
     state: TableState<T>,
     filtering: Boolean,
+    noVisibleRows: Boolean,
+    emptyMessage: String,
     onLoad: () -> Unit,
 ) {
     val error = state.error
+    // Antes da primeira carga (sem linhas e com mais por vir) a lista não "terminou vazia".
+    val finishedEmpty = noVisibleRows && !state.loading && error == null && !(state.rows.isEmpty() && state.hasMore)
+    if (finishedEmpty) Text(emptyMessage, Modifier.padding(vertical = 8.dp).testTag("table-empty"))
     when {
         state.loading -> {
             CircularProgressIndicator(Modifier.testTag("table-loading"))

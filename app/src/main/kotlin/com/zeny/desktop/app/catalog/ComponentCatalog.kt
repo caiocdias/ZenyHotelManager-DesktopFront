@@ -27,6 +27,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.feedback.ConfirmDialog
 import com.zeny.desktop.design.feedback.EmptyState
 import com.zeny.desktop.design.feedback.ErrorState
@@ -43,6 +44,7 @@ import com.zeny.desktop.design.form.FormTextField
 import com.zeny.desktop.design.input.DateField
 import com.zeny.desktop.design.input.DocumentField
 import com.zeny.desktop.design.input.MoneyField
+import com.zeny.desktop.design.input.MoneyInput
 import com.zeny.desktop.design.input.PhoneField
 import com.zeny.desktop.design.layout.AppScaffold
 import com.zeny.desktop.design.layout.NavItem
@@ -50,6 +52,7 @@ import com.zeny.desktop.design.table.DataTable
 import com.zeny.desktop.design.table.TableState
 import com.zeny.desktop.design.theme.ZenyColors
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 
 /** Verdadeiro só com `ZENY_DEV=1` ou `-Dzeny.dev=true`. */
 fun isDevMode(
@@ -155,7 +158,7 @@ private fun ThemeSection() {
 
 @Composable
 private fun FieldsSection() {
-    var money by remember { mutableStateOf("1.234,56") }
+    var money by remember { mutableStateOf(MoneyInput.format(Money(BigDecimal("1234.56")))) }
     var date by remember { mutableStateOf("11/11/2026") }
     var document by remember { mutableStateOf(SAMPLE_CPF) }
     var cnpj by remember { mutableStateOf(SAMPLE_CNPJ) }

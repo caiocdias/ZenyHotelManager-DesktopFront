@@ -65,8 +65,8 @@ fun PhoneField(
     error: String? = null,
     modifier: Modifier = Modifier,
 ) = ParsedTextField(
-    PhoneInput.mask(value),
-    { onValueChange(PhoneInput.mask(it)) },
-    FieldSpec(label, error, PhoneInput::parse),
+    value,
+    onValueChange,
+    FieldSpec(label, error, PhoneInput::parse, PhoneInput::mask, Char::isDigit),
     modifier,
 )
