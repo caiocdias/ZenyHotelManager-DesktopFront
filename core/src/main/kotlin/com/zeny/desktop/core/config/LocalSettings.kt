@@ -40,8 +40,7 @@ class PreferencesSettings(
 
     private fun isUuid(text: String): Boolean =
         try {
-            UUID.fromString(text)
-            true
+            UUID.fromString(text).toString().equals(text, ignoreCase = true)
         } catch (
             @Suppress("SwallowedException") e: IllegalArgumentException,
         ) {

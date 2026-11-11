@@ -9,6 +9,9 @@ value class ServerUrl private constructor(
     val value: String,
 ) {
     companion object {
+        private const val NO_PORT = -1
+        private val PORT_RANGE = 1..65535
+
         fun parse(raw: String?): ServerUrl? {
             val trimmed = raw?.trim().orEmpty()
             val uri = toUri(trimmed)
@@ -17,6 +20,7 @@ value class ServerUrl private constructor(
                 uri != null &&
                     schemeOk &&
                     !uri.host.isNullOrEmpty() &&
+                    (uri.port == NO_PORT || uri.port in PORT_RANGE) &&
                     uri.rawQuery == null &&
                     uri.rawFragment == null &&
                     uri.rawUserInfo == null
