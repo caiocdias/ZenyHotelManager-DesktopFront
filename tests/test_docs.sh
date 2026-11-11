@@ -39,4 +39,28 @@ assert_contains "$leia" "down -v\` apaga" "LEIA-ME: aviso do down -v"
 assert_contains "$leia" "Get-NetConnectionProfile" "LEIA-ME: checar categoria da rede"
 assert_contains "$leia" "Set-NetConnectionProfile -InterfaceAlias" "LEIA-ME: ajustar categoria da rede"
 
+# Comandos oficiais: mesmos textos no README e no CLAUDE.md.
+claude="$ROOT/CLAUDE.md"
+assert_file "$claude" "CLAUDE.md existe"
+claude_text="$(cat "$claude" 2>/dev/null)"
+official_commands=(
+  '| build | `./gradlew build` |'
+  '| testes | `./gradlew test` e `bash tests/run.sh` |'
+  '| lint | `./gradlew ktlintCheck detekt` |'
+  '| run | `./gradlew run` |'
+  '| JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |'
+  '| travas | `./gradlew resolveAndLockAll --write-locks` |'
+  '| gate do projeto | `./gradlew build` + `bash tests/run.sh` |'
+)
+for cmd in "${official_commands[@]}"; do
+  assert_contains "$readme_text" "$cmd" "README tem o comando: $cmd"
+  assert_contains "$claude_text" "$cmd" "CLAUDE.md tem o comando: $cmd"
+done
+for section in "## Projeto" "## Stack e comandos" "## Git" "## Decisões do usuário"; do
+  assert_contains $'\n'"$claude_text"$'\n' $'\n'"$section"$'\n' "CLAUDE.md tem a seção $section"
+done
+assert_contains "$readme_text" "0007" "README cita a ADR 0007"
+assert_contains "$readme_text" "0008" "README cita a ADR 0008"
+assert_not_contains "$readme_text" "Ainda não há código do app" "README não diz mais que não há código"
+
 finish

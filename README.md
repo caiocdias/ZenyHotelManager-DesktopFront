@@ -1,6 +1,6 @@
 # Zeny Hotel Manager — Front Desktop
 
-Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). Ainda não há código do app: ele nasce na M1. Hoje o repositório guarda o contrato da API fixado, as ferramentas que sincronizam com o servidor e o ambiente local do servidor para desenvolver e demonstrar.
+Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O repositório é um build Gradle com os módulos `sdk` (cliente gerado do contrato com o ogen, ADR 0007), `core` (fronteira entre as features e o `sdk`, ADR 0008, uma proposta que aguarda a confirmação do usuário), `design`, `app` (a janela) e `demo-seed` (ainda vazio). Além do app, guarda o contrato da API fixado, as ferramentas que sincronizam com o servidor e o ambiente local do servidor para desenvolver e demonstrar.
 
 ## Onde está o quê
 
@@ -9,6 +9,20 @@ Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). Aind
 - Roadmaps por marco: [`docs/roadmaps/`](docs/roadmaps/).
 - Pedidos do front ao servidor: [`docs/pedidos-servidor.md`](docs/pedidos-servidor.md).
 - Pacote do Windows (demo): [`tools/server-env/LEIA-ME.md`](tools/server-env/LEIA-ME.md). O passo a passo no Windows fica lá, não aqui.
+
+## Comandos oficiais do app
+
+| Para quê | Comando |
+|---|---|
+| build | `./gradlew build` |
+| testes | `./gradlew test` e `bash tests/run.sh` |
+| lint | `./gradlew ktlintCheck detekt` |
+| run | `./gradlew run` |
+| JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |
+| travas | `./gradlew resolveAndLockAll --write-locks` |
+| gate do projeto | `./gradlew build` + `bash tests/run.sh` |
+
+As dependências são travadas em lockfiles estritos: regrave-os no mesmo commit que muda o catálogo de versões ou um plugin. O código do `sdk` é gerado no build e não é versionado. O Gradle 9.8.1 e o `~/.gradle` são compartilhados com o servidor, então nunca rode `./gradlew --stop`.
 
 ## Servidor fixado
 

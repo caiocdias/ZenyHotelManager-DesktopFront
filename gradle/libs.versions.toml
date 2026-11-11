@@ -1,0 +1,50 @@
+# Catálogo único de versões do projeto. Toda dependência e todo plugin
+# declarado no build tem a versão aqui; nenhum *.gradle.kts tem versão literal.
+
+[versions]
+kotlin = "2.4.21"
+compose-multiplatform = "1.12.2"
+detekt = "2.0.0-alpha.6"
+ktlint-plugin = "14.2.0"
+ktlint-cli = "1.8.0"
+ogen = "0.16.1"
+quati-kotlin-util = "2.6.1"
+ktor = "3.6.1"
+kotlinx-serialization = "1.12.0"
+# Classpath dos plugins (o ogen traz swagger-parser e openapi-generator 7.26.0): o Jackson 2 chega na 2.22.1,
+# o guava na 32.1.3-jre e o handlebars na 4.3.1. A plataforma do Jackson na 2.22.3 fecha 5 High
+# (GHSA-7hhh-6rmp-j9qf, GHSA-p6pp-m3f8-5c89, GHSA-cxp5-3px4-pw24, GHSA-wv8q-qhhj-9h54, GHSA-q4xh-88c3-wmh7) e
+# 2 Medium (GHSA-gx83-3vf8-gh7j, GHSA-wjgm-6hv5-3cvf); o guava 33.7.2 fecha GHSA-xxph-c9ww-hj94 (High) e o
+# handlebars 4.5.2 fecha GHSA-r4gv-qr8j-p3pg (High). Saem quando o openapi-generator trouxer versões >= estas;
+# confira essas advisories no scanner antes de remover.
+jackson2 = "2.22.3"
+guava = "33.7.2-jre"
+handlebars = "4.5.2"
+# O ktlint CLI 1.8.0 puxa o logback 1.3.16 (configuração ktlint): GHSA-jhq6-gfmj-v8fx, GHSA-p47f-322f-whfh e
+# GHSA-qqpg-mvqg-649v (Low). Sai quando o ktlint CLI trouxer o logback >= 1.5.34.
+logback = "1.5.34"
+
+[libraries]
+ogen-core = { module = "de.quati.ogen:core", version.ref = "ogen" }
+ogen-client-ktor = { module = "de.quati.ogen:client-ktor", version.ref = "ogen" }
+quati-kotlin-util = { module = "de.quati:kotlin-util", version.ref = "quati-kotlin-util" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
+ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+jackson-bom = { module = "com.fasterxml.jackson:jackson-bom", version.ref = "jackson2" }
+guava = { module = "com.google.guava:guava", version.ref = "guava" }
+handlebars = { module = "com.github.jknack:handlebars", version.ref = "handlebars" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+logback-core = { module = "ch.qos.logback:logback-core", version.ref = "logback" }
+kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
+detekt = { id = "dev.detekt", version.ref = "detekt" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-plugin" }
+ogen = { id = "de.quati.ogen", version.ref = "ogen" }
