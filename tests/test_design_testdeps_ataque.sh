@@ -38,9 +38,22 @@ for cfg in compileClasspath runtimeClasspath; do
   assert_not_contains "$prod" "desktop-jvm-" "design: $cfg sem nativos do Compose"
 done
 
-# Os outros módulos não herdam o ui-test nem o junit4 (nem o app, que embarca o JAR).
-for m in sdk core app demo-seed; do
+# sdk, core e demo-seed não herdam o ui-test nem o junit4.
+for m in sdk core demo-seed; do
   assert_eq "0" "$(grep -cE '^(org\.jetbrains\.compose\.ui:ui-test|junit:junit|org\.hamcrest)' "$ROOT/$m/gradle.lockfile")" "$m: lockfile sem ui-test/junit4/hamcrest"
+done
+
+# O app (Task 9) leva o ui-test só nos classpaths de teste: nada em produção (o JAR embarca o runtime).
+app_lock="$ROOT/app/gradle.lockfile"
+for c in 'org.jetbrains.compose.ui:ui-test' 'org.jetbrains.compose.ui:ui-test-desktop' 'junit:junit' 'org.hamcrest:hamcrest-core'; do
+  cfgs="$(grep -E "^$c:" "$app_lock" | cut -d= -f2 | tr ',' '\n' | sort -u)"
+  assert_eq "" "$(grep -vE '^(composeHotReloadDev)?[Tt]est[A-Za-z]*$' <<<"$cfgs")" "app: $c só em classpaths de teste"
+done
+for cfg in compileClasspath runtimeClasspath; do
+  prod="$(grep -E "^[^#].*[=,]$cfg(,|$)" "$app_lock" | cut -d= -f1)"
+  assert_not_contains "$prod" "ui-test" "app: $cfg sem ui-test"
+  assert_not_contains "$prod" "junit:junit" "app: $cfg sem junit4"
+  assert_not_contains "$prod" "hamcrest" "app: $cfg sem hamcrest"
 done
 
 # Nenhum currentOs em nenhum *.gradle.kts (comentários não contam).
@@ -61,6 +74,16 @@ if [[ ! -f "$jar" ]] || ! command -v zipinfo >/dev/null; then
 else
   names="$(zipinfo -1 "$jar")"
   assert_eq "0" "$(grep -cE '^(androidx/compose/ui/test/|org/junit/|junit/|org/hamcrest/|kotlinx/coroutines/test/)' <<<"$names")" "JAR sem classes de teste de UI, junit, hamcrest ou coroutines-test"
+fi
+
+# Task 9: a captura do catálogo existe, é um PNG de verdade (assinatura) e tem conteúdo (não é um arquivo mínimo).
+png="$ROOT/app/build/catalog/catalog.png"
+if [[ ! -f "$png" ]]; then
+  skip_case "catalog.png ausente (rode ./gradlew :app:test)"
+else
+  assert_eq "89504e470d0a1a0a" "$(head -c 8 "$png" | od -An -tx1 | tr -d ' \n')" "catalog.png tem assinatura PNG"
+  tam="$(wc -c <"$png")"
+  if ((tam < 10000)); then _assert_fail "catalog.png tem conteúdo" "só $tam bytes"; fi
 fi
 
 finish
