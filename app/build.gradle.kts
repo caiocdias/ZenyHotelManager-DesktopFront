@@ -22,6 +22,9 @@ dependencies {
     implementation(compose.desktop.windows_x64)
 
     testImplementation(libs.kotlin.test.junit5)
+    // Teste de UI só no classpath de teste: o JAR de produção não o carrega (como no design).
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTest)
 }
 
 compose.desktop {
