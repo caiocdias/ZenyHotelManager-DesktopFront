@@ -181,7 +181,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
 | E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
-| E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
+| E04 | Login, casca do app e aprovação de superior | #em-andamento | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
@@ -436,7 +436,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E04 — Login, casca do app e aprovação de superior — #pendente
+## E04 — Login, casca do app e aprovação de superior — #em-andamento
 
 **Objetivo:** o usuário informa o servidor, testa a conexão, faz login (trocando a senha se o servidor exigir) e entra num app com menu lateral filtrado pelas permissões. No topo aparecem o nome do hotel e a data operacional. Qualquer ação recusada com `APPROVAL_REQUIRED` abre o diálogo de aprovação de superior e é repetida.
 
