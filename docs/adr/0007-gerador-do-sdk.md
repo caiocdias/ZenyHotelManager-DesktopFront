@@ -173,8 +173,9 @@ dependencies {
 - **Interceptação e repetição na E02.** O `core` é dono do único `HttpClient` e instala nele o que a E02 precisar.
   - O refresh no `401` com `code` `UNAUTHENTICATED`, por plugin do Ktor (`HttpSend.intercept` ou `createClientPlugin`), repete a mesma requisição com o novo `Authorization`.
   - O atributo `ogenAuthAttr` de cada requisição diz se a operação exige `bearerAuth`. Em `login` e `refreshTokens` ele é `emptyList()`, e o token não vai.
-  - O reenvio após o `403 APPROVAL_REQUIRED` refaz a mesma chamada gerada, com a mesma `Idempotency-Key` e o token no `block`. A camada HTTP também pode fazer o reenvio, com `request.headers["X-Approval-Token"] = token` no `HttpRequestBuilder`.
-  - A `Idempotency-Key` também pode ir pelo `block`.
+  - O reenvio após o `403 APPROVAL_REQUIRED` refaz a chamada gerada com o token no `block`. A camada HTTP também pode fazer o reenvio, com `request.headers["X-Approval-Token"] = token` no `HttpRequestBuilder`.
+  - **A `Idempotency-Key` do reenvio está em aberto.** O design §6.2 pede uma chave por intenção, reaproveitada no reenvio e após a aprovação. O contrato manda o contrário em pelo menos uma operação: `cancelReservation` diz "repita com o `X-Approval-Token` e **outra** `Idempotency-Key`". A escolha é uma decisão do usuário, pendente antes da E02, e esta ADR não a toma.
+  - O mecanismo serve às duas regras. O parâmetro `idempotencyKey` gerado, ou `headers["Idempotency-Key"] = …` no `block` ou no `HttpRequestBuilder`, envia a mesma chave ou uma nova, sempre uma vez só.
 - **Qual header vence.** O parâmetro gerado (`ifMatch`, `idempotencyKey`, `xApprovalToken`) é aplicado antes do `block`. Um `headers[nome] = valor` no `block` substitui o valor, e o injetado vence. O `core` passa cada header por um caminho só: pelo parâmetro, quando a operação o declara, e pelo `block`, quando não declara. A substituição garante que, mesmo se os dois coexistirem, o header sai uma vez só.
 - **Enum fechado com valor novo.** O ogen não tem caso desconhecido: um valor fora do `enum:` fechado faz a resposta inteira falhar com `SerializationException`.
   - O `Json` do `sdk` não liga `coerceInputValues`, porque ele só cobriria o enum opcional, transformando-o em ausente sem aviso.
