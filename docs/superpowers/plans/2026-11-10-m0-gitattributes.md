@@ -79,3 +79,10 @@ git commit -m "Acrescenta o .gitattributes: contrato sem normalização e script
 ```
 
 - [ ] **Step 6: Verify after commit:** `git add --renormalize . && git diff --cached --quiet && git status --porcelain` → sem saída e exit 0.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas (`revisor-arquitetura`, opus).
+- **Rodadas:** 1. A revisão inicial bloqueou por dois Importantes: o `--renormalize` antes do commit no Step 4 e o clone sem `core.autocrlf` gravado na config. Os dois foram corrigidos, junto com os Menores 1 a 4.
+- **Nota Menor em aberto:** marcar o Menor adiado do `.gitattributes` como resolvido no handoff da E01 e no Histórico do roadmap M0. Fica com o orquestrador, no fechamento.
+- **Sem ARCHITECTURE nem spec dedicada:** o plano foi julgado contra o Menor adiado, as invariantes do roadmap M0 e os ADRs 0002 e 0003.
