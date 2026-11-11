@@ -8,6 +8,14 @@ buildscript {
         lockAllConfigurations()
         lockMode = LockMode.STRICT
     }
+    // Correções de advisories no classpath dos plugins; versões, motivos e saída no catálogo.
+    dependencies {
+        classpath(platform(libs.jackson.bom))
+        constraints {
+            classpath(libs.guava) { because("GHSA-xxph-c9ww-hj94") }
+            classpath(libs.handlebars) { because("GHSA-r4gv-qr8j-p3pg") }
+        }
+    }
 }
 
 plugins {
@@ -40,6 +48,14 @@ subprojects {
         // O código gerado do sdk (ogen) fica fora; o escrito à mão, testes incluídos, é linted.
         filter {
             exclude { it.file.path.contains("/build/generated/") }
+        }
+    }
+
+    // O ktlint CLI traz o logback 1.3.16 (3 advisories Low); motivo e saída no catálogo.
+    dependencies {
+        constraints {
+            add("ktlint", rootProject.libs.logback.classic) { because("GHSA-jhq6-gfmj-v8fx, GHSA-p47f-322f-whfh, GHSA-qqpg-mvqg-649v") }
+            add("ktlint", rootProject.libs.logback.core) { because("GHSA-jhq6-gfmj-v8fx, GHSA-p47f-322f-whfh, GHSA-qqpg-mvqg-649v") }
         }
     }
 
