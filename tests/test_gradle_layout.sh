@@ -22,9 +22,16 @@ outros="$(grep -vE '^\s*(alias\(.*\) apply false|plugins *\{|\}|//.*)?\s*$' <<<"
 assert_eq "" "$outros" "raiz só tem alias(...) apply false e o bloco subprojects"
 
 sem_alias="$(grep -vE '^\s*alias\(' <<<"$raiz")"
+# Sem diferença entre maiúsculas e minúsculas (`BasePlugin`, `Delete`), só neste trecho.
+shopt -s nocasematch
 for proibido in 'base' 'java' 'application' 'kotlin' 'clean' 'buildDirectory'; do
   assert_not_contains "$sem_alias" "$proibido" "raiz não usa $proibido"
 done
+# Dentro de subprojects, nada que alcance a raiz: plugin nela (cria `clean`) ou tarefa Delete (atinge build/).
+for proibido in 'rootProject.apply' 'rootProject.plugins' 'rootProject.pluginManager' 'rootProject.tasks' 'allprojects' 'Delete'; do
+  assert_not_contains "$bloco" "$proibido" "bloco subprojects não usa $proibido"
+done
+shopt -u nocasematch
 
 # Caminhos relativos à raiz: o worktree mora sob .claude/, e uma exclusão '*/.claude/*' contra o caminho
 # absoluto descartaria todos os arquivos. Só o .claude da raiz (worktrees aninhados) fica de fora.
