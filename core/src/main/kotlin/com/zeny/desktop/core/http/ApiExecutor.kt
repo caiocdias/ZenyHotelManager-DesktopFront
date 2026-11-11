@@ -4,8 +4,9 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.error.ProblemMapper
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import de.quati.ogen.client.ktor.ogenAuthAttr
+import io.ktor.client.call.NoTransformationFoundException
 import io.ktor.http.HttpHeaders
-import io.ktor.serialization.JsonConvertException
+import io.ktor.serialization.ContentConvertException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerializationException
 import java.io.IOException
@@ -45,7 +46,9 @@ class ApiExecutor {
             throw e
         } catch (e: ApiError) {
             throw e
-        } catch (e: JsonConvertException) {
+        } catch (e: ContentConvertException) {
+            throw ApiError.IncompatibleResponse(e)
+        } catch (e: NoTransformationFoundException) {
             throw ApiError.IncompatibleResponse(e)
         } catch (e: SerializationException) {
             throw ApiError.IncompatibleResponse(e)
