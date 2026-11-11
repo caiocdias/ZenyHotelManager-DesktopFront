@@ -8,6 +8,9 @@ class Intent {
     var key: String = Uuid.random().toString()
         private set
 
+    /** Token da última `executeApproved`; o reenvio por rede da mesma intenção o leva junto com a mesma chave. */
+    internal var approvalToken: String? = null
+
     /** Depois do `403 APPROVAL_REQUIRED` a repetição com token usa uma chave nova (decisão D2). */
     internal fun rotateForApproval(): String {
         key = Uuid.random().toString()

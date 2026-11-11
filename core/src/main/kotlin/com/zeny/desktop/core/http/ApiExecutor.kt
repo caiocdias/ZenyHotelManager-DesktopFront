@@ -18,20 +18,30 @@ class ApiResponse<T : Any>(
     val status: Int,
 )
 
-/** Executa uma chamada gerada do `sdk` e a traduz em `ApiResponse` ou `ApiError`. */
+/**
+ * Executa uma chamada gerada do `sdk` e a traduz em `ApiResponse` ou `ApiError`.
+ *
+ * Contrato da `Intent` (decisão D2): `execute(intent)` envia a chave atual e, se a intenção já foi aprovada,
+ * o token da última `executeApproved`; assim o reenvio por falha de rede mantém chave e token. Cada
+ * `executeApproved` (token novo) gira a chave e guarda o novo token.
+ */
 class ApiExecutor {
     suspend fun <T : Any> execute(
         intent: Intent? = null,
         credentialCheck: Boolean = false,
         call: suspend (CallOptions) -> HttpResponseTyped<T>,
-    ): ApiResponse<T> = run(CallOptions(intent?.key, null, credentialCheck), call)
+    ): ApiResponse<T> = run(CallOptions(intent?.key, intent?.approvalToken, credentialCheck), call)
 
     /** Repete a intenção com o token de aprovação e uma `Idempotency-Key` nova (decisão D2). */
     suspend fun <T : Any> executeApproved(
         intent: Intent,
         approvalToken: String,
         call: suspend (CallOptions) -> HttpResponseTyped<T>,
-    ): ApiResponse<T> = run(CallOptions(intent.rotateForApproval(), approvalToken), call)
+    ): ApiResponse<T> {
+        val key = intent.rotateForApproval()
+        intent.approvalToken = approvalToken
+        return run(CallOptions(key, approvalToken), call)
+    }
 
     private suspend fun <T : Any> run(
         options: CallOptions,

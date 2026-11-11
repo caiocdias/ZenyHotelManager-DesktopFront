@@ -149,6 +149,30 @@ class ApiExecutorTest {
         }
 
     @Test
+    fun approvedNetworkResendKeepsKeyAndToken() =
+        runTest {
+            var calls = 0
+            val reservations =
+                ReservationsApi(
+                    api {
+                        if (++calls == 1) throw IOException("sem rede")
+                        json("{}")
+                    },
+                )
+            val intent = Intent()
+            val cancel = cancelCall(reservations)
+
+            assertFailsWith<ApiError.Network> { executor.executeApproved(intent, "tok-1", cancel) }
+            runCatching { executor.execute(intent, call = cancel) }
+
+            assertEquals(2, requests.size)
+            assertEquals(listOf(intent.key), requests[1].headers.getAll("Idempotency-Key"))
+            assertEquals(requests[0].headers.getAll("Idempotency-Key"), requests[1].headers.getAll("Idempotency-Key"))
+            assertEquals(listOf("tok-1"), requests[0].headers.getAll("X-Approval-Token"))
+            assertEquals(listOf("tok-1"), requests[1].headers.getAll("X-Approval-Token"))
+        }
+
+    @Test
     fun getWithoutIntentSendsNoIdempotencyKey() =
         runTest {
             val hotel = HotelApi(api { json(hotelJson) })
