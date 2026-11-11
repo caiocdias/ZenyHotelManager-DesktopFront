@@ -66,7 +66,7 @@ varre_proibidos() {
     [[ -d "$base/$d" ]] || continue
     while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
   done
-  grep -nE 'com\.zeny\.desktop\.sdk\.(client|util)' /dev/null "${arquivos[@]}" 2>/dev/null
+  grep -nE 'com\.zeny\.desktop\.sdk\.(client|util)|io\.ktor\.client|de\.quati\.ogen\.client' /dev/null "${arquivos[@]}" 2>/dev/null
 }
 if [[ ! -d "$ROOT/app/src" ]]; then _assert_fail "app/src existe (a varredura de fronteira tem o que varrer)"; fi
 assert_eq "" "$(varre_proibidos "$ROOT")" "app/src e design/src sem pacote de operação do sdk"
@@ -76,6 +76,16 @@ printf 'val x = com.zeny.desktop.sdk.util.Foo()\n' >"$plantado/design/src/main/k
 assert_contains "$(varre_proibidos "$plantado")" "sdk.util.Foo" "a varredura de fronteira acha nome qualificado em design/src"
 printf 'import com.zeny.desktop.sdk.client.AuthApi\n' >"$plantado/app/src/main/kotlin/B.kt"
 assert_contains "$(varre_proibidos "$plantado")" "sdk.client.AuthApi" "a varredura de fronteira acha import em app/src"
+# Cliente HTTP só pelo core (ADR 0008, D1): pacote ktor e ogen-client, com subpacote e nome qualificado.
+for pkg in 'io.ktor.client.*' 'de.quati.ogen.client.*'; do
+  assert_contains "$fi_bloco" "value: '$pkg'" "ForbiddenImport barra $pkg (cliente HTTP só pelo core)"
+done
+printf 'import io.ktor.client.HttpClient\n' >"$plantado/app/src/main/kotlin/C.kt"
+assert_contains "$(varre_proibidos "$plantado")" "io.ktor.client.HttpClient" "a varredura de fronteira acha import de io.ktor.client em app/src"
+printf 'import io.ktor.client.request.get\n' >"$plantado/app/src/main/kotlin/D.kt"
+assert_contains "$(varre_proibidos "$plantado")" "io.ktor.client.request.get" "a varredura de fronteira acha subpacote io.ktor.client.request em app/src"
+printf 'val c = de.quati.ogen.client.ktor.HttpClientOgen()\n' >"$plantado/design/src/main/kotlin/E.kt"
+assert_contains "$(varre_proibidos "$plantado")" "de.quati.ogen.client.ktor.HttpClientOgen" "a varredura de fronteira acha nome qualificado de de.quati.ogen.client em design/src"
 rm -rf "$plantado"
 
 # --- 4. Módulos: grafo e plugins por módulo (design §6.1) --------------------------------------------------

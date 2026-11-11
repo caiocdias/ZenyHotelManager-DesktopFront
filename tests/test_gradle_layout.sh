@@ -90,9 +90,13 @@ assert_contains "$detekt_yml" 'ignoreAnnotated' "detekt.yml dispensa @Composable
 for pkg in 'com.zeny.desktop.sdk.client' 'com.zeny.desktop.sdk.util'; do
   assert_contains "$detekt_yml" "$pkg" "ForbiddenImport barra $pkg"
 done
+# Cliente HTTP só pelo core (ADR 0008, decisão D1): o detekt barra o pacote e seus subpacotes.
+for pkg in 'io.ktor.client.*' 'de.quati.ogen.client.*'; do
+  assert_contains "$detekt_yml" "value: '$pkg'" "ForbiddenImport barra $pkg (cliente HTTP só pelo core)"
+done
 # O ForbiddenImport só olha `import`: nada de nome totalmente qualificado do sdk de operações em app/design.
-proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
-assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client nem .util"
+proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)|io\.ktor\.client|de\.quati\.ogen\.client' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client, .util, io.ktor.client nem de.quati.ogen.client"
 
 # Task 10: travamento estrito. Cada módulo tem gradle.lockfile (a raiz não tem configuração resolvível, e o
 # Gradle não grava lockfile vazio); o classpath dos plugins e o das settings também têm o seu.
