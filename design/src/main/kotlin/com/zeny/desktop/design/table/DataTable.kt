@@ -62,7 +62,8 @@ fun <T> DataTable(
                     .lastOrNull()
                     ?.index ?: -1
             val count = listState.layoutInfo.totalItemsCount
-            (count > 0 && last >= count - 1 - NEAR_END_ROWS) to state.rows.size
+            // Com erro, só "Tentar de novo" pede a página de novo; o rodapé de erro não conta como fim da lista.
+            (state.error == null && count > 0 && last >= count - 1 - NEAR_END_ROWS) to state.rows.size
         }.distinctUntilChanged()
             .filter { (nearEnd, _) -> nearEnd }
             .collect { state.loadMore() }

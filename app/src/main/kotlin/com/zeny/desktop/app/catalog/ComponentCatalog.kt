@@ -155,7 +155,7 @@ private fun ThemeSection() {
 
 @Composable
 private fun FieldsSection() {
-    var money by remember { mutableStateOf("1234,56") }
+    var money by remember { mutableStateOf("1.234,56") }
     var date by remember { mutableStateOf("11/11/2026") }
     var document by remember { mutableStateOf(SAMPLE_CPF) }
     var cnpj by remember { mutableStateOf(SAMPLE_CNPJ) }
