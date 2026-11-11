@@ -37,9 +37,6 @@ class SessionManager(
     private val _state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    /** Sessão cuja troca de senha o servidor já aceitou, mas cujo refresh seguinte ainda não chegou. */
-    private var passwordChangedAwaitingRefresh: String? = null
-
     /** Abre a sessão; um `ApiError` (por exemplo `401 INVALID_CREDENTIALS`) sai sem mudar o estado. */
     suspend fun login(
         login: String,
@@ -49,7 +46,6 @@ class SessionManager(
         val tokens = executor.execute { iam.login(request, it.headers) }.value.toTokens()
         settings.lastLogin = login
         return synchronized(lock) {
-            passwordChangedAwaitingRefresh = null
             store.set(tokens)
             activate(tokens)
         }
@@ -58,27 +54,53 @@ class SessionManager(
     /**
      * Troca a senha e renova o par pelo voo único, para o estado refletir o `passwordChangeRequired` do servidor.
      * `401 INVALID_CREDENTIALS`/`ACCOUNT_LOCKED` conferem a senha atual: lança `ApiError.Problem` e mantém a sessão.
-     * Se a troca foi aceita e o refresh caiu por rede, a próxima chamada da mesma sessão só refaz o refresh (repetir
-     * o POST daria `INVALID_CREDENTIALS`, porque a senha já mudou). Sessão encerrada ou trocada no meio (o refresh
-     * devolve `null` ou o par de outra sessão): o estado não muda.
+     * Se o servidor aceitou a troca e o refresh seguinte caiu por rede, lança o `ApiError.Network` e o estado passa a
+     * `Active(passwordChangeAwaitingRefresh = true)`: a senha nova já vale, e a continuação é
+     * `retryPasswordChangeRefresh`. Chamar `changePassword` com essa pendência é erro de programação
+     * (`IllegalStateException`), porque um novo POST com outras senhas não refletiria o que o servidor gravou.
+     * Sessão encerrada ou trocada no meio (o refresh devolve `null` ou o par de outra sessão): o estado não muda.
      */
     suspend fun changePassword(
         current: String,
         new: String,
     ) {
-        val sessionId = store.current()?.sessionId
-        val alreadyChanged = synchronized(lock) { sessionId != null && passwordChangedAwaitingRefresh == sessionId }
-        if (!alreadyChanged) {
-            executor.execute(credentialCheck = true) {
-                iam.changePassword(ChangePasswordRequest(current, new), it.headers)
-            }
-            synchronized(lock) {
-                if (store.current()?.sessionId == sessionId) passwordChangedAwaitingRefresh = sessionId
-            }
+        check(pendingPasswordChange() == null) {
+            "A troca de senha já foi aceita e espera o refresh: chame retryPasswordChangeRefresh, não changePassword."
         }
-        val tokens = authenticator.forceRefresh()
+        val sessionId = store.current()?.sessionId
+        executor.execute(credentialCheck = true) { iam.changePassword(ChangePasswordRequest(current, new), it.headers) }
+        refreshAfterPasswordChange(sessionId)
+    }
+
+    /**
+     * Continua a troca de senha que o servidor aceitou e cujo refresh caiu por rede (`Active` com
+     * `passwordChangeAwaitingRefresh`): só refaz o refresh pelo voo único, sem novo POST, com a mesma regra de
+     * sessão de `changePassword`. No sucesso, o estado passa a `Active` com o `passwordChangeRequired` do par novo
+     * e sem a pendência; rede caída de novo lança `ApiError.Network` e mantém a pendência. Sem pendência (por
+     * exemplo, a sessão acabou no meio), não faz nada.
+     */
+    suspend fun retryPasswordChangeRefresh() {
+        val pending = pendingPasswordChange() ?: return
+        refreshAfterPasswordChange(pending.sessionId)
+    }
+
+    private fun pendingPasswordChange(): SessionState.Active? =
+        (_state.value as? SessionState.Active)?.takeIf { it.passwordChangeAwaitingRefresh }
+
+    private suspend fun refreshAfterPasswordChange(sessionId: String?) {
+        val tokens =
+            try {
+                authenticator.forceRefresh()
+            } catch (e: ApiError.Network) {
+                synchronized(lock) {
+                    val active = _state.value as? SessionState.Active
+                    if (active != null && active.sessionId == sessionId && store.current()?.sessionId == sessionId) {
+                        _state.value = active.copy(passwordChangeAwaitingRefresh = true)
+                    }
+                }
+                throw e
+            }
         synchronized(lock) {
-            if (passwordChangedAwaitingRefresh == sessionId) passwordChangedAwaitingRefresh = null
             val sameSession = tokens?.sessionId == sessionId && store.current()?.sessionId == sessionId
             if (tokens != null && sameSession) activate(tokens)
         }
@@ -96,7 +118,6 @@ class SessionManager(
         } finally {
             withContext(NonCancellable) {
                 synchronized(lock) {
-                    passwordChangedAwaitingRefresh = null
                     store.clear()
                     _state.value = SessionState.LoggedOut
                 }
@@ -109,7 +130,6 @@ class SessionManager(
         @Suppress("UNUSED_PARAMETER") code: String?,
     ) {
         synchronized(lock) {
-            passwordChangedAwaitingRefresh = null
             store.clear()
             _state.value = SessionState.Ended(SESSION_ENDED_MESSAGE)
         }
@@ -124,7 +144,6 @@ class SessionManager(
         sessionId: String,
     ) {
         synchronized(lock) {
-            if (passwordChangedAwaitingRefresh == sessionId) passwordChangedAwaitingRefresh = null
             if ((_state.value as? SessionState.Active)?.sessionId == sessionId) {
                 _state.value = SessionState.Ended(SESSION_ENDED_MESSAGE)
             }

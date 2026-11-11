@@ -98,7 +98,7 @@ class ApiExecutor {
 }
 
 /** Causa de `ApiError.IncompatibleResponse`: o nome da classe e a pilha da falha original, sem a mensagem dela. */
-class ResponseFormatException(
+internal class ResponseFormatException(
     original: Throwable,
 ) : Exception(original::class.qualifiedName) {
     init {

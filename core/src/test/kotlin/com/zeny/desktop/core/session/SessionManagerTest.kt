@@ -190,6 +190,10 @@ class SessionManagerTest {
 
     private fun active(changeRequired: Boolean) = SessionState.Active(userId, sessionId, changeRequired)
 
+    /** A troca de senha da sessão foi aceita, e o refresh seguinte ainda não chegou. */
+    private fun awaitingRefresh() =
+        SessionState.Active(userId, sessionId, passwordChangeRequired = true, passwordChangeAwaitingRefresh = true)
+
     @Test
     fun loginSendsPersistedDeviceAndKeepsTokensInMemory() =
         runTest(timeout = 5.seconds) {
@@ -392,6 +396,64 @@ class SessionManagerTest {
             manager.sessionEnded("REFRESH_TOKEN_REUSED", sessionId)
 
             assertSame(tokens, store.current())
+        }
+
+    @Test
+    fun changePasswordWithPendingRefreshFailsClearly() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            refreshNetworkFailures = 1
+            assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
+            assertEquals(awaitingRefresh(), manager.state.value)
+
+            val error = assertFailsWith<IllegalStateException> { manager.changePassword("velha", "outra-senha-456") }
+
+            assertTrue("retryPasswordChangeRefresh" in error.message.orEmpty())
+            assertEquals(listOf("/api/v1/auth/login", "/api/v1/auth/password", "/api/v1/auth/refresh"), paths)
+        }
+
+    @Test
+    fun retryPasswordChangeRefreshCompletesTheChange() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            refreshNetworkFailures = 1
+            assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(
+                listOf("/api/v1/auth/login", "/api/v1/auth/password", "/api/v1/auth/refresh", "/api/v1/auth/refresh"),
+                paths,
+            )
+            assertEquals(listOf("R1", "R1"), refreshTokensReceived.toList())
+            assertEquals(active(false), manager.state.value)
+            assertEquals("A2", store.current()?.accessToken)
+        }
+
+    @Test
+    fun retryPasswordChangeRefreshFailingAgainKeepsThePendingChange() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            refreshNetworkFailures = 2
+            assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
+
+            assertFailsWith<ApiError.Network> { manager.retryPasswordChangeRefresh() }
+
+            assertEquals(awaitingRefresh(), manager.state.value)
+        }
+
+    @Test
+    fun retryPasswordChangeRefreshWithoutPendingChangeDoesNothing() =
+        runTest(timeout = 5.seconds) {
+            manager.login("maria.silva", "senha-longa-123")
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(listOf("/api/v1/auth/login"), paths)
+            assertEquals(active(false), manager.state.value)
         }
 
     @Test
