@@ -1,6 +1,6 @@
 # Zeny Hotel Manager — Front Desktop
 
-Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O repositório é um build Gradle com os módulos `sdk` (cliente gerado do contrato com o ogen, ADR 0007), `core` (fronteira entre as features e o `sdk`, ADR 0008, uma proposta que aguarda a confirmação do usuário), `design`, `app` (a janela) e `demo-seed` (ainda vazio). Além do app, guarda o contrato da API fixado, as ferramentas que sincronizam com o servidor e o ambiente local do servidor para desenvolver e demonstrar.
+Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O repositório é um build Gradle com os módulos `sdk` (cliente gerado do contrato com o ogen, ADR 0007), `core` (fronteira entre as features e o `sdk`, ADR 0008, aceita pelo usuário em 2026-11-11), `design`, `app` (a janela) e `demo-seed` (ainda vazio). Além do app, guarda o contrato da API fixado, as ferramentas que sincronizam com o servidor e o ambiente local do servidor para desenvolver e demonstrar.
 
 ## Onde está o quê
 

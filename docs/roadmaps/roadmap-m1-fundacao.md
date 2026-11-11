@@ -79,6 +79,9 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 | H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` — **confirmada na E01** com o ogen 0.16.1 (ADR 0007); o openapi-generator 7.27.0 não cumpriu | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
 | H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **Linux confirmado na E01**; Windows aguarda o usuário na parada da E01 | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
 | H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
+| D1 | **Decidido pelo usuário em 2026-11-11 (entrevista da parada da E01):** fronteira `core`/`sdk` pela opção (b) da ADR 0008 — `core` expõe o `sdk` por `api`, as features usam os modelos gerados e o `ForbiddenImport` barra as classes de operação — **fechando a brecha**: barrar também `io.ktor.client.*` e `de.quati.ogen.client.*` em `app` e `design` | Ajuste do `config/detekt/detekt.yml` e da varredura de nome qualificado ainda não feito: entra no plano da E02 | E02 em diante |
+| D2 | **Decidido pelo usuário em 2026-11-11:** depois do `403 APPROVAL_REQUIRED`, a repetição com `X-Approval-Token` usa uma **nova** `Idempotency-Key`, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede continua com a mesma chave. Substitui o "mesma chave" do design §6.2 e do critério da E02 | A E02 testa a nova chave na repetição aprovada; o design §6.2 fica para o arquiteto atualizar | E02, E04 |
+| D3 | **Decidido pelo usuário em 2026-11-11:** gerador do SDK confirmado, ogen 0.16.1 (ADR 0007) | Plano B na ADR 0007 se uma versão nova quebrar | todas |
 | H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
 
 ## Definição global de pronto
@@ -258,6 +261,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **O JAR abre a janela com `java -jar` no Linux:** o JAR é `app/build/libs/zeny-desktop.jar` (59.420.229 bytes, gerado por `./gradlew :app:desktopJar`). Do clone limpo, ele abriu a janela `"Zeny Hotel Manager"` sem nada em stderr. O `verifyDesktopJar` (ligado ao `check`) exige os nativos do Skia de Linux x64 e Windows x64. **No Windows: pendente, é a conferência do usuário nesta parada.**
   - **Os comandos oficiais estão no `README.md` e no `CLAUDE.md`,** e o `tests/test_docs.sh` exige a mesma tabela nos dois.
   - **Validação:** lint `./gradlew ktlintCheck detekt` verde.
+- **Respostas do usuário na entrevista (2026-11-11):** fronteira `core`/`sdk` pela opção (b), fechando a brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1); nova `Idempotency-Key` na repetição após aprovação, como diz o contrato (D2); ogen confirmado (D3). Ver "Hipóteses e decisões em aberto". A conferência do JAR no Windows continua pendente.
 - **Decisões para o usuário** (tomadas pela opção recomendada, revisáveis):
   - **Gerador do SDK:** ogen 0.16.1, e não openapi-generator 7.27.0, que não compila o contrato com kotlinx no `jvm-ktor`. O ogen é 0.x, de um mantenedor só, e a versão saiu 4 dias antes da adoção. Plano B na ADR 0007.
   - **Fronteira `core`/`sdk`:** ADR 0008, proposta. O `core` expõe o `sdk` por `api` e o `ForbiddenImport` barra as classes de operação em `app` e `design`. Há uma brecha conhecida: `io.ktor.client.*` e `de.quati.ogen.client.*` não são barrados. **Decisão de arquitetura: entrevista.**
@@ -316,7 +320,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** a descrição `info` do contrato e a ARCHITECTURE §7 e §8.1 do servidor definem a semântica de cada `401` e `403`. Leia-as, não deduza.
+**Notas para o plano:** a descrição `info` do contrato e a ARCHITECTURE §7 e §8.1 do servidor definem a semântica de cada `401` e `403`. Leia-as, não deduza. **Decisão D2 do usuário (2026-11-11):** o critério "A repetição envia `X-Approval-Token` e a **mesma** `Idempotency-Key`" fica substituído por "…e uma **nova** `Idempotency-Key`" (o reenvio por falha de rede mantém a chave). **Decisão D1:** acrescentar `io.ktor.client.*` e `de.quati.ogen.client.*` ao `ForbiddenImport` de `app` e `design` (e à varredura de nome qualificado dos testes). Leia também as "Notas para a próxima etapa" do handoff da E01.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 

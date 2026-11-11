@@ -1,6 +1,6 @@
 # 0007 — Gerador do `sdk`: ogen com cliente Ktor
 
-- Estado: aceita · 2026-11-11 · decidida pelo construtor na M1 E01 (descoberta da Task 3)
+- Estado: aceita · 2026-11-11 · decidida pelo construtor na M1 E01 (descoberta da Task 3) e confirmada pelo usuário na parada da etapa
 - Design: [spec](../superpowers/specs/2026-11-10-front-desktop-design.md) §9 · relacionada: [ADR 0001](0001-stack-compose-desktop.md)
 
 ## Contexto

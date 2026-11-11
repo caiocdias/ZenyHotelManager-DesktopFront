@@ -1,6 +1,6 @@
 # 0008 — Fronteira entre `core` e `sdk`
 
-- Estado: proposta — decidida pelo orquestrador pela opção recomendada; aguarda confirmação do usuário na parada da M1 E01 · 2026-11-11
+- Estado: aceita · 2026-11-11 · opção (b) confirmada pelo usuário na parada da M1 E01, **fechando a brecha**: `io.ktor.client.*` e `de.quati.ogen.client.*` também passam a ser barrados em `app` e `design` (ajuste do lint previsto para a E02)
 - Design: [spec](../superpowers/specs/2026-11-10-front-desktop-design.md) §6.1 · relacionada: [ADR 0007](0007-gerador-do-sdk.md)
 
 ## Contexto
