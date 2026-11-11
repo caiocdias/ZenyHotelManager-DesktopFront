@@ -115,6 +115,45 @@ printf 'import com.zeny.desktop.core.RawSdkAccess\n' >"$plantado/design/src/main
 assert_contains "$(varre_raw "$plantado")" "G.kt:1:import com.zeny.desktop.core.RawSdkAccess" "a varredura de RawSdkAccess acha import em design/src"
 rm -rf "$plantado"
 
+# Os desvios do opt-in que não citam RawSdkAccess em app e design: a supressão do erro (`OPT_IN_USAGE_ERROR`,
+# que o Kotlin 2.4 aceita sem aviso) e o opt-in feito na raiz do build para todos os subprojetos.
+varre_supressao() {
+  local base="$1" d f
+  local -a arquivos=()
+  for d in app/src design/src; do
+    [[ -d "$base/$d" ]] || continue
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
+  done
+  for f in app/build.gradle.kts design/build.gradle.kts; do
+    [[ -f "$base/$f" ]] && arquivos+=("$base/$f")
+  done
+  grep -nE 'OPT_IN_USAGE' /dev/null "${arquivos[@]}" 2>/dev/null
+}
+varre_raiz() {
+  local base="$1" f
+  local -a arquivos=()
+  for f in build.gradle.kts settings.gradle.kts gradle.properties; do
+    [[ -f "$base/$f" ]] && arquivos+=("$base/$f")
+  done
+  for d in buildSrc build-logic; do
+    [[ -d "$base/$d" ]] || continue
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
+  done
+  grep -nE 'RawSdkAccess' /dev/null "${arquivos[@]}" 2>/dev/null
+}
+assert_eq "" "$(varre_supressao "$ROOT")" "app e design (fontes e build.gradle.kts) sem supressão de OPT_IN_USAGE_ERROR"
+assert_eq "" "$(varre_raiz "$ROOT")" "raiz do build (build.gradle.kts, settings, gradle.properties) sem RawSdkAccess"
+plantado="$(mktemp -d)"
+mkdir -p "$plantado/app/src/main/kotlin" "$plantado/design/src/main/kotlin"
+printf '@file:Suppress("OPT_IN_USAGE_ERROR")\n\nfun f(core: ZenyCore) = core.apis.iam\n' >"$plantado/app/src/main/kotlin/F.kt"
+assert_eq "" "$(varre_raw "$plantado")" "a supressão do opt-in não cita RawSdkAccess: a varredura de RawSdkAccess sozinha não a vê"
+assert_contains "$(varre_supressao "$plantado")" 'F.kt:1:@file:Suppress("OPT_IN_USAGE_ERROR")' "a varredura acha @file:Suppress(OPT_IN_USAGE_ERROR) em app/src"
+printf 'class G {\n  @Suppress("UNUSED", "OPT_IN_USAGE_ERROR")\n  fun g(core: ZenyCore) = core.executor\n}\n' >"$plantado/design/src/main/kotlin/G.kt"
+assert_contains "$(varre_supressao "$plantado")" 'G.kt:2:' "a varredura acha @Suppress com OPT_IN_USAGE_ERROR entre outros nomes em design/src"
+printf 'subprojects {\n  extensions.configure<KotlinJvmProjectExtension> {\n    compilerOptions.optIn.add("com.zeny.desktop.core.RawSdkAccess")\n  }\n}\n' >"$plantado/build.gradle.kts"
+assert_contains "$(varre_raiz "$plantado")" 'optIn.add("com.zeny.desktop.core.RawSdkAccess")' "a varredura acha o opt-in de RawSdkAccess na raiz (subprojects alcança app e design)"
+rm -rf "$plantado"
+
 # --- 4. Módulos: grafo e plugins por módulo (design §6.1) --------------------------------------------------
 kts() { sem_comentario "$ROOT/$1/build.gradle.kts"; }
 for m in sdk core design app demo-seed; do

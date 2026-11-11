@@ -108,6 +108,12 @@ raw_ativo="$(sed -E 's@^\s*//.*$@@' "$raw_kt" 2>/dev/null)"
 assert_contains "$raw_ativo" 'annotation class RawSdkAccess' "RawSdkAccess é uma annotation class"
 assert_contains "$raw_ativo" '@RequiresOptIn' "RawSdkAccess é @RequiresOptIn"
 assert_contains "$raw_ativo" 'RequiresOptIn.Level.ERROR' "RawSdkAccess exige opt-in no nível ERROR (não WARNING)"
+# O opt-in também cai sem citar RawSdkAccess: `@Suppress("OPT_IN_USAGE_ERROR")` compila `core.apis.iam` (Kotlin
+# 2.4, sem aviso), e um opt-in na raiz (subprojects/allprojects) alcança app e design.
+supressao_optin="$(cd "$ROOT" && grep -rnE 'OPT_IN_USAGE' /dev/null $(ls -d app/src design/src app/build.gradle.kts design/build.gradle.kts 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$supressao_optin" "app e design não suprimem o erro de opt-in (OPT_IN_USAGE_ERROR)"
+raw_raiz="$(cd "$ROOT" && grep -rnE 'RawSdkAccess' /dev/null $(ls -d build.gradle.kts settings.gradle.kts gradle.properties buildSrc build-logic 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$raw_raiz" "a raiz do build não faz opt-in de RawSdkAccess para os subprojetos"
 
 # Task 10: travamento estrito. Cada módulo tem gradle.lockfile (a raiz não tem configuração resolvível, e o
 # Gradle não grava lockfile vazio); o classpath dos plugins e o das settings também têm o seu.
