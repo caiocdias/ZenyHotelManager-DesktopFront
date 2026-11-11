@@ -4,6 +4,7 @@ import com.zeny.desktop.sdk.model.CreateGuestRequest
 import com.zeny.desktop.sdk.model.TokenResponse
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.jsonObject
+import java.util.Locale
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -20,7 +21,7 @@ class CoreJsonAttackTest {
     fun ignoresUnknownKeysWithNestedObjectsAndArrays() {
         val decoded =
             CoreJson.decodeFromString<TokenResponse>(
-                token.format(""","novo":{"a":[1,{"b":null}]},"lista":[[1],[2]]"""),
+                token.format(Locale.ROOT, ""","novo":{"a":[1,{"b":null}]},"lista":[[1],[2]]"""),
             )
         assertEquals("a", decoded.accessToken)
         assertEquals("r", decoded.refreshToken)

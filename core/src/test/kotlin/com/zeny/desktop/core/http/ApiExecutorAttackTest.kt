@@ -152,7 +152,38 @@ class ApiExecutorAttackTest {
             assertNotEquals(original, first)
             assertEquals(first, requests[1].headers["Idempotency-Key"])
             assertEquals(intent.key, first)
-            assertNull(requests[1].headers["X-Approval-Token"])
+            assertEquals(listOfNotNull(first), requests[1].headers.getAll("Idempotency-Key"))
+            assertEquals(listOf("tok-1"), requests[0].headers.getAll("X-Approval-Token"))
+            assertEquals(listOf("tok-1"), requests[1].headers.getAll("X-Approval-Token"))
+        }
+
+    @Test
+    fun secondApprovalRotatesAgainAndReplacesTheToken() =
+        runTest {
+            val reservations = ReservationsApi(api { json("{}") })
+            val intent = Intent()
+            val cancel = cancelCall(reservations)
+
+            runCatching { executor.executeApproved(intent, "tok-1", cancel) }
+            runCatching { executor.executeApproved(intent, "tok-2", cancel) }
+            runCatching { executor.execute(intent, call = cancel) }
+
+            val keys = requests.map { it.headers["Idempotency-Key"] }
+            assertEquals(2, keys.toSet().size)
+            assertNotEquals(keys[0], keys[1])
+            assertEquals(keys[1], keys[2])
+            assertEquals(intent.key, keys[2])
+            assertEquals(listOf("tok-2"), requests[2].headers.getAll("X-Approval-Token"))
+        }
+
+    @Test
+    fun plainExecuteOnAFreshIntentSendsNoApprovalToken() =
+        runTest {
+            val reservations = ReservationsApi(api { json("{}") })
+
+            runCatching { executor.execute(Intent(), call = cancelCall(reservations)) }
+
+            assertNull(requests.single().headers["X-Approval-Token"])
         }
 
     @Test
@@ -163,6 +194,8 @@ class ApiExecutorAttackTest {
         for (key in keys) assertEquals(key, Uuid.parse(key).toString())
     }
 
+    // O teste precisa de threads reais para atacar a leitura concorrente; o dispatcher de teste seria um só.
+    @Suppress("InjectDispatcher")
     @Test
     fun intentKeyIsStableAcrossManyReadsAndThreads() =
         runBlocking {
