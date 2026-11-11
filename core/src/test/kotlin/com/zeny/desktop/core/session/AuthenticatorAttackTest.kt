@@ -18,6 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -374,6 +375,90 @@ class AuthenticatorAttackTest {
             assertEquals("A5", auth.refreshAfterRejection(Tokens("A4", "R0", "s1", "u1", false))?.accessToken)
             assertEquals("A5", auth.refreshAfterRejection(Tokens("", "", "s1", "u1", false))?.accessToken)
             assertEquals(0, refresher.calls)
+        }
+
+    // Ruling da revisão final: no refresh, só `Problem` com status 401 encerra a sessão; 5xx, 4xx que não é 401 e
+    // `Unexpected` (502 de proxy, sem corpo de problema) são transitórios, como a queda de rede.
+
+    @Test
+    fun serviceUnavailableReachesEveryWaiterKeepsSessionAndNextRefreshUsesSameRefreshToken() =
+        runTest(timeout = 5.seconds) {
+            val refresher =
+                FailingThenRotating({ ApiError.Problem(503, "SERVICE_UNAVAILABLE", null, emptyList()) })
+            val auth = authWith(refresher)
+            val sent = store.current()!!
+            val waiters =
+                List(20) {
+                    async(start = CoroutineStart.UNDISPATCHED) {
+                        runCatching { auth.refreshAfterRejection(sent) }
+                    }
+                }
+            refresher.entered.await()
+
+            refresher.gate.complete(Unit)
+
+            val failures = waiters.awaitAll().map { it.exceptionOrNull() }
+            assertTrue(
+                failures.all { it is ApiError.Problem && it.status == 503 && it.code == "SERVICE_UNAVAILABLE" },
+                "todos recebem o 503 como está: $failures",
+            )
+            assertEquals(1, refresher.calls.get())
+            assertSame(sent, store.current(), "o 503 do refresh limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "o 503 do refresh encerrou a sessão: $ended")
+
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
+            assertEquals(listOf("R1"), refresher.rotating.received.toList())
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun forceRefreshWithBadGatewayThrowsAndKeepsTheSession() =
+        runTest(timeout = 5.seconds) {
+            val refresher = FailingThenRotating({ ApiError.Unexpected(502) })
+            refresher.gate.complete(Unit)
+            val auth = authWith(refresher)
+            val sent = store.current()!!
+
+            val thrown = assertFailsWith<ApiError> { auth.forceRefresh() }
+
+            assertTrue(thrown is ApiError.Unexpected && thrown.status == 502, "o 502 não chegou como está: $thrown")
+            assertSame(sent, store.current(), "o 502 do refresh limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "o 502 do refresh encerrou a sessão: $ended")
+            assertEquals("A2", assertNotNull(auth.forceRefresh()).accessToken)
+            assertEquals(listOf("R1"), refresher.rotating.received.toList())
+        }
+
+    @Test
+    fun forceRefreshWithInternalErrorThrowsAndKeepsTheSession() =
+        runTest(timeout = 5.seconds) {
+            val refresher = FailingThenRotating({ ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList()) })
+            refresher.gate.complete(Unit)
+            val auth = authWith(refresher)
+            val sent = store.current()!!
+
+            val thrown = assertFailsWith<ApiError> { auth.forceRefresh() }
+
+            assertTrue(thrown is ApiError.Problem && thrown.status == 500, "o 500 não chegou como está: $thrown")
+            assertSame(sent, store.current(), "o 500 do refresh limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "o 500 do refresh encerrou a sessão: $ended")
+        }
+
+    @Test
+    fun invalidRefreshTokenWithTwentyWaitersStillEndsSessionExactlyOnce() =
+        runTest(timeout = 5.seconds) {
+            val refresher =
+                FailingThenRotating({ ApiError.Problem(401, "REFRESH_TOKEN_INVALID", null, emptyList()) })
+            val auth = authWith(refresher)
+            val sent = store.current()!!
+            val waiters = List(20) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) } }
+            refresher.entered.await()
+
+            refresher.gate.complete(Unit)
+
+            assertEquals(List(20) { null }, waiters.awaitAll())
+            assertNull(store.current())
+            assertEquals(listOf<String?>("REFRESH_TOKEN_INVALID"), ended.toList())
+            assertEquals(listOf("s1"), endedSessions.toList())
         }
 
     @Test

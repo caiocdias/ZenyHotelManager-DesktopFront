@@ -322,6 +322,66 @@ class AuthenticatorTest {
             assertNull(privateField("inFlightOrigin"))
         }
 
+    // Ruling da revisão final: no refresh, só `Problem` com status 401 encerra a sessão; qualquer outro `ApiError`
+    // é transitório (chega a quem esperava como está, o store fica e `onSessionEnded` não é chamado).
+
+    @Test
+    fun serviceUnavailableOnRefreshReachesTheCallerAndKeepsTheSession() =
+        assertTransientRefreshFailure(ApiError.Problem(503, "SERVICE_UNAVAILABLE", null, emptyList()))
+
+    @Test
+    fun internalErrorOnRefreshReachesTheCallerAndKeepsTheSession() =
+        assertTransientRefreshFailure(ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList()))
+
+    @Test
+    fun badGatewayWithoutProblemBodyOnRefreshReachesTheCallerAndKeepsTheSession() =
+        assertTransientRefreshFailure(ApiError.Unexpected(502))
+
+    @Test
+    fun clientProblemOtherThan401OnRefreshReachesTheCallerAndKeepsTheSession() =
+        assertTransientRefreshFailure(ApiError.Problem(400, "MALFORMED_REQUEST", null, emptyList()))
+
+    @Test
+    fun invalidRefreshTokenStillEndsTheSession() =
+        runTest(timeout = 5.seconds) {
+            val sent = store.current()!!
+            refresher.failures += ApiError.Problem(401, "REFRESH_TOKEN_INVALID", null, emptyList())
+
+            assertNull(auth.refreshAfterRejection(sent))
+
+            assertNull(store.current())
+            assertEquals(listOf<String?>("REFRESH_TOKEN_INVALID"), ended.toList())
+            assertEquals(listOf("s1"), endedSessions.toList())
+        }
+
+    /**
+     * O refresher lança `failure` uma vez (antes de girar: o R1 segue valendo no servidor). Quem esperava recebe o
+     * mesmo erro, o store guarda o mesmo par, ninguém é avisado do fim da sessão e o próximo refresh, pelo voo
+     * único, sai com o mesmo R1.
+     */
+    private fun assertTransientRefreshFailure(failure: ApiError) =
+        runTest(timeout = 5.seconds) {
+            val sent = store.current()!!
+            refresher.failures += failure
+
+            val thrown = assertFailsWith<ApiError> { auth.refreshAfterRejection(sent) }
+
+            assertEquals(describe(failure), describe(thrown), "o erro do refresh não chegou como está")
+            assertSame(sent, store.current(), "a falha transitória limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "a falha transitória encerrou a sessão: $ended")
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
+            assertEquals(listOf("R1", "R1"), refresher.received.toList())
+            assertTrue(ended.isEmpty())
+        }
+
+    /** A recuperação de pilha das corrotinas pode copiar a exceção: compara tipo e campos, não a instância. */
+    private fun describe(error: ApiError): String =
+        when (error) {
+            is ApiError.Problem -> "Problem(${error.status}, ${error.code})"
+            is ApiError.Unexpected -> "Unexpected(${error.status})"
+            else -> error::class.simpleName.orEmpty()
+        }
+
     private fun privateField(name: String): Any? =
         Authenticator::class.java
             .getDeclaredField(name)

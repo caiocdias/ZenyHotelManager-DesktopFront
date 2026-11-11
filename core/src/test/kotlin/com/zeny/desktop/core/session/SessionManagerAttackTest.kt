@@ -81,6 +81,9 @@ class SessionManagerAttackTest {
     /** `code` com que o servidor recusa o próximo `/auth/refresh`, ou `null`. */
     @Volatile private var refreshRefusal: String? = null
 
+    /** Respostas de erro transitório (5xx) dos próximos `/auth/refresh`, sem girar o token (ele segue valendo). */
+    private val refreshServerErrors = ConcurrentLinkedQueue<MockRequestHandleScope.() -> HttpResponseData>()
+
     @Volatile private var onLogin: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = {
         tokens("A1", "R1")
     }
@@ -222,6 +225,7 @@ class SessionManagerAttackTest {
                 throw IOException("sem rede")
             }
         }
+        refreshServerErrors.poll()?.let { return it() }
         val refusal = refreshRefusal
         val issued =
             synchronized(this@SessionManagerAttackTest) {
@@ -669,6 +673,73 @@ class SessionManagerAttackTest {
             assertEquals(active(false), manager.state.value)
             assertEquals(1, requestsTo("password").size, "uma retomada repetiu o POST")
             assertEquals(listOf("R1", "R1", "R1"), refreshTokensReceived.toList())
+        }
+
+    // Ruling da revisão final: a queda transitória do refresh (5xx, 502 de proxy) depois da troca aceita marca
+    // `passwordChangeAwaitingRefresh` como a de rede; só o `401` do refresh encerra a sessão.
+
+    @Test
+    fun serviceUnavailableOnTheRefreshAfterChangeMarksThePendingLikeTheNetwork() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            val before = store.current()
+            refreshServerErrors += { problem("SERVICE_UNAVAILABLE", HttpStatusCode.ServiceUnavailable) }
+
+            val error = assertFailsWith<ApiError> { manager.changePassword("velha", "nova-senha-123") }
+
+            assertEquals(503, assertIs<ApiError.Problem>(error, "o 503 do refresh não chegou como está").status)
+            assertEquals(awaitingRefresh(), manager.state.value)
+            assertSame(before, store.current(), "o 503 do refresh limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "o 503 do refresh encerrou a sessão: $ended")
+        }
+
+    @Test
+    fun badGatewayHtmlOnTheRefreshAfterChangeMarksThePendingLikeTheNetwork() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            val before = store.current()
+            refreshServerErrors += { html(HttpStatusCode.BadGateway) }
+
+            val error = assertFailsWith<ApiError> { manager.changePassword("velha", "nova-senha-123") }
+
+            assertEquals(502, assertIs<ApiError.Unexpected>(error, "o 502 do refresh não chegou como está").status)
+            assertEquals(awaitingRefresh(), manager.state.value)
+            assertSame(before, store.current(), "o 502 do refresh limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "o 502 do refresh encerrou a sessão: $ended")
+        }
+
+    @Test
+    fun retryAfterServiceUnavailableOnTheRefreshOnlyRefreshesAndCompletesTheChange() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            refreshServerErrors += { problem("SERVICE_UNAVAILABLE", HttpStatusCode.ServiceUnavailable) }
+            assertFailsWith<ApiError> { manager.changePassword("velha", "nova-senha-123") }
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(1, requestsTo("password").size, "a retomada repetiu o POST da troca já aceita")
+            assertEquals(listOf("R1", "R1"), refreshTokensReceived.toList())
+            assertEquals(active(false), manager.state.value)
+            assertEquals("A2", store.current()?.accessToken)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun retryFailingWithServiceUnavailableKeepsThePendingAndTheSession() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            val before = store.current()
+            refreshServerErrors += { problem("SERVICE_UNAVAILABLE", HttpStatusCode.ServiceUnavailable) }
+
+            val error = assertFailsWith<ApiError> { manager.retryPasswordChangeRefresh() }
+
+            assertEquals(503, assertIs<ApiError.Problem>(error, "o 503 do refresh não chegou como está").status)
+            assertEquals(awaitingRefresh(), manager.state.value)
+            assertSame(before, store.current(), "o 503 do refresh limpou o par da sessão")
+            assertTrue(ended.isEmpty(), "o 503 do refresh encerrou a sessão: $ended")
         }
 
     @Test

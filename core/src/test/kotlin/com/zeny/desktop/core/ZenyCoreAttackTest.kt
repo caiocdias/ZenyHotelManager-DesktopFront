@@ -16,10 +16,13 @@ import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.HttpResponseData
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -431,6 +434,46 @@ class ZenyCoreAttackTest {
             server.requests.clear()
             assertFailsWith<ApiError.SessionEnded> { core.me() }
             assertEquals(listOf(null), server.authorizations(ME), "token sobrando depois do fim da sessão")
+        }
+
+    /**
+     * Ruling da revisão final: um `502` de proxy (HTML, sem problema RFC 9457) no `/auth/refresh` é transitório. A
+     * chamada que pediu o refresh falha com o `ApiError` dele, a sessão continua `Active` e a seguinte renova com o
+     * mesmo refresh token, que o servidor não chegou a girar.
+     */
+    @Test
+    fun badGatewayHtmlOnRefreshFailsTheCallAndKeepsTheSession() =
+        runTest(timeout = 5.seconds) {
+            val server = FakeZenyServer()
+            val failRefresh = AtomicBoolean(true)
+            val engine =
+                around(server) { request, proceed ->
+                    if (request.path() == REFRESH && failRefresh.getAndSet(false)) {
+                        respond(
+                            "<html><body><h1>502 Bad Gateway</h1></body></html>",
+                            HttpStatusCode.BadGateway,
+                            headersOf(HttpHeaders.ContentType, "text/html"),
+                        )
+                    } else {
+                        proceed()
+                    }
+                }
+            val core = core(engine)
+            core.login()
+            server.expireAccess()
+
+            val error = assertFailsWith<ApiError> { core.me() }
+
+            assertTrue(error is ApiError.Unexpected && error.status == 502, "a chamada não falhou com o 502: $error")
+            assertIs<SessionState.Active>(core.session.state.value)
+            assertEquals(200, core.me().status)
+            assertIs<SessionState.Active>(core.session.state.value)
+            val refreshes = server.requests.filter { it.path() == REFRESH }
+            assertEquals(2, refreshes.size)
+            for (refresh in refreshes) {
+                val body = refresh.bodyText()
+                assertTrue("\"R1\"" in body, "refresh sem o R1: $body")
+            }
         }
 
     /** Espera em tempo real: o trabalho do `ZenyCore` roda em `Dispatchers.IO`, fora do relógio do `runTest`. */
