@@ -70,7 +70,7 @@ O front fica preso a um commit da `main` do servidor, com o contrato copiado e u
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
 | H1 | O compose do servidor aceita um override de projeto, imagem, porta e endereço sem editar o arquivo original. Para tirar o `build:` no pacote, `!reset` do Compose v2.24+ | Seria preciso copiar e editar o compose dentro do pacote | E01 — **confirmada (2026-11-10)** para projeto, imagem, porta e endereço: `ports: !override` e `docker compose config` real contra o compose do commit fixado. O `build:` **fica** no override (D1 do plano da E01, confirmada pelo usuário em 2026-11-10), porque o ADR 0003 constrói a imagem no Windows; com a imagem carregada por `docker load`, o `up -d` não reconstrói |
-| H2 | O `docker build` do servidor roda no Docker Desktop do Windows a partir do `git archive` | O pacote passaria a levar a imagem pronta (`docker save`), construída no notebook | E01 — **aberta**: depende do usuário rodar o fluxo 1 do `LEIA-ME` no Windows, na parada da E01 |
+| H2 | O `docker build` do servidor roda no Docker Desktop do Windows a partir do `git archive` | O pacote passaria a levar a imagem pronta (`docker save`), construída no notebook | E01 — **confirmada (2026-11-10)** pelo usuário: seguindo o fluxo 1 do `LEIA-ME` em `C:\Users\Caio\Desktop\demo-package`, `curl.exe -fsS http://localhost:8088/actuator/health/readiness` respondeu `{"status":"UP"}` |
 | H3 | O oasdiff por Docker serve para o pré-voo, como no script do servidor | O pré-voo cairia para comparação por hash, sem classificar a mudança | E01 — **confirmada (2026-11-10)**: contra o servidor real, `igual (código 0)` na `main` e `aditivo (código 11)` a partir de `60080b7c5585`; o breaking (12) foi demonstrado no servidor falso, porque o servidor proíbe breaking em `/api/v1` |
 | H4 | As chaves do `.env` podem ser geradas por script conforme o README do servidor | Geração manual documentada no `LEIA-ME` | E01 — **confirmada (2026-11-10)**: `tools/server-env/gen-env.sh`, autocontido; no Windows roda em `alpine:3.22@sha256:49340b34…` com `apk add bash openssl` (D3) |
 
@@ -78,8 +78,8 @@ O front fica preso a um commit da `main` do servidor, com o contrato copiado e u
 
 - [x] `api/server-pin.properties` e `api/openapi.yaml` conferem com a `main` do servidor no commit escolhido.
 - [x] `tools/server-drift.sh` distingue igual, aditivo e breaking, com códigos de saída documentados.
-- [ ] O ambiente `zeny-front` sobe com readiness `UP`, numa das máquinas, sem tocar no projeto `zeny`.
-- [ ] O pacote do Windows sobe o servidor seguindo só o `LEIA-ME`.
+- [x] O ambiente `zeny-front` sobe com readiness `UP`, numa das máquinas, sem tocar no projeto `zeny`.
+- [x] O pacote do Windows sobe o servidor seguindo só o `LEIA-ME`.
 - [x] O README do front lista os comandos dos scripts.
 
 ## Protocolo de execução
@@ -162,11 +162,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Fixação do servidor e ambiente isolado (rodada 1) | #em-andamento | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
+| E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
 
 ---
 
-## E01 — Fixação do servidor e ambiente isolado (rodada 1) — #em-andamento
+## E01 — Fixação do servidor e ambiente isolado (rodada 1) — #concluida
 
 **Objetivo:** criar o mecanismo de fixação do servidor e o ambiente isolado em que todo gate do front roda. Ao fim, o servidor sobe como `zeny-front`, a partir do commit fixado, no notebook ou no Windows.
 
@@ -206,12 +206,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - [x] O `sha256sum api/openapi.yaml` é igual a `contract_sha256` e igual ao hash de `git -C <servidor> show <commit>:api/openapi.yaml`.
 - [x] `tools/server-drift.sh` sai com o código de "igual" logo após a fixação. Contra um commit anterior do servidor, passado por parâmetro ou variável, distingue aditivo de breaking.
-- [ ] `tools/server-env/up.sh` sobe o projeto `zeny-front`, e `curl -fsS http://localhost:8088/actuator/health/readiness` responde `UP`. Isso vale no notebook, se houver memória; senão, no Windows pelo `LEIA-ME`, com a evidência dada pelo usuário. *(Aguarda o usuário: `MemAvailable` de 4,2 GiB, abaixo do limiar de 6 GiB do plano, impediu o build da api no notebook.)*
+- [x] `tools/server-env/up.sh` sobe o projeto `zeny-front`, e `curl -fsS http://localhost:8088/actuator/health/readiness` responde `UP`. Isso vale no notebook, se houver memória; senão, no Windows pelo `LEIA-ME`, com a evidência dada pelo usuário. *(No notebook, `MemAvailable` de 4,2 GiB, abaixo do limiar de 6 GiB do plano, impediu o build da api. Validado no Windows pelo `LEIA-ME`: o usuário devolveu `{"status":"UP"}` em 2026-11-10.)*
 - [x] Com `zeny-front` no ar, `docker compose -p zeny ps` e as imagens `zeny-hotel-manager:dev` ficam como estavam antes, sem nada criado nem alterado no projeto `zeny`. *(Validado com `db`, `storage` e `storage-init` no ar, sem a api.)*
 - [x] `tools/server-env/down.sh` remove só containers e volumes de `zeny-front`.
 - [x] `git -C /home/caio/repos/ZenyHotelManager status --porcelain` e `git -C /home/caio/repos/ZenyHotelManager worktree list` ficam iguais antes e depois da etapa.
 - [x] Nenhum segredo versionado: `git ls-files` não lista `.env` e o `.env.example` não tem chave real.
-- [ ] O `package.sh` gera `build/demo-package/` com `LEIA-ME.md`, e o usuário sobe o servidor no Windows seguindo só o `LEIA-ME`, conferido pelo usuário na parada da etapa. *(O pacote foi gerado; falta a conferência do usuário no Windows.)*
+- [x] O `package.sh` gera `build/demo-package/` com `LEIA-ME.md`, e o usuário sobe o servidor no Windows seguindo só o `LEIA-ME`, conferido pelo usuário na parada da etapa. *(Conferido pelo usuário em 2026-11-10: `curl.exe -fsS http://localhost:8088/actuator/health/readiness` em `C:\Users\Caio\Desktop\demo-package` → `{"status":"UP"}`.)*
 
 **Validação obrigatória:**
 
@@ -238,7 +238,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-10):** implementação completa, revisada e integrada à `main`. A etapa continua `#em-andamento` aguardando a **parada humana**: o usuário roda o `LEIA-ME` no Windows e devolve a evidência da readiness. Ao receber `{"status":"UP"}`, o próximo orquestrador marca `#concluida`. Se falhar, a correção entra como rodada nova desta etapa.
+- **Estado (2026-11-10):** `#concluida`. A implementação foi revisada e integrada à `main` no lote anterior. Na parada humana, o usuário seguiu o `LEIA-ME` no Windows e devolveu `{"status":"UP"}` (`curl.exe -fsS http://localhost:8088/actuator/health/readiness`, em `C:\Users\Caio\Desktop\demo-package`). O orquestrador seguinte conferiu antes de fechar: pré-voo `igual (código 0)` (pin `ca9f9e2f9808` igual à `main` do servidor), suíte com 16 arquivos, 0 falhas e 0 casos pulados, e o servidor sem mudança (`status --porcelain` e `worktree list` iguais antes e depois). H2 confirmada.
+- **Ruling do fechamento:** a evidência colada foi aceita como conferência do usuário dos dois critérios pendentes e como confirmação da H2. É o comando do fluxo 1 do `LEIA-ME`, rodado no diretório do pacote e com o resultado que o critério exige. O usuário não disse com todas as letras que construiu a imagem no Windows nem que seguiu *só* o `LEIA-ME`. Custo se errado: a H2 seria reaberta como rodada nova desta etapa, que é barata.
 - **Plano:** [`docs/superpowers/plans/2026-11-10-m0-sincronizacao-e01.md`](../superpowers/plans/2026-11-10-m0-sincronizacao-e01.md). Revisão de arquitetura: aprovado com notas em 2 rodadas (`revisor-arquitetura`, opus).
 - **Commits:** `abe64cd..59c62d3` na branch `roadmap/m0-sincronizacao`, 8 tasks:
   - Task 1, base, `common.sh` e harness: `7aefaf4..e6d06af`;
@@ -258,7 +259,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - Servidor: `status --porcelain` igual ao snapshot inicial. O `worktree list` tem os mesmos caminhos e branches; o HEAD do worktree do orquestrador do servidor avançou por conta dele.
   - Segredos: `git ls-files` não lista nenhum `.env`; os seis segredos do `.env.example` estão vazios.
   - Pacote: `build/demo-package/` gerado no checkout principal, sem `.env`.
-  - **Pendentes, com o usuário:** readiness da api e o fluxo do `LEIA-ME` no Windows.
+  - **Readiness e `LEIA-ME` no Windows:** `{"status":"UP"}`, evidência do usuário (2026-11-10).
 - **Decisões para o usuário** (já tomadas pela opção recomendada; revisáveis):
   1. D1, desfecho da H1: o override **mantém** o `build:`, contra o texto "override sem `build`" deste roadmap. O ADR 0003 manda construir no Windows. Custo se errado: um `up -d` sem a imagem dispara o build, que leva minutos e precisa de internet. **Confirmada pelo usuário em entrevista (2026-11-10)**, e o ADR 0003 foi atualizado.
   2. D2: `ZENY_HTTP_ADDRESS` tem padrão `127.0.0.1` no notebook e `0.0.0.0` no pacote, pelo marcador do override; o `.env.example` deixa endereço e endpoint vazios. O ADR 0003 punha `0.0.0.0` no override para os dois. **Confirmada pelo usuário em entrevista (2026-11-10)**, e o ADR 0003 foi atualizado.
@@ -284,3 +285,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`), com a rodada 1. As rodadas seguintes entram como etapas novas, pelo `development-roadmap` em modo atualização.
 - 2026-11-10 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (readiness no Windows). H1, H3 e H4 confirmadas; H2 aberta.
+- 2026-11-10 — E01 `#concluida` pelo `claude --agent orquestrador`, com a evidência do usuário: readiness `UP` no Windows pelo `LEIA-ME`. H2 confirmada. Não resta etapa elegível no M0 até a próxima rodada de sincronização.
