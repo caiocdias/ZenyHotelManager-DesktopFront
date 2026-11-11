@@ -12,7 +12,7 @@ object MoneyInput {
     private const val INVALID = "Valor inválido. Use o formato 1.234,56."
     private const val TOO_MANY_DECIMALS = "Use no máximo 2 casas decimais."
     private val PATTERN =
-        Regex("""^(-)?\s*(?:R\$\s*)?(-)?(\d+|\d{1,3}(?:\.\d{3})+)(?:,(\d+))?$""")
+        Regex("""^(-)?[\s\u00A0\u202F]*(?:R\$[\s\u00A0\u202F]*)?(-)?(\d+|\d{1,3}(?:\.\d{3})+)(?:,(\d+))?$""")
 
     fun parse(text: String): InputResult<Money> {
         val trimmed = text.trim()
