@@ -76,9 +76,15 @@ class ErrorCatalogTest {
     }
 
     @Test
+    fun coversEveryErrorCodeOfTheContract() {
+        val missing = ContractErrorCodes.all().filter { ErrorCatalog.message(it) == null }.sorted()
+        assertTrue(missing.isEmpty(), "sem mensagem para ${missing.size} códigos: $missing")
+    }
+
+    @Test
     fun messagesArePortugueseAndNeverRaw() {
         val raw = Regex("[A-Z]+_[A-Z]+")
-        for (code in common + auth) {
+        for (code in ContractErrorCodes.all()) {
             val message = assertNotNull(ErrorCatalog.message(code))
             assertFalse(message.contains(code), "$code vaza o código")
             assertFalse(message.contains("{") || message.contains("}"), "$code tem chave")
