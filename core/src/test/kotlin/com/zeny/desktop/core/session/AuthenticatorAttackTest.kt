@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -52,11 +53,16 @@ class AuthenticatorAttackTest {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val store = TokenStore().apply { set(Tokens("A1", "R1", "s1", "u1", false)) }
     private val ended = CopyOnWriteArrayList<String?>()
+    private val endedSessions = CopyOnWriteArrayList<String>()
 
     @AfterTest
     fun tearDown() = scope.cancel()
 
-    private fun authWith(refresher: TokenRefresher) = Authenticator(store, refresher, scope) { ended += it }
+    private fun authWith(refresher: TokenRefresher) =
+        Authenticator(store, refresher, scope) { code, sessionId ->
+            ended += code
+            endedSessions += sessionId
+        }
 
     @Test
     fun twentyFiveConcurrentRejectionsShareOneRefreshAcrossManyRounds() =
@@ -66,13 +72,14 @@ class AuthenticatorAttackTest {
                 val roundStore = TokenStore().apply { set(Tokens("A1", "R1", "s1", "u1", false)) }
                 val refresher = RotatingRefresher()
                 val roundEnded = CopyOnWriteArrayList<String?>()
-                val auth = Authenticator(roundStore, refresher, roundScope) { roundEnded += it }
+                val auth = Authenticator(roundStore, refresher, roundScope) { code, _ -> roundEnded += code }
+                val sent = roundStore.current()!!
                 val go = CompletableDeferred<Unit>()
                 val callers =
                     List(25) {
                         async(Dispatchers.Default) {
                             go.await()
-                            auth.refreshAfterRejection("A1")
+                            auth.refreshAfterRejection(sent)?.accessToken
                         }
                     }
 
@@ -91,18 +98,22 @@ class AuthenticatorAttackTest {
             val refresher = RotatingRefresher()
             val auth = authWith(refresher)
 
+            var previous: Tokens? = null
             for (wave in 1..30) {
-                val rejected = store.current()!!.accessToken
-                val previous = "A${wave - 1}"
+                val rejected = store.current()!!
                 val callers =
                     List(10) { i ->
-                        // Metade rejeita o token atual; a outra metade chega atrasada com o token anterior.
-                        val token = if (i % 2 == 0 || wave == 1) rejected else previous
-                        async(Dispatchers.Default) { auth.refreshAfterRejection(token) }
+                        // Metade rejeita o par atual; a outra metade chega atrasada com o par anterior.
+                        val sent = previous?.takeIf { i % 2 == 1 } ?: rejected
+                        async(Dispatchers.Default) { auth.refreshAfterRejection(sent)?.accessToken }
                     }
                 val results = callers.awaitAll()
-                assertTrue(results.all { it == "A${wave + 1}" || it == rejected }, "onda $wave: $results")
+                assertTrue(
+                    results.all { it == "A${wave + 1}" || it == rejected.accessToken },
+                    "onda $wave: $results",
+                )
                 assertEquals("A${wave + 1}", store.current()?.accessToken, "onda $wave")
+                previous = rejected
             }
 
             assertEquals((1..30).map { "R$it" }, refresher.received.toList())
@@ -116,14 +127,15 @@ class AuthenticatorAttackTest {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
             val auth = authWith(refresher)
-            val waiters = List(6) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") } }
+            val sent = store.current()!!
+            val waiters = List(6) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) } }
             refresher.entered.receive()
 
             waiters.forEach { it.cancelAndJoin() }
             gate.complete(Unit)
 
             assertTrue(waiters.all { it.isCancelled })
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
             assertEquals(listOf("R1"), refresher.received.toList())
             assertEquals("A2", store.current()?.accessToken)
             assertTrue(ended.isEmpty())
@@ -136,14 +148,15 @@ class AuthenticatorAttackTest {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
             val auth = authWith(refresher)
-            val waiters = List(8) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") } }
+            val sent = store.current()!!
+            val waiters = List(8) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) } }
             refresher.entered.receive()
 
             waiters.filterIndexed { i, _ -> i % 2 == 0 }.forEach { it.cancelAndJoin() }
             gate.complete(Unit)
 
             val survivors = waiters.filterIndexed { i, _ -> i % 2 == 1 }
-            assertEquals(List(4) { "A2" }, survivors.awaitAll())
+            assertEquals(List(4) { "A2" }, survivors.awaitAll().map { it?.accessToken })
             assertEquals(1, refresher.calls)
             assertTrue(ended.isEmpty())
         }
@@ -153,10 +166,11 @@ class AuthenticatorAttackTest {
         runTest(timeout = 5.seconds) {
             val refresher = FailingThenRotating({ ApiError.Network(IOException("sem rede")) })
             val auth = authWith(refresher)
+            val sent = store.current()!!
             val waiters =
                 List(20) {
                     async(start = CoroutineStart.UNDISPATCHED) {
-                        runCatching { auth.refreshAfterRejection("A1") }
+                        runCatching { auth.refreshAfterRejection(sent) }
                     }
                 }
             refresher.entered.await()
@@ -166,11 +180,11 @@ class AuthenticatorAttackTest {
             val results = waiters.awaitAll()
             assertTrue(results.all { it.exceptionOrNull() is ApiError.Network }, "todos recebem Network: $results")
             assertEquals(1, refresher.calls.get())
-            assertEquals("A1", store.current()?.accessToken)
+            assertSame(sent, store.current())
             assertTrue(ended.isEmpty())
             assertTrue(scope.isActive, "o escopo do core sobrevive à falha do voo")
 
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
             assertEquals(listOf("R1"), refresher.rotating.received.toList())
             assertTrue(ended.isEmpty())
         }
@@ -180,14 +194,15 @@ class AuthenticatorAttackTest {
         runTest(timeout = 5.seconds) {
             val refresher = FailingThenRotating({ IllegalStateException("falha inesperada") })
             val auth = authWith(refresher)
-            val first = async(start = CoroutineStart.UNDISPATCHED) { runCatching { auth.refreshAfterRejection("A1") } }
+            val sent = store.current()!!
+            val first = async(start = CoroutineStart.UNDISPATCHED) { runCatching { auth.refreshAfterRejection(sent) } }
             refresher.entered.await()
 
             refresher.gate.complete(Unit)
 
             assertTrue(first.await().isFailure)
             assertTrue(scope.isActive, "o escopo do core sobrevive à falha do voo")
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
             assertEquals("A2", store.current()?.accessToken)
         }
 
@@ -197,7 +212,8 @@ class AuthenticatorAttackTest {
             val refresher =
                 FailingThenRotating({ ApiError.Problem(401, "REFRESH_TOKEN_REUSED", null, emptyList()) })
             val auth = authWith(refresher)
-            val waiters = List(20) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") } }
+            val sent = store.current()!!
+            val waiters = List(20) { async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) } }
             refresher.entered.await()
 
             refresher.gate.complete(Unit)
@@ -206,7 +222,8 @@ class AuthenticatorAttackTest {
             assertEquals(1, refresher.calls.get())
             assertNull(store.current())
             assertEquals(listOf<String?>("REFRESH_TOKEN_REUSED"), ended.toList())
-            assertNull(auth.refreshAfterRejection("A1"))
+            assertEquals(listOf("s1"), endedSessions.toList())
+            assertNull(auth.refreshAfterRejection(sent))
             assertNull(auth.forceRefresh())
             assertEquals(1, refresher.calls.get(), "sem sessão não há novo refresh")
             assertEquals(1, ended.size)
@@ -217,7 +234,7 @@ class AuthenticatorAttackTest {
         runTest(timeout = 5.seconds) {
             val auth = authWith { throw ApiError.SessionEnded("SESSION_REVOKED") }
 
-            assertNull(auth.refreshAfterRejection("A1"))
+            assertNull(auth.refreshAfterRejection(store.current()!!))
 
             assertNull(store.current())
             assertEquals(listOf<String?>("SESSION_REVOKED"), ended.toList())
@@ -228,7 +245,8 @@ class AuthenticatorAttackTest {
         runTest(timeout = 5.seconds) {
             val refresher = FailingThenRotating({ ApiError.Network(IOException("sem rede")) })
             val auth = authWith(refresher)
-            val first = async(start = CoroutineStart.UNDISPATCHED) { runCatching { auth.refreshAfterRejection("A1") } }
+            val sent = store.current()!!
+            val first = async(start = CoroutineStart.UNDISPATCHED) { runCatching { auth.refreshAfterRejection(sent) } }
             refresher.entered.await()
             val forced = async(start = CoroutineStart.UNDISPATCHED) { auth.forceRefresh() }
 
@@ -246,7 +264,8 @@ class AuthenticatorAttackTest {
             val refresher =
                 FailingThenRotating({ ApiError.Problem(401, "REFRESH_TOKEN_REUSED", null, emptyList()) })
             val auth = authWith(refresher)
-            val first = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val first = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
             refresher.entered.await()
             val forced = async(start = CoroutineStart.UNDISPATCHED) { auth.forceRefresh() }
 
@@ -263,10 +282,11 @@ class AuthenticatorAttackTest {
         runTest(timeout = 5.seconds) {
             val refresher = RotatingRefresher()
             val auth = authWith(refresher)
+            val sent = store.current()!!
             store.clear()
 
             assertNull(auth.forceRefresh())
-            assertNull(auth.refreshAfterRejection("A1"))
+            assertNull(auth.refreshAfterRejection(sent))
             assertNull(auth.accessToken())
             assertEquals(0, refresher.calls)
             assertTrue(ended.isEmpty())
@@ -293,7 +313,7 @@ class AuthenticatorAttackTest {
                 val roundStore = TokenStore().apply { set(Tokens("A1", "R1", "s1", "u1", false)) }
                 val refresher = RotatingRefresher()
                 val roundEnded = CopyOnWriteArrayList<String?>()
-                val auth = Authenticator(roundStore, refresher, roundScope) { roundEnded += it }
+                val auth = Authenticator(roundStore, refresher, roundScope) { code, _ -> roundEnded += code }
                 val go = CompletableDeferred<Unit>()
                 val callers =
                     List(24) { i ->
@@ -302,7 +322,7 @@ class AuthenticatorAttackTest {
                             if (i % 4 == 0) {
                                 assertNotNull(auth.forceRefresh(), "rodada $round").accessToken
                             } else {
-                                auth.refreshAfterRejection(roundStore.current()!!.accessToken)
+                                auth.refreshAfterRejection(roundStore.current()!!)?.accessToken
                             }
                         }
                     }
@@ -325,15 +345,16 @@ class AuthenticatorAttackTest {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
             val auth = authWith(refresher)
-            val first = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val first = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
             refresher.entered.receive()
             val forced = List(3) { async(start = CoroutineStart.UNDISPATCHED) { auth.forceRefresh() } }
-            val lateRejection = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val lateRejection = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
 
             gate.complete(Unit)
 
-            assertEquals("A2", first.await())
-            assertEquals("A2", lateRejection.await())
+            assertEquals("A2", first.await()?.accessToken)
+            assertEquals("A2", lateRejection.await()?.accessToken)
             val results = forced.awaitAll().map { it?.accessToken }
             // Nenhum forceRefresh devolve o par do voo que já estava no ar (A2): cada um vem de um refresh posterior.
             assertTrue(results.none { it == null || it == "A2" || it == "A1" }, "par antigo devolvido: $results")
@@ -350,8 +371,8 @@ class AuthenticatorAttackTest {
             val auth = authWith(refresher)
             store.set(Tokens("A5", "R1", "s1", "u1", false))
 
-            assertEquals("A5", auth.refreshAfterRejection("A4"))
-            assertEquals("A5", auth.refreshAfterRejection(""))
+            assertEquals("A5", auth.refreshAfterRejection(Tokens("A4", "R0", "s1", "u1", false))?.accessToken)
+            assertEquals("A5", auth.refreshAfterRejection(Tokens("", "", "s1", "u1", false))?.accessToken)
             assertEquals(0, refresher.calls)
         }
 

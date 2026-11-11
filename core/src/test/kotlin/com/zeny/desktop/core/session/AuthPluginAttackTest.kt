@@ -68,7 +68,7 @@ class AuthPluginAttackTest {
     private val ended = CopyOnWriteArrayList<String?>()
     private val requests = CopyOnWriteArrayList<HttpRequestData>()
     private var refresher: TokenRefresher = RotatingRefresher()
-    private val auth by lazy { Authenticator(store, refresher, scope) { ended += it } }
+    private val auth by lazy { Authenticator(store, refresher, scope) { code, _ -> ended += code } }
 
     @AfterTest
     fun tearDown() = scope.cancel()

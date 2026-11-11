@@ -22,6 +22,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -84,12 +85,13 @@ class AuthenticatorTest {
     @Test
     fun concurrentRejectionsRefreshOnce() =
         runTest(timeout = 5.seconds) {
+            val sent = store.current()!!
             val go = CompletableDeferred<Unit>()
             val callers =
                 List(5) {
                     async(Dispatchers.Default) {
                         go.await()
-                        auth.refreshAfterRejection("A1")
+                        auth.refreshAfterRejection(sent)?.accessToken
                     }
                 }
 
@@ -104,22 +106,24 @@ class AuthenticatorTest {
     @Test
     fun staleRejectionReusesNewToken() =
         runTest(timeout = 5.seconds) {
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            val sent = store.current()!!
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
 
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
             assertEquals(1, refresher.calls)
         }
 
     @Test
     fun refreshNetworkFailureKeepsSession() =
         runTest(timeout = 5.seconds) {
+            val sent = store.current()!!
             refresher.failures += ApiError.Network(IOException("sem rede"))
 
-            assertFailsWith<ApiError.Network> { auth.refreshAfterRejection("A1") }
+            assertFailsWith<ApiError.Network> { auth.refreshAfterRejection(sent) }
 
-            assertEquals("A1", store.current()?.accessToken)
+            assertSame(sent, store.current())
             assertTrue(ended.isEmpty())
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
             assertEquals(2, refresher.calls)
         }
 
@@ -127,12 +131,13 @@ class AuthenticatorTest {
     fun refreshRejectedEndsSession() =
         runTest(timeout = 5.seconds) {
             store.set(Tokens("A0", "R0", "s1", "u1", false))
+            val sent = store.current()!!
             val gate = CompletableDeferred<Unit>()
             val callers =
                 List(3) {
                     async(Dispatchers.Default) {
                         gate.await()
-                        auth.refreshAfterRejection("A0")
+                        auth.refreshAfterRejection(sent)
                     }
                 }
 
@@ -149,13 +154,14 @@ class AuthenticatorTest {
         runTest(timeout = 5.seconds) {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
-            val first = launch(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val first = launch(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
             refresher.entered.receive()
 
             first.cancelAndJoin()
             gate.complete(Unit)
 
-            assertEquals("A2", auth.refreshAfterRejection("A1"))
+            assertEquals("A2", auth.refreshAfterRejection(sent)?.accessToken)
             assertEquals(listOf("R1"), refresher.received.toList())
             assertEquals("A2", store.current()?.accessToken)
             assertTrue(ended.isEmpty())
@@ -166,7 +172,8 @@ class AuthenticatorTest {
         runTest(timeout = 5.seconds) {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
-            val caller = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val caller = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
             refresher.entered.receive()
 
             store.clear()
@@ -182,7 +189,8 @@ class AuthenticatorTest {
         runTest(timeout = 5.seconds) {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
-            val caller = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val caller = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
             refresher.entered.receive()
 
             store.set(Tokens("B1", "S1", "s2", "u2", false))
@@ -207,7 +215,8 @@ class AuthenticatorTest {
                     scope,
                     ::recordEnd,
                 )
-            val caller = async(start = CoroutineStart.UNDISPATCHED) { rejecting.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val caller = async(start = CoroutineStart.UNDISPATCHED) { rejecting.refreshAfterRejection(sent) }
 
             store.set(Tokens("B1", "S1", "s2", "u2", false))
             gate.complete(Unit)
@@ -222,13 +231,14 @@ class AuthenticatorTest {
         runTest(timeout = 5.seconds) {
             val gate = CompletableDeferred<Unit>()
             refresher.gates += gate
-            val first = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            val sent = store.current()!!
+            val first = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection(sent) }
             refresher.entered.receive()
             val forced = async(start = CoroutineStart.UNDISPATCHED) { auth.forceRefresh() }
 
             gate.complete(Unit)
 
-            assertEquals("A2", first.await())
+            assertEquals("A2", first.await()?.accessToken)
             val tokens = forced.await()
             assertEquals("A3", tokens?.accessToken)
             assertFalse(tokens!!.passwordChangeRequired)

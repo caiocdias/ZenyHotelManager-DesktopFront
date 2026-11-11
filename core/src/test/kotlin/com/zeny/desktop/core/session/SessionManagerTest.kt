@@ -292,9 +292,10 @@ class SessionManagerTest {
         runTest(timeout = 5.seconds) {
             passwordChangeRequired = true
             manager.login("maria.silva", "provisoria-123")
-            // A sessão é encerrada enquanto a troca de senha está no servidor.
+            // A sessão é encerrada enquanto a troca de senha está no servidor (pelo Authenticator, como em produção:
+            // limpa o store da sessão e avisa o manager com o sessionId).
             onPassword = {
-                manager.sessionEnded("SESSION_REVOKED")
+                auth.endSession(store.current()!!, "SESSION_REVOKED")
                 respond("", HttpStatusCode.NoContent)
             }
 
@@ -342,7 +343,8 @@ class SessionManagerTest {
         runTest(timeout = 5.seconds) {
             manager.login("maria.silva", "senha-longa-123")
 
-            manager.sessionEnded("REFRESH_TOKEN_REUSED")
+            // O fim da sessão vem do Authenticator, que limpa o store e chama sessionEnded(code, sessionId).
+            auth.endSession(store.current()!!, "REFRESH_TOKEN_REUSED")
 
             assertEquals(SessionState.Ended("Sua sessão foi encerrada. Entre novamente."), manager.state.value)
             assertNull(store.current())
