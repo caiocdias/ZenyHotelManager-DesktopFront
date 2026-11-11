@@ -213,15 +213,15 @@ class SessionManagerAttackTest {
                 .jsonPrimitive.content
         refreshTokensReceived += token
         refreshEntered.trySend(Unit)
+        // A sessão é a do momento em que o refresh chega; a queda, a recusa e o giro, os de quando o portão abre.
+        val session = serverSessionId
+        refreshGates.poll()?.await()
         synchronized(this@SessionManagerAttackTest) {
             if (refreshNetworkFailures > 0) {
                 refreshNetworkFailures--
                 throw IOException("sem rede")
             }
         }
-        // A sessão é a do momento em que o refresh chega; a recusa e o giro, os do momento em que o portão abre.
-        val session = serverSessionId
-        refreshGates.poll()?.await()
         val refusal = refreshRefusal
         val issued =
             synchronized(this@SessionManagerAttackTest) {
@@ -244,6 +244,19 @@ class SessionManagerAttackTest {
         changeRequired: Boolean,
         session: String = s1,
     ) = SessionState.Active(userId, session, changeRequired)
+
+    /** A troca foi aceita e o refresh seguinte caiu por rede (ruling do ledger). */
+    private fun awaitingRefresh(changeRequired: Boolean = true) =
+        SessionState.Active(userId, s1, changeRequired, passwordChangeAwaitingRefresh = true)
+
+    /** Login com troca obrigatória e uma troca aceita cujo refresh caiu por rede. */
+    private suspend fun loginWithPendingPasswordChange() {
+        passwordChangeRequired = true
+        manager.login("maria.silva", "provisoria-123")
+        refreshNetworkFailures = 1
+        assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
+        assertEquals(awaitingRefresh(), manager.state.value)
+    }
 
     // ---------------------------------------------------------------- login
 
@@ -601,31 +614,199 @@ class SessionManagerAttackTest {
 
             assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
 
-            assertEquals(active(true), manager.state.value)
+            // Ruling do ledger: a sessão continua, agora marcada como troca aceita à espera do refresh.
+            assertEquals(awaitingRefresh(), manager.state.value)
             assertSame(before, store.current(), "o par não refeito foi perdido")
             assertTrue(ended.isEmpty())
         }
 
-    /** Ruling: com o POST já aceito e o refresh caído por rede, a nova tentativa só refaz o refresh. */
+    /**
+     * Ruling do ledger: com o POST já aceito e o refresh caído por rede, `changePassword` recusa (sem POST) e a
+     * retomada é `retryPasswordChangeRefresh`, que só refaz o refresh.
+     */
     @Test
     fun changePasswordRetryAfterNetworkFailureOnlyRefreshes() =
         runTest(timeout = 5.seconds) {
-            passwordChangeRequired = true
-            manager.login("maria.silva", "provisoria-123")
-            refreshNetworkFailures = 1
-            assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
+            loginWithPendingPasswordChange()
 
-            val retry = runCatching { manager.changePassword("velha", "nova-senha-123") }
+            assertFailsWith<IllegalStateException> { manager.changePassword("outra", "outra-senha-456") }
+            manager.retryPasswordChangeRefresh()
 
             assertEquals(
                 listOf("/api/v1/auth/login", "/api/v1/auth/password", "/api/v1/auth/refresh", "/api/v1/auth/refresh"),
                 paths,
-                "a nova tentativa repetiu o POST da troca já aceita (falha: ${retry.exceptionOrNull()})",
+                "a retomada repetiu o POST da troca já aceita",
             )
-            assertTrue(retry.isSuccess, "a nova tentativa falhou: ${retry.exceptionOrNull()}")
             assertEquals(listOf("R1", "R1"), refreshTokensReceived.toList())
             assertEquals(active(false), manager.state.value)
             assertEquals("A2", store.current()?.accessToken)
+        }
+
+    @Test
+    fun retryWithoutAPendingChangeDoesNothing() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(listOf("/api/v1/auth/login"), paths)
+            assertEquals(active(true), manager.state.value)
+        }
+
+    @Test
+    fun retryFailingAgainByNetworkKeepsThePendingAndTheSession() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            val before = store.current()
+            refreshNetworkFailures = 1
+
+            assertFailsWith<ApiError.Network> { manager.retryPasswordChangeRefresh() }
+
+            assertEquals(awaitingRefresh(), manager.state.value)
+            assertSame(before, store.current())
+            manager.retryPasswordChangeRefresh()
+            assertEquals(active(false), manager.state.value)
+            assertEquals(1, requestsTo("password").size, "uma retomada repetiu o POST")
+            assertEquals(listOf("R1", "R1", "R1"), refreshTokensReceived.toList())
+        }
+
+    @Test
+    fun retryKeepsTheFlagWhenTheServerStillRequiresIt() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            passwordChangeRequired = true
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(active(true), manager.state.value, "a pendência ficou ou o flag virou false fixo")
+        }
+
+    @Test
+    fun logoutDuringTheRetryRefreshDiscardsThePairAndThePending() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            val gate = CompletableDeferred<Unit>().also { refreshGates += it }
+
+            val retry = async(Dispatchers.Default) { runCatching { manager.retryPasswordChangeRefresh() } }
+            refreshEntered.receive() // o refresh que caiu
+            refreshEntered.receive() // o da retomada, preso no portão
+            manager.logout()
+            gate.complete(Unit)
+            retry.await()
+
+            assertEquals(SessionState.LoggedOut, manager.state.value)
+            assertNull(store.current(), "o par da retomada voltou ao store depois do logout")
+            val before = requests.size
+            manager.retryPasswordChangeRefresh()
+            assertEquals(before, requests.size, "retomada depois do logout foi ao servidor")
+        }
+
+    @Test
+    fun reloginDropsThePendingOfTheOldSession() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            onLogin = {
+                serverSessionId = s2
+                validRefreshToken = "Q1"
+                tokens("B1", "Q1", changeRequired = false)
+            }
+            manager.login("maria.silva", "nova-senha-123")
+            val before = requests.size
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(active(false, s2), manager.state.value)
+            assertEquals(before, requests.size, "a pendência da s1 refez refresh na s2")
+            onPassword = { respond("", HttpStatusCode.NoContent) }
+            manager.changePassword("nova-senha-123", "mais-nova-789") // sem IllegalStateException
+            assertEquals(2, requestsTo("password").size)
+            assertEquals(active(false, s2), manager.state.value)
+        }
+
+    @Test
+    fun networkFailureAfterReloginDoesNotMarkTheNewSession() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            val gate = CompletableDeferred<Unit>().also { refreshGates += it }
+            refreshNetworkFailures = 1
+
+            val change =
+                async(Dispatchers.Default) { runCatching { manager.changePassword("velha", "nova-senha-123") } }
+            refreshEntered.receive()
+            onLogin = {
+                serverSessionId = s2
+                tokens("B1", "Q1", changeRequired = false)
+            }
+            manager.login("maria.silva", "nova-senha-123")
+            gate.complete(Unit)
+            val failure = change.await().exceptionOrNull()
+
+            assertIs<ApiError.Network>(failure)
+            assertEquals(active(false, s2), manager.state.value, "a queda do refresh da s1 marcou a s2")
+            assertEquals("B1", store.current()?.accessToken)
+        }
+
+    @Test
+    fun sessionEndedWhileAwaitingRefreshEndsItAndRetryDoesNothing() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            store.clear() // o Authenticator limpa antes de avisar
+            manager.sessionEnded("SESSION_REVOKED", s1)
+            val before = requests.size
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(SessionState.Ended(endedMessage), manager.state.value)
+            assertEquals(before, requests.size)
+        }
+
+    @Test
+    fun refusedRetryRefreshEndsTheSession() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            refreshRefusal = "REFRESH_TOKEN_REUSED"
+
+            runCatching { manager.retryPasswordChangeRefresh() }
+
+            assertEquals(SessionState.Ended(endedMessage), manager.state.value)
+            assertNull(store.current())
+            assertEquals(listOf<Pair<String?, String>>("REFRESH_TOKEN_REUSED" to s1), ended.toList())
+        }
+
+    @Test
+    fun retryAfterAReactiveRefreshUsesTheRotatedToken() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+            // getMe com A1 leva a um refresh reativo (R1 -> R2) enquanto a pendência está no estado.
+            assertEquals(
+                200,
+                iam
+                    .getMe()
+                    .raw.status.value,
+            )
+
+            manager.retryPasswordChangeRefresh()
+
+            assertEquals(listOf("R1", "R1", "R2"), refreshTokensReceived.toList())
+            assertTrue(ended.isEmpty(), "token reusado: $ended")
+            assertEquals(active(false), manager.state.value)
+            assertEquals("A3", store.current()?.accessToken)
+        }
+
+    @Test
+    fun concurrentRetriesNeverReuseARefreshToken() =
+        runTest(timeout = 5.seconds) {
+            loginWithPendingPasswordChange()
+
+            List(2) { async(Dispatchers.Default) { manager.retryPasswordChangeRefresh() } }.awaitAll()
+
+            val retries = refreshTokensReceived.drop(1) // o primeiro é o refresh que caiu
+            assertEquals(retries.distinct(), retries, "refresh token repetido entre as retomadas")
+            assertTrue(ended.isEmpty(), "sessão encerrada: $ended")
+            assertEquals(active(false), manager.state.value)
+            assertEquals(1, requestsTo("password").size)
         }
 
     @Test
