@@ -311,8 +311,8 @@ class SdkAttackTest {
             """{"active":true,"createdAt":"2026-11-10T13:00:00Z","id":"$id","kind":"ROOFTOP",""" +
                 """"name":"x","updatedAt":"2026-11-10T13:00:00Z"}"""
 
-        // Fato novo: o body() lança io.ktor.serialization.JsonConvertException, com a SerializationException na causa
-        // (a ADR 0007 fala só em SerializationException).
+        // O body() lança io.ktor.serialization.JsonConvertException (Ktor), com a SerializationException na causa,
+        // como a ADR 0007 documenta.
         val failure =
             assertFailsWith<JsonConvertException> {
                 runBlocking { RoomsApi(client(area)).getArea(someId).body() }
