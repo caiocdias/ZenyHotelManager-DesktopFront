@@ -27,6 +27,12 @@ class TokenStore {
         tokens.set(null)
     }
 
+    /** Troca o par só se o atual ainda é `expected` (a mesma instância); `next == null` limpa. `true` quando trocou. */
+    internal fun replaceIf(
+        expected: Tokens,
+        next: Tokens?,
+    ): Boolean = tokens.compareAndSet(expected, next)
+
     /** Limpa só se o access atual ainda é o recusado; `true` quando limpou. */
     internal fun clearIfAccess(accessToken: String): Boolean {
         val current = tokens.get() ?: return false

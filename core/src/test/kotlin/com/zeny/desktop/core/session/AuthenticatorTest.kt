@@ -152,6 +152,61 @@ class AuthenticatorTest {
         }
 
     @Test
+    fun logoutDuringRefreshIsNotUndone() =
+        runTest(timeout = 5.seconds) {
+            val gate = CompletableDeferred<Unit>()
+            refresher.gates += gate
+            val caller = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            refresher.entered.receive()
+
+            store.clear()
+            gate.complete(Unit)
+
+            assertNull(caller.await())
+            assertNull(store.current())
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun newLoginDuringRefreshIsKept() =
+        runTest(timeout = 5.seconds) {
+            val gate = CompletableDeferred<Unit>()
+            refresher.gates += gate
+            val caller = async(start = CoroutineStart.UNDISPATCHED) { auth.refreshAfterRejection("A1") }
+            refresher.entered.receive()
+
+            store.set(Tokens("B1", "S1", "s2", "u2", false))
+            gate.complete(Unit)
+
+            assertNull(caller.await())
+            assertEquals("B1", store.current()?.accessToken)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun rejectedRefreshAfterNewLoginKeepsNewSession() =
+        runTest(timeout = 5.seconds) {
+            val gate = CompletableDeferred<Unit>()
+            val rejecting =
+                Authenticator(
+                    store,
+                    {
+                        gate.await()
+                        throw ApiError.Problem(401, "REFRESH_TOKEN_REUSED", null, emptyList())
+                    },
+                    scope,
+                ) { ended += it }
+            val caller = async(start = CoroutineStart.UNDISPATCHED) { rejecting.refreshAfterRejection("A1") }
+
+            store.set(Tokens("B1", "S1", "s2", "u2", false))
+            gate.complete(Unit)
+
+            assertNull(caller.await())
+            assertEquals("B1", store.current()?.accessToken)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
     fun forceRefreshRunsAfterInFlightRefresh() =
         runTest(timeout = 5.seconds) {
             val gate = CompletableDeferred<Unit>()

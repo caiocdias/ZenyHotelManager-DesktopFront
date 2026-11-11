@@ -58,14 +58,18 @@ class Authenticator(
             scope.async { refresh(current) }.also { inFlight = it }
         }
 
+    /**
+     * Grava o par novo só se o `TokenStore` ainda guarda o par usado no refresh: se a sessão foi limpa ou
+     * trocada no meio (logout, novo login), o resultado é descartado e quem espera recebe `null`.
+     */
     private suspend fun refresh(current: Tokens): Tokens? =
         try {
-            refresher.refresh(current).also(store::set)
+            val next = refresher.refresh(current)
+            next.takeIf { store.replaceIf(current, it) }
         } catch (e: ApiError.Network) {
             throw e
         } catch (e: ApiError) {
-            store.clear()
-            onSessionEnded(codeOf(e))
+            if (store.replaceIf(current, null)) onSessionEnded(codeOf(e))
             null
         }
 
