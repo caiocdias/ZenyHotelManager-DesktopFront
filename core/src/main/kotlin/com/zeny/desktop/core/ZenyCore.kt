@@ -28,8 +28,8 @@ import kotlinx.coroutines.cancel
 
 /**
  * O `core` montado para um servidor: cliente HTTP com o `AuthPlugin`, as operações geradas, o voo único do refresh
- * e a sessão. Trocar de servidor é criar outro `ZenyCore` e fechar o antigo. O `ZenyCore` é dono do `engine`:
- * `close()` cancela o escopo do refresh e fecha o cliente e o `engine`.
+ * e a sessão. Trocar de servidor é criar outro `ZenyCore` e, no antigo, `session.logout()` e
+ * `close()`. O `ZenyCore` é dono do `engine`, que o `close()` fecha.
  */
 class ZenyCore(
     val serverUrl: ServerUrl,
@@ -60,6 +60,11 @@ class ZenyCore(
     @RawSdkAccess
     val apis: Apis get() = sdkApis
 
+    /**
+     * Fecha localmente: cancela o escopo do refresh e fecha o cliente e o `engine`. Não faz logout nem avisa o
+     * servidor; para trocar de servidor, chame `session.logout()` e depois `close()`. Chamadas feitas depois do
+     * `close()`, ou em curso durante ele, terminam em `CancellationException`, não em `ApiError`.
+     */
     override fun close() {
         scope.cancel()
         http.close()

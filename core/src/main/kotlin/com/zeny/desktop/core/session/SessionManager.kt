@@ -137,9 +137,11 @@ class SessionManager(
 
     /**
      * O `onSessionEnded` do `Authenticator`, que já limpou o store: só passa a `Ended` se o estado ativo é da
-     * sessão `sessionId` (o aviso de uma sessão antiga não derruba a atual). Chamado de qualquer thread.
+     * sessão `sessionId` (o aviso de uma sessão antiga não derruba a atual). Chamado de qualquer thread. É
+     * `internal`: só o `Authenticator` montado pelo `ZenyCore` avisa; chamado de fora, poria o estado em `Ended`
+     * sem limpar o store.
      */
-    fun sessionEnded(
+    internal fun sessionEnded(
         @Suppress("UNUSED_PARAMETER") code: String?,
         sessionId: String,
     ) {

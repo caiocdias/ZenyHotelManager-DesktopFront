@@ -7,6 +7,7 @@ import com.zeny.desktop.core.error.ApprovalLimit
 import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.http.CallOptions
 import com.zeny.desktop.core.http.Intent
+import com.zeny.desktop.core.session.SessionManager
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.sdk.model.MeResponse
 import com.zeny.desktop.sdk.model.OperationalSettingsDto
@@ -32,6 +33,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.Uuid
 
@@ -180,6 +182,17 @@ class CoreCriteriaTest {
             assertEquals(listOf(listOf("\"7\""), listOf("\"8\"")), writes.map { it.headers.getAll("If-Match") })
             assertIs<SessionState.Active>(core.session.state.value)
         }
+
+    /**
+     * Só o `Authenticator` do `core` avisa o fim da sessão: uma feature que o chamasse poria o estado em `Ended`
+     * sem limpar o store. `internal` sai no bytecode com o nome do módulo (`sessionEnded$core`).
+     */
+    @Test
+    fun sessionEndedIsNotPublicToFeatures() {
+        val public = SessionManager::class.java.methods.map { it.name }
+
+        assertTrue("sessionEnded" !in public, "SessionManager.sessionEnded público: $public")
+    }
 
     private suspend fun loadSettings(): ApiResponse<OperationalSettingsDto> =
         core.executor.execute { core.apis.hotel.getHotelOperationalSettings(it.headers) }
