@@ -179,7 +179,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
-| E02 | Núcleo HTTP e sessão | #em-andamento | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
+| E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #pendente | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
@@ -284,7 +284,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Núcleo HTTP e sessão — #em-andamento
+## E02 — Núcleo HTTP e sessão — #concluida
 
 **Objetivo:** o módulo `core` oferece às features uma sessão autenticada e um pipeline HTTP que cumpre as convenções da API. As features nunca tratam token, refresh, erro cru, idempotência ou `ETag` à mão.
 
@@ -306,13 +306,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Teste: 5 requisições concorrentes com access token vencido → um único `POST /api/v1/auth/refresh`, e todas concluem.
-- [ ] Teste: `401 UNAUTHENTICATED` → refresh e repetição. Outro `401` → evento de "sessão encerrada", sem repetição.
-- [ ] Teste: `403 APPROVAL_REQUIRED` → erro tipado com os quatro campos. A repetição envia `X-Approval-Token` e uma **nova** `Idempotency-Key` (D2); um reenvio por falha de rede mantém a chave.
-- [ ] Teste: `412` → erro tipado de conflito.
-- [ ] Teste: valor desconhecido de enum extensível → rótulo "Outro (VALOR)", sem exceção.
-- [ ] Teste: os tokens não aparecem em nenhum arquivo escrito pelo app, nem nas preferências, nem em log.
-- [ ] Teste: a precedência da URL base segue o design §6.3.
+- [x] Teste: 5 requisições concorrentes com access token vencido → um único `POST /api/v1/auth/refresh`, e todas concluem.
+- [x] Teste: `401 UNAUTHENTICATED` → refresh e repetição. Outro `401` → evento de "sessão encerrada", sem repetição.
+- [x] Teste: `403 APPROVAL_REQUIRED` → erro tipado com os quatro campos. A repetição envia `X-Approval-Token` e uma **nova** `Idempotency-Key` (D2); um reenvio por falha de rede mantém a chave.
+- [x] Teste: `412` → erro tipado de conflito.
+- [x] Teste: valor desconhecido de enum extensível → rótulo "Outro (VALOR)", sem exceção.
+- [x] Teste: os tokens não aparecem em nenhum arquivo escrito pelo app, nem nas preferências, nem em log.
+- [x] Teste: a precedência da URL base segue o design §6.3.
 
 **Validação obrigatória:**
 
@@ -330,12 +330,38 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-11):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-11-m1-fundacao-e02.md`](../superpowers/plans/2026-11-11-m1-fundacao-e02.md), com 10 tarefas. A revisão de arquitetura bloqueou na rodada 0 (7 Importantes: troca de senha encerrando a sessão, refresh cancelado levando a `REFRESH_TOKEN_REUSED`, refresh fora do voo único, padrão do `Money`, `@RawSdkAccess` sem registro, dependência escondida entre ondas, tamanho da Task 3) e aprovou com notas na rodada 1.
+- **Commits:** `31a1df6..b3277bc` na branch `roadmap/m1-fundacao` (44 commits, cada um com o trailer `Soul:`). As tarefas correram em série: a sessão isolada no worktree da etapa impede subagentes de escrever em worktrees de tarefa.
+- **Revisão final:** "Ready to merge: With fixes" (1 Importante: um 5xx no `/auth/refresh` encerrava a sessão, defeito herdado do plano). A onda única de correção resolveu o Importante e 7 Menores; a re-revisão aprovou, com 3 Menores estacionados (abaixo).
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 347 pacotes), "No issues found".
+  - Verificação mecânica `--base 31a1df6`: 1 apontamento (asserção reescrita com regex mais amplo na Task 1), justificado; na onda final, 21 apontamentos da migração dos testes para as formas com sessão, todos justificados (equivalentes ou mais fortes).
+  - Gate em `b3277bc`: `./gradlew build --rerun-tasks` BUILD SUCCESSFUL (71 tarefas), 396 testes no `core` e 0 falhas; `bash tests/run.sh` 25 arquivos e 0 falhas.
+- **Critérios verificados:**
+  - **5 concorrentes com token vencido → um refresh:** `CoreCriteriaTest.fiveConcurrentRequestsWithExpiredTokenRefreshOnce` (barreira com as 5 em A1; um `POST /auth/refresh`; 5×200).
+  - **`401 UNAUTHENTICATED` → refresh e repetição; outro `401` → sessão encerrada sem repetição:** `CoreCriteriaTest.unauthenticatedRefreshesOtherUnauthorizedEndsSession`.
+  - **`APPROVAL_REQUIRED` com os 4 campos; repetição com `X-Approval-Token` e chave nova (D2); reenvio por rede com a mesma chave e o mesmo token:** `CoreCriteriaTest.approvalRequiredEndToEnd`.
+  - **`412` → erro tipado:** `CoreCriteriaTest.preconditionFailedEndToEnd`.
+  - **Enum desconhecido → "Outro (VALOR)":** `ExtensibleEnumTest`.
+  - **Tokens fora de arquivos, preferências e log:** `TokenLeakTest` (disco isolado com controle positivo, stdout/stderr, `toString`, mensagens, pilha e cadeia de causas; o `core` não tem binding de log).
+  - **Precedência da URL base:** `ServerUrlResolverTest` (salvo, `ZENY_SERVER_URL`, `.env` ao lado do JAR, `http://localhost:8088`; fonte em branco ou inválida segue adiante; `.env` com BOM, CRLF e aspas).
+  - **Validação:** build, testes e lint oficiais verdes.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Troca de senha:** os `401 INVALID_CREDENTIALS`/`ACCOUNT_LOCKED` de `changePassword` mantêm a sessão (a descrição da operação prevalece sobre a leitura literal do `info`). Se o POST foi aceito e o refresh seguinte falhou (rede ou erro transitório), o estado expõe `passwordChangeAwaitingRefresh` e a interface só oferece "tentar de novo" (`retryPasswordChangeRefresh`), sem campos de senha.
+  - **Refresh:** só reativo ao `401 UNAUTHENTICATED`, sem antecipação pelo relógio local. Encerra a sessão só com 401 (com ou sem corpo de problema), resposta 2xx ilegível ou `SessionEnded`; rede, 5xx e outros 4xx mantêm a sessão. Uma chamada recusada só é repetida com token da **mesma** sessão; logout ou novo login durante um refresh não são desfeitos.
+  - **Reenvio aprovado:** o `Intent` guarda o `X-Approval-Token`; o reenvio por rede de uma chamada aprovada leva a mesma chave e o mesmo token (D2).
+  - **Fronteira (ADR 0008 atualizada):** `ZenyCore.apis` e `ZenyCore.executor` exigem o opt-in `@RawSdkAccess` (nível ERROR); o detekt barra em `app` e `design` os imports de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1) e a supressão `OPT_IN_USAGE_ERROR`/`OPT_IN_IS_NOT_ENABLED`; um teste de shell barra fonte `.java` em `app/src` e `design/src`.
+  - **Engine HTTP:** `ktor-client-java` (do JDK), registrada na ADR 0007; `followRedirects = false` e só 2xx conta como sucesso.
+  - **Mensagens de erro:** catálogo pt-BR para os 353 códigos de erro do contrato; `detail` do servidor só é mostrado quando não é JSON nem identificador cru; a causa de uma resposta ilegível não carrega o corpo (que ecoaria tokens).
+  - **`Money`:** formato do contrato para BRL (`^-?\d+(\.\d{1,2})?$`); percentual e limite de aprovação não passam por ele.
+- **Notas para a próxima etapa (E03 e E04):**
+  - **E04:** as features chegam ao servidor só por fachadas do `core` (`getMe`, `getHotel`, data operacional, `grantApproval`), nunca por `executor`/`apis`. Trocar de servidor (ou o "testar" com outro endereço) é `session.logout()`, depois `close()` do `ZenyCore` antigo e um novo `ZenyCore`; chamadas depois do `close()` terminam em `CancellationException`. O `ZenyCore` é dono do engine e o fecha. O critério da E04 "repete a ação uma vez com a mesma chave" é substituído pela D2 (nova chave na repetição aprovada).
+  - **E04:** a tela de login trata `SessionState.Ended`, `passwordChangeAwaitingRefresh` e o `IllegalStateException` de `changePassword` com a pendência ativa. Um `BackingStoreException` ao gravar `lastLogin` depois do login sai como exceção não-`ApiError`; tratar na tela. `jarDirectory` pode lançar `IllegalArgumentException` num caminho estranho; `ServerUrl` aceita caminho (`http://h/api` daria `/api/api/v1`) e esquema em maiúsculas: validar no "testar endereço". Quando o `app` ganhar um provider de log, conferir que nenhum token vai para o log.
+  - **E03/E04:** o construtor de `Money`/`BusinessDate` é público e não valida, e o `equals` do `BigDecimal` diferencia escala (`10.5` ≠ `10.50`): o campo de dinheiro compara com `compareTo`. `CursorPager` não valida `pageSize` nem detecta ciclo de cursor com mais de um passo.
+  - **E05:** o `demo-seed` usa `LocalSettings` próprio, com outro `deviceId` (um novo login no mesmo dispositivo encerra a sessão anterior dele).
+  - **E06:** o `requestTimeoutMillis = 30_000` global corta o SSE; o cliente SSE sobrescreve o timeout por requisição.
+  - **Menores estacionados:** o comentário "BOM por escape" de `ProblemMapperAttackTest` descreve um U+FEFF que está literal; o ramo `Unexpected(401)` do refresh não tem teste próprio; comentários de seção de `AuthenticatorTest`/`AuthenticatorAttackTest` e o KDoc do `AuthPlugin` ainda descrevem a regra anterior ao refinamento do 5xx.
+  - **Arquiteto:** alinhar à D2 a linha "reaproveitada … após aprovação" das "Restrições e invariantes" deste roadmap, o critério da E04 e o design §6.2 e §6.5.
 
 ---
 
@@ -632,3 +658,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-11 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (JAR no Windows e decisões da fronteira `core`/`sdk` e da `Idempotency-Key`). H1 e H2 confirmadas; H3 confirmada no Linux.
 - 2026-11-11 — E01 `#concluida` (`claude --agent orquestrador`): o usuário conferiu o JAR no Windows; H3 confirmada. Pré-voo do lote: aditivo (código 11).
+- 2026-11-11 — E02 `#concluida` (`claude --agent orquestrador`): núcleo HTTP e sessão no `core`, revisão final limpa após a onda única de correção.
