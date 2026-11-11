@@ -274,7 +274,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - A M1 E07 preenche `app/` no pacote.
   - Os Menores adiados (ver o ledger da etapa, resumido na mensagem do lote) incluem:
     - zeros à esquerda em `ZENY_UP_TIMEOUT`;
-    - `.gitattributes` (`api/openapi.yaml -text`, `*.sh eol=lf`), recomendado antes de qualquer clone no Windows;
+    - ~~`.gitattributes` (`api/openapi.yaml -text`, `*.sh eol=lf`), recomendado antes de qualquer clone no Windows~~ — **resolvido em 2026-11-10** pelo plano [`2026-11-10-m0-gitattributes.md`](../superpowers/plans/2026-11-10-m0-gitattributes.md). As regras ficaram: `api/openapi.yaml -text`, `*.sh text eol=lf`, `api/server-pin.properties`, `tools/server-env/.env.example` e `tools/server-env/compose.override.yaml` com `text eol=lf`. Os testes são `tests/test_gitattributes.sh` e `tests/test_gitattributes_ataque.sh`. Ficou adiado para quando a suíte precisar rodar em Git Bash no Windows (M1): `.gitattributes` e `LEIA-ME.md` em LF, o assert de `.SH` sob `core.ignorecase` e o `test_docs.sh:37`. Na M1 E01, `gradlew text eol=lf` e `*.bat text eol=crlf` entram na lista;
     - pontos de progresso do `openssl` no stderr do `gen-env.sh`;
     - asserts em subshell nos testes.
   - As ondas paralelas não funcionam com a sessão do orquestrador isolada num worktree, porque os subagentes não escrevem em outros worktrees: as tasks rodaram em série no worktree da etapa.
@@ -286,3 +286,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`), com a rodada 1. As rodadas seguintes entram como etapas novas, pelo `development-roadmap` em modo atualização.
 - 2026-11-10 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (readiness no Windows). H1, H3 e H4 confirmadas; H2 aberta.
 - 2026-11-10 — E01 `#concluida` pelo `claude --agent orquestrador`, com a evidência do usuário: readiness `UP` no Windows pelo `LEIA-ME`. H2 confirmada. Não resta etapa elegível no M0 até a próxima rodada de sincronização.
+- 2026-11-10 — `.gitattributes` acrescentado (Menor adiado da E01), com plano revisado e revisão final aprovada (`claude --agent orquestrador`).
