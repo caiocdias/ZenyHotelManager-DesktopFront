@@ -12,6 +12,7 @@ api/openapi.yaml -text
 api/server-pin.properties text eol=lf
 tools/server-env/.env.example text eol=lf
 tools/server-env/compose.override.yaml text eol=lf
+*.lockfile text eol=lf
 
 # Wrapper do Gradle (cópia do servidor no pin).
 gradlew text eol=lf
