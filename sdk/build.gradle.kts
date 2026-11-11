@@ -26,6 +26,13 @@ dependencies {
     api(libs.ktor.client.core)
     api(libs.ktor.client.content.negotiation)
     api(libs.ktor.serialization.kotlinx.json)
+
+    testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.kotlin.test.junit5)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.named("ogenGenerate") {
