@@ -38,7 +38,7 @@ Estimativa: 20 min · Depende de: nenhuma · Risco: alto (protege o contrato per
 
 **Interfaces:**
 - Consumes: `tests/lib/assert.sh` (as funções `assert_eq`, `assert_contains` etc., como nos testes existentes) e `tests/run.sh`, que já descobre `tests/test_*.sh`.
-- Produces: o `.gitattributes` com exatamente estas regras (comentários em pt-BR, livres):
+- Produces: o `.gitattributes` com exatamente estas regras e um comentário de política em pt-BR. O comentário diz que a lista é explícita, sem `* text=auto`, e que todo arquivo novo lido por bash ou Docker sem extensão `.sh` entra nela (na M1 E01: `gradlew text eol=lf` e `*.bat text eol=crlf`):
 
 ```
 api/openapi.yaml -text
@@ -50,13 +50,14 @@ tools/server-env/compose.override.yaml text eol=lf
 
 - [ ] **Step 1: Write the failing test** `tests/test_gitattributes.sh`, no estilo dos testes existentes, com diretório temporário e limpeza por `trap`:
   - **atributos:** `git check-attr text eol -- <arquivo>` dá `text: unset` para `api/openapi.yaml`. Dá `text: set` e `eol: lf` para `tools/server-drift.sh`, `tools/server-env/gen-env.sh`, `tests/lib/assert.sh`, `api/server-pin.properties`, `tools/server-env/.env.example` e `tools/server-env/compose.override.yaml`.
-  - **checkout Windows:** monte um repositório temporário com o **estado atual da árvore**: os arquivos de `git ls-files` mais o `.gitattributes` do working tree, se existir, para o teste ficar vermelho antes da implementação e verde sem depender de commit. Clone esse repositório com `-c core.autocrlf=true` e confira:
+  - **checkout Windows:** monte um repositório temporário com o **estado atual da árvore**: copie do working tree os arquivos de `git ls-files -z`, filtrando `.gitattributes`, e depois acrescente o `.gitattributes` do working tree, se existir. Assim o teste fica vermelho antes da implementação e verde sem depender de commit. No repositório temporário use `git add -A`; o `.superpowers/sdd/.gitignore`, que se ignora, pode ficar de fora sem prejuízo. Clone com `git clone -c core.autocrlf=true <repo-tmp> <clone>`, que grava o valor no `.git/config` do clone; **não** use `git -c core.autocrlf=true clone`. Confira:
+    - `git -C <clone> config core.autocrlf` é `true`;
     - o `sha256sum` de `api/openapi.yaml` no clone é igual ao `contract_sha256` do `api/server-pin.properties` do front;
     - nenhum `*.sh` do clone contém `\r`;
     - `api/server-pin.properties`, `tools/server-env/.env.example` e `tools/server-env/compose.override.yaml` do clone não contêm `\r`;
     - o `git -C <clone> status --porcelain` sai vazio.
-  - **controle negativo:** o mesmo clone, montado **sem** `.gitattributes`, tem `\r` em `tools/server-drift.sh`. Isso prova que o `autocrlf` está em vigor no teste.
-  - O teste usa `-c user.name=Teste -c user.email=teste@example.com`, como `_fgit` em `tests/lib/fixtures.sh`, e `GIT_CONFIG_GLOBAL=/dev/null` e `GIT_CONFIG_NOSYSTEM=1` nos comandos de git do repositório e do clone temporários. Assim, um `core.autocrlf` ou `core.eol` da máquina não altera o resultado.
+  - **controle negativo:** o mesmo clone, montado **sem** `.gitattributes` (filtrado da cópia também depois do commit), tem `\r` em `tools/server-drift.sh`. Isso prova que o `autocrlf` está em vigor no teste.
+  - O teste usa `-c user.name=Teste -c user.email=teste@example.com`, como `_fgit` em `tests/lib/fixtures.sh`, e `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_NOSYSTEM=1` e `-c core.attributesFile=/dev/null` (ou `HOME` e `XDG_CONFIG_HOME` no diretório temporário) nos comandos de git do repositório e do clone temporários. Assim, um `core.autocrlf`, `core.eol` ou arquivo de atributos global da máquina não altera o resultado.
   - Termina com `finish`, como os demais testes.
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -68,7 +69,7 @@ Expected: FAIL nos asserts de atributos e de checkout Windows; o controle negati
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `bash tests/run.sh tests/test_gitattributes.sh` → PASS. Depois `bash tests/run.sh` → `Resumo: 17 arquivos, 0 falhas, 0 com casos pulados`. Depois `git ls-files --eol` → todos `i/lf`, `api/openapi.yaml` com `attr/-text`, e `git status --porcelain` vazio depois de `git add --renormalize .`, sem blob alterado.
+Run: `bash tests/run.sh tests/test_gitattributes.sh` → PASS. Depois `bash tests/run.sh` → `Resumo: 17 arquivos, 0 falhas, 0 com casos pulados`. Depois `git ls-files --eol` → todos os rastreados `i/lf`, `api/openapi.yaml` com `attr/-text`. Isso prova que `text eol=lf` não muda nenhum blob. **Não** rode `git add --renormalize` antes do commit: ele implica `-u` e põe no índice o que estiver modificado.
 
 - [ ] **Step 5: Commit**
 
@@ -76,3 +77,5 @@ Run: `bash tests/run.sh tests/test_gitattributes.sh` → PASS. Depois `bash test
 git add .gitattributes tests/test_gitattributes.sh
 git commit -m "Acrescenta o .gitattributes: contrato sem normalização e scripts em LF" -m "Soul: desenvolvedor"
 ```
+
+- [ ] **Step 6: Verify after commit:** `git add --renormalize . && git diff --cached --quiet && git status --porcelain` → sem saída e exit 0.
