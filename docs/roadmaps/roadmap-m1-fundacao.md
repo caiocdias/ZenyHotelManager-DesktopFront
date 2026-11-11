@@ -243,7 +243,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - **Estado (2026-11-11):** implementada, revisada e integrada à `main`. Fica `#em-andamento` aguardando a parada humana: o JAR no Windows e a confirmação das decisões abaixo. O próximo orquestrador marca `#concluida` com a evidência do usuário.
 - **Plano:** [`docs/superpowers/plans/2026-11-10-m1-fundacao-e01.md`](../superpowers/plans/2026-11-10-m1-fundacao-e01.md), com 11 tarefas.
   - A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: o `./gradlew --stop` derrubava os daemons do servidor) e aprovou com notas na rodada 1.
-- **Commits:** `9d1fb5e..62ea5bf` na branch `roadmap/m1-fundacao`, 35 commits, cada um com o trailer `Soul:`.
+- **Commits:** `9d1fb5e..26306a0` na branch `roadmap/m1-fundacao`, cada um com o trailer `Soul:`.
+  - O gate no checkout principal pegou um defeito que o worktree não mostrava. O `tests/test_gradle_layout.sh` varria os `*.gradle.kts` do disco e pegava a árvore do servidor em `.server/`.
+  - O merge local foi desfeito antes de qualquer push. O testador corrigiu o teste em `26306a0`, que passou a usar `git ls-files`, e a correção foi re-revisada.
 - **Revisão final:** aprovado com ressalvas ("Ready to merge: Yes"), sem achado Crítico.
   - A onda única de correção (frases desatualizadas nas ADRs 0007 e 0008, no README e num comentário de teste) foi re-revisada e está limpa.
   - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 344 pacotes cada), "No issues found".
