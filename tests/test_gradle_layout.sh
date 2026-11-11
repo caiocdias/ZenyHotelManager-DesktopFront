@@ -41,9 +41,10 @@ for proibido in 'apply(' 'plugins' 'pluginManager' 'Delete' '"clean"' 'clean('; 
 done
 shopt -u nocasematch
 
-# Caminhos relativos à raiz: o worktree mora sob .claude/, e uma exclusão '*/.claude/*' contra o caminho
-# absoluto descartaria todos os arquivos. Só o .claude da raiz (worktrees aninhados) fica de fora.
-mapfile -t kts < <(cd "$ROOT" && find . -name '*.gradle.kts' -type f -not -path '*/build/*' -not -path '*/.gradle/*' -not -path './.claude/*' -not -path './.git/*' | sort)
+# Só os *.gradle.kts versionados: pastas ignoradas pelo git (.server/<commit> com a árvore do servidor,
+# build/, .gradle/, .kotlin/) e outros worktrees são estado da máquina, não parte do front. Caminhos
+# relativos à raiz, como o ls-files devolve.
+mapfile -t kts < <(git -C "$ROOT" ls-files -- '*.gradle.kts' | sort)
 if [[ "${#kts[@]}" -lt 7 ]]; then _assert_fail "acha ao menos 7 *.gradle.kts (raiz, settings e cinco módulos)" "achou ${#kts[@]}: ${kts[*]}"; fi
 # /dev/null evita que o grep leia o stdin se a lista vier vazia.
 literais="$(cd "$ROOT" && grep -nE '^[^/]*("[^"]*:[0-9]+\.[0-9]+[^"]*"|\<version[[:space:]]*(=|\()?[[:space:]]*"[^"]*[0-9])' /dev/null "${kts[@]}" 2>/dev/null)"
