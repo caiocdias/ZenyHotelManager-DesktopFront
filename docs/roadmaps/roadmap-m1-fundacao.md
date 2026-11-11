@@ -75,9 +75,9 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
-| H1 | Compose Multiplatform 1.12.x (estável em agosto de 2026) compila e roda com Kotlin 2.4 e JDK 25 | Ajustar versões (Kotlin ou JDK alvo de bytecode) na própria E01 | E01 |
-| H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
-| H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
+| H1 | Compose Multiplatform 1.12.x (estável em agosto de 2026) compila e roda com Kotlin 2.4 e JDK 25 — **confirmada na E01** (1.12.2, Kotlin 2.4.21, JDK 25.0.5) | Ajustar versões (Kotlin ou JDK alvo de bytecode) na própria E01 | E01 |
+| H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` — **confirmada na E01** com o ogen 0.16.1 (ADR 0007); o openapi-generator 7.27.0 não cumpriu | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
+| H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **Linux confirmado na E01**; Windows aguarda o usuário na parada da E01 | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
 | H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
 | H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
 
@@ -240,12 +240,41 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-11):** implementada, revisada e integrada à `main`. Fica `#em-andamento` aguardando a parada humana: o JAR no Windows e a confirmação das decisões abaixo. O próximo orquestrador marca `#concluida` com a evidência do usuário.
+- **Plano:** [`docs/superpowers/plans/2026-11-10-m1-fundacao-e01.md`](../superpowers/plans/2026-11-10-m1-fundacao-e01.md), com 11 tarefas.
+  - A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: o `./gradlew --stop` derrubava os daemons do servidor) e aprovou com notas na rodada 1.
+- **Commits:** `9d1fb5e..62ea5bf` na branch `roadmap/m1-fundacao`, 35 commits, cada um com o trailer `Soul:`.
+- **Revisão final:** aprovado com ressalvas ("Ready to merge: Yes"), sem achado Crítico.
+  - A onda única de correção (frases desatualizadas nas ADRs 0007 e 0008, no README e num comentário de teste) foi re-revisada e está limpa.
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 344 pacotes cada), "No issues found".
+  - A verificação mecânica dos testes saiu com 5 apontamentos, todos justificados pela revisora.
+- **Critérios verificados:**
+  - **`./gradlew build` verde num clone limpo:** clone em `62ea5bf`, BUILD SUCCESSFUL em 1m19s (67 tarefas), `git status` vazio depois do build. No worktree, `./gradlew build --rerun-tasks` passou com 41 testes Kotlin, 0 falhas e 0 pulados. `bash tests/run.sh` passou com 24 arquivos e 0 falhas; no clone fora do checkout principal, dois testes da M0 pulam casos porque procuram o servidor relativo ao checkout.
+  - **O `sdk` gerado compila o contrato inteiro:** ogen 0.16.1 gera 303 métodos de operação para 303 `operationId`, conferido por `SdkAttackTest.everyOperationInTheContractHasAGeneratedMethod`. O código gerado fica em `sdk/build/` e não é versionado.
+  - **A ADR 0007 registra o gerador item a item:** [`docs/adr/0007-gerador-do-sdk.md`](../adr/0007-gerador-do-sdk.md). A evidência permanente é `SdkCriteriaTest`: lê o `ETag`, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` cada um exatamente uma vez, aceita enum extensível desconhecido e propriedade desconhecida, e mantém dinheiro, data e instante exatos na leitura e na escrita.
+  - **`./gradlew run` abre a janela "Zeny Hotel Manager":** conferido com `xwininfo` (`"Zeny Hotel Manager": ("com-zeny-desktop-app-MainKt" …) 800x563`).
+  - **O JAR abre a janela com `java -jar` no Linux:** o JAR é `app/build/libs/zeny-desktop.jar` (59.420.229 bytes, gerado por `./gradlew :app:desktopJar`). Do clone limpo, ele abriu a janela `"Zeny Hotel Manager"` sem nada em stderr. O `verifyDesktopJar` (ligado ao `check`) exige os nativos do Skia de Linux x64 e Windows x64. **No Windows: pendente, é a conferência do usuário nesta parada.**
+  - **Os comandos oficiais estão no `README.md` e no `CLAUDE.md`,** e o `tests/test_docs.sh` exige a mesma tabela nos dois.
+  - **Validação:** lint `./gradlew ktlintCheck detekt` verde.
+- **Decisões para o usuário** (tomadas pela opção recomendada, revisáveis):
+  - **Gerador do SDK:** ogen 0.16.1, e não openapi-generator 7.27.0, que não compila o contrato com kotlinx no `jvm-ktor`. O ogen é 0.x, de um mantenedor só, e a versão saiu 4 dias antes da adoção. Plano B na ADR 0007.
+  - **Fronteira `core`/`sdk`:** ADR 0008, proposta. O `core` expõe o `sdk` por `api` e o `ForbiddenImport` barra as classes de operação em `app` e `design`. Há uma brecha conhecida: `io.ktor.client.*` e `de.quati.ogen.client.*` não são barrados. **Decisão de arquitetura: entrevista.**
+  - **`Idempotency-Key` no reenvio após aprovação:** o design §6.2 e a E02 dizem "a mesma chave", mas o contrato diz "outra chave" em algumas operações (por exemplo, `cancelReservation`). **Decisão de arquitetura: entrevista, antes da E02.**
+  - **Enum fechado com valor novo derruba a resposta inteira** (`JsonConvertException`). Aceito na M1 porque o servidor está fixado; o `core` deve traduzir isso numa mensagem de "versão incompatível".
+  - **Vulnerabilidades no build:** o classpath dos plugins tinha 7 vulnerabilidades High (guava, jackson e handlebars, que chegam pelo ogen e pelo openapi-generator) e a configuração do ktlint trazia o logback com Low. Elas foram corrigidas por constraints no `buildscript` (jackson-bom 2.22.3, guava 33.7.2-jre, handlebars 4.5.2 e logback 1.5.34). O catálogo registra os motivos e a condição de saída.
+  - **Travamento de dependências:** estrito, com lockfiles em todos os projetos e no classpath dos plugins, seguindo o precedente do servidor. A regravação é `./gradlew resolveAndLockAll --write-locks`.
+  - **Checksums das dependências:** não há `gradle/verification-metadata.xml`, e os lockfiles travam versão, não hash. Recomenda-se decidir antes da E07, quando sai o pacote do Windows.
+- **Notas para a próxima etapa (E02 e E03):**
+  - O `sdk` devolve dinheiro, data e instante como `String`. O `core` converte para `BigDecimal(String)` e escreve com `toPlainString()`, nunca com `toString()` ou `Double`. Isso precisa de teste.
+  - O cliente gerado não lança exceção em 4xx. O `core` checa `raw.status` antes de chamar `body()` e lê o RFC 9457 sozinho. `body()` num erro lança `JsonConvertException`, que não é subclasse de `SerializationException`.
+  - Header por chamada vai pelo `block` com `headers[n] = v`, que substitui. `header(...)` duplica. A ADR 0007 diz qual header vence.
+  - O `Json` do `core` precisa de `ignoreUnknownKeys = true` e `encodeDefaults = false`, com um teste contra o `Json` do próprio `core`.
+  - Na E05, ao pôr `application` no `demo-seed`, o comando oficial `./gradlew run` passa a subir os dois módulos.
+  - Nunca use `./gradlew --stop`: o Gradle 9.8.1 e o `~/.gradle` são compartilhados com o servidor. Nesta etapa, um build morreu com "stop command received" vindo de fora; repita uma vez.
+  - Rodar `./gradlew check` gera o JAR de 59 MB, porque `DesktopJarTest` e `verifyDesktopJar` dependem dele.
+  - Para a E07:
+    - rever `DuplicatesStrategy.EXCLUDE` no JAR, que descarta em silêncio colisões, inclusive de NOTICE e LICENSE;
+    - trocar `contains("/build/generated/")` por `invariantSeparatorsPath`, para o build rodar no Windows.
 
 ---
 
@@ -595,3 +624,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
+- 2026-11-11 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (JAR no Windows e decisões da fronteira `core`/`sdk` e da `Idempotency-Key`). H1 e H2 confirmadas; H3 confirmada no Linux.
