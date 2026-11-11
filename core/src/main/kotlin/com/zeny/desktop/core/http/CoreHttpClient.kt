@@ -26,6 +26,8 @@ fun createCoreHttpClient(
 ): HttpClient =
     HttpClient(engine) {
         expectSuccess = false
+        // Um redirecionamento não é seguido: o Authorization não vai para outro endereço, e o 3xx vira erro tipado.
+        followRedirects = false
         install(ContentNegotiation) { json(CoreJson) }
         install(HttpTimeout) {
             connectTimeoutMillis = CONNECT_TIMEOUT_MILLIS

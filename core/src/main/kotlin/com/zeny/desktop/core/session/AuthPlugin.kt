@@ -24,7 +24,8 @@ class AuthPluginConfig {
  * pede um refresh e uma única repetição, sempre com um token da mesma sessão do envio (sessão trocada ou
  * encerrada no meio: devolve o `401`, sem repetir). `401` de conferência de credencial (`CredentialCheck`)
  * mantém a sessão; qualquer outro `401`, o da repetição inclusive, encerra a sessão do envio, se ainda é a
- * atual. O corpo segue legível para o `ProblemMapper`.
+ * atual. Falha transitória do refresh (rede, 5xx) sai da chamada como o `ApiError` do refresh, não como o `401`
+ * original. O corpo segue legível para o `ProblemMapper`.
  */
 val AuthPlugin =
     createClientPlugin("ZenyAuth", ::AuthPluginConfig) {

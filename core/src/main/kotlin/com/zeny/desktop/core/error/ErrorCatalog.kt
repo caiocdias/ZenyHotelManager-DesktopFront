@@ -4,6 +4,10 @@ package com.zeny.desktop.core.error
 object ErrorCatalog {
     const val GENERIC_MESSAGE = "Não foi possível concluir a operação."
 
+    /** Fora do mapa só pelo tamanho da linha. */
+    private const val IN_HOUSE_STAY_FIXED_MESSAGE =
+        "Com o hóspede hospedado, não dá para mudar a chegada, o tipo, o plano nem a ocupação."
+
     private val messages: Map<String, String> =
         mapOf(
             // Comuns (Problem.code)
@@ -58,7 +62,7 @@ object ErrorCatalog {
             "RESERVATION_TRANSITION_NOT_ALLOWED" to "Esta ação não é permitida na situação atual da reserva.",
             "PROVISIONAL_RESERVATION_EXPIRED" to "A reserva provisória expirou.",
             "STAY_INVALID" to "Os dados da estadia estão inválidos.",
-            "IN_HOUSE_STAY_FIXED" to "Com o hóspede hospedado, só é possível alterar a saída.",
+            "IN_HOUSE_STAY_FIXED" to IN_HOUSE_STAY_FIXED_MESSAGE,
             "IN_HOUSE_DEPARTURE_INVALID" to "A nova data de saída é inválida para um hóspede hospedado.",
             "CHECK_IN_BEFORE_ARRIVAL" to "O check-in não pode ser feito antes da data de chegada.",
             "CHECK_IN_INVALID" to "Os dados do check-in estão inválidos.",
@@ -129,7 +133,7 @@ object ErrorCatalog {
             "RATE_PLAN_DERIVATION_INVALID" to "A derivação do plano de tarifa é inválida.",
             "RATE_PLAN_DERIVATION_TOO_DEEP" to "A cadeia de planos derivados é profunda demais.",
             "RATE_PLAN_DERIVED" to "Os preços de um plano derivado não são alterados diretamente.",
-            "RATE_PLAN_HAS_PRICES" to "O plano de tarifa já tem preços.",
+            "RATE_PLAN_HAS_PRICES" to "O plano tem preços próprios e não pode virar derivado.",
             "RATE_PRICE_CHILD_BANDS_INVALID" to "As faixas de preço para crianças estão inválidas.",
             "RATE_PRICE_INVALID" to "O preço informado é inválido.",
             "RATE_PRICE_PERIOD_INVALID" to "O período do preço está inválido.",

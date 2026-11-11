@@ -286,4 +286,32 @@ class ApiExecutorTest {
             assertEquals(30_000L, config?.requestTimeoutMillis)
             assertEquals(30_000L, config?.socketTimeoutMillis)
         }
+
+    @Test
+    fun redirectIsNotFollowedAndIsTyped() =
+        runTest {
+            val hotel =
+                HotelApi(
+                    api { request ->
+                        if (request.url.host == "outro.teste") {
+                            json(hotelJson)
+                        } else {
+                            val location = headersOf(HttpHeaders.Location, "http://outro.teste/api/v1/hotel")
+                            respond("", HttpStatusCode.Found, location)
+                        }
+                    },
+                )
+
+            val failure =
+                assertFailsWith<ApiError.Unexpected> {
+                    executor.execute {
+                        hotel.getHotel {
+                            headers[HttpHeaders.Authorization] = "Bearer A1"
+                        }
+                    }
+                }
+
+            assertEquals(302, failure.status)
+            assertEquals(listOf("servidor.teste"), requests.map { it.url.host })
+        }
 }

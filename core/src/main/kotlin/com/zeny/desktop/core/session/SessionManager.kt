@@ -54,7 +54,8 @@ class SessionManager(
     /**
      * Troca a senha e renova o par pelo voo único, para o estado refletir o `passwordChangeRequired` do servidor.
      * `401 INVALID_CREDENTIALS`/`ACCOUNT_LOCKED` conferem a senha atual: lança `ApiError.Problem` e mantém a sessão.
-     * Se o servidor aceitou a troca e o refresh seguinte caiu por rede, lança o `ApiError.Network` e o estado passa a
+     * Se o servidor aceitou a troca e o refresh seguinte falhou de forma transitória (rede, 5xx, outro status que não
+     * 401), lança esse `ApiError` e o estado passa a
      * `Active(passwordChangeAwaitingRefresh = true)`: a senha nova já vale, e a continuação é
      * `retryPasswordChangeRefresh`. Chamar `changePassword` com essa pendência é erro de programação
      * (`IllegalStateException`), porque um novo POST com outras senhas não refletiria o que o servidor gravou.
@@ -73,10 +74,10 @@ class SessionManager(
     }
 
     /**
-     * Continua a troca de senha que o servidor aceitou e cujo refresh caiu por rede (`Active` com
+     * Continua a troca de senha que o servidor aceitou e cujo refresh falhou de forma transitória (`Active` com
      * `passwordChangeAwaitingRefresh`): só refaz o refresh pelo voo único, sem novo POST, com a mesma regra de
      * sessão de `changePassword`. No sucesso, o estado passa a `Active` com o `passwordChangeRequired` do par novo
-     * e sem a pendência; rede caída de novo lança `ApiError.Network` e mantém a pendência. Sem pendência (por
+     * e sem a pendência; nova falha transitória lança o `ApiError` e mantém a pendência. Sem pendência (por
      * exemplo, a sessão acabou no meio), não faz nada.
      */
     suspend fun retryPasswordChangeRefresh() {
@@ -91,7 +92,8 @@ class SessionManager(
         val tokens =
             try {
                 authenticator.forceRefresh()
-            } catch (e: ApiError.Network) {
+            } catch (e: ApiError) {
+                // O forceRefresh só lança falha transitória; as que encerram a sessão devolvem null.
                 synchronized(lock) {
                     val active = _state.value as? SessionState.Active
                     if (active != null && active.sessionId == sessionId && store.current()?.sessionId == sessionId) {
@@ -122,16 +124,6 @@ class SessionManager(
                     _state.value = SessionState.LoggedOut
                 }
             }
-        }
-    }
-
-    /** Só para testes: a forma do brief, que limpa o store sem olhar de que sessão é o aviso. */
-    internal fun sessionEnded(
-        @Suppress("UNUSED_PARAMETER") code: String?,
-    ) {
-        synchronized(lock) {
-            store.clear()
-            _state.value = SessionState.Ended(SESSION_ENDED_MESSAGE)
         }
     }
 

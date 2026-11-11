@@ -50,7 +50,7 @@ class ApiExecutor {
         try {
             val typed = call(options)
             val raw = typed.raw
-            if (raw.status.value >= HTTP_ERROR) throw errorOf(options, typed)
+            if (raw.status.value !in HTTP_SUCCESS) throw errorOf(options, typed)
             ApiResponse(typed.body(), raw.headers[HttpHeaders.ETag], raw.status.value)
         } catch (e: CancellationException) {
             throw e
@@ -91,7 +91,8 @@ class ApiExecutor {
     }
 
     private companion object {
-        const val HTTP_ERROR = 400
+        /** Só 2xx é sucesso; um 3xx (o cliente não segue redirecionamento) vira erro tipado. */
+        val HTTP_SUCCESS = 200..299
         const val HTTP_UNAUTHORIZED = 401
         val CREDENTIAL_CODES = setOf("INVALID_CREDENTIALS", "ACCOUNT_LOCKED")
     }

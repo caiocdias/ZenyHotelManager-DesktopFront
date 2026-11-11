@@ -10,6 +10,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+private const val HTTP_UNAUTHORIZED = 401
+
 /** Troca o par atual por um novo; lança `ApiError` (por exemplo `Problem` `401 REFRESH_TOKEN_REUSED`, ou `Network`). */
 fun interface TokenRefresher {
     suspend fun refresh(current: Tokens): Tokens
@@ -19,10 +21,17 @@ fun interface TokenRefresher {
  * Dono do refresh: todo refresh do `core` passa pelo voo único daqui. O refresh roda no `scope` do `core`
  * (com `SupervisorJob`), então quem espera e é cancelado só deixa de esperar; o par novo é gravado mesmo assim,
  * mas só se o `TokenStore` ainda guarda o par usado no refresh (logout ou novo login no meio descartam o par).
- * `ApiError.Network` chega a todos que esperam e mantém a sessão. Qualquer outro `ApiError` encerra a sessão
- * (limpa o store e chama `onSessionEnded(code, sessionId)` uma vez), só se o store ainda guarda o par usado.
- * Exceções que não são `ApiError` chegam a quem espera sem encerrar a sessão. Terminado o voo, o
- * `Authenticator` não guarda par nenhum.
+ *
+ * Falha do refresh:
+ * - encerra a sessão (limpa o store por CAS e chama `onSessionEnded(code, sessionId)` uma vez, só se o store
+ *   ainda guarda o par usado; quem espera recebe `null`): `ApiError` com status 401 (`Problem` ou `Unexpected`),
+ *   `IncompatibleResponse` (2xx ilegível: o servidor já girou o par) e `SessionEnded`;
+ * - transitória (o erro chega a quem espera como está, store mantido, sem aviso e sem gravar par; o próximo
+ *   refresh sai com o mesmo refresh token): `Network`, `Problem`/`Unexpected` com outro status e os demais
+ *   `ApiError`;
+ * - exceções que não são `ApiError` chegam a quem espera sem encerrar a sessão.
+ *
+ * Terminado o voo, o `Authenticator` não guarda par nenhum.
  */
 class Authenticator(
     private val store: TokenStore,
@@ -30,14 +39,6 @@ class Authenticator(
     private val scope: CoroutineScope,
     private val onSessionEnded: (code: String?, sessionId: String) -> Unit,
 ) {
-    /** Só para testes: o aviso sem o `sessionId`, na forma do brief. */
-    internal constructor(
-        store: TokenStore,
-        refresher: TokenRefresher,
-        scope: CoroutineScope,
-        onSessionEnded: (code: String?) -> Unit,
-    ) : this(store, refresher, scope, { code, _ -> onSessionEnded(code) })
-
     private val mutex = Mutex()
     private var inFlight: Deferred<Tokens?>? = null
     private var inFlightOrigin: Tokens? = null
@@ -56,10 +57,6 @@ class Authenticator(
      */
     suspend fun refreshAfterRejection(rejected: Tokens): Tokens? =
         flight(isRejected = { it === rejected }, sameSession = { it.sessionId == rejected.sessionId }).await()
-
-    /** Só para testes; não distingue sessões (um token de outra sessão conta como antigo da atual). */
-    internal suspend fun refreshAfterRejection(rejectedAccessToken: String): String? =
-        flight(isRejected = { it.accessToken == rejectedAccessToken }, sameSession = { true }).await()?.accessToken
 
     /** Espera o refresh em voo, se houver, e faz um novo pelo voo único, com o refresh token já girado. */
     suspend fun forceRefresh(): Tokens? {
@@ -119,11 +116,19 @@ class Authenticator(
         try {
             val next = refresher.refresh(current)
             next.takeIf { store.replaceIf(current, it) }
-        } catch (e: ApiError.Network) {
-            throw e
         } catch (e: ApiError) {
+            if (!endsSession(e)) throw e
             if (store.replaceIf(current, null)) onSessionEnded(codeOf(e), current.sessionId)
             null
+        }
+
+    /** Recusa do par (401), resposta ilegível depois do giro ou sessão já encerrada; o resto é transitório. */
+    private fun endsSession(error: ApiError): Boolean =
+        when (error) {
+            is ApiError.Problem -> error.status == HTTP_UNAUTHORIZED
+            is ApiError.Unexpected -> error.status == HTTP_UNAUTHORIZED
+            is ApiError.IncompatibleResponse, is ApiError.SessionEnded -> true
+            else -> false
         }
 
     /** Esquece o voo que terminou, para o último par não ficar guardado aqui (logout inclusive). */
