@@ -50,6 +50,15 @@ class MoneyInputTest {
     }
 
     @Test
+    fun rejectsLeadingZeroInGroupedForm() {
+        listOf("0.500", "0.001", "00.123", "0.500,00").forEach {
+            assertIs<InputResult.Invalid>(MoneyInput.parse(it), "esperava Invalid para '$it'")
+        }
+        assertEquals("0.00", api("0"))
+        assertEquals("7.00", api("007"))
+    }
+
+    @Test
     fun pastedValues() {
         assertEquals("12.00", api(" 12 "))
         assertEquals("10.50", api("R$ 10,5"))
