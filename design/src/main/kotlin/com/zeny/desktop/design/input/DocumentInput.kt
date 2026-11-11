@@ -34,7 +34,7 @@ object DocumentInput {
 
     fun parse(text: String): InputResult<Document> {
         if (text.isBlank()) return InputResult.Empty
-        val raw = text.replace(PUNCTUATION, "").uppercase()
+        val raw = asciiUpper(text.replace(PUNCTUATION, ""))
         return when (raw.length) {
             CPF_LENGTH -> {
                 if (isValidCpf(raw)) {
@@ -53,14 +53,16 @@ object DocumentInput {
             }
 
             else -> {
-                InputResult.Invalid(INVALID_LENGTH)
+                // Caractere fora de [0-9A-Za-z] não é "tamanho errado": o documento tem lixo, não falta dígito.
+                val garbage = raw.any { it !in '0'..'9' && it !in 'A'..'Z' }
+                InputResult.Invalid(if (garbage) INVALID_CNPJ else INVALID_LENGTH)
             }
         }
     }
 
     /** Formata enquanto se digita: CPF `000.000.000-00` (até 11 dígitos) ou CNPJ `AA.AAA.AAA/AAAA-00`. */
     fun mask(raw: String): String {
-        val chars = raw.replace(PUNCTUATION, "").uppercase().filter { it in '0'..'9' || it in 'A'..'Z' }
+        val chars = asciiUpper(raw.replace(PUNCTUATION, "")).filter { it in '0'..'9' || it in 'A'..'Z' }
         val cnpj = chars.length > CPF_LENGTH || chars.any { it in 'A'..'Z' }
         return if (cnpj) maskWith(chars.take(CNPJ_LENGTH), CNPJ_SEPARATORS) else maskWith(chars, CPF_SEPARATORS)
     }
@@ -79,6 +81,19 @@ object DocumentInput {
                 append(char)
             }
         }
+
+    // Só a-z vira maiúscula: uppercase() de Unicode transformaria ß em SS, ı em I e ſ em S.
+    private fun asciiUpper(text: String): String =
+        text
+            .map {
+                if (it in
+                    'a'..'z'
+                ) {
+                    it - ('a' - 'A')
+                } else {
+                    it
+                }
+            }.joinToString("")
 
     private fun isValidCpf(raw: String): Boolean {
         if (!CPF_SHAPE.matches(raw) || raw.all { it == raw[0] }) return false
