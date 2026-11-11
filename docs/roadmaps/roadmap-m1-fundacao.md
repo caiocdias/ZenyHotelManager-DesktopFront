@@ -180,7 +180,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
 | E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
-| E03 | Design system | #em-andamento | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
+| E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
@@ -365,7 +365,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Design system — #em-andamento
+## E03 — Design system — #concluida
 
 **Objetivo:** o módulo `design` tem o tema e os componentes reaproveitáveis que dão ao app aparência de produto. As features só os montam.
 
@@ -389,10 +389,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Teste de UI do Compose: a tabela carrega a próxima página ao chegar ao fim e não repete linhas.
-- [ ] Teste de UI do Compose: o formulário mostra o erro de `errors[]` no campo certo.
-- [ ] Teste: o campo de dinheiro converte para `BigDecimal` sem perda e recusa entrada inválida.
-- [ ] Existe uma tela de catálogo dos componentes, só no modo de desenvolvimento, para conferência visual.
+- [x] Teste de UI do Compose: a tabela carrega a próxima página ao chegar ao fim e não repete linhas.
+- [x] Teste de UI do Compose: o formulário mostra o erro de `errors[]` no campo certo.
+- [x] Teste: o campo de dinheiro converte para `BigDecimal` sem perda e recusa entrada inválida.
+- [x] Existe uma tela de catálogo dos componentes, só no modo de desenvolvimento, para conferência visual.
 
 **Validação obrigatória:**
 
@@ -411,12 +411,28 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-11):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-11-m1-fundacao-e03.md`](../superpowers/plans/2026-11-11-m1-fundacao-e03.md), com 9 tarefas. A revisão de arquitetura bloqueou na rodada 0 (10 Importantes: CNPJ alfanumérico do contrato, máscara de documento própria, telefone internacional, casamento de `errors[]` por último segmento, risco da Task 4, tabela sem recarga, cancelamento e laço de requisições, teste de UI impossível com lista preguiçosa, `currentOs` nos testes, Task 7 grande demais), bloqueou na rodada 1 (recarga com página em voo) e aprovou com notas na rodada 2.
+- **Commits:** `c6221df..3953e2d` na branch `roadmap/m1-fundacao` (32 commits, com o trailer `Soul:`; o 3476286, do testador, saiu com linha em branco antes do `Co-Authored-By` e por isso o trailer não é lido — mantido por ruling, com a autoria no corpo da mensagem).
+- **Revisão final:** bloqueou por um Crítico (os campos de documento e telefone embaralhavam a digitação tecla a tecla, confirmado por teste). A onda única de correção resolveu o Crítico e 4 Menores; a re-revisão achou uma regressão (seleção recolhida nos campos), corrigida numa continuação da onda e aprovada. Ficaram 2 Menores estacionados (abaixo).
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found".
+  - Verificação mecânica `--base c6221df`: só o aviso de trailer do 3476286, justificado.
+  - Gate em `3953e2d`: `./gradlew build` BUILD SUCCESSFUL (213 testes no `design`, 23 no `app`, 396 no `core`, 0 falhas); `bash tests/run.sh` 26 arquivos e 0 falhas.
+- **Critérios verificados:**
+  - **A tabela carrega a próxima página ao chegar ao fim e não repete linhas:** `DataTableUiTest.loadsNextPagesAtTheEndWithoutRepeatingRows` (3 fetches, 150 chaves distintas, nenhuma tag `row-*` repetida em cada passo), mais `firstPageSurvivesASlowFetch` e os 38 testes do `TableState` (voo único, recarga com página em voo, cancelamento).
+  - **O formulário mostra o erro de `errors[]` no campo certo:** `FormUiTest.serverErrorShowsUnderFieldAndTypingClearsIt` e `FormStateTest.nestedPathDoesNotMatchHomonymField`.
+  - **O campo de dinheiro converte para `BigDecimal` sem perda e recusa entrada inválida:** `MoneyInputTest` (`parsesBrazilianFormatWithoutLoss`, `rejectsInvalid`, `formatRoundTrips`, `neverUsesDouble`) e 13 testes de ataque.
+  - **Catálogo só no modo de desenvolvimento:** `ComponentCatalogTest` (`devModeOnlyWithFlag`, `catalogRendersEverySection`, `writesCatalogScreenshot`) e `ComponentCatalogAtaqueTest`. Abrir: `ZENY_DEV=1 ./gradlew :app:run` ou `java -Dzeny.dev=true -jar app/build/libs/zeny-desktop.jar`. A captura é gerada em `app/build/catalog/catalog.png` (1280×800) pelo `./gradlew :app:test`; conferida: tema, campos formatados (`R$ 1.234,56`, `529.982.247-25`, `11.222.333/0001-81`, `(11) 98765-4321`), formulário com erro no campo e tabela com "Outro (MAINTENANCE)".
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Tabela:** ordenação e filtro valem sobre as linhas já carregadas (o contrato não tem ordenação no servidor; se for preciso, pedido `PF-NN`); filtro do servidor é da feature, por `reload()`; com filtro ativo, a carga de mais páginas é manual ("Carregar mais"); depois de um erro, só "Tentar de novo" pede a página.
+  - **Documento e telefone:** CNPJ alfanumérico aceito como no contrato; o `design` não cria máscara de exibição de documento salvo (usa o `maskedNumber` do servidor); telefone brasileiro com máscara ou internacional com `+`.
+  - **Formulário:** `errors[]` casa só pelo caminho exato do campo (ou apelidos `serverPaths`); o resto vai para o erro geral, só com a mensagem.
+  - **Dinheiro:** aceita NBSP e espaço fino; recusa zero à frente no agrupamento (`0.500`).
+- **Notas para a próxima etapa (E04 em diante):**
+  - Os campos de documento e telefone devolvem o texto formatado (`529.982.247-25`); o `parse` aceita com ou sem pontuação.
+  - A `DataTable` carrega a primeira página sozinha; a feature chama `reload()` ao trocar filtro do servidor, no `412` e no `reset` do SSE. `TableState` não captura exceção da `pagerFactory` (a fábrica não deve lançar).
+  - Tema: só os papéis principais do Material 3 foram definidos; preencher os demais (containers, tertiary) antes de usar componentes tonais. Toasts de erro são curtos (`Short`); considerar `Long` para erro.
+  - **Menores estacionados:** a tecla Delete antes de um separador não avança o cursor nos campos com máscara; o `ParsedTextField` escreve estado durante a composição (uma recomposição a mais).
 
 ---
 
@@ -659,3 +675,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-11 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (JAR no Windows e decisões da fronteira `core`/`sdk` e da `Idempotency-Key`). H1 e H2 confirmadas; H3 confirmada no Linux.
 - 2026-11-11 — E01 `#concluida` (`claude --agent orquestrador`): o usuário conferiu o JAR no Windows; H3 confirmada. Pré-voo do lote: aditivo (código 11).
 - 2026-11-11 — E02 `#concluida` (`claude --agent orquestrador`): núcleo HTTP e sessão no `core`, revisão final limpa após a onda única de correção.
+- 2026-11-11 — E03 `#concluida` (`claude --agent orquestrador`): design system no `design` e catálogo no `app`, revisão final limpa após a onda de correção.
