@@ -1,0 +1,22 @@
+# Ajustes sobre a configuração padrão do detekt (buildUponDefaultConfig = true no build).
+config:
+  validation: true
+
+naming:
+  FunctionNaming:
+    # Funções @Composable usam PascalCase.
+    ignoreAnnotated: ['Composable']
+
+style:
+  ForbiddenImport:
+    active: true
+    # ADR 0008: app e design usam os modelos do sdk, mas nunca as operações (<Tag>Api) nem os
+    # serializadores internos; essas chamadas passam pelo core.
+    includes: ['**/app/src/**', '**/design/src/**']
+    forbiddenImports:
+      - value: 'com.zeny.desktop.sdk.client.*'
+        reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'
+      - value: 'com.zeny.desktop.sdk.util.*'
+        reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'
+      - value: 'com.zeny.desktop.sdk.util.model.*'
+        reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'

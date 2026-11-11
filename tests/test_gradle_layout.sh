@@ -15,8 +15,11 @@ aliases="$(grep -c 'alias(' <<<"$raiz")"
 sem_apply="$(grep 'alias(' <<<"$raiz" | grep -vc 'apply false')"
 assert_eq "0" "$sem_apply" "todo alias(...) da raiz termina em apply false"
 if [[ "$aliases" -eq 0 ]]; then _assert_fail "raiz declara plugins" "nenhum alias(...) encontrado"; fi
-outros="$(grep -vE '^\s*(alias\(.*\) apply false|plugins *\{|\}|//.*)?\s*$' <<<"$raiz")"
-assert_eq "" "$outros" "raiz só tem alias(...) apply false"
+# O bloco `subprojects { ... }` (lint, Task 9) é a única configuração permitida além dos aliases.
+bloco="$(awk '/^subprojects *\{/{d=1} d{print} d&&/^\}/{d=0}' <<<"$raiz")"
+raiz_sem_bloco="$(awk '/^subprojects *\{/{d=1} !d{print} d&&/^\}/{d=0}' <<<"$raiz")"
+outros="$(grep -vE '^\s*(alias\(.*\) apply false|plugins *\{|\}|//.*)?\s*$' <<<"$raiz_sem_bloco")"
+assert_eq "" "$outros" "raiz só tem alias(...) apply false e o bloco subprojects"
 
 sem_alias="$(grep -vE '^\s*alias\(' <<<"$raiz")"
 for proibido in 'base' 'java' 'application' 'kotlin' 'clean' 'buildDirectory'; do
@@ -56,5 +59,23 @@ app_kts="$(cat "$ROOT/app/build.gradle.kts" 2>/dev/null)"
 assert_contains "$app_kts" 'linux_x64' "app depende dos nativos linux_x64"
 assert_contains "$app_kts" 'windows_x64' "app depende dos nativos windows_x64"
 assert_not_contains "$app_kts" 'currentOs' "app não usa currentOs"
+
+# Task 9: lint oficial. A raiz aplica detekt e ktlint só nos subprojetos (nunca em si mesma).
+assert_contains "$bloco" 'dev.detekt' "subprojects aplica o detekt"
+assert_contains "$bloco" 'org.jlleitschuh.gradle.ktlint' "subprojects aplica o ktlint"
+assert_contains "$bloco" 'libs.versions.ktlint.cli' "ktlint CLI vem do catálogo"
+assert_contains "$bloco" 'detektMain' "check depende de detektMain"
+assert_contains "$bloco" 'detektTest' "check depende de detektTest"
+assert_file "$ROOT/.editorconfig" ".editorconfig"
+assert_contains "$(cat "$ROOT/.editorconfig" 2>/dev/null)" 'ktlint_function_naming_ignore_when_annotated_with = Composable' "ktlint dispensa @Composable do nome de função"
+detekt_yml="$(cat "$ROOT/config/detekt/detekt.yml" 2>/dev/null)"
+assert_contains "$detekt_yml" 'ForbiddenImport' "detekt.yml tem ForbiddenImport"
+assert_contains "$detekt_yml" 'ignoreAnnotated' "detekt.yml dispensa @Composable do nome de função"
+for pkg in 'com.zeny.desktop.sdk.client' 'com.zeny.desktop.sdk.util'; do
+  assert_contains "$detekt_yml" "$pkg" "ForbiddenImport barra $pkg"
+done
+# O ForbiddenImport só olha `import`: nada de nome totalmente qualificado do sdk de operações em app/design.
+proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client nem .util"
 
 finish
