@@ -320,7 +320,9 @@ class SdkAttackTest {
             HotelApi(client(problem, HttpStatusCode.Forbidden, "application/problem+json")).getHotel()
         }
 
-        assertFailsWith<Exception> { runBlocking { response.body() } }
+        val failure = assertFailsWith<JsonConvertException> { runBlocking { response.body() } }
+
+        assertTrue(failure.cause is SerializationException, "causa: ${failure.cause}")
     }
 
     // ---- Resposta sem corpo ----
