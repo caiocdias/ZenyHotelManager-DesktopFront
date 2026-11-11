@@ -21,8 +21,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -38,6 +41,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -62,6 +66,9 @@ class SessionManagerTest {
     @Volatile private var generation = 1
 
     @Volatile private var passwordChangeRequired = false
+
+    /** Quantos `/auth/refresh` seguintes caem por rede antes de girar o token. */
+    @Volatile private var refreshNetworkFailures = 0
 
     /** Sessão que o servidor falso põe nos pares que devolve. */
     @Volatile private var serverSessionId = sessionId
@@ -118,7 +125,9 @@ class SessionManagerTest {
     private val iam: IamApi = IamApi(ogenBase(http, "http://servidor.teste"))
     private val executor = ApiExecutor()
     private val auth: Authenticator =
-        Authenticator(store, IamTokenRefresher(iam, executor), scope) { manager.sessionEnded(it) }
+        Authenticator(store, IamTokenRefresher(iam, executor), scope) { code, session ->
+            manager.sessionEnded(code, session)
+        }
     private val manager: SessionManager = SessionManager(iam, executor, store, auth, settings)
 
     @AfterTest
@@ -164,6 +173,10 @@ class SessionManagerTest {
                 .jsonPrimitive.content
         refreshTokensReceived += token
         refreshEntered.trySend(Unit)
+        if (refreshNetworkFailures > 0) {
+            refreshNetworkFailures--
+            throw IOException("sem rede")
+        }
         val (next, changeRequired) =
             synchronized(this@SessionManagerTest) {
                 if (token != validRefreshToken) return problem("REFRESH_TOKEN_REUSED")
@@ -329,5 +342,71 @@ class SessionManagerTest {
 
             assertEquals(SessionState.Ended("Sua sessão foi encerrada. Entre novamente."), manager.state.value)
             assertNull(store.current())
+        }
+
+    @Test
+    fun cancelledLogoutStillClearsTokens() =
+        runTest(timeout = 5.seconds) {
+            manager.login("maria.silva", "senha-longa-123")
+            val logoutEntered = CompletableDeferred<Unit>()
+            onLogout = {
+                logoutEntered.complete(Unit)
+                awaitCancellation()
+            }
+
+            val logout = launch(Dispatchers.Default) { manager.logout() }
+            logoutEntered.await()
+            logout.cancelAndJoin()
+
+            assertNull(store.current())
+            assertEquals(SessionState.LoggedOut, manager.state.value)
+        }
+
+    @Test
+    fun sessionEndedOfTheCurrentSessionEndsIt() =
+        runTest(timeout = 5.seconds) {
+            manager.login("maria.silva", "senha-longa-123")
+
+            manager.sessionEnded("REFRESH_TOKEN_REUSED", sessionId)
+
+            assertEquals(SessionState.Ended("Sua sessão foi encerrada. Entre novamente."), manager.state.value)
+        }
+
+    @Test
+    fun sessionEndedOfAnotherSessionKeepsTheState() =
+        runTest(timeout = 5.seconds) {
+            manager.login("maria.silva", "senha-longa-123")
+
+            manager.sessionEnded("REFRESH_TOKEN_REUSED", "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9c0f")
+
+            assertEquals(active(false), manager.state.value)
+            assertEquals("A1", store.current()?.accessToken)
+        }
+
+    @Test
+    fun sessionEndedWithSessionIdLeavesTheStoreToTheAuthenticator() =
+        runTest(timeout = 5.seconds) {
+            manager.login("maria.silva", "senha-longa-123")
+            val tokens = store.current()
+
+            manager.sessionEnded("REFRESH_TOKEN_REUSED", sessionId)
+
+            assertSame(tokens, store.current())
+        }
+
+    @Test
+    fun reloginForgetsAPasswordChangeAwaitingItsRefresh() =
+        runTest(timeout = 5.seconds) {
+            passwordChangeRequired = true
+            manager.login("maria.silva", "provisoria-123")
+            refreshNetworkFailures = 1
+            assertFailsWith<ApiError.Network> { manager.changePassword("velha", "nova-senha-123") }
+            manager.logout()
+            manager.login("maria.silva", "nova-senha-123")
+            requests.clear()
+
+            manager.changePassword("nova-senha-123", "outra-senha-456")
+
+            assertEquals(listOf("/api/v1/auth/password", "/api/v1/auth/refresh"), paths)
         }
 }

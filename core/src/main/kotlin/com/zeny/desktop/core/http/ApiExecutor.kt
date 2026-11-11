@@ -57,16 +57,19 @@ class ApiExecutor {
         } catch (e: ApiError) {
             throw e
         } catch (e: ContentConvertException) {
-            throw ApiError.IncompatibleResponse(e)
+            throw incompatible(e)
         } catch (e: NoTransformationFoundException) {
-            throw ApiError.IncompatibleResponse(e)
+            throw incompatible(e)
         } catch (e: SerializationException) {
-            throw ApiError.IncompatibleResponse(e)
+            throw incompatible(e)
         } catch (e: IOException) {
             throw ApiError.Network(e)
         } catch (e: UnresolvedAddressException) {
             throw ApiError.Network(e)
         }
+
+    /** A mensagem do parser ecoa o corpo da resposta (no login, com os tokens): a causa leva só o tipo dela. */
+    private fun incompatible(e: Exception): ApiError = ApiError.IncompatibleResponse(ResponseFormatException(e))
 
     private suspend fun errorOf(
         options: CallOptions,
@@ -91,5 +94,14 @@ class ApiExecutor {
         const val HTTP_ERROR = 400
         const val HTTP_UNAUTHORIZED = 401
         val CREDENTIAL_CODES = setOf("INVALID_CREDENTIALS", "ACCOUNT_LOCKED")
+    }
+}
+
+/** Causa de `ApiError.IncompatibleResponse`: o nome da classe e a pilha da falha original, sem a mensagem dela. */
+class ResponseFormatException(
+    original: Throwable,
+) : Exception(original::class.qualifiedName) {
+    init {
+        stackTrace = original.stackTrace
     }
 }
