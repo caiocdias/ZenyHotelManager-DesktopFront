@@ -179,7 +179,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
-| E02 | Núcleo HTTP e sessão | #pendente | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
+| E02 | Núcleo HTTP e sessão | #em-andamento | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #pendente | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
@@ -284,7 +284,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Núcleo HTTP e sessão — #pendente
+## E02 — Núcleo HTTP e sessão — #em-andamento
 
 **Objetivo:** o módulo `core` oferece às features uma sessão autenticada e um pipeline HTTP que cumpre as convenções da API. As features nunca tratam token, refresh, erro cru, idempotência ou `ETag` à mão.
 
