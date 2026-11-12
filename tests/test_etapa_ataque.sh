@@ -66,7 +66,7 @@ varre_proibidos() {
     [[ -d "$base/$d" ]] || continue
     while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
   done
-  grep -nE 'com\.zeny\.desktop\.sdk\.(client|util)' /dev/null "${arquivos[@]}" 2>/dev/null
+  grep -nE 'com\.zeny\.desktop\.sdk\.(client|util)|io\.ktor\.client|de\.quati\.ogen\.client' /dev/null "${arquivos[@]}" 2>/dev/null
 }
 if [[ ! -d "$ROOT/app/src" ]]; then _assert_fail "app/src existe (a varredura de fronteira tem o que varrer)"; fi
 assert_eq "" "$(varre_proibidos "$ROOT")" "app/src e design/src sem pacote de operação do sdk"
@@ -76,6 +76,82 @@ printf 'val x = com.zeny.desktop.sdk.util.Foo()\n' >"$plantado/design/src/main/k
 assert_contains "$(varre_proibidos "$plantado")" "sdk.util.Foo" "a varredura de fronteira acha nome qualificado em design/src"
 printf 'import com.zeny.desktop.sdk.client.AuthApi\n' >"$plantado/app/src/main/kotlin/B.kt"
 assert_contains "$(varre_proibidos "$plantado")" "sdk.client.AuthApi" "a varredura de fronteira acha import em app/src"
+# Cliente HTTP só pelo core (ADR 0008, D1): pacote ktor e ogen-client, com subpacote e nome qualificado.
+for pkg in 'io.ktor.client.*' 'de.quati.ogen.client.*'; do
+  assert_contains "$fi_bloco" "value: '$pkg'" "ForbiddenImport barra $pkg (cliente HTTP só pelo core)"
+done
+printf 'import io.ktor.client.HttpClient\n' >"$plantado/app/src/main/kotlin/C.kt"
+assert_contains "$(varre_proibidos "$plantado")" "io.ktor.client.HttpClient" "a varredura de fronteira acha import de io.ktor.client em app/src"
+printf 'import io.ktor.client.request.get\n' >"$plantado/app/src/main/kotlin/D.kt"
+assert_contains "$(varre_proibidos "$plantado")" "io.ktor.client.request.get" "a varredura de fronteira acha subpacote io.ktor.client.request em app/src"
+printf 'val c = de.quati.ogen.client.ktor.HttpClientOgen()\n' >"$plantado/design/src/main/kotlin/E.kt"
+assert_contains "$(varre_proibidos "$plantado")" "de.quati.ogen.client.ktor.HttpClientOgen" "a varredura de fronteira acha nome qualificado de de.quati.ogen.client em design/src"
+rm -rf "$plantado"
+
+# E02 Task 10: `RawSdkAccess` (acesso cru, ADR 0008) fora de app e design, inclusive o opt-in no build.gradle.kts.
+varre_raw() {
+  local base="$1" d f
+  local -a arquivos=()
+  for d in app/src design/src; do
+    [[ -d "$base/$d" ]] || continue
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
+  done
+  for f in app/build.gradle.kts design/build.gradle.kts; do
+    [[ -f "$base/$f" ]] && arquivos+=("$base/$f")
+  done
+  grep -nE 'RawSdkAccess' /dev/null "${arquivos[@]}" 2>/dev/null
+}
+assert_eq "" "$(varre_raw "$ROOT")" "app e design (fontes e build.gradle.kts) sem RawSdkAccess"
+plantado="$(mktemp -d)"
+mkdir -p "$plantado/app/src/main/kotlin" "$plantado/design/src/main/kotlin"
+printf '@OptIn(RawSdkAccess::class)\nfun f() = Unit\n' >"$plantado/app/src/main/kotlin/F.kt"
+assert_contains "$(varre_raw "$plantado")" "@OptIn(RawSdkAccess::class)" "a varredura de RawSdkAccess acha @OptIn em app/src"
+rm "$plantado/app/src/main/kotlin/F.kt"
+printf 'kotlin {\n  compilerOptions {\n    optIn.add("com.zeny.desktop.core.RawSdkAccess")\n  }\n}\n' >"$plantado/app/build.gradle.kts"
+assert_contains "$(varre_raw "$plantado")" 'optIn.add("com.zeny.desktop.core.RawSdkAccess")' "a varredura de RawSdkAccess acha optIn.add num app/build.gradle.kts"
+printf 'freeCompilerArgs.add("-opt-in=com.zeny.desktop.core.RawSdkAccess")\n' >"$plantado/design/build.gradle.kts"
+assert_contains "$(varre_raw "$plantado")" '-opt-in=com.zeny.desktop.core.RawSdkAccess' "a varredura de RawSdkAccess acha -opt-in num design/build.gradle.kts"
+printf 'import com.zeny.desktop.core.RawSdkAccess\n' >"$plantado/design/src/main/kotlin/G.kt"
+assert_contains "$(varre_raw "$plantado")" "G.kt:1:import com.zeny.desktop.core.RawSdkAccess" "a varredura de RawSdkAccess acha import em design/src"
+rm -rf "$plantado"
+
+# Os desvios do opt-in que não citam RawSdkAccess em app e design: a supressão do erro (`OPT_IN_USAGE_ERROR`,
+# que o Kotlin 2.4 aceita sem aviso) e o opt-in feito na raiz do build para todos os subprojetos.
+varre_supressao() {
+  local base="$1" d f
+  local -a arquivos=()
+  for d in app/src design/src; do
+    [[ -d "$base/$d" ]] || continue
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
+  done
+  for f in app/build.gradle.kts design/build.gradle.kts; do
+    [[ -f "$base/$f" ]] && arquivos+=("$base/$f")
+  done
+  grep -nE 'OPT_IN_USAGE' /dev/null "${arquivos[@]}" 2>/dev/null
+}
+varre_raiz() {
+  local base="$1" f
+  local -a arquivos=()
+  for f in build.gradle.kts settings.gradle.kts gradle.properties; do
+    [[ -f "$base/$f" ]] && arquivos+=("$base/$f")
+  done
+  for d in buildSrc build-logic; do
+    [[ -d "$base/$d" ]] || continue
+    while IFS= read -r -d '' f; do arquivos+=("$f"); done < <(find "$base/$d" -type f -print0)
+  done
+  grep -nE 'RawSdkAccess' /dev/null "${arquivos[@]}" 2>/dev/null
+}
+assert_eq "" "$(varre_supressao "$ROOT")" "app e design (fontes e build.gradle.kts) sem supressão de OPT_IN_USAGE_ERROR"
+assert_eq "" "$(varre_raiz "$ROOT")" "raiz do build (build.gradle.kts, settings, gradle.properties) sem RawSdkAccess"
+plantado="$(mktemp -d)"
+mkdir -p "$plantado/app/src/main/kotlin" "$plantado/design/src/main/kotlin"
+printf '@file:Suppress("OPT_IN_USAGE_ERROR")\n\nfun f(core: ZenyCore) = core.apis.iam\n' >"$plantado/app/src/main/kotlin/F.kt"
+assert_eq "" "$(varre_raw "$plantado")" "a supressão do opt-in não cita RawSdkAccess: a varredura de RawSdkAccess sozinha não a vê"
+assert_contains "$(varre_supressao "$plantado")" 'F.kt:1:@file:Suppress("OPT_IN_USAGE_ERROR")' "a varredura acha @file:Suppress(OPT_IN_USAGE_ERROR) em app/src"
+printf 'class G {\n  @Suppress("UNUSED", "OPT_IN_USAGE_ERROR")\n  fun g(core: ZenyCore) = core.executor\n}\n' >"$plantado/design/src/main/kotlin/G.kt"
+assert_contains "$(varre_supressao "$plantado")" 'G.kt:2:' "a varredura acha @Suppress com OPT_IN_USAGE_ERROR entre outros nomes em design/src"
+printf 'subprojects {\n  extensions.configure<KotlinJvmProjectExtension> {\n    compilerOptions.optIn.add("com.zeny.desktop.core.RawSdkAccess")\n  }\n}\n' >"$plantado/build.gradle.kts"
+assert_contains "$(varre_raiz "$plantado")" 'optIn.add("com.zeny.desktop.core.RawSdkAccess")' "a varredura acha o opt-in de RawSdkAccess na raiz (subprojects alcança app e design)"
 rm -rf "$plantado"
 
 # --- 4. Módulos: grafo e plugins por módulo (design §6.1) --------------------------------------------------

@@ -77,7 +77,7 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 |---|---|---|---|
 | H1 | Compose Multiplatform 1.12.x (estável em agosto de 2026) compila e roda com Kotlin 2.4 e JDK 25 — **confirmada na E01** (1.12.2, Kotlin 2.4.21, JDK 25.0.5) | Ajustar versões (Kotlin ou JDK alvo de bytecode) na própria E01 | E01 |
 | H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` — **confirmada na E01** com o ogen 0.16.1 (ADR 0007); o openapi-generator 7.27.0 não cumpriu | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
-| H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **Linux confirmado na E01**; Windows aguarda o usuário na parada da E01 | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
+| H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **confirmada na E01**: Linux pelo orquestrador; Windows pelo usuário em 2026-11-11 (`java -jar zeny-desktop.jar` abriu a janela normalmente) | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
 | H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
 | D1 | **Decidido pelo usuário em 2026-11-11 (entrevista da parada da E01):** fronteira `core`/`sdk` pela opção (b) da ADR 0008 — `core` expõe o `sdk` por `api`, as features usam os modelos gerados e o `ForbiddenImport` barra as classes de operação — **fechando a brecha**: barrar também `io.ktor.client.*` e `de.quati.ogen.client.*` em `app` e `design` | Ajuste do `config/detekt/detekt.yml` e da varredura de nome qualificado ainda não feito: entra no plano da E02 | E02 em diante |
 | D2 | **Decidido pelo usuário em 2026-11-11:** depois do `403 APPROVAL_REQUIRED`, a repetição com `X-Approval-Token` usa uma **nova** `Idempotency-Key`, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede continua com a mesma chave. Substitui o "mesma chave" do design §6.2 e do critério da E02 | A E02 testa a nova chave na repetição aprovada; o design §6.2 fica para o arquiteto atualizar | E02, E04 |
@@ -178,17 +178,17 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #em-andamento | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
-| E02 | Núcleo HTTP e sessão | #pendente | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
-| E03 | Design system | #pendente | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
-| E04 | Login, casca do app e aprovação de superior | #pendente | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
+| E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
+| E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
+| E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
+| E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
 ---
 
-## E01 — Esqueleto Gradle, SDK gerado e JAR multiplataforma — #em-andamento
+## E01 — Esqueleto Gradle, SDK gerado e JAR multiplataforma — #concluida
 
 **Objetivo:** projeto Gradle com os módulos `sdk`, `core`, `design`, `app` e `demo-seed`. O `sdk` é gerado de `api/openapi.yaml` por um gerador escolhido com critério explícito. Uma janela "Zeny Hotel Manager" abre com `./gradlew run`, e um JAR único roda no Linux e no Windows.
 
@@ -213,12 +213,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] `./gradlew build` verde num clone limpo.
-- [ ] O `sdk` gerado compila o contrato inteiro, sem excluir operações.
-- [ ] A ADR 0007 registra o gerador, mostrando o critério do design §9 item a item, com evidência: um teste do `sdk`, ou do `core` usando o `sdk`, que lê o `ETag` de uma resposta, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` numa chamada e desserializa um valor desconhecido de `x-extensible-enum` sem falhar.
-- [ ] `./gradlew run` abre a janela com o título "Zeny Hotel Manager".
-- [ ] O JAR abre a janela com `java -jar` no Linux. No Windows, o usuário confere na parada da etapa.
-- [ ] Os comandos oficiais estão no `README.md` e no `CLAUDE.md`.
+- [x] `./gradlew build` verde num clone limpo.
+- [x] O `sdk` gerado compila o contrato inteiro, sem excluir operações.
+- [x] A ADR 0007 registra o gerador, mostrando o critério do design §9 item a item, com evidência: um teste do `sdk`, ou do `core` usando o `sdk`, que lê o `ETag` de uma resposta, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` numa chamada e desserializa um valor desconhecido de `x-extensible-enum` sem falhar.
+- [x] `./gradlew run` abre a janela com o título "Zeny Hotel Manager".
+- [x] O JAR abre a janela com `java -jar` no Linux. No Windows, o usuário confere na parada da etapa.
+- [x] Os comandos oficiais estão no `README.md` e no `CLAUDE.md`.
 
 **Validação obrigatória:**
 
@@ -243,7 +243,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-11):** implementada, revisada e integrada à `main`. Fica `#em-andamento` aguardando a parada humana: o JAR no Windows e a confirmação das decisões abaixo. O próximo orquestrador marca `#concluida` com a evidência do usuário.
+- **Estado (2026-11-11):** `#concluida`. Implementada, revisada e integrada à `main`; a parada humana fechou com as decisões D1 a D3 confirmadas na entrevista e o JAR conferido pelo usuário no Windows.
 - **Plano:** [`docs/superpowers/plans/2026-11-10-m1-fundacao-e01.md`](../superpowers/plans/2026-11-10-m1-fundacao-e01.md), com 11 tarefas.
   - A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: o `./gradlew --stop` derrubava os daemons do servidor) e aprovou com notas na rodada 1.
 - **Commits:** `9d1fb5e..26306a0` na branch `roadmap/m1-fundacao`, cada um com o trailer `Soul:`.
@@ -258,10 +258,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **O `sdk` gerado compila o contrato inteiro:** ogen 0.16.1 gera 303 métodos de operação para 303 `operationId`, conferido por `SdkAttackTest.everyOperationInTheContractHasAGeneratedMethod`. O código gerado fica em `sdk/build/` e não é versionado.
   - **A ADR 0007 registra o gerador item a item:** [`docs/adr/0007-gerador-do-sdk.md`](../adr/0007-gerador-do-sdk.md). A evidência permanente é `SdkCriteriaTest`: lê o `ETag`, envia `Idempotency-Key`, `If-Match` e `X-Approval-Token` cada um exatamente uma vez, aceita enum extensível desconhecido e propriedade desconhecida, e mantém dinheiro, data e instante exatos na leitura e na escrita.
   - **`./gradlew run` abre a janela "Zeny Hotel Manager":** conferido com `xwininfo` (`"Zeny Hotel Manager": ("com-zeny-desktop-app-MainKt" …) 800x563`).
-  - **O JAR abre a janela com `java -jar` no Linux:** o JAR é `app/build/libs/zeny-desktop.jar` (59.420.229 bytes, gerado por `./gradlew :app:desktopJar`). Do clone limpo, ele abriu a janela `"Zeny Hotel Manager"` sem nada em stderr. O `verifyDesktopJar` (ligado ao `check`) exige os nativos do Skia de Linux x64 e Windows x64. **No Windows: pendente, é a conferência do usuário nesta parada.**
+  - **O JAR abre a janela com `java -jar` no Linux:** o JAR é `app/build/libs/zeny-desktop.jar` (59.420.229 bytes, gerado por `./gradlew :app:desktopJar`). Do clone limpo, ele abriu a janela `"Zeny Hotel Manager"` sem nada em stderr. O `verifyDesktopJar` (ligado ao `check`) exige os nativos do Skia de Linux x64 e Windows x64. **No Windows: conferido pelo usuário em 2026-11-11 — `java -jar zeny-desktop.jar` abriu a tela normalmente.**
   - **Os comandos oficiais estão no `README.md` e no `CLAUDE.md`,** e o `tests/test_docs.sh` exige a mesma tabela nos dois.
   - **Validação:** lint `./gradlew ktlintCheck detekt` verde.
-- **Respostas do usuário na entrevista (2026-11-11):** fronteira `core`/`sdk` pela opção (b), fechando a brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1); nova `Idempotency-Key` na repetição após aprovação, como diz o contrato (D2); ogen confirmado (D3). Ver "Hipóteses e decisões em aberto". A conferência do JAR no Windows continua pendente.
+- **Respostas do usuário na entrevista (2026-11-11):** fronteira `core`/`sdk` pela opção (b), fechando a brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1); nova `Idempotency-Key` na repetição após aprovação, como diz o contrato (D2); ogen confirmado (D3). Ver "Hipóteses e decisões em aberto". O JAR no Windows foi conferido pelo usuário no mesmo dia (H3 confirmada).
 - **Decisões para o usuário** (tomadas pela opção recomendada; as três de arquitetura já confirmadas na entrevista, as demais revisáveis):
   - **Gerador do SDK:** ogen 0.16.1, e não openapi-generator 7.27.0, que não compila o contrato com kotlinx no `jvm-ktor`. O ogen é 0.x, de um mantenedor só, e a versão saiu 4 dias antes da adoção. Plano B na ADR 0007.
   - **Fronteira `core`/`sdk`:** ADR 0008, aceita (D1). O `core` expõe o `sdk` por `api` e o `ForbiddenImport` barra as classes de operação em `app` e `design`. A brecha de `io.ktor.client.*` e `de.quati.ogen.client.*` foi decidida: fechar, com o ajuste do lint no plano da E02.
@@ -284,7 +284,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Núcleo HTTP e sessão — #pendente
+## E02 — Núcleo HTTP e sessão — #concluida
 
 **Objetivo:** o módulo `core` oferece às features uma sessão autenticada e um pipeline HTTP que cumpre as convenções da API. As features nunca tratam token, refresh, erro cru, idempotência ou `ETag` à mão.
 
@@ -306,13 +306,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Teste: 5 requisições concorrentes com access token vencido → um único `POST /api/v1/auth/refresh`, e todas concluem.
-- [ ] Teste: `401 UNAUTHENTICATED` → refresh e repetição. Outro `401` → evento de "sessão encerrada", sem repetição.
-- [ ] Teste: `403 APPROVAL_REQUIRED` → erro tipado com os quatro campos. A repetição envia `X-Approval-Token` e uma **nova** `Idempotency-Key` (D2); um reenvio por falha de rede mantém a chave.
-- [ ] Teste: `412` → erro tipado de conflito.
-- [ ] Teste: valor desconhecido de enum extensível → rótulo "Outro (VALOR)", sem exceção.
-- [ ] Teste: os tokens não aparecem em nenhum arquivo escrito pelo app, nem nas preferências, nem em log.
-- [ ] Teste: a precedência da URL base segue o design §6.3.
+- [x] Teste: 5 requisições concorrentes com access token vencido → um único `POST /api/v1/auth/refresh`, e todas concluem.
+- [x] Teste: `401 UNAUTHENTICATED` → refresh e repetição. Outro `401` → evento de "sessão encerrada", sem repetição.
+- [x] Teste: `403 APPROVAL_REQUIRED` → erro tipado com os quatro campos. A repetição envia `X-Approval-Token` e uma **nova** `Idempotency-Key` (D2); um reenvio por falha de rede mantém a chave.
+- [x] Teste: `412` → erro tipado de conflito.
+- [x] Teste: valor desconhecido de enum extensível → rótulo "Outro (VALOR)", sem exceção.
+- [x] Teste: os tokens não aparecem em nenhum arquivo escrito pelo app, nem nas preferências, nem em log.
+- [x] Teste: a precedência da URL base segue o design §6.3.
 
 **Validação obrigatória:**
 
@@ -330,16 +330,42 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-11):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-11-m1-fundacao-e02.md`](../superpowers/plans/2026-11-11-m1-fundacao-e02.md), com 10 tarefas. A revisão de arquitetura bloqueou na rodada 0 (7 Importantes: troca de senha encerrando a sessão, refresh cancelado levando a `REFRESH_TOKEN_REUSED`, refresh fora do voo único, padrão do `Money`, `@RawSdkAccess` sem registro, dependência escondida entre ondas, tamanho da Task 3) e aprovou com notas na rodada 1.
+- **Commits:** `31a1df6..b3277bc` na branch `roadmap/m1-fundacao` (44 commits, cada um com o trailer `Soul:`). As tarefas correram em série: a sessão isolada no worktree da etapa impede subagentes de escrever em worktrees de tarefa.
+- **Revisão final:** "Ready to merge: With fixes" (1 Importante: um 5xx no `/auth/refresh` encerrava a sessão, defeito herdado do plano). A onda única de correção resolveu o Importante e 7 Menores; a re-revisão aprovou, com 3 Menores estacionados (abaixo).
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 347 pacotes), "No issues found".
+  - Verificação mecânica `--base 31a1df6`: 1 apontamento (asserção reescrita com regex mais amplo na Task 1), justificado; na onda final, 21 apontamentos da migração dos testes para as formas com sessão, todos justificados (equivalentes ou mais fortes).
+  - Gate em `b3277bc`: `./gradlew build --rerun-tasks` BUILD SUCCESSFUL (71 tarefas), 396 testes no `core` e 0 falhas; `bash tests/run.sh` 25 arquivos e 0 falhas.
+- **Critérios verificados:**
+  - **5 concorrentes com token vencido → um refresh:** `CoreCriteriaTest.fiveConcurrentRequestsWithExpiredTokenRefreshOnce` (barreira com as 5 em A1; um `POST /auth/refresh`; 5×200).
+  - **`401 UNAUTHENTICATED` → refresh e repetição; outro `401` → sessão encerrada sem repetição:** `CoreCriteriaTest.unauthenticatedRefreshesOtherUnauthorizedEndsSession`.
+  - **`APPROVAL_REQUIRED` com os 4 campos; repetição com `X-Approval-Token` e chave nova (D2); reenvio por rede com a mesma chave e o mesmo token:** `CoreCriteriaTest.approvalRequiredEndToEnd`.
+  - **`412` → erro tipado:** `CoreCriteriaTest.preconditionFailedEndToEnd`.
+  - **Enum desconhecido → "Outro (VALOR)":** `ExtensibleEnumTest`.
+  - **Tokens fora de arquivos, preferências e log:** `TokenLeakTest` (disco isolado com controle positivo, stdout/stderr, `toString`, mensagens, pilha e cadeia de causas; o `core` não tem binding de log).
+  - **Precedência da URL base:** `ServerUrlResolverTest` (salvo, `ZENY_SERVER_URL`, `.env` ao lado do JAR, `http://localhost:8088`; fonte em branco ou inválida segue adiante; `.env` com BOM, CRLF e aspas).
+  - **Validação:** build, testes e lint oficiais verdes.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Troca de senha:** os `401 INVALID_CREDENTIALS`/`ACCOUNT_LOCKED` de `changePassword` mantêm a sessão (a descrição da operação prevalece sobre a leitura literal do `info`). Se o POST foi aceito e o refresh seguinte falhou (rede ou erro transitório), o estado expõe `passwordChangeAwaitingRefresh` e a interface só oferece "tentar de novo" (`retryPasswordChangeRefresh`), sem campos de senha.
+  - **Refresh:** só reativo ao `401 UNAUTHENTICATED`, sem antecipação pelo relógio local. Encerra a sessão só com 401 (com ou sem corpo de problema), resposta 2xx ilegível ou `SessionEnded`; rede, 5xx e outros 4xx mantêm a sessão. Uma chamada recusada só é repetida com token da **mesma** sessão; logout ou novo login durante um refresh não são desfeitos.
+  - **Reenvio aprovado:** o `Intent` guarda o `X-Approval-Token`; o reenvio por rede de uma chamada aprovada leva a mesma chave e o mesmo token (D2).
+  - **Fronteira (ADR 0008 atualizada):** `ZenyCore.apis` e `ZenyCore.executor` exigem o opt-in `@RawSdkAccess` (nível ERROR); o detekt barra em `app` e `design` os imports de `io.ktor.client.*` e `de.quati.ogen.client.*` (D1) e a supressão `OPT_IN_USAGE_ERROR`/`OPT_IN_IS_NOT_ENABLED`; um teste de shell barra fonte `.java` em `app/src` e `design/src`.
+  - **Engine HTTP:** `ktor-client-java` (do JDK), registrada na ADR 0007; `followRedirects = false` e só 2xx conta como sucesso.
+  - **Mensagens de erro:** catálogo pt-BR para os 353 códigos de erro do contrato; `detail` do servidor só é mostrado quando não é JSON nem identificador cru; a causa de uma resposta ilegível não carrega o corpo (que ecoaria tokens).
+  - **`Money`:** formato do contrato para BRL (`^-?\d+(\.\d{1,2})?$`); percentual e limite de aprovação não passam por ele.
+- **Notas para a próxima etapa (E03 e E04):**
+  - **E04:** as features chegam ao servidor só por fachadas do `core` (`getMe`, `getHotel`, data operacional, `grantApproval`), nunca por `executor`/`apis`. Trocar de servidor (ou o "testar" com outro endereço) é `session.logout()`, depois `close()` do `ZenyCore` antigo e um novo `ZenyCore`; chamadas depois do `close()` terminam em `CancellationException`. O `ZenyCore` é dono do engine e o fecha. O critério da E04 "repete a ação uma vez com a mesma chave" é substituído pela D2 (nova chave na repetição aprovada).
+  - **E04:** a tela de login trata `SessionState.Ended`, `passwordChangeAwaitingRefresh` e o `IllegalStateException` de `changePassword` com a pendência ativa. Um `BackingStoreException` ao gravar `lastLogin` depois do login sai como exceção não-`ApiError`; tratar na tela. `jarDirectory` pode lançar `IllegalArgumentException` num caminho estranho; `ServerUrl` aceita caminho (`http://h/api` daria `/api/api/v1`) e esquema em maiúsculas: validar no "testar endereço". Quando o `app` ganhar um provider de log, conferir que nenhum token vai para o log.
+  - **E03/E04:** o construtor de `Money`/`BusinessDate` é público e não valida, e o `equals` do `BigDecimal` diferencia escala (`10.5` ≠ `10.50`): o campo de dinheiro compara com `compareTo`. `CursorPager` não valida `pageSize` nem detecta ciclo de cursor com mais de um passo.
+  - **E05:** o `demo-seed` usa `LocalSettings` próprio, com outro `deviceId` (um novo login no mesmo dispositivo encerra a sessão anterior dele).
+  - **E06:** o `requestTimeoutMillis = 30_000` global corta o SSE; o cliente SSE sobrescreve o timeout por requisição.
+  - **Menores estacionados:** o comentário "BOM por escape" de `ProblemMapperAttackTest` descreve um U+FEFF que está literal; o ramo `Unexpected(401)` do refresh não tem teste próprio; comentários de seção de `AuthenticatorTest`/`AuthenticatorAttackTest` e o KDoc do `AuthPlugin` ainda descrevem a regra anterior ao refinamento do 5xx.
+  - **Arquiteto:** alinhar à D2 a linha "reaproveitada … após aprovação" das "Restrições e invariantes" deste roadmap, o critério da E04 e o design §6.2 e §6.5.
 
 ---
 
-## E03 — Design system — #pendente
+## E03 — Design system — #concluida
 
 **Objetivo:** o módulo `design` tem o tema e os componentes reaproveitáveis que dão ao app aparência de produto. As features só os montam.
 
@@ -363,10 +389,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Teste de UI do Compose: a tabela carrega a próxima página ao chegar ao fim e não repete linhas.
-- [ ] Teste de UI do Compose: o formulário mostra o erro de `errors[]` no campo certo.
-- [ ] Teste: o campo de dinheiro converte para `BigDecimal` sem perda e recusa entrada inválida.
-- [ ] Existe uma tela de catálogo dos componentes, só no modo de desenvolvimento, para conferência visual.
+- [x] Teste de UI do Compose: a tabela carrega a próxima página ao chegar ao fim e não repete linhas.
+- [x] Teste de UI do Compose: o formulário mostra o erro de `errors[]` no campo certo.
+- [x] Teste: o campo de dinheiro converte para `BigDecimal` sem perda e recusa entrada inválida.
+- [x] Existe uma tela de catálogo dos componentes, só no modo de desenvolvimento, para conferência visual.
 
 **Validação obrigatória:**
 
@@ -385,16 +411,32 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-11):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-11-m1-fundacao-e03.md`](../superpowers/plans/2026-11-11-m1-fundacao-e03.md), com 9 tarefas. A revisão de arquitetura bloqueou na rodada 0 (10 Importantes: CNPJ alfanumérico do contrato, máscara de documento própria, telefone internacional, casamento de `errors[]` por último segmento, risco da Task 4, tabela sem recarga, cancelamento e laço de requisições, teste de UI impossível com lista preguiçosa, `currentOs` nos testes, Task 7 grande demais), bloqueou na rodada 1 (recarga com página em voo) e aprovou com notas na rodada 2.
+- **Commits:** `c6221df..3953e2d` na branch `roadmap/m1-fundacao` (32 commits, com o trailer `Soul:`; o 3476286, do testador, saiu com linha em branco antes do `Co-Authored-By` e por isso o trailer não é lido — mantido por ruling, com a autoria no corpo da mensagem).
+- **Revisão final:** bloqueou por um Crítico (os campos de documento e telefone embaralhavam a digitação tecla a tecla, confirmado por teste). A onda única de correção resolveu o Crítico e 4 Menores; a re-revisão achou uma regressão (seleção recolhida nos campos), corrigida numa continuação da onda e aprovada. Ficaram 2 Menores estacionados (abaixo).
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found".
+  - Verificação mecânica `--base c6221df`: só o aviso de trailer do 3476286, justificado.
+  - Gate em `3953e2d`: `./gradlew build` BUILD SUCCESSFUL (213 testes no `design`, 23 no `app`, 396 no `core`, 0 falhas); `bash tests/run.sh` 26 arquivos e 0 falhas.
+- **Critérios verificados:**
+  - **A tabela carrega a próxima página ao chegar ao fim e não repete linhas:** `DataTableUiTest.loadsNextPagesAtTheEndWithoutRepeatingRows` (3 fetches, 150 chaves distintas, nenhuma tag `row-*` repetida em cada passo), mais `firstPageSurvivesASlowFetch` e os 38 testes do `TableState` (voo único, recarga com página em voo, cancelamento).
+  - **O formulário mostra o erro de `errors[]` no campo certo:** `FormUiTest.serverErrorShowsUnderFieldAndTypingClearsIt` e `FormStateTest.nestedPathDoesNotMatchHomonymField`.
+  - **O campo de dinheiro converte para `BigDecimal` sem perda e recusa entrada inválida:** `MoneyInputTest` (`parsesBrazilianFormatWithoutLoss`, `rejectsInvalid`, `formatRoundTrips`, `neverUsesDouble`) e 13 testes de ataque.
+  - **Catálogo só no modo de desenvolvimento:** `ComponentCatalogTest` (`devModeOnlyWithFlag`, `catalogRendersEverySection`, `writesCatalogScreenshot`) e `ComponentCatalogAtaqueTest`. Abrir: `ZENY_DEV=1 ./gradlew :app:run` ou `java -Dzeny.dev=true -jar app/build/libs/zeny-desktop.jar`. A captura é gerada em `app/build/catalog/catalog.png` (1280×800) pelo `./gradlew :app:test`; conferida: tema, campos formatados (`R$ 1.234,56`, `529.982.247-25`, `11.222.333/0001-81`, `(11) 98765-4321`), formulário com erro no campo e tabela com "Outro (MAINTENANCE)".
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Tabela:** ordenação e filtro valem sobre as linhas já carregadas (o contrato não tem ordenação no servidor; se for preciso, pedido `PF-NN`); filtro do servidor é da feature, por `reload()`; com filtro ativo, a carga de mais páginas é manual ("Carregar mais"); depois de um erro, só "Tentar de novo" pede a página.
+  - **Documento e telefone:** CNPJ alfanumérico aceito como no contrato; o `design` não cria máscara de exibição de documento salvo (usa o `maskedNumber` do servidor); telefone brasileiro com máscara ou internacional com `+`.
+  - **Formulário:** `errors[]` casa só pelo caminho exato do campo (ou apelidos `serverPaths`); o resto vai para o erro geral, só com a mensagem.
+  - **Dinheiro:** aceita NBSP e espaço fino; recusa zero à frente no agrupamento (`0.500`).
+- **Notas para a próxima etapa (E04 em diante):**
+  - Os campos de documento e telefone devolvem o texto formatado (`529.982.247-25`); o `parse` aceita com ou sem pontuação.
+  - A `DataTable` carrega a primeira página sozinha; a feature chama `reload()` ao trocar filtro do servidor, no `412` e no `reset` do SSE. `TableState` não captura exceção da `pagerFactory` (a fábrica não deve lançar).
+  - Tema: só os papéis principais do Material 3 foram definidos; preencher os demais (containers, tertiary) antes de usar componentes tonais. Toasts de erro são curtos (`Short`); considerar `Long` para erro.
+  - **Menores estacionados:** a tecla Delete antes de um separador não avança o cursor nos campos com máscara; o `ParsedTextField` escreve estado durante a composição (uma recomposição a mais).
 
 ---
 
-## E04 — Login, casca do app e aprovação de superior — #pendente
+## E04 — Login, casca do app e aprovação de superior — #concluida
 
 **Objetivo:** o usuário informa o servidor, testa a conexão, faz login (trocando a senha se o servidor exigir) e entra num app com menu lateral filtrado pelas permissões. No topo aparecem o nome do hotel e a data operacional. Qualquer ação recusada com `APPROVAL_REQUIRED` abre o diálogo de aprovação de superior e é repetida.
 
@@ -420,11 +462,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Login contra o ambiente `zeny-front` com o administrador e com um usuário Recepcionista do seed: os menus diferem conforme as permissões.
-- [ ] "Testar" com endereço inválido → mensagem em pt-BR, sem travar a tela.
-- [ ] O endereço salvo é reaproveitado na próxima abertura. Fechar e reabrir pede login de novo.
-- [ ] Teste do *state holder*: `PASSWORD_CHANGE_REQUIRED` leva à troca de senha, e a troca concluída leva à casca.
-- [ ] Teste do *state holder*: um `APPROVAL_REQUIRED` simulado abre o diálogo, e a aprovação repete a ação uma vez com a mesma chave.
+- [x] Login contra o ambiente `zeny-front` com o administrador e com um usuário Recepcionista do seed: os menus diferem conforme as permissões. (Sem o seed da E05, o Recepcionista foi criado pela API; ver o handoff.)
+- [x] "Testar" com endereço inválido → mensagem em pt-BR, sem travar a tela.
+- [x] O endereço salvo é reaproveitado na próxima abertura. Fechar e reabrir pede login de novo.
+- [x] Teste do *state holder*: `PASSWORD_CHANGE_REQUIRED` leva à troca de senha, e a troca concluída leva à casca.
+- [x] Teste do *state holder*: um `APPROVAL_REQUIRED` simulado abre o diálogo, e a aprovação repete a ação uma vez com a mesma chave. (Substituído pela D2: a repetição aprovada usa uma chave **nova**.)
 
 **Validação obrigatória:**
 
@@ -443,12 +485,45 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-12):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-11-m1-fundacao-e04.md`](../superpowers/plans/2026-11-11-m1-fundacao-e04.md), com 9 tarefas, todas de risco alto. A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: `MockEngine` no `app` contra a ADR 0008; 11 Importantes), bloqueou na rodada 1 (mover o catálogo quebrava um teste de ataque; risco da Task 6) e aprovou com notas na rodada 2.
+- **Commits:** `22312a9..3ed3141` na branch `roadmap/m1-fundacao` (40 commits, cada um com o trailer `Soul:`; o `daafb64` do testador saiu sem trailer legível e foi corrigido por amend para `9453576`, só a mensagem). Tarefas em série na branch da etapa.
+- **Revisão final:** "Ready to merge: With fixes" (1 Importante: um logout lento no servidor, terminando depois de um novo login no mesmo endereço, apagava os tokens da sessão nova). A onda única de correção resolveu o Importante e 4 Menores; o testador da onda achou um defeito introduzido por ela (o corte do motivo da aprovação partia um par substituto), corrigido numa extensão da onda por ruling. A re-revisão aprovou ("Ready to merge: Yes").
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova (só `kotlinx-coroutines-test` declarado no `app`, já travado).
+  - Verificação mecânica `--base 6eba700`: "OK: nenhum apontamento". Nas tarefas, os apontamentos (troca da âncora provisória "Sessão iniciada." e remoção do `assertNearToday`) foram justificados pela revisora.
+  - Gate em `3ed3141`: `./gradlew build` BUILD SUCCESSFUL (493 testes no `core`, 226 no `design`, 278 no `app` com 12 pulados — as verificações ao vivo sem `ZENY_LIVE_URL` —, 1 no `demo-seed`; 0 falhas); `bash tests/run.sh` 26 arquivos e 0 falhas.
+- **Critérios verificados:**
+  - **Menus diferem (administrador × Recepcionista) contra o `zeny-front`:** `LiveServerCheck.adminAndReceptionistSeeTheirOwnShell` e `LiveServerAtaqueCheck.receptionistHasExactlyItsAreasAndNoManagement`, verdes com `--rerun` (2/2 e 10/10). Capturas em `app/build/live/shell-admin.png` (6 áreas) e `shell-receptionist.png` (Recepção, Reservas, Contas e caixa, Hóspedes, Governança; sem Gestão), com `devMode`; topo "Hotel ainda não configurado", "Data operacional: 12/11/2026", usuário e "Sair". Sem o seed da E05, valeu o administrador inicial e um Recepcionista criado por `curl` (modelo de role RECEPTIONIST).
+  - **"Testar" com endereço inválido:** `LoginState` (mensagem pt-BR, tela livre, sonda antiga descartada) e, ao vivo, `127.0.0.1:1` em menos de 11 s, outra aplicação ("não é um servidor do Zeny"), página HTML sem vazar o corpo e servidor mudo (10,03 s).
+  - **Endereço reaproveitado; reabrir pede login:** `serverUrl` e `lastLogin` gravados só depois do login aceito; tokens só em memória (`AppControllerAtaqueTest`, reabertura com `PreferencesSettings` isolado).
+  - **`PASSWORD_CHANGE_REQUIRED` → troca → casca:** `AppControllerTest`, `AppRootTest.followsTheControllerFromLoginToPasswordChangeAndOn`; ao vivo, o caminho de troca do administrador e do Recepcionista.
+  - **`APPROVAL_REQUIRED` → diálogo → repete uma vez:** `ApprovalCoordinatorTest.approvalRequiredOpensDialogAndRetriesOnceWithToken` e `AppRootApprovalTest.featureInsideTheShellRunsThroughTheLocalCoordinator`, com chave nova (D2).
+  - **Sessão encerrada volta ao login com aviso:** `AppRootAtaqueTest` (na casca e na troca de senha).
+- **Tabela área → permissão** (o servidor continua decidindo; a área aparece com qualquer uma das permissões):
+
+  | Área | Permissões |
+  |---|---|
+  | Recepção | `frontdesk.stays.checkin`, `frontdesk.stays.checkout` |
+  | Reservas | `reservations.reservations.read` |
+  | Contas e caixa | `billing.folios.read`, `billing.cashier.operate` |
+  | Hóspedes | `guests.profiles.read` |
+  | Governança | `rooms.status.read` |
+  | Gestão | `iam.users.manage`, `iam.roles.manage`, `hotel.settings.manage`, `rates.plans.manage` |
+
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Recepção:** `frontdesk.traces.read` **não** abre Recepção (os modelos de Governanta e Manutenção também a têm). Pelos modelos reais do servidor, o Gerente chega a Gestão só por `rates.plans.manage`, `hotel.settings.manage` é só do Administrador e Manutenção não vê nenhuma área.
+  - **Áreas sem tela:** não aparecem na build normal (`IMPLEMENTED_AREAS` está vazio, então até a E06 o menu fica vazio fora do modo de desenvolvimento). Com `ZENY_DEV_SHELL=1` ou `-Dzeny.devShell=true`, a casca mostra as áreas mapeadas com "(em breve)". O catálogo continua em `ZENY_DEV=1`, sem servidor.
+  - **Aprovação exposta às features** por `LocalApprovalCoordinator` (um `CompositionLocal` do `app`, provido pelo `AppRoot`, um coordenador por sessão). Alternativa: parâmetro explícito, a decidir quando a E05/E06 planejar as features. Login do aprovador é obrigatório; "Cancelar" é ignorado com a aprovação em voo; a repetição aprovada pertence à feature e não é cancelada pelo fim da sessão (falha com `SessionEnded`).
+  - **`ServerProbe` fora do `ZenyCore`** (alternativa descartada: criar e fechar um `ZenyCore` só para testar o endereço); `serverUrl` salvo só depois do login aceito; endereço com caminho é recusado ("Informe só o endereço e a porta").
+  - **Sessão:** o `app` fala com o servidor por uma porta (`ServerConnection`) com adaptador fino sobre o `ZenyCore`; os testes do `app` usam um falso. Logout é melhor esforço com limite de 3 s (também ao fechar a janela, o que pode congelar a janela até 3 s com o servidor fora do ar). O logout do `SessionManager` só limpa a sessão que saiu.
+  - **Hotel e data:** a data operacional nunca depende de `getHotel` (403 para a Governanta); hotel configurado sem nome fantasia mostra "Hotel"; data de negócio ilegível vira `IncompatibleResponse`.
+  - **Melhor esforço nas preferências:** falha ao gravar `lastLogin` ou `deviceId` não derruba o login; o logger `java.util.prefs` fica em `WARNING` para o primeiro `java -jar` não escrever no stderr.
+- **Notas para a próxima etapa (E05 em diante):**
+  - **Ambiente `zeny-front`:** a senha do administrador foi trocada e existe o usuário `recepcao.live` (Recepcionista). As senhas estão só num arquivo 600 do scratchpad da sessão que executou a E04, que é temporário; a E05 deve redefinir as credenciais ou recriar o ambiente com `tools/server-env/down.sh -v` (apaga os dados). A imagem do servidor fixado já está construída.
+  - **Verificação ao vivo:** `set -a; . <arquivo com ZENY_LIVE_URL, ZENY_LIVE_ADMIN_LOGIN, ZENY_LIVE_ADMIN_PASSWORD, ZENY_LIVE_ADMIN_NEW_PASSWORD, ZENY_LIVE_RECEPTIONIST_*>; set +a` e `./gradlew :app:test --tests 'com.zeny.desktop.app.Live*' --rerun`. Com a URL definida e credenciais faltando, falha (não pula). A lista exata do Recepcionista depende do modelo de role do servidor fixado; `LiveServerCheck` afirma `none { implemented }`, que quebra quando a primeira área ganhar tela (E06).
+  - **Features:** pegam o coordenador com `LocalApprovalCoordinator.current.run(action)`; o `AppRoot` tem um slot interno `insideShell`, só para testes, a trocar pelo conteúdo real das áreas na E06.
+  - **Menores estacionados:** login contra servidor que aceita a conexão e não responde espera até 30 s (o timeout de request do `core`), não ~10 s como o "Testar"; o diálogo de aprovação não descreve a ação aprovada (a feature deveria passar uma descrição); Enter não envia os formulários; "Sair" da troca de senha fica habilitado com a troca em voo; `LoginState.toString` mostra o endereço (sem credencial, porque `ServerUrl` recusa userinfo); o `ShellState` nasce em `remember` fora do `DisposableEffect`; o topo fica sem título enquanto o nome do hotel não chega; resíduo raro da corrida de logout (um login no instante entre a captura da sessão e o POST de logout faz a sessão nova terminar em `Ended` com aviso); o limite de 500 do motivo conta unidades UTF-16.
+  - **Arquiteto:** alinhar à D2 a linha "reaproveitada … após aprovação" das "Restrições e invariantes" deste roadmap e o design §6.2 e §6.5.
 
 ---
 
@@ -631,3 +706,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-11 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (JAR no Windows e decisões da fronteira `core`/`sdk` e da `Idempotency-Key`). H1 e H2 confirmadas; H3 confirmada no Linux.
+- 2026-11-11 — E01 `#concluida` (`claude --agent orquestrador`): o usuário conferiu o JAR no Windows; H3 confirmada. Pré-voo do lote: aditivo (código 11).
+- 2026-11-11 — E02 `#concluida` (`claude --agent orquestrador`): núcleo HTTP e sessão no `core`, revisão final limpa após a onda única de correção.
+- 2026-11-11 — E03 `#concluida` (`claude --agent orquestrador`): design system no `design` e catálogo no `app`, revisão final limpa após a onda de correção.
+- 2026-11-12 — E04 `#concluida` (`claude --agent orquestrador`): login, troca de senha, casca com menu por permissão e diálogo de aprovação, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. Lote de 4 etapas encerrado.

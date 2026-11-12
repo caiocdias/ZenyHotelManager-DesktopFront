@@ -90,9 +90,45 @@ assert_contains "$detekt_yml" 'ignoreAnnotated' "detekt.yml dispensa @Composable
 for pkg in 'com.zeny.desktop.sdk.client' 'com.zeny.desktop.sdk.util'; do
   assert_contains "$detekt_yml" "$pkg" "ForbiddenImport barra $pkg"
 done
+# Cliente HTTP só pelo core (ADR 0008, decisão D1): o detekt barra o pacote e seus subpacotes.
+for pkg in 'io.ktor.client.*' 'de.quati.ogen.client.*'; do
+  assert_contains "$detekt_yml" "value: '$pkg'" "ForbiddenImport barra $pkg (cliente HTTP só pelo core)"
+done
 # O ForbiddenImport só olha `import`: nada de nome totalmente qualificado do sdk de operações em app/design.
-proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
-assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client nem .util"
+proibidos="$(cd "$ROOT" && grep -rnE 'com\.zeny\.desktop\.sdk\.(client|util)|io\.ktor\.client|de\.quati\.ogen\.client' $(ls -d app/src design/src 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$proibidos" "app e design não citam com.zeny.desktop.sdk.client, .util, io.ktor.client nem de.quati.ogen.client"
+
+# Task 10 da E02: o acesso cru às operações do sdk (`@RawSdkAccess`, ADR 0008) é só do core e do demo-seed.
+# app e design não citam a anotação, nem por @OptIn, nem por optIn/-opt-in no build.gradle.kts.
+raw_usos="$(cd "$ROOT" && grep -rnE 'RawSdkAccess' /dev/null $(ls -d app/src design/src app/build.gradle.kts design/build.gradle.kts 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$raw_usos" "app e design não citam RawSdkAccess (nem @OptIn, nem optIn/-opt-in no build)"
+raw_kt="$ROOT/core/src/main/kotlin/com/zeny/desktop/core/RawSdkAccess.kt"
+assert_file "$raw_kt" "o core declara a anotação RawSdkAccess"
+raw_ativo="$(sed -E 's@^\s*//.*$@@' "$raw_kt" 2>/dev/null)"
+assert_contains "$raw_ativo" 'annotation class RawSdkAccess' "RawSdkAccess é uma annotation class"
+assert_contains "$raw_ativo" '@RequiresOptIn' "RawSdkAccess é @RequiresOptIn"
+assert_contains "$raw_ativo" 'RequiresOptIn.Level.ERROR' "RawSdkAccess exige opt-in no nível ERROR (não WARNING)"
+# O opt-in também cai sem citar RawSdkAccess: `@Suppress("OPT_IN_USAGE_ERROR")` compila `core.apis.iam` (Kotlin
+# 2.4, sem aviso), e um opt-in na raiz (subprojects/allprojects) alcança app e design.
+supressao_optin="$(cd "$ROOT" && grep -rnE 'OPT_IN_USAGE' /dev/null $(ls -d app/src design/src app/build.gradle.kts design/build.gradle.kts 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$supressao_optin" "app e design não suprimem o erro de opt-in (OPT_IN_USAGE_ERROR)"
+raw_raiz="$(cd "$ROOT" && grep -rnE 'RawSdkAccess' /dev/null $(ls -d build.gradle.kts settings.gradle.kts gradle.properties buildSrc build-logic 2>/dev/null) 2>/dev/null)"
+assert_eq "" "$raw_raiz" "a raiz do build não faz opt-in de RawSdkAccess para os subprojetos"
+# Revisão final da E02: fonte Java em app ou design contornaria a cerca, porque o javac ignora `@RequiresOptIn`
+# (RawSdkAccess) e enxerga `internal` do core como público. app e design são só Kotlin, versionado ou não.
+java_em() {
+  local raiz="$1" dirs=() d
+  for d in app/src design/src; do [[ -d "$raiz/$d" ]] && dirs+=("$d"); done
+  ((${#dirs[@]} > 0)) || return 0
+  (cd "$raiz" && find "${dirs[@]}" -type f -iname '*.java' | sort)
+}
+assert_eq "" "$(java_em "$ROOT")" "nenhum *.java sob app/src e design/src (Java ignora @RequiresOptIn e internal)"
+sonda_java="$(mktemp -d)"
+mkdir -p "$sonda_java/app/src/main/java/com/zeny" "$sonda_java/design/src/main/kotlin"
+printf 'class F {}\n' >"$sonda_java/app/src/main/java/com/zeny/F.java"
+printf 'class G {}\n' >"$sonda_java/design/src/main/kotlin/G.JAVA"
+assert_eq $'app/src/main/java/com/zeny/F.java\ndesign/src/main/kotlin/G.JAVA' "$(java_em "$sonda_java")" "a varredura de *.java acha fonte Java em app/src e em design/src (extensão em qualquer caixa)"
+rm -rf "$sonda_java"
 
 # Task 10: travamento estrito. Cada módulo tem gradle.lockfile (a raiz não tem configuração resolvível, e o
 # Gradle não grava lockfile vazio); o classpath dos plugins e o das settings também têm o seu.

@@ -20,3 +20,12 @@ style:
         reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'
       - value: 'com.zeny.desktop.sdk.util.model.*'
         reason: 'Operações e serializadores do sdk só pelo core (ADR 0008).'
+      - value: 'io.ktor.client.*'
+        reason: 'Cliente HTTP só pelo core (ADR 0008, decisão D1).'
+      - value: 'de.quati.ogen.client.*'
+        reason: 'Cliente HTTP só pelo core (ADR 0008, decisão D1).'
+  ForbiddenSuppress:
+    active: true
+    # ADR 0008: suprimir o erro de opt-in contornaria o @RawSdkAccess sem citar o nome dele.
+    includes: ['**/app/src/**', '**/design/src/**']
+    rules: ['OPT_IN_USAGE_ERROR', 'OPT_IN_IS_NOT_ENABLED']
