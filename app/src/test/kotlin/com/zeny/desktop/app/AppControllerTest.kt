@@ -26,6 +26,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AppControllerTest {
@@ -292,6 +293,20 @@ class AppControllerTest {
             assertEquals(Screen.Login, f.controller.screen.value)
             assertNull(f.controller.notice)
             assertTrue("logout" in f.created.single().calls)
+        }
+
+    @Test
+    fun logoutDoesNotHangWhenTheServerIsDown() =
+        runTest(timeout = 5.seconds) {
+            val f = Fixture(RecordingSettings(), backgroundScope) { it.logoutHangs = true }
+            f.controller.login(serverA, "ana", "segredo")
+            runCurrent()
+
+            f.controller.logout()
+
+            assertEquals(Screen.Login, f.controller.screen.value)
+            assertTrue("logout" in f.created.single().calls)
+            assertSame(f.created.single(), f.controller.connection)
         }
 
     @Test

@@ -115,7 +115,10 @@ class AppController(
         return if (changeRequired) LoginOutcome.PasswordChangeRequired else LoginOutcome.Success
     }
 
-    /** Volta ao login já, sem esperar o servidor; a conexão fica para o próximo login no mesmo endereço. */
+    /**
+     * Volta ao login já, sem esperar o servidor; a conexão fica para o próximo login no mesmo endereço. O aviso ao
+     * servidor é melhor esforço e dura no máximo `logoutTimeout`.
+     */
     suspend fun logout() {
         notice = null
         currentScreen.value = Screen.Login
@@ -123,7 +126,7 @@ class AppController(
         // Sem observar no meio do logout: um `Active` ainda não lido não pode devolver a casca.
         watcher?.cancel()
         try {
-            conn.logout()
+            withTimeoutOrNull(logoutTimeout) { conn.logout() }
         } finally {
             if (conn === connection) watch(conn)
         }

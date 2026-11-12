@@ -121,9 +121,11 @@ class SessionManager(
 
     /**
      * Avisa o servidor em melhor esforço (sem rede ou recusado, segue igual) e limpa a sessão local, mesmo se a
-     * corrotina for cancelada no meio do aviso.
+     * corrotina for cancelada no meio do aviso. Só limpa a sessão que estava aberta no início: se outro login
+     * abriu uma sessão nova enquanto o aviso voava, ela fica.
      */
     suspend fun logout() {
+        val sessionId = store.current()?.sessionId
         try {
             executor.execute { iam.logout(it.headers) }
         } catch (ignored: ApiError) {
@@ -131,8 +133,12 @@ class SessionManager(
         } finally {
             withContext(NonCancellable) {
                 synchronized(lock) {
-                    store.clear()
-                    _state.value = SessionState.LoggedOut
+                    // O login põe o par novo e o estado juntos, sob o mesmo lock: store vazio é sessão nenhuma.
+                    val current = store.current()
+                    if (current == null || current.sessionId == sessionId) {
+                        store.clear()
+                        _state.value = SessionState.LoggedOut
+                    }
                 }
             }
         }
