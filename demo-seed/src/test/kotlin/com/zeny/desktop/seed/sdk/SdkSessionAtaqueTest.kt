@@ -116,6 +116,7 @@ class SdkSessionAtaqueTest {
         runTest {
             val outcome = signInOutcome(HttpStatusCode.Unauthorized, """{"code":401,"detail":"x"}""")
             assertTrue(outcome.getOrNull() != SignIn.InvalidCredentials)
+            assertIs<ApiError>(outcome.exceptionOrNull())
         }
 
     @Test
