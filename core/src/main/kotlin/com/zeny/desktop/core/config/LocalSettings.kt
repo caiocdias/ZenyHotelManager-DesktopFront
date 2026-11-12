@@ -1,6 +1,7 @@
 package com.zeny.desktop.core.config
 
 import java.util.UUID
+import java.util.prefs.BackingStoreException
 import java.util.prefs.Preferences
 
 /** Preferências locais em disco: só o endereço do servidor, o último login e o id do dispositivo. Nunca tokens. */
@@ -26,7 +27,18 @@ class PreferencesSettings(
             val stored = node.get(KEY_DEVICE_ID, null)
             if (stored != null && isUuid(stored)) return stored
             val fresh = UUID.randomUUID().toString()
-            write(KEY_DEVICE_ID, fresh)
+            // Melhor esforço: sem gravar, o id gerado vale nesta chamada e o login não cai.
+            try {
+                write(KEY_DEVICE_ID, fresh)
+            } catch (
+                @Suppress("SwallowedException") e: BackingStoreException,
+            ) {
+                // Gera outro id na próxima leitura.
+            } catch (
+                @Suppress("SwallowedException") e: IllegalStateException,
+            ) {
+                // Nó removido.
+            }
             return fresh
         }
 
