@@ -37,4 +37,20 @@ class SeedReportTest {
         secrets.forEach { assertFalse(text.contains(it), "vazou: $it") }
         assertTrue(text.lines().all { Regex("[^\\d]+: \\d+ criados, \\d+ já existiam").matches(it) })
     }
+
+    @Test
+    fun toStringIsDeterministicLabelsAndCountsOnly() {
+        val report = SeedReport()
+        assertEquals("SeedReport()", report.toString())
+        report.created(SeedItem.GUEST)
+        report.created(SeedItem.GUEST)
+        report.kept(SeedItem.RESERVATION)
+        val text = report.toString()
+        assertEquals(
+            "SeedReport(hóspedes: 2 criados, 0 já existiam; reservas: 0 criados, 1 já existiam)",
+            text,
+        )
+        assertEquals(setOf('2', '0', '1'), text.filter { it.isDigit() }.toSet())
+        assertEquals(text, report.toString())
+    }
 }

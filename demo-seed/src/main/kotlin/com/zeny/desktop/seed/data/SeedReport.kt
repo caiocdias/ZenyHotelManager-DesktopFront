@@ -42,4 +42,7 @@ class SeedReport {
         SeedItem.entries
             .filter { createdCount(it) + keptCount(it) > 0 }
             .map { "${it.label}: ${createdCount(it)} criados, ${keptCount(it)} já existiam" }
+
+    /** Só rótulos e contagens; nunca o hash de identidade do objeto. */
+    override fun toString(): String = "SeedReport(" + lines().joinToString("; ") + ")"
 }
