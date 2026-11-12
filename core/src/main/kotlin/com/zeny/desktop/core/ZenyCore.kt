@@ -2,6 +2,9 @@ package com.zeny.desktop.core
 
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
+import com.zeny.desktop.core.facade.AccountFacade
+import com.zeny.desktop.core.facade.ApprovalFacade
+import com.zeny.desktop.core.facade.HotelFacade
 import com.zeny.desktop.core.http.ApiExecutor
 import com.zeny.desktop.core.http.createCoreHttpClient
 import com.zeny.desktop.core.http.ogenBase
@@ -43,14 +46,18 @@ class ZenyCore(
 
     /** O `AuthPlugin` pede o `Authenticator` a cada requisição, então o cliente nasce antes dele. */
     private val http: HttpClient = createCoreHttpClient(engine) { install(AuthPlugin) { authenticator = { auth } } }
-    private val sdkApis = Apis(ogenBase(http, serverUrl.value))
-    private val sdkExecutor = ApiExecutor()
+    internal val sdkApis = Apis(ogenBase(http, serverUrl.value))
+    internal val sdkExecutor = ApiExecutor()
     private val auth: Authenticator =
         Authenticator(store, IamTokenRefresher(sdkApis.iam, sdkExecutor), scope) { code, sessionId ->
             session.sessionEnded(code, sessionId)
         }
 
     val session: SessionManager = SessionManager(sdkApis.iam, sdkExecutor, store, auth, settings)
+
+    val account: AccountFacade = AccountFacade(sdkApis.iam, sdkExecutor)
+    val hotel: HotelFacade = HotelFacade(sdkApis.hotel, sdkExecutor)
+    val approvals: ApprovalFacade = ApprovalFacade(sdkApis.iam, sdkExecutor)
 
     /** Executa as operações cruas; as features usam as fachadas do `core` (ADR 0008). */
     @RawSdkAccess
