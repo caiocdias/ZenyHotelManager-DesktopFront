@@ -429,12 +429,13 @@ class SdkConfigGatewayAtaqueTest {
         }
 
     @Test
-    fun unknownHousekeepingStatusPassesRawInsteadOfBreakingTheListing() =
+    fun unknownHousekeepingStatusIsAnIncompatibleResponse() =
         runTest {
-            // RoomState.housekeeping é "o valor cru (DIRTY, CLEAN, INSPECTED ou outro)".
+            // O enum do contrato é fechado: valor fora dele é quebra do contrato pelo servidor.
             val gateway =
                 gateway { json("""{"items":[${room(ID_A, "101", housekeeping = "QUARANTINE")}]}""") }
-            assertEquals("QUARANTINE", gateway.rooms().getValue("101").housekeeping)
+            val error = assertFailsWith<ApiError.IncompatibleResponse> { gateway.rooms() }
+            assertTrue(allMessages(error).none { "QUARANTINE" in it }, "corpo da resposta vazou na mensagem")
         }
 
     // ---------- corpos enviados ----------
