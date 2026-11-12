@@ -2,6 +2,7 @@ package com.zeny.desktop.seed.sdk
 
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.seed.cli.Secret
 import com.zeny.desktop.seed.people.SignIn
 import io.ktor.client.engine.mock.MockEngine
@@ -14,7 +15,6 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -26,7 +26,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
-import kotlin.test.assertTrue
 
 private val SERVER = checkNotNull(ServerUrl.parse("http://servidor.teste"))
 private const val PASSWORD = "Senha-Secreta-123"
@@ -117,20 +116,19 @@ class SdkSessionTest {
         }
 
     @Test
-    fun signOutBoundedAndSilent() {
-        val session =
-            factory { request ->
-                if (request.url.encodedPath.endsWith("/logout")) awaitCancellation() else json(tokens(false))
-            }.open()
-        val started = System.nanoTime()
-        runBlocking {
+    fun signOutBoundedAndSilent() =
+        runTest {
+            val session =
+                factory { request ->
+                    if (request.url.encodedPath.endsWith("/logout")) awaitCancellation() else json(tokens(false))
+                }.open()
             session.signIn("a", Secret("x"))
+            val before = testScheduler.currentTime
             session.signOut()
+            assertEquals(3_000L, testScheduler.currentTime - before)
+            assertEquals(SessionState.LoggedOut, session.seed.core.session.state.value)
+            session.close()
         }
-        val elapsedMillis = (System.nanoTime() - started) / 1_000_000
-        session.close()
-        assertTrue(elapsedMillis < 4_500, "signOut demorou ${elapsedMillis}ms")
-    }
 
     @Test
     fun signOutWithoutSignInIsHarmless() =
