@@ -181,7 +181,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Esqueleto Gradle, SDK gerado e JAR multiplataforma | #concluida | — | Módulos, gerador escolhido, janela que abre, comandos oficiais, JAR Linux + Windows |
 | E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
-| E04 | Login, casca do app e aprovação de superior | #em-andamento | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
+| E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
@@ -436,7 +436,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E04 — Login, casca do app e aprovação de superior — #em-andamento
+## E04 — Login, casca do app e aprovação de superior — #concluida
 
 **Objetivo:** o usuário informa o servidor, testa a conexão, faz login (trocando a senha se o servidor exigir) e entra num app com menu lateral filtrado pelas permissões. No topo aparecem o nome do hotel e a data operacional. Qualquer ação recusada com `APPROVAL_REQUIRED` abre o diálogo de aprovação de superior e é repetida.
 
@@ -462,11 +462,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Login contra o ambiente `zeny-front` com o administrador e com um usuário Recepcionista do seed: os menus diferem conforme as permissões.
-- [ ] "Testar" com endereço inválido → mensagem em pt-BR, sem travar a tela.
-- [ ] O endereço salvo é reaproveitado na próxima abertura. Fechar e reabrir pede login de novo.
-- [ ] Teste do *state holder*: `PASSWORD_CHANGE_REQUIRED` leva à troca de senha, e a troca concluída leva à casca.
-- [ ] Teste do *state holder*: um `APPROVAL_REQUIRED` simulado abre o diálogo, e a aprovação repete a ação uma vez com a mesma chave.
+- [x] Login contra o ambiente `zeny-front` com o administrador e com um usuário Recepcionista do seed: os menus diferem conforme as permissões. (Sem o seed da E05, o Recepcionista foi criado pela API; ver o handoff.)
+- [x] "Testar" com endereço inválido → mensagem em pt-BR, sem travar a tela.
+- [x] O endereço salvo é reaproveitado na próxima abertura. Fechar e reabrir pede login de novo.
+- [x] Teste do *state holder*: `PASSWORD_CHANGE_REQUIRED` leva à troca de senha, e a troca concluída leva à casca.
+- [x] Teste do *state holder*: um `APPROVAL_REQUIRED` simulado abre o diálogo, e a aprovação repete a ação uma vez com a mesma chave. (Substituído pela D2: a repetição aprovada usa uma chave **nova**.)
 
 **Validação obrigatória:**
 
@@ -485,12 +485,45 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-12):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-11-m1-fundacao-e04.md`](../superpowers/plans/2026-11-11-m1-fundacao-e04.md), com 9 tarefas, todas de risco alto. A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: `MockEngine` no `app` contra a ADR 0008; 11 Importantes), bloqueou na rodada 1 (mover o catálogo quebrava um teste de ataque; risco da Task 6) e aprovou com notas na rodada 2.
+- **Commits:** `22312a9..3ed3141` na branch `roadmap/m1-fundacao` (40 commits, cada um com o trailer `Soul:`; o `daafb64` do testador saiu sem trailer legível e foi corrigido por amend para `9453576`, só a mensagem). Tarefas em série na branch da etapa.
+- **Revisão final:** "Ready to merge: With fixes" (1 Importante: um logout lento no servidor, terminando depois de um novo login no mesmo endereço, apagava os tokens da sessão nova). A onda única de correção resolveu o Importante e 4 Menores; o testador da onda achou um defeito introduzido por ela (o corte do motivo da aprovação partia um par substituto), corrigido numa extensão da onda por ruling. A re-revisão aprovou ("Ready to merge: Yes").
+  - Scanner `osv-scanner -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova (só `kotlinx-coroutines-test` declarado no `app`, já travado).
+  - Verificação mecânica `--base 6eba700`: "OK: nenhum apontamento". Nas tarefas, os apontamentos (troca da âncora provisória "Sessão iniciada." e remoção do `assertNearToday`) foram justificados pela revisora.
+  - Gate em `3ed3141`: `./gradlew build` BUILD SUCCESSFUL (493 testes no `core`, 226 no `design`, 278 no `app` com 12 pulados — as verificações ao vivo sem `ZENY_LIVE_URL` —, 1 no `demo-seed`; 0 falhas); `bash tests/run.sh` 26 arquivos e 0 falhas.
+- **Critérios verificados:**
+  - **Menus diferem (administrador × Recepcionista) contra o `zeny-front`:** `LiveServerCheck.adminAndReceptionistSeeTheirOwnShell` e `LiveServerAtaqueCheck.receptionistHasExactlyItsAreasAndNoManagement`, verdes com `--rerun` (2/2 e 10/10). Capturas em `app/build/live/shell-admin.png` (6 áreas) e `shell-receptionist.png` (Recepção, Reservas, Contas e caixa, Hóspedes, Governança; sem Gestão), com `devMode`; topo "Hotel ainda não configurado", "Data operacional: 12/11/2026", usuário e "Sair". Sem o seed da E05, valeu o administrador inicial e um Recepcionista criado por `curl` (modelo de role RECEPTIONIST).
+  - **"Testar" com endereço inválido:** `LoginState` (mensagem pt-BR, tela livre, sonda antiga descartada) e, ao vivo, `127.0.0.1:1` em menos de 11 s, outra aplicação ("não é um servidor do Zeny"), página HTML sem vazar o corpo e servidor mudo (10,03 s).
+  - **Endereço reaproveitado; reabrir pede login:** `serverUrl` e `lastLogin` gravados só depois do login aceito; tokens só em memória (`AppControllerAtaqueTest`, reabertura com `PreferencesSettings` isolado).
+  - **`PASSWORD_CHANGE_REQUIRED` → troca → casca:** `AppControllerTest`, `AppRootTest.followsTheControllerFromLoginToPasswordChangeAndOn`; ao vivo, o caminho de troca do administrador e do Recepcionista.
+  - **`APPROVAL_REQUIRED` → diálogo → repete uma vez:** `ApprovalCoordinatorTest.approvalRequiredOpensDialogAndRetriesOnceWithToken` e `AppRootApprovalTest.featureInsideTheShellRunsThroughTheLocalCoordinator`, com chave nova (D2).
+  - **Sessão encerrada volta ao login com aviso:** `AppRootAtaqueTest` (na casca e na troca de senha).
+- **Tabela área → permissão** (o servidor continua decidindo; a área aparece com qualquer uma das permissões):
+
+  | Área | Permissões |
+  |---|---|
+  | Recepção | `frontdesk.stays.checkin`, `frontdesk.stays.checkout` |
+  | Reservas | `reservations.reservations.read` |
+  | Contas e caixa | `billing.folios.read`, `billing.cashier.operate` |
+  | Hóspedes | `guests.profiles.read` |
+  | Governança | `rooms.status.read` |
+  | Gestão | `iam.users.manage`, `iam.roles.manage`, `hotel.settings.manage`, `rates.plans.manage` |
+
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Recepção:** `frontdesk.traces.read` **não** abre Recepção (os modelos de Governanta e Manutenção também a têm). Pelos modelos reais do servidor, o Gerente chega a Gestão só por `rates.plans.manage`, `hotel.settings.manage` é só do Administrador e Manutenção não vê nenhuma área.
+  - **Áreas sem tela:** não aparecem na build normal (`IMPLEMENTED_AREAS` está vazio, então até a E06 o menu fica vazio fora do modo de desenvolvimento). Com `ZENY_DEV_SHELL=1` ou `-Dzeny.devShell=true`, a casca mostra as áreas mapeadas com "(em breve)". O catálogo continua em `ZENY_DEV=1`, sem servidor.
+  - **Aprovação exposta às features** por `LocalApprovalCoordinator` (um `CompositionLocal` do `app`, provido pelo `AppRoot`, um coordenador por sessão). Alternativa: parâmetro explícito, a decidir quando a E05/E06 planejar as features. Login do aprovador é obrigatório; "Cancelar" é ignorado com a aprovação em voo; a repetição aprovada pertence à feature e não é cancelada pelo fim da sessão (falha com `SessionEnded`).
+  - **`ServerProbe` fora do `ZenyCore`** (alternativa descartada: criar e fechar um `ZenyCore` só para testar o endereço); `serverUrl` salvo só depois do login aceito; endereço com caminho é recusado ("Informe só o endereço e a porta").
+  - **Sessão:** o `app` fala com o servidor por uma porta (`ServerConnection`) com adaptador fino sobre o `ZenyCore`; os testes do `app` usam um falso. Logout é melhor esforço com limite de 3 s (também ao fechar a janela, o que pode congelar a janela até 3 s com o servidor fora do ar). O logout do `SessionManager` só limpa a sessão que saiu.
+  - **Hotel e data:** a data operacional nunca depende de `getHotel` (403 para a Governanta); hotel configurado sem nome fantasia mostra "Hotel"; data de negócio ilegível vira `IncompatibleResponse`.
+  - **Melhor esforço nas preferências:** falha ao gravar `lastLogin` ou `deviceId` não derruba o login; o logger `java.util.prefs` fica em `WARNING` para o primeiro `java -jar` não escrever no stderr.
+- **Notas para a próxima etapa (E05 em diante):**
+  - **Ambiente `zeny-front`:** a senha do administrador foi trocada e existe o usuário `recepcao.live` (Recepcionista). As senhas estão só num arquivo 600 do scratchpad da sessão que executou a E04, que é temporário; a E05 deve redefinir as credenciais ou recriar o ambiente com `tools/server-env/down.sh -v` (apaga os dados). A imagem do servidor fixado já está construída.
+  - **Verificação ao vivo:** `set -a; . <arquivo com ZENY_LIVE_URL, ZENY_LIVE_ADMIN_LOGIN, ZENY_LIVE_ADMIN_PASSWORD, ZENY_LIVE_ADMIN_NEW_PASSWORD, ZENY_LIVE_RECEPTIONIST_*>; set +a` e `./gradlew :app:test --tests 'com.zeny.desktop.app.Live*' --rerun`. Com a URL definida e credenciais faltando, falha (não pula). A lista exata do Recepcionista depende do modelo de role do servidor fixado; `LiveServerCheck` afirma `none { implemented }`, que quebra quando a primeira área ganhar tela (E06).
+  - **Features:** pegam o coordenador com `LocalApprovalCoordinator.current.run(action)`; o `AppRoot` tem um slot interno `insideShell`, só para testes, a trocar pelo conteúdo real das áreas na E06.
+  - **Menores estacionados:** login contra servidor que aceita a conexão e não responde espera até 30 s (o timeout de request do `core`), não ~10 s como o "Testar"; o diálogo de aprovação não descreve a ação aprovada (a feature deveria passar uma descrição); Enter não envia os formulários; "Sair" da troca de senha fica habilitado com a troca em voo; `LoginState.toString` mostra o endereço (sem credencial, porque `ServerUrl` recusa userinfo); o `ShellState` nasce em `remember` fora do `DisposableEffect`; o topo fica sem título enquanto o nome do hotel não chega; resíduo raro da corrida de logout (um login no instante entre a captura da sessão e o POST de logout faz a sessão nova terminar em `Ended` com aviso); o limite de 500 do motivo conta unidades UTF-16.
+  - **Arquiteto:** alinhar à D2 a linha "reaproveitada … após aprovação" das "Restrições e invariantes" deste roadmap e o design §6.2 e §6.5.
 
 ---
 
@@ -676,3 +709,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-11 — E01 `#concluida` (`claude --agent orquestrador`): o usuário conferiu o JAR no Windows; H3 confirmada. Pré-voo do lote: aditivo (código 11).
 - 2026-11-11 — E02 `#concluida` (`claude --agent orquestrador`): núcleo HTTP e sessão no `core`, revisão final limpa após a onda única de correção.
 - 2026-11-11 — E03 `#concluida` (`claude --agent orquestrador`): design system no `design` e catálogo no `app`, revisão final limpa após a onda de correção.
+- 2026-11-12 — E04 `#concluida` (`claude --agent orquestrador`): login, troca de senha, casca com menu por permissão e diálogo de aprovação, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. Lote de 4 etapas encerrado.
