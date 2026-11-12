@@ -102,13 +102,31 @@ class AppRootAtaqueTest {
         override fun close() = Unit
     }
 
+    private var controller: AppController? = null
+
+    /** Na casca: o controlador diz `Shell` e "Sair" está na tela (vale para o marcador provisório e a casca real). */
+    private fun ComposeUiTest.assertOnShell() {
+        assertEquals(Screen.Shell, controller?.screen?.value)
+        onNodeWithText("Sair").assertExists()
+        onNodeWithTag("login-user").assertDoesNotExist()
+        onNodeWithTag("password-current").assertDoesNotExist()
+    }
+
     private fun ComposeUiTest.root(
         fake: Fake,
         settings: MemorySettings = MemorySettings(),
     ) {
         setContent {
             val scope = rememberCoroutineScope()
-            val controller = remember { AppController(settings, { fake }, { ProbeResult.Ok("1.0") }, scope) }
+            val controller =
+                remember {
+                    AppController(
+                        settings,
+                        { fake },
+                        { ProbeResult.Ok("1.0") },
+                        scope,
+                    )
+                }.also { controller = it }
             ZenyTheme { AppRoot(controller, devMode = false) }
         }
     }
@@ -164,7 +182,7 @@ class AppRootAtaqueTest {
             gate.complete(Unit)
             waitForIdle()
             assertEquals(1, fake.logins.size)
-            onNodeWithText("Sessão iniciada.").assertExists()
+            assertOnShell()
         }
 
     @Test
@@ -178,7 +196,7 @@ class AppRootAtaqueTest {
 
             onNodeWithTag("login-message").assertExists()
             onNodeWithText("Entrar").assertIsEnabled()
-            onNodeWithText("Sessão iniciada.").assertDoesNotExist()
+            assertEquals(Screen.Login, controller?.screen?.value)
             onNodeWithTag("login-user").assertTextContains("ana")
         }
 
@@ -205,7 +223,7 @@ class AppRootAtaqueTest {
             onNodeWithText("Entrar").performClick()
             waitForIdle()
 
-            onNodeWithText("Sessão iniciada.").assertExists()
+            assertOnShell()
             onNodeWithTag("password-current").assertDoesNotExist()
             assertEquals("ana", settings.lastLogin)
 
@@ -226,18 +244,18 @@ class AppRootAtaqueTest {
             typeCredentials()
             onNodeWithText("Entrar").performClick()
             waitForIdle()
-            onNodeWithText("Sessão iniciada.").assertExists()
+            assertOnShell()
 
             fake.state.value = SessionState.Ended("expirou")
             waitForIdle()
 
             onNodeWithTag("login-notice").assertTextContains(ENDED_NOTICE)
-            onNodeWithText("Sessão iniciada.").assertDoesNotExist()
+            assertEquals(Screen.Login, controller?.screen?.value)
 
             typeCredentials(login = "", password = NEW_SECRET)
             onNodeWithText("Entrar").performClick()
             waitForIdle()
-            onNodeWithText("Sessão iniciada.").assertExists()
+            assertOnShell()
             onNodeWithTag("login-notice").assertDoesNotExist()
         }
 
@@ -281,7 +299,7 @@ class AppRootAtaqueTest {
             waitForIdle()
 
             assertEquals(2, fake.changes.size)
-            onNodeWithText("Sessão iniciada.").assertExists()
+            assertOnShell()
         }
 
     @Test
