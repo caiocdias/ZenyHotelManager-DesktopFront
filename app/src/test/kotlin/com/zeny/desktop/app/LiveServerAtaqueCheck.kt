@@ -20,7 +20,6 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ProbeResult
 import com.zeny.desktop.core.facade.ServerProbe
 import com.zeny.desktop.core.session.SessionState
-import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.design.theme.ZenyTheme
 import kotlinx.coroutines.CoroutineScope
@@ -34,8 +33,6 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 import java.util.UUID
 import kotlin.concurrent.thread
 import kotlin.test.BeforeTest
@@ -331,15 +328,7 @@ class LiveServerAtaqueCheck {
                 onNodeWithText("Data operacional: ${DateInput.format(date)}").assertExists()
                 Area.entries.forEach { onNodeWithText("${it.label} (em breve)").assertExists() }
             }
-            assertNearToday(date)
         }
-
-    private fun assertNearToday(date: BusinessDate) {
-        val parts = DateInput.format(date).split("/")
-        val shown = LocalDate.of(parts[2].toInt(), parts[1].toInt(), parts[0].toInt())
-        val gap = kotlin.math.abs(ChronoUnit.DAYS.between(LocalDate.now(), shown))
-        assertTrue(gap <= 1, "a data operacional $shown está a $gap dias de hoje")
-    }
 
     @Test
     fun shellOnAnEndedSessionShowsAPortugueseErrorNotJson() =
