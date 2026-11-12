@@ -100,6 +100,16 @@ class FacadesTest {
         }
 
     @Test
+    fun blankTradeNameBecomesNull() =
+        runTest {
+            for (name in listOf("", "   ")) {
+                core { json(hotelBody(true, ""","tradeName":"$name"""")) }.use {
+                    assertEquals(HotelInfo(null, true), it.hotel.hotel())
+                }
+            }
+        }
+
+    @Test
     fun businessDateWithoutZoneConversion() =
         runTest {
             core { json("""{"businessDate":"2026-03-01","timezone":"Pacific/Kiritimati"}""") }.use { core ->

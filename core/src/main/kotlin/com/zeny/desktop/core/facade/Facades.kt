@@ -1,6 +1,8 @@
 package com.zeny.desktop.core.facade
 
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.ApiExecutor
+import com.zeny.desktop.core.http.ResponseFormatException
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.client.HotelApi
 import com.zeny.desktop.sdk.client.IamApi
@@ -42,9 +44,16 @@ class HotelFacade internal constructor(
 ) {
     suspend fun hotel(): HotelInfo {
         val response = executor.execute { hotel.getHotel(it.headers) }.value
-        return HotelInfo((response.tradeName as? Option.Some)?.value, response.configured)
+        return HotelInfo((response.tradeName as? Option.Some)?.value?.takeIf { it.isNotBlank() }, response.configured)
     }
 
-    suspend fun businessDate(): BusinessDate =
-        BusinessDate.parse(executor.execute { hotel.getBusinessDate(it.headers) }.value.businessDate)
+    /** Data ilegível é resposta incompatível; a causa leva só o tipo da falha, nunca o texto da data. */
+    suspend fun businessDate(): BusinessDate {
+        val text = executor.execute { hotel.getBusinessDate(it.headers) }.value.businessDate
+        return try {
+            BusinessDate.parse(text)
+        } catch (e: IllegalArgumentException) {
+            throw ApiError.IncompatibleResponse(ResponseFormatException(e))
+        }
+    }
 }
