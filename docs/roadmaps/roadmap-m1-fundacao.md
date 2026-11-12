@@ -182,7 +182,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
-| E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
+| E05 | Dados de demonstração e teste de fumaça | #em-andamento | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
@@ -527,7 +527,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Dados de demonstração e teste de fumaça — #pendente
+## E05 — Dados de demonstração e teste de fumaça — #em-andamento
 
 **Objetivo:** o `demo-seed` popula um servidor recém-criado pela API, de forma idempotente e em menos de 2 minutos, com um hotel crível. O `smokeTest` confere o SDK contra o servidor real.
 
