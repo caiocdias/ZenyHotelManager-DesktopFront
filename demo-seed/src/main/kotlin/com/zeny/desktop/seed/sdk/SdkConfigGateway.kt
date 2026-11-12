@@ -9,10 +9,17 @@ import com.zeny.desktop.sdk.model.AreaRequest
 import com.zeny.desktop.sdk.model.CancellationPolicyRequest
 import com.zeny.desktop.sdk.model.GuaranteePolicyRequest
 import com.zeny.desktop.sdk.model.HotelRequest
+import com.zeny.desktop.sdk.model.HousekeepingStatusRequest
+import com.zeny.desktop.sdk.model.HousekeepingStatusRequest.Transition
+import com.zeny.desktop.sdk.model.OpenOutOfOrderRequest
 import com.zeny.desktop.sdk.model.OutOfOrderOverlayResponse
+import com.zeny.desktop.sdk.model.PriceValuesRequest
+import com.zeny.desktop.sdk.model.RatePlanCreateRequest
+import com.zeny.desktop.sdk.model.RatePriceUpdateRequest
 import com.zeny.desktop.sdk.model.RoomRequest
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomTypeRequest
+import com.zeny.desktop.sdk.model.SeasonRequest
 import com.zeny.desktop.seed.config.ConfigGateway
 import com.zeny.desktop.seed.config.HousekeepingTransition
 import com.zeny.desktop.seed.config.RoomState
@@ -26,6 +33,7 @@ import com.zeny.desktop.seed.data.RoomTypeSpec
 import com.zeny.desktop.seed.data.SeasonSpec
 import de.quati.kotlin.util.Option
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.LocalDate
 import kotlin.uuid.Uuid
 
@@ -64,7 +72,7 @@ class SdkConfigGateway(
     }
 
     /**
-     * O `PUT` leva o `ETag` do `GET` no `If-Match`, que o contrato exige. Sem `ETag` na resposta, falha com
+     * O `PUT` leva o `ETag` do `GET` no `If-Match`, que o seed exige. Sem `ETag` na resposta, falha com
      * `ApiError.IncompatibleResponse` (mensagem pt-BR por `userMessage`) antes de enviar o `PUT`: o servidor não
      * cumpriu o contrato, e sobrescrever às cegas apagaria uma edição concorrente.
      */
@@ -201,30 +209,95 @@ class SdkConfigGateway(
             .toString()
     }
 
+    /**
+     * Lê o `ETag` do status da UH e o manda no `If-Match` (o servidor responde 428 sem ele e 412 se a versão
+     * mudou). Sem `ETag` na resposta, falha com `ApiError.IncompatibleResponse` antes do `POST`.
+     * `MARK_CLEAN_PENDING_INSPECTION` é `MARK_CLEAN` com `requiresInspection`; não há `Idempotency-Key`.
+     */
     override suspend fun changeHousekeeping(
         roomId: String,
         transition: HousekeepingTransition,
-    ): Unit = throw NotImplementedError("Task 8")
+    ) {
+        val id = Uuid.parse(roomId)
+        val etag =
+            executor.execute { roomsApi.getRoomStatus(id, it.headers) }.etag
+                ?: throw ApiError.IncompatibleResponse(IllegalStateException("GET do status da UH sem ETag"))
+        val requiresInspection = transition == HousekeepingTransition.MARK_CLEAN_PENDING_INSPECTION
+        val request =
+            HousekeepingStatusRequest(
+                requiresInspection = if (requiresInspection) Option.Some(true) else Option.Undefined,
+                transition = Transition.fromSerial(transition.contractName()),
+            )
+        executor.execute { roomsApi.changeRoomHousekeepingStatus(id, etag, request, it.headers) }
+    }
 
     override suspend fun openOutOfOrder(
         roomId: String,
         from: LocalDate,
         to: LocalDate,
-    ): Unit = throw NotImplementedError("Task 8")
+    ) {
+        val request =
+            OpenOutOfOrderRequest(
+                endsOn = to.toString(),
+                kind = OpenOutOfOrderRequest.Kind.OUT_OF_ORDER,
+                reason = OUT_OF_ORDER_REASON,
+                responsible = OUT_OF_ORDER_RESPONSIBLE,
+                startsOn = from.toString(),
+            )
+        executor.execute { roomsApi.openOutOfOrder(Uuid.parse(roomId), null, request, it.headers) }
+    }
 
-    override suspend fun seasonIds(): Map<String, String> = throw NotImplementedError("Task 8")
+    override suspend fun seasonIds(): Map<String, String> =
+        readAll { cursor, limit ->
+            val page = executor.execute { rates.listSeasons(null, cursor, limit, it.headers) }.value
+            Page(page.items, (page.nextCursor as? Option.Some)?.value)
+        }.associate { it.name to it.id.toString() }
 
-    override suspend fun createSeason(spec: SeasonSpec): String = throw NotImplementedError("Task 8")
+    override suspend fun createSeason(spec: SeasonSpec): String {
+        val request =
+            SeasonRequest(endsOn = spec.endsOn.toString(), name = spec.name, startsOn = spec.startsOn.toString())
+        return executor
+            .execute { rates.createSeason(request, it.headers) }
+            .value.id
+            .toString()
+    }
 
-    override suspend fun ratePlanId(code: String): String? = throw NotImplementedError("Task 8")
+    override suspend fun ratePlanId(code: String): String? =
+        readAll { cursor, limit ->
+            val page = executor.execute { rates.listRatePlans(null, null, null, null, cursor, limit, it.headers) }.value
+            Page(page.items, (page.nextCursor as? Option.Some)?.value)
+        }.firstOrNull { it.code.equals(code, ignoreCase = true) }?.id?.toString()
 
     override suspend fun createRatePlan(
         spec: RatePlanSpec,
         roomTypeIds: List<String>,
         guaranteePolicyId: String,
         cancellationPolicyId: String,
-    ): String = throw NotImplementedError("Task 8")
+    ): String {
+        val request =
+            RatePlanCreateRequest(
+                cancellationPolicyId = Uuid.parse(cancellationPolicyId),
+                category = RatePlanCreateRequest.Category.NORMAL,
+                channels = spec.channels.map { RatePlanCreateRequest.ChannelsItem.fromSerial(it) },
+                code = spec.code,
+                guaranteePolicyId = Uuid.parse(guaranteePolicyId),
+                mealPlan = RatePlanCreateRequest.MealPlan.fromSerial(spec.mealPlan),
+                name = spec.name,
+                packageIds = emptyList(),
+                roomTypeIds = roomTypeIds.map { Uuid.parse(it) },
+            )
+        return executor
+            .execute { rates.createRatePlan(request, it.headers) }
+            .value.id
+            .toString()
+    }
 
+    /**
+     * Grava os três valores da temporada para um tipo de UH, todos os dias da semana e sem preço de criança. Os
+     * valores seguem como texto decimal de duas casas (`toPlainString`, nunca notação científica); mais de duas
+     * casas é erro do catálogo (`ArithmeticException`), não arredondamento de dinheiro. Regravar valores iguais
+     * não pede aprovação (contrato).
+     */
     @Suppress("LongParameterList") // assinatura fixa da porta: espelha a linha de preço do contrato
     override suspend fun updatePrices(
         ratePlanId: String,
@@ -233,5 +306,31 @@ class SdkConfigGateway(
         oneAdult: BigDecimal,
         twoAdults: BigDecimal,
         extraAdult: BigDecimal,
-    ): Unit = throw NotImplementedError("Task 8")
+    ) {
+        val request =
+            RatePriceUpdateRequest(
+                prices =
+                    PriceValuesRequest(
+                        children = emptyList(),
+                        extraAdult = Option.Some(extraAdult.money()),
+                        oneAdult = oneAdult.money(),
+                        twoAdults = Option.Some(twoAdults.money()),
+                    ),
+                roomTypeIds = listOf(Uuid.parse(roomTypeId)),
+                seasonId = Option.Some(Uuid.parse(seasonId)),
+                weekdays = emptyList(),
+            )
+        executor.execute { rates.updateRatePlanPrices(Uuid.parse(ratePlanId), null, request, it.headers) }
+    }
+
+    private fun HousekeepingTransition.contractName() =
+        if (this == HousekeepingTransition.MARK_CLEAN_PENDING_INSPECTION) "MARK_CLEAN" else name
+
+    private fun BigDecimal.money(): String = setScale(MONEY_SCALE, RoundingMode.UNNECESSARY).toPlainString()
+
+    private companion object {
+        const val OUT_OF_ORDER_REASON = "Manutenção programada (demo)"
+        const val OUT_OF_ORDER_RESPONSIBLE = "Equipe de manutenção (demo)"
+        const val MONEY_SCALE = 2
+    }
 }

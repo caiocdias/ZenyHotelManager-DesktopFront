@@ -2,11 +2,14 @@ package com.zeny.desktop.seed.sdk
 
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.seed.config.HousekeepingTransition
 import com.zeny.desktop.seed.data.AddressSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
 import com.zeny.desktop.seed.data.GuaranteePolicySpec
 import com.zeny.desktop.seed.data.HotelSpec
+import com.zeny.desktop.seed.data.RatePlanSpec
 import com.zeny.desktop.seed.data.RoomTypeSpec
+import com.zeny.desktop.seed.data.SeasonSpec
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
@@ -22,6 +25,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.math.BigDecimal
+import java.time.LocalDate
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -291,5 +296,178 @@ class SdkConfigGatewayTest {
                     )
                 }
             assertEquals(setOf("Piscina", "Recepção"), gateway.areaNames())
+        }
+
+    private fun seasonJson(
+        name: String,
+        id: String,
+    ) = """{"active":true,"createdAt":"$STAMP","endsOn":"2026-12-31","id":"$id","name":"$name",
+        |"startsOn":"2026-12-01","updatedAt":"$STAMP"}
+        """.trimMargin()
+
+    private fun planJson(
+        code: String,
+        id: String,
+    ) = """{"active":true,"cancellationPolicyId":"$ID_B","category":"NORMAL","channels":["DIRECT"],"code":"$code",
+        |"createdAt":"$STAMP","guaranteePolicyId":"$ID_A","id":"$id","mealPlan":"BREAKFAST","name":"Tarifa",
+        |"packageIds":[],"roomTypeIds":["$ID_C"],"updatedAt":"$STAMP"}
+        """.trimMargin()
+
+    @Test
+    fun housekeepingSendsIfMatchFromStatus() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    if (request.method == HttpMethod.Get) {
+                        json(roomStatus(ID_A, "101"), etag = "\"v7\"")
+                    } else {
+                        json(roomStatus(ID_A, "101"))
+                    }
+                }
+            gateway.changeHousekeeping(ID_A, HousekeepingTransition.MARK_INSPECTED)
+            assertEquals(listOf(HttpMethod.Get, HttpMethod.Post), requests.map { it.method })
+            assertTrue(requests[0].url.encodedPath.endsWith("/rooms/$ID_A/status"))
+            assertTrue(requests[1].url.encodedPath.endsWith("/rooms/$ID_A/housekeeping-status"))
+            assertEquals("\"v7\"", requests[1].headers[HttpHeaders.IfMatch])
+            val sent = Json.parseToJsonElement(bodies[1]).jsonObject
+            assertEquals("MARK_INSPECTED", sent.getValue("transition").jsonPrimitive.content)
+            assertNull(requests[1].headers["Idempotency-Key"])
+        }
+
+    @Test
+    fun housekeepingWithoutEtagFailsBeforeThePost() =
+        runTest {
+            val gateway = gateway { json(roomStatus(ID_A, "101")) }
+            assertFailsWith<ApiError.IncompatibleResponse> {
+                gateway.changeHousekeeping(ID_A, HousekeepingTransition.MARK_DIRTY)
+            }
+            assertEquals(listOf(HttpMethod.Get), requests.map { it.method })
+        }
+
+    @Test
+    fun cleanPendingInspectionSetsFlag() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    if (request.method == HttpMethod.Get) {
+                        json(roomStatus(ID_A, "101"), etag = "\"v1\"")
+                    } else {
+                        json(roomStatus(ID_A, "101"))
+                    }
+                }
+            gateway.changeHousekeeping(ID_A, HousekeepingTransition.MARK_CLEAN_PENDING_INSPECTION)
+            gateway.changeHousekeeping(ID_A, HousekeepingTransition.MARK_CLEAN)
+            val pending = Json.parseToJsonElement(bodies[1]).jsonObject
+            assertEquals("MARK_CLEAN", pending.getValue("transition").jsonPrimitive.content)
+            assertEquals("true", pending.getValue("requiresInspection").jsonPrimitive.content)
+            val plain = Json.parseToJsonElement(bodies[3]).jsonObject
+            assertEquals("MARK_CLEAN", plain.getValue("transition").jsonPrimitive.content)
+            assertTrue(plain["requiresInspection"]?.jsonPrimitive?.content != "true")
+        }
+
+    @Test
+    fun outOfOrderBodyMatchesContract() =
+        runTest {
+            val gateway =
+                gateway {
+                    json(
+                        """{"endsOn":"2026-11-14","id":"$ID_B","kind":"OUT_OF_ORDER","reason":"x","responsible":"y",
+                        |"returnStatus":"DIRTY","roomId":"$ID_A","startsOn":"2026-11-12","openedAt":"$STAMP",
+                        |"updatedAt":"$STAMP","version":1}
+                        """.trimMargin(),
+                        HttpStatusCode.Created,
+                    )
+                }
+            gateway.openOutOfOrder(ID_A, LocalDate.of(2026, 11, 12), LocalDate.of(2026, 11, 14))
+            assertTrue(
+                requests
+                    .single()
+                    .url.encodedPath
+                    .endsWith("/rooms/$ID_A/out-of-order"),
+            )
+            val sent = Json.parseToJsonElement(bodies.single()).jsonObject
+            assertEquals("OUT_OF_ORDER", sent.getValue("kind").jsonPrimitive.content)
+            assertEquals("2026-11-12", sent.getValue("startsOn").jsonPrimitive.content)
+            assertEquals("2026-11-14", sent.getValue("endsOn").jsonPrimitive.content)
+            assertEquals("Manutenção programada (demo)", sent.getValue("reason").jsonPrimitive.content)
+            assertEquals("Equipe de manutenção (demo)", sent.getValue("responsible").jsonPrimitive.content)
+            assertTrue(sent["returnStatus"] == null || sent["returnStatus"]?.jsonPrimitive?.content == "null")
+        }
+
+    @Test
+    fun seasonsAndPlansReadAllPages() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    val first = request.url.parameters["cursor"] == null
+                    val next = if (first) ""","nextCursor":"p2"""" else ""
+                    if ("seasons" in request.url.encodedPath) {
+                        val season = seasonJson(if (first) "Baixa" else "Alta", if (first) ID_A else ID_B)
+                        json("""{"items":[$season]$next}""")
+                    } else {
+                        json("""{"items":[${planJson(if (first) "AAA" else "bar", if (first) ID_A else ID_B)}]$next}""")
+                    }
+                }
+            assertEquals(mapOf("Baixa" to ID_A, "Alta" to ID_B), gateway.seasonIds())
+            assertEquals(ID_B, gateway.ratePlanId("BAR"))
+            assertNull(gateway.ratePlanId("ZZZ"))
+        }
+
+    @Test
+    fun createSeasonSendsDates() =
+        runTest {
+            val gateway = gateway { json(seasonJson("Baixa", ID_A), HttpStatusCode.Created) }
+            val id = gateway.createSeason(SeasonSpec("Baixa", LocalDate.of(2026, 12, 1), LocalDate.of(2026, 12, 31)))
+            assertEquals(ID_A, id)
+            val sent = Json.parseToJsonElement(bodies.single()).jsonObject
+            assertEquals("Baixa", sent.getValue("name").jsonPrimitive.content)
+            assertEquals("2026-12-01", sent.getValue("startsOn").jsonPrimitive.content)
+            assertEquals("2026-12-31", sent.getValue("endsOn").jsonPrimitive.content)
+        }
+
+    @Test
+    fun createRatePlanSendsReferences() =
+        runTest {
+            val gateway = gateway { json(planJson("BAR", ID_A), HttpStatusCode.Created) }
+            val spec = RatePlanSpec("BAR", "Tarifa balcão", "BREAKFAST", listOf("DIRECT", "OTA"), listOf("STD"))
+            assertEquals(ID_A, gateway.createRatePlan(spec, listOf(ID_C), ID_A, ID_B))
+            val sent = Json.parseToJsonElement(bodies.single()).jsonObject
+            assertEquals("BAR", sent.getValue("code").jsonPrimitive.content)
+            assertEquals("NORMAL", sent.getValue("category").jsonPrimitive.content)
+            assertEquals("BREAKFAST", sent.getValue("mealPlan").jsonPrimitive.content)
+            assertEquals(listOf("DIRECT", "OTA"), sent.getValue("channels").jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf(ID_C), sent.getValue("roomTypeIds").jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(ID_A, sent.getValue("guaranteePolicyId").jsonPrimitive.content)
+            assertEquals(ID_B, sent.getValue("cancellationPolicyId").jsonPrimitive.content)
+            assertEquals(0, sent.getValue("packageIds").jsonArray.size)
+        }
+
+    @Test
+    fun pricesSendBigDecimalStrings() =
+        runTest {
+            val gateway =
+                gateway {
+                    json(
+                        """{"changed":0,"created":1,"derivedRatePlanIds":[],"matchedDates":1,"ratePlanId":"$ID_A",
+                        |"removed":0}
+                        """.trimMargin(),
+                    )
+                }
+            gateway.updatePrices(ID_A, ID_C, ID_B, BigDecimal("2.8E+2"), BigDecimal("350"), BigDecimal("1E+2"))
+            assertTrue(
+                requests
+                    .single()
+                    .url.encodedPath
+                    .endsWith("/rate-plans/$ID_A/prices/bulk-update"),
+            )
+            val sent = Json.parseToJsonElement(bodies.single()).jsonObject
+            assertEquals(ID_B, sent.getValue("seasonId").jsonPrimitive.content)
+            assertEquals(listOf(ID_C), sent.getValue("roomTypeIds").jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(0, sent.getValue("weekdays").jsonArray.size)
+            val prices = sent.getValue("prices").jsonObject
+            assertEquals("280.00", prices.getValue("oneAdult").jsonPrimitive.content)
+            assertEquals("350.00", prices.getValue("twoAdults").jsonPrimitive.content)
+            assertEquals("100.00", prices.getValue("extraAdult").jsonPrimitive.content)
+            assertEquals(0, prices.getValue("children").jsonArray.size)
         }
 }
