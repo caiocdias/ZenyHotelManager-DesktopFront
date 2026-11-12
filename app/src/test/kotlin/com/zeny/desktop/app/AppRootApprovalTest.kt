@@ -1,7 +1,14 @@
 package com.zeny.desktop.app
 
+import androidx.compose.material3.Button
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -9,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.approval.ApprovalCoordinator
+import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
@@ -27,12 +35,16 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNotSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -67,11 +79,11 @@ class AppRootApprovalTest {
             state.value = SessionState.LoggedOut
         }
 
-        override suspend fun me(): Me = error("não usado")
+        override suspend fun me(): Me = Me("user-1", "ana", "Ana Souza", emptySet())
 
-        override suspend fun hotel(): HotelInfo = error("não usado")
+        override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
-        override suspend fun businessDate(): BusinessDate = error("não usado")
+        override suspend fun businessDate(): BusinessDate = BusinessDate(LocalDate.of(2026, 3, 7))
 
         override suspend fun grant(
             required: ApiError.ApprovalRequired,
@@ -97,6 +109,82 @@ class AppRootApprovalTest {
             if (approvalToken == null) throw required
             return ApiResponse("ok", null, 200)
         }
+    }
+
+    /** Uma "feature" dentro da casca: pega o coordenador pelo Local e roda a ação sensível no clique. */
+    @Composable
+    private fun SensitiveFeature(
+        action: ApprovableAction<String>,
+        seen: MutableList<ApprovalCoordinator>,
+        results: MutableList<ApiResponse<String>?>,
+    ) {
+        val approvals = LocalApprovalCoordinator.current
+        SideEffect { if (seen.lastOrNull() !== approvals) seen += approvals }
+        val scope = rememberCoroutineScope()
+        Button(
+            onClick = { scope.launch { results += approvals.run(action) } },
+            modifier = Modifier.testTag("feature-action"),
+        ) { Text("Ação sensível") }
+    }
+
+    private fun ComposeUiTest.logIn() {
+        onNodeWithTag("login-user").performTextInput("ana")
+        onNodeWithTag("login-password").performTextInput("segredo-123")
+        onNodeWithText("Entrar").performClick()
+        waitForIdle()
+    }
+
+    @Test
+    fun featureInsideTheShellRunsThroughTheLocalCoordinator() =
+        runComposeUiTest {
+            val connection = FakeConnection()
+            val action = RecordingAction(required)
+            val seen = mutableListOf<ApprovalCoordinator>()
+            val results = mutableListOf<ApiResponse<String>?>()
+            lateinit var controller: AppController
+            setContent {
+                val scope = rememberCoroutineScope()
+                controller =
+                    remember { AppController(MemorySettings(), { connection }, { ProbeResult.Ok("1.0") }, scope) }
+                ZenyTheme {
+                    AppRoot(controller, devMode = false) { SensitiveFeature(action, seen, results) }
+                }
+            }
+            logIn()
+            assertEquals(Screen.Shell, controller.screen.value)
+            assertEquals(1, seen.size)
+
+            onNodeWithTag("feature-action").performClick()
+            waitForIdle()
+            onNodeWithText("Aprovação de superior").assertExists()
+            onNodeWithTag("approval-login").performTextInput("joana.gerente")
+            onNodeWithTag("approval-pin").performTextInput("1234")
+            onNodeWithTag("approval-reason").performTextInput("Cortesia")
+            onNodeWithTag("approval-confirm").performClick()
+            waitForIdle()
+
+            onNodeWithText("Aprovação de superior").assertDoesNotExist()
+            assertEquals(listOf(ApprovalInput("joana.gerente", "1234", "Cortesia")), connection.grants)
+            assertEquals(listOf(null, "token-1"), action.tokens)
+            assertEquals(listOf("ok"), results.map { it?.value })
+
+            // Nova sessão, novo coordenador no Local.
+            onNodeWithText("Sair").performClick()
+            waitForIdle()
+            onNodeWithText("Entrar").assertExists()
+            logIn()
+            assertEquals(Screen.Shell, controller.screen.value)
+            assertEquals(2, seen.size)
+            assertNotSame(seen[0], seen[1])
+        }
+
+    @Test
+    fun localWithoutTheShellFails() {
+        val failure =
+            assertFailsWith<IllegalStateException> {
+                runComposeUiTest { setContent { LocalApprovalCoordinator.current } }
+            }
+        assertTrue(failure.message.orEmpty().startsWith("Sem coordenador de aprovação"), failure.message)
     }
 
     @Test

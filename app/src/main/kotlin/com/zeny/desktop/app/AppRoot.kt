@@ -3,6 +3,7 @@ package com.zeny.desktop.app
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -10,6 +11,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import com.zeny.desktop.app.approval.ApprovalCoordinator
+import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
@@ -32,12 +34,21 @@ fun isShellDevMode(
 
 /**
  * Desenha a tela do `AppController`. Os estados das telas nascem a cada visita, com o escopo da raiz: a troca
- * de tela que o próprio login provoca não cancela o login em voo.
+ * de tela que o próprio login provoca não cancela o login em voo. Na casca, `LocalApprovalCoordinator` dá às
+ * features o coordenador de aprovação da sessão.
  */
 @Composable
 fun AppRoot(
     controller: AppController,
     devMode: Boolean,
+) = AppRoot(controller, devMode, insideShell = {})
+
+/** `insideShell` é desenhado dentro da casca, com o `LocalApprovalCoordinator` da sessão (os testes o usam). */
+@Composable
+internal fun AppRoot(
+    controller: AppController,
+    devMode: Boolean,
+    insideShell: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val screen by controller.screen.collectAsState()
@@ -75,8 +86,11 @@ fun AppRoot(
                         approvals.close()
                     }
                 }
-                ShellScreen(state, onLogout = { scope.launch { controller.logout() } })
-                ApprovalHost(approvals)
+                CompositionLocalProvider(LocalApprovalCoordinator provides approvals) {
+                    ShellScreen(state, onLogout = { scope.launch { controller.logout() } })
+                    insideShell()
+                    ApprovalHost(approvals)
+                }
             }
         }
     }
