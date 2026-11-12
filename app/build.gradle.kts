@@ -22,6 +22,7 @@ dependencies {
     implementation(compose.desktop.windows_x64)
 
     testImplementation(libs.kotlin.test.junit5)
+    testImplementation(libs.kotlinx.coroutines.test)
     // Teste de UI só no classpath de teste: o JAR de produção não o carrega (como no design).
     @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
     testImplementation(compose.uiTest)
@@ -35,6 +36,16 @@ compose.desktop {
 
 tasks.test {
     useJUnitPlatform()
+    // Testes não tocam o java.util.prefs nem o /tmp reais da máquina (como no core).
+    val testTmpRoot = File(layout.buildDirectory.get().asFile, "tmp")
+    val isolatedPrefs = File(testTmpRoot, "test-prefs")
+    val isolatedTmp = File(testTmpRoot, "test-tmp")
+    systemProperty("java.util.prefs.userRoot", isolatedPrefs.absolutePath)
+    systemProperty("java.io.tmpdir", isolatedTmp.absolutePath)
+    doFirst {
+        isolatedPrefs.mkdirs()
+        isolatedTmp.mkdirs()
+    }
 }
 
 val mergedServicesDir = layout.buildDirectory.dir("generated/merged-services")
