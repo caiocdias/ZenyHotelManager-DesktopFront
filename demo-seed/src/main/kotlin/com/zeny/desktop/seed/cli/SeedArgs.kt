@@ -83,19 +83,26 @@ object SeedArgs {
         var i = 0
         while (i < args.size) {
             val arg = args[i]
-            val name = arg.substringBefore('=').removePrefix("--")
-            if (!arg.startsWith("--") || name !in OPTIONS) {
-                throw Failure("Opção desconhecida: ${arg.substringBefore('=')}.")
-            }
+            val name = optionName(arg)
             if ('=' in arg) {
                 given[name] = arg.substringAfter('=')
             } else {
-                if (i + 1 >= args.size) throw Failure("Falta o valor de --$name.")
-                given[name] = args[++i]
+                val next = args.getOrNull(i + 1)
+                if (next == null || next.startsWith("--")) throw Failure("Falta o valor de --$name.")
+                given[name] = next
+                i++
             }
             i++
         }
         return given
+    }
+
+    /** Só um token que começa com "--" pode ser citado; qualquer outro pode ser um segredo solto. */
+    private fun optionName(arg: String): String {
+        if (!arg.startsWith("--")) throw Failure("Argumento inesperado; use --opção valor ou --opção=valor.")
+        val name = arg.substringBefore('=').removePrefix("--")
+        if (name !in OPTIONS) throw Failure("Opção desconhecida: --$name.")
+        return name
     }
 
     private fun envName(option: String) = "ZENY_SEED_" + option.uppercase().replace('-', '_')
@@ -105,7 +112,7 @@ object SeedArgs {
     ) : Exception(message)
 
     private fun build(lookup: (String) -> String?): ParseResult {
-        fun required(name: String) = lookup(name) ?: throw Failure("Falta --$name (ou ${envName(name)}).")
+        fun required(name: String) = lookup(name) ?: throw missing(name)
 
         fun password(name: String) = checked(name, required(name)) { it.length in PASSWORD_LENGTH }
 
@@ -113,7 +120,7 @@ object SeedArgs {
             checked(name, required(name)) { v -> v.length in PIN_LENGTH && v.all { it in '0'..'9' } }
         return try {
             val server = server(required("server"))
-            val login = required("admin-login")
+            val login = required("admin-login").also { if (it.isBlank()) throw missing("admin-login") }
             val adminPassword = password("admin-password")
             val newPassword = lookup("admin-new-password")?.let { password("admin-new-password") }
             val manager = password("manager-password")
@@ -127,6 +134,8 @@ object SeedArgs {
             ParseResult.Invalid(e.message)
         }
     }
+
+    private fun missing(name: String) = Failure("Falta --$name (ou ${envName(name)}).")
 
     private fun checked(
         name: String,
