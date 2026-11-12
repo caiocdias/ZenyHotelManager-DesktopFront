@@ -3,6 +3,8 @@
 package com.zeny.desktop.seed.sdk
 
 import com.zeny.desktop.core.RawSdkAccess
+import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.FieldError
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.sdk.model.CreateUserRequest
@@ -18,6 +20,8 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 private const val PAGE_SIZE = 200
+private const val PRECONDITION_REQUIRED = 428
+private const val MASK = "***"
 
 /**
  * Usuários e perfis sobre o `sdk`. As operações usadas não levam `Idempotency-Key` no contrato; o admin tem
@@ -57,10 +61,12 @@ class SdkUserGateway(
                 pin = pin?.let { Option.Some(it.value) } ?: Option.Undefined,
                 roleIds = roleIds.map(Uuid::parse),
             )
-        return seed.executor
-            .execute { seed.apis.iam.createUser(null, request, it.headers) }
-            .value.id
-            .toString()
+        return redacting(provisional, pin) {
+            seed.executor
+                .execute { seed.apis.iam.createUser(null, request, it.headers) }
+                .value.id
+                .toString()
+        }
     }
 
     override suspend fun reactivate(userId: String) {
@@ -76,6 +82,15 @@ class SdkUserGateway(
         val id = Uuid.parse(userId)
         val etag = seed.executor.execute { seed.apis.iam.getUser(id, it.headers) }.etag
         val request = SetUserRolesRequest(roleIds.map(Uuid::parse))
+        if (etag == null) {
+            // sem a precondição o servidor responderia 428; nem se tenta a escrita
+            throw ApiError.Problem(
+                PRECONDITION_REQUIRED,
+                "PRECONDITION_REQUIRED",
+                "GET do usuário sem ETag",
+                emptyList(),
+            )
+        }
         seed.executor.execute { seed.apis.iam.setUserRoles(id, etag, null, request, it.headers) }
     }
 
@@ -85,7 +100,9 @@ class SdkUserGateway(
     ) {
         val id = Uuid.parse(userId)
         val request = ResetPasswordRequest(provisional.value)
-        seed.executor.execute { seed.apis.iam.resetUserPassword(id, null, request, it.headers) }
+        redacting(provisional) {
+            seed.executor.execute { seed.apis.iam.resetUserPassword(id, null, request, it.headers) }
+        }
     }
 
     override suspend fun resetPin(
@@ -94,7 +111,7 @@ class SdkUserGateway(
     ) {
         val id = Uuid.parse(userId)
         val request = ResetPinRequest(pin.value)
-        seed.executor.execute { seed.apis.iam.resetUserPin(id, null, request, it.headers) }
+        redacting(pin) { seed.executor.execute { seed.apis.iam.resetUserPin(id, null, request, it.headers) } }
     }
 }
 
@@ -105,4 +122,36 @@ private suspend fun <I> allPages(fetch: suspend (cursor: String?, limit: Int) ->
     val all = mutableListOf<I>()
     while (pager.hasMore) all += pager.next()
     return all
+}
+
+/**
+ * O servidor pode ecoar o que recebeu (senha, PIN) em `detail` e nas mensagens de campo; o `userMessage` do
+ * `Problem` nasce do `detail`. Aqui o erro é refeito, com o mesmo status, código e campos, sem os segredos.
+ */
+@Suppress("SwallowedException") // o erro original traz o eco do segredo: é descartado de propósito
+private suspend fun <T> redacting(
+    vararg secrets: Secret?,
+    block: suspend () -> T,
+): T {
+    val values = secrets.mapNotNull { it?.value?.takeIf(String::isNotEmpty) }
+
+    fun String.clean() = values.fold(this) { text, secret -> text.replace(secret, MASK) }
+    try {
+        return block()
+    } catch (e: ApiError.Problem) {
+        throw ApiError.Problem(
+            e.status,
+            e.code?.clean(),
+            e.detail?.clean(),
+            e.fieldErrors.map { FieldError(it.field.clean(), it.code.clean(), it.message.clean()) },
+        )
+    } catch (e: ApiError.ApprovalRequired) {
+        throw ApiError.ApprovalRequired(
+            e.action.clean(),
+            e.permission.clean(),
+            e.resourceRef.clean(),
+            e.limit,
+            e.detail?.clean(),
+        )
+    }
 }
