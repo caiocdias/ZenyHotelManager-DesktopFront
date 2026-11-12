@@ -50,6 +50,12 @@ class ApprovalCoordinator(
     // Sem atraso na inscrição: um fim de sessão logo depois de criar o coordenador não se perde.
     private val watcher = scope.launch(start = CoroutineStart.UNDISPATCHED) { sessionEnded.collect { end() } }
 
+    /**
+     * Roda `action` sem token e, no `APPROVAL_REQUIRED`, espera o diálogo: devolve a resposta da repetição aprovada,
+     * ou `null` se o usuário cancelou ou a sessão acabou com o diálogo aberto. A repetição aprovada roda no escopo
+     * de quem chamou (a feature), fora da pendência: o fim da sessão não a cancela, e ela falha com
+     * `ApiError.SessionEnded` se o servidor já não aceitar a sessão.
+     */
     suspend fun <T : Any> run(action: ApprovableAction<T>): ApiResponse<T>? {
         check(request == null) { "Já há uma aprovação pendente." }
         val required =

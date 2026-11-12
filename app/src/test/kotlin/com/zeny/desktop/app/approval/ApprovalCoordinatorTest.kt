@@ -271,6 +271,35 @@ class ApprovalCoordinatorTest {
             h.assertCleared()
         }
 
+    /** Documenta o KDoc do `run`: a repetição aprovada é da feature; o fim da sessão não a cancela. */
+    @Test
+    fun sessionEndDuringTheApprovedRetryDoesNotCancelIt() =
+        runTest {
+            val retryGate = CompletableDeferred<ApiResponse<String>>()
+            val tokens = mutableListOf<String?>()
+            val action =
+                ApprovableAction { approvalToken ->
+                    tokens += approvalToken
+                    if (approvalToken == null) throw required()
+                    retryGate.await()
+                }
+            val h = harness()
+            val result = async { h.coordinator.run(action) }
+            runCurrent()
+            h.fill()
+            h.coordinator.confirm()
+            runCurrent()
+            assertEquals(listOf(null, "token-1"), tokens)
+
+            h.ended.emit(Unit)
+            runCurrent()
+            assertFalse(result.isCancelled)
+            retryGate.complete(ApiResponse("ok", null, 200))
+
+            assertEquals("ok", assertNotNull(result.await()).value)
+            h.assertCleared()
+        }
+
     @Test
     fun coordinatorWorksAgainAfterASessionEnd() =
         runTest {
