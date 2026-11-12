@@ -11,6 +11,8 @@ class AreasTest {
     // /home/caio/repos/ZenyHotelManager/src/main/kotlin/com/zeny/hotel/<modulo>/<Modulo>Permissions.kt
     // (frontdesk, reservations, billing, guests, rooms, iam, hotel, rates). Só entram as permissões que
     // o menu consulta ou que poderiam confundi-lo (as de leitura vizinhas); o Administrador recebe todas.
+    // O Gerente real não tem iam.users.manage, iam.roles.manage nem hotel.settings.manage (só o Administrador):
+    // ele chega a Gestão por rates.plans.manage (RatesPermissions.kt; IamPermissions.kt só lhe dá as leituras).
     private val everyMenuPermission = Area.entries.flatMap { it.permissions }.toSet()
 
     private val administrator =
@@ -28,8 +30,10 @@ class AreasTest {
             "guests.profiles.read",
             "rooms.status.read",
             "rooms.registry.read",
-            "iam.users.manage",
-            "iam.roles.manage",
+            "iam.permissions.read",
+            "iam.roles.read",
+            "iam.users.read",
+            "iam.sessions.manage",
             "rates.plans.manage",
             "hotel.settings.read",
         )
@@ -80,6 +84,8 @@ class AreasTest {
     @Test
     fun managerSeesManagement() {
         assertTrue(Area.MANAGEMENT in ids(visibleAreas(manager, Area.entries.toSet(), devMode = false)))
+        val withoutPlans = manager - "rates.plans.manage"
+        assertFalse(Area.MANAGEMENT in ids(visibleAreas(withoutPlans, Area.entries.toSet(), devMode = false)))
     }
 
     @Test
