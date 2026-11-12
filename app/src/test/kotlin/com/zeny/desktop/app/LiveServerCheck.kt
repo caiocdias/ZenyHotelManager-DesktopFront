@@ -39,7 +39,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -53,6 +52,8 @@ private val STEP_TIMEOUT = 30.seconds
 private val PROBE_LIMIT = 11.seconds
 private const val CLOSED_PORT = "http://127.0.0.1:1"
 private val DATE_PATTERN = Regex("""\d{2}/\d{2}/\d{4}""")
+private val RECEPTIONIST_AREAS =
+    listOf(Area.RECEPTION, Area.RESERVATIONS, Area.ACCOUNTS, Area.GUESTS, Area.HOUSEKEEPING)
 
 /**
  * Verificação de ponta a ponta contra um servidor real (o ambiente `zeny-front`), pelo `CoreConnection` real e com
@@ -127,8 +128,9 @@ class LiveServerCheck {
             // O mesmo endereço reaproveita a conexão: o segundo login passa pelo mesmo adaptador.
             enter(controller, receptionist)
             val receptionistAreas = shell(controller, "shell-receptionist.png")
-            assertTrue(receptionistAreas.isNotEmpty(), "o Recepcionista vê alguma área")
-            assertNotEquals(adminAreas, receptionistAreas)
+            // As áreas do modelo RECEPTIONIST do servidor fixado, na ordem do menu; Gestão nunca.
+            assertEquals(RECEPTIONIST_AREAS, receptionistAreas)
+            assertTrue(Area.MANAGEMENT !in receptionistAreas, "o Recepcionista não vê Gestão")
         } finally {
             controller.close()
             scope.cancel()
@@ -177,7 +179,8 @@ class LiveServerCheck {
         current: String,
         user: LiveUser,
     ) {
-        assertEquals(user.password, current, "$user pede troca de senha já com a senha nova")
+        // Comparação booleana: um assertEquals poria as duas senhas na mensagem de falha.
+        assertTrue(user.password == current, "$user pede troca de senha já com a senha nova")
         val changeJob = SupervisorJob()
         val connection = checkNotNull(controller.connection)
         val state =
