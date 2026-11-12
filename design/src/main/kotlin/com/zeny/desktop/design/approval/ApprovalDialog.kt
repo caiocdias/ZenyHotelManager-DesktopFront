@@ -17,7 +17,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 
-private val PIN = Regex("[0-9]{4,8}")
+private const val MAX_PIN = 8
+private val PIN = Regex("[0-9]{4,$MAX_PIN}")
+private val PIN_TYPING = Regex("[0-9]{0,$MAX_PIN}")
 private const val MAX_REASON = 500
 
 /**
@@ -40,7 +42,10 @@ data class ApprovalDialogModel(
         "ApprovalDialogModel(detail=$detail, login=$login, pin=***, reason=$reason, message=$message, busy=$busy)"
 }
 
-/** Login e PIN (mascarado) de quem aprova e o motivo; "Aprovar" só com os campos válidos. */
+/**
+ * Login e PIN (mascarado) de quem aprova e o motivo; "Aprovar" só com os campos válidos. Na digitação, o PIN
+ * aceita só dígitos de 0 a 9 até 8 (outra edição é ignorada) e o motivo é cortado em 500 caracteres.
+ */
 @Composable
 @Suppress("LongParameterList") // assinatura fixada pelo plano
 fun ApprovalDialog(
@@ -70,7 +75,7 @@ fun ApprovalDialog(
                 )
                 OutlinedTextField(
                     value = model.pin,
-                    onValueChange = onPin,
+                    onValueChange = { if (PIN_TYPING.matches(it)) onPin(it) },
                     label = { Text("PIN") },
                     supportingText = { Text("De 4 a 8 dígitos.") },
                     singleLine = true,
@@ -81,7 +86,7 @@ fun ApprovalDialog(
                 )
                 OutlinedTextField(
                     value = model.reason,
-                    onValueChange = onReason,
+                    onValueChange = { onReason(it.take(MAX_REASON)) },
                     label = { Text("Motivo") },
                     supportingText = { Text("Obrigatório, até $MAX_REASON caracteres.") },
                     enabled = !model.busy,

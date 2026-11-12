@@ -106,6 +106,42 @@ class ApprovalDialogUiTest {
         }
 
     @Test
+    fun typingKeepsThePinToEightAsciiDigitsAndTheReasonTo500Characters() =
+        runComposeUiTest {
+            var model by mutableStateOf(valid.copy(pin = "", reason = ""))
+            setContent {
+                ZenyTheme {
+                    ApprovalDialog(
+                        model,
+                        {},
+                        { model = model.copy(pin = it) },
+                        { model = model.copy(reason = it) },
+                        {},
+                        {},
+                    )
+                }
+            }
+            onNodeWithTag("approval-pin").performTextInput("12")
+            listOf("a", " ", "-", "\u0663", "\uFF14").forEach {
+                onNodeWithTag("approval-pin").performTextInput(it)
+                waitForIdle()
+                assertEquals("12", model.pin, "aceitou '$it' no PIN")
+            }
+            onNodeWithTag("approval-pin").performTextInput("345678")
+            onNodeWithTag("approval-pin").performTextInput("9")
+            waitForIdle()
+            assertEquals("12345678", model.pin)
+
+            onNodeWithTag("approval-reason").performTextInput("x".repeat(499))
+            onNodeWithTag("approval-reason").performTextInput("yz")
+            waitForIdle()
+            assertEquals("x".repeat(499) + "y", model.reason)
+            onNodeWithTag("approval-reason").performTextInput("w")
+            waitForIdle()
+            assertEquals(500, model.reason.length)
+        }
+
+    @Test
     fun toStringHidesThePin() {
         assertFalse(valid.copy(pin = "987654").toString().contains("987654"))
     }
