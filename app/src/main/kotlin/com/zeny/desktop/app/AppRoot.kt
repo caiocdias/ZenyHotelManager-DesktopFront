@@ -3,6 +3,7 @@ package com.zeny.desktop.app
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -61,6 +62,8 @@ fun AppRoot(
 
             Screen.Shell -> {
                 val state = remember { ShellState(controller.requireConnection(), devMode, scope) }
+                // Sair da casca (logout, sessão encerrada) cancela a carga em voo.
+                DisposableEffect(state) { onDispose { state.close() } }
                 ShellScreen(state, onLogout = { scope.launch { controller.logout() } })
             }
         }

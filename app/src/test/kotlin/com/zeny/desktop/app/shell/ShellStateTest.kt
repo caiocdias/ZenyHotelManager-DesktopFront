@@ -7,6 +7,7 @@ import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -282,5 +283,59 @@ class ShellStateTest {
             assertEquals("Recepcionista", state.userName)
             assertEquals(Area.RECEPTION, state.areas.first().first)
             assertFalse(state.loading)
+        }
+
+    @Test
+    fun cancellationFromTheCallBecomesRetryableError() =
+        runTest {
+            // Um tempo esgotado no core chega como CancellationException sem que a carga tenha sido cancelada.
+            val connection = FakeConnection(me = { throw CancellationException("tempo esgotado") })
+            val state = loaded(connection)
+
+            assertFalse(state.loading)
+            assertTrue(state.error is ApiError.Network)
+
+            connection.me = { Me("user-1", "ana", "Ana Souza", emptySet()) }
+            state.reload()
+            advanceUntilIdle()
+            assertNull(state.error)
+        }
+
+    @Test
+    fun cancellationFromTheHotelCallGivesFallbackName() =
+        runTest {
+            val state = loaded(FakeConnection(hotel = { throw CancellationException("tempo esgotado") }))
+
+            assertEquals("Hotel", state.hotelName)
+            assertNull(state.error)
+        }
+
+    @Test
+    fun closeCancelsTheLoadAndStopsReloads() =
+        runTest {
+            val gate = CompletableDeferred<Unit>()
+            var cancelled = 0
+            val connection =
+                FakeConnection(
+                    me = {
+                        try {
+                            gate.await()
+                        } catch (e: CancellationException) {
+                            cancelled++
+                            throw e
+                        }
+                        Me("u-1", "ana", "Ana Souza", emptySet())
+                    },
+                )
+            val state = ShellState(connection, devMode = false, scope = this)
+            advanceUntilIdle()
+
+            state.close()
+            advanceUntilIdle()
+            state.reload()
+            advanceUntilIdle()
+
+            assertEquals(1, cancelled)
+            assertEquals(1, connection.meCalls)
         }
 }

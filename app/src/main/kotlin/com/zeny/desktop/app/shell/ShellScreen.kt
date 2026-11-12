@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.design.feedback.EmptyState
 import com.zeny.desktop.design.feedback.ErrorState
@@ -62,11 +63,24 @@ private fun TopBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(state.hotelName, style = MaterialTheme.typography.titleMedium)
+        // Nome longo do hotel ou do usuário encolhe com reticências; a data e "Sair" ficam sempre à vista.
+        Text(
+            state.hotelName,
+            Modifier.weight(1f, fill = false),
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         if (state.businessDate.isNotEmpty()) {
             Text("Data operacional: ${state.businessDate}", style = MaterialTheme.typography.bodyMedium)
         }
-        Text(state.userName, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            state.userName,
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         OutlinedButton(onClick = onLogout) { Text("Sair") }
     }
 }
