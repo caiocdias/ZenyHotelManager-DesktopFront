@@ -146,15 +146,16 @@ class ShellStateTest {
     @Test
     fun businessDateFormattedWithoutZoneConversion() =
         runTest {
-            val previous = java.util.TimeZone.getDefault()
-            try {
-                // Num fuso a oeste de UTC, uma conversão de meia-noite UTC voltaria um dia.
-                java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("America/Manaus"))
-                val state = loaded(FakeConnection(businessDate = { BusinessDate.parse("2026-01-01") }))
+            // Datas de borda: uma conversão por instante (meia-noite UTC num fuso a oeste) mudaria o dia, o mês
+            // ou o ano. O texto do servidor vira o mesmo dia, mês e ano em dd/MM/aaaa.
+            mapOf(
+                "2026-01-01" to "01/01/2026",
+                "2025-12-31" to "31/12/2025",
+                "2028-02-29" to "29/02/2028",
+            ).forEach { (api, shown) ->
+                val state = loaded(FakeConnection(businessDate = { BusinessDate.parse(api) }))
 
-                assertEquals("01/01/2026", state.businessDate)
-            } finally {
-                java.util.TimeZone.setDefault(previous)
+                assertEquals(shown, state.businessDate, api)
             }
         }
 

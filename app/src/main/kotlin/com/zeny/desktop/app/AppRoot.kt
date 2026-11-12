@@ -1,24 +1,20 @@
 package com.zeny.desktop.app
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
 import com.zeny.desktop.app.login.PasswordChangeState
 import com.zeny.desktop.app.session.ServerConnection
+import com.zeny.desktop.app.shell.ShellScreen
+import com.zeny.desktop.app.shell.ShellState
 import com.zeny.desktop.core.session.SessionState
 import kotlinx.coroutines.launch
 
@@ -35,7 +31,7 @@ fun isShellDevMode(
 @Composable
 fun AppRoot(
     controller: AppController,
-    @Suppress("UnusedParameter") devMode: Boolean, // a casca (Task 7) mostra as áreas "(em breve)" com ele
+    devMode: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val screen by controller.screen.collectAsState()
@@ -64,23 +60,11 @@ fun AppRoot(
             }
 
             Screen.Shell -> {
-                SessionStarted(onLogout = { scope.launch { controller.logout() } })
+                val state = remember { ShellState(controller.requireConnection(), devMode, scope) }
+                ShellScreen(state, onLogout = { scope.launch { controller.logout() } })
             }
         }
     }
 }
 
 private fun AppController.requireConnection(): ServerConnection = checkNotNull(connection) { "sem conexão" }
-
-/** Lugar da casca até a Task 7: só confirma a sessão e permite sair. */
-@Composable
-private fun SessionStarted(onLogout: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text("Sessão iniciada.")
-        OutlinedButton(onClick = onLogout) { Text("Sair") }
-    }
-}
