@@ -45,25 +45,30 @@ class PasswordChangeState(
             if (message != null) return
         }
         busy = true
-        scope.launch {
-            var succeeded = false
-            try {
-                if (retryOnly) retry() else change(currentPassword, newPassword)
-                succeeded = true
-            } catch (e: CancellationException) {
-                throw e
-            } catch (
-                @Suppress("TooGenericExceptionCaught") e: Exception,
-            ) {
-                message = (e as? ApiError)?.userMessage ?: GENERIC_FAILURE
-            } finally {
+        // As senhas saem do estado já aqui: não depende de a corrotina chegar a rodar.
+        current = ""
+        new = ""
+        confirm = ""
+        scope
+            .launch {
+                var succeeded = false
+                try {
+                    if (retryOnly) retry() else change(currentPassword, newPassword)
+                    succeeded = true
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (
+                    @Suppress("TooGenericExceptionCaught") e: Exception,
+                ) {
+                    message = (e as? ApiError)?.userMessage ?: GENERIC_FAILURE
+                }
+                if (succeeded) onDone()
+            }.invokeOnCompletion {
                 current = ""
                 new = ""
                 confirm = ""
                 busy = false
             }
-            if (succeeded) onDone()
-        }
     }
 
     private fun validate(

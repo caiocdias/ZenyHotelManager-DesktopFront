@@ -8,6 +8,7 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ProbeResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URI
 
@@ -55,35 +56,44 @@ class LoginState(
     var probeMessage by mutableStateOf<String?>(null)
         private set
 
-    private var probing = false
+    private var probeJob: Job? = null
+    private var probeUrl: ServerUrl? = null
 
     fun testConnection() {
         probeMessage = null
         val url = ServerUrl.parse(server)
         val problem = serverProblem(url)
         if (problem != null || url == null) {
+            cancelProbe()
             probeMessage = problem
             return
         }
-        if (probing) return
-        probing = true
-        scope.launch {
-            try {
+        if (probeJob?.isActive == true && probeUrl == url) return
+        cancelProbe()
+        probeUrl = url
+        // Resultado de sonda antiga nunca sobrescreve a mensagem atual: o job anterior é cancelado.
+        probeJob =
+            scope.launch {
                 probeMessage =
-                    when (val result = backend.probe(url)) {
-                        is ProbeResult.Ok -> "Servidor encontrado (versão ${result.version})."
-                        is ProbeResult.Failed -> result.message
+                    try {
+                        when (val result = backend.probe(url)) {
+                            is ProbeResult.Ok -> "Servidor encontrado (versão ${result.version})."
+                            is ProbeResult.Failed -> result.message
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (
+                        @Suppress("TooGenericExceptionCaught") e: Exception,
+                    ) {
+                        (e as? ApiError)?.userMessage ?: ApiError.Network(e).userMessage
                     }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (
-                @Suppress("TooGenericExceptionCaught") e: Exception,
-            ) {
-                probeMessage = (e as? ApiError)?.userMessage ?: ApiError.Network(e).userMessage
-            } finally {
-                probing = false
             }
-        }
+    }
+
+    private fun cancelProbe() {
+        probeJob?.cancel()
+        probeJob = null
+        probeUrl = null
     }
 
     fun submit(onDone: (LoginOutcome) -> Unit) {
@@ -95,23 +105,26 @@ class LoginState(
         message = problem
         if (problem != null || url == null) return
         busy = true
-        scope.launch {
-            val outcome =
-                try {
-                    backend.login(url, typedLogin, typedPassword)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (
-                    @Suppress("TooGenericExceptionCaught") e: Exception,
-                ) {
-                    LoginOutcome.Failed((e as? ApiError)?.userMessage ?: GENERIC_FAILURE)
-                } finally {
-                    password = ""
-                    busy = false
-                }
-            if (outcome is LoginOutcome.Failed) message = outcome.message
-            onDone(outcome)
-        }
+        // A senha sai do estado já aqui: não depende de a corrotina chegar a rodar.
+        password = ""
+        scope
+            .launch {
+                val outcome =
+                    try {
+                        backend.login(url, typedLogin, typedPassword)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (
+                        @Suppress("TooGenericExceptionCaught") e: Exception,
+                    ) {
+                        LoginOutcome.Failed((e as? ApiError)?.userMessage ?: GENERIC_FAILURE)
+                    }
+                if (outcome is LoginOutcome.Failed) message = outcome.message
+                onDone(outcome)
+            }.invokeOnCompletion {
+                password = ""
+                busy = false
+            }
     }
 
     private fun serverProblem(url: ServerUrl?): String? =
