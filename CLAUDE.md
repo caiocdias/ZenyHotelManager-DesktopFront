@@ -13,8 +13,10 @@ Kotlin, Compose Multiplatform e Gradle 9.8.1 (wrapper). Versões só em `gradle/
 | build | `./gradlew build` |
 | testes | `./gradlew test` e `bash tests/run.sh` |
 | lint | `./gradlew ktlintCheck detekt` |
-| run | `./gradlew run` |
+| run | `./gradlew :app:run` |
 | JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |
+| seed | `./gradlew :demo-seed:run --args="--server http://localhost:8088 --admin-login <login>"`, com os segredos por variáveis de ambiente (veja `--help` e `tools/server-env/LEIA-ME.md`) |
+| JAR do seed | `./gradlew :demo-seed:seedJar` → `demo-seed/build/libs/demo-seed.jar` |
 | travas | `./gradlew resolveAndLockAll --write-locks` |
 | gate do projeto | `./gradlew build` + `bash tests/run.sh` |
 

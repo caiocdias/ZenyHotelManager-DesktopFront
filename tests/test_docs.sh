@@ -47,7 +47,7 @@ official_commands=(
   '| build | `./gradlew build` |'
   '| testes | `./gradlew test` e `bash tests/run.sh` |'
   '| lint | `./gradlew ktlintCheck detekt` |'
-  '| run | `./gradlew run` |'
+  '| run | `./gradlew :app:run` |'
   '| JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |'
   '| travas | `./gradlew resolveAndLockAll --write-locks` |'
   '| gate do projeto | `./gradlew build` + `bash tests/run.sh` |'

@@ -1,6 +1,6 @@
 # Zeny Hotel Manager — Front Desktop
 
-Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O repositório é um build Gradle com os módulos `sdk` (cliente gerado do contrato com o ogen, ADR 0007), `core` (fronteira entre as features e o `sdk`, ADR 0008, aceita pelo usuário em 2026-11-11), `design`, `app` (a janela) e `demo-seed` (ainda vazio). Além do app, guarda o contrato da API fixado, as ferramentas que sincronizam com o servidor e o ambiente local do servidor para desenvolver e demonstrar.
+Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O repositório é um build Gradle com os módulos `sdk` (cliente gerado do contrato com o ogen, ADR 0007), `core` (fronteira entre as features e o `sdk`, ADR 0008, aceita pelo usuário em 2026-11-11), `design`, `app` (a janela) e `demo-seed` (programa que popula o servidor da demo). Além do app, guarda o contrato da API fixado, as ferramentas que sincronizam com o servidor e o ambiente local do servidor para desenvolver e demonstrar.
 
 ## Onde está o quê
 
@@ -17,8 +17,10 @@ Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O re
 | build | `./gradlew build` |
 | testes | `./gradlew test` e `bash tests/run.sh` |
 | lint | `./gradlew ktlintCheck detekt` |
-| run | `./gradlew run` |
+| run | `./gradlew :app:run` |
 | JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |
+| seed | `./gradlew :demo-seed:run --args="--server http://localhost:8088 --admin-login <login>"`, com os segredos por variáveis de ambiente (veja `--help` e `tools/server-env/LEIA-ME.md`) |
+| JAR do seed | `./gradlew :demo-seed:seedJar` → `demo-seed/build/libs/demo-seed.jar` |
 | travas | `./gradlew resolveAndLockAll --write-locks` |
 | gate do projeto | `./gradlew build` + `bash tests/run.sh` |
 

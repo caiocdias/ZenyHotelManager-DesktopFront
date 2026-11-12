@@ -66,7 +66,23 @@ docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.y
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env up -d
 ```
 
-A partir da M1, popule os dados com `java -jar app\demo-seed.jar ...`.
+Depois de recriar, popule os dados com o `demo-seed.jar` (gerado por `./gradlew :demo-seed:seedJar` em `demo-seed/build/libs/`; copie-o para `app\`). Os segredos vão por variáveis de ambiente, não pela linha de comando (que fica no histórico do shell e na lista de processos). Senhas têm de 12 a 128 caracteres; o PIN do Gerente, de 4 a 8 dígitos. Para cada variável abaixo, escolha o seu próprio valor:
+
+```powershell
+$env:ZENY_SEED_ADMIN_PASSWORD = "<senha inicial do administrador>"
+$env:ZENY_SEED_ADMIN_NEW_PASSWORD = "<senha nova do administrador>"
+$env:ZENY_SEED_MANAGER_PASSWORD = "<senha do Gerente>"
+$env:ZENY_SEED_RECEPTIONIST_PASSWORD = "<senha da Recepção>"
+$env:ZENY_SEED_HOUSEKEEPER_PASSWORD = "<senha da Governança>"
+$env:ZENY_SEED_MANAGER_PIN = "<PIN do Gerente>"
+java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login <login>
+```
+
+- A primeira execução troca a senha inicial do administrador (que o servidor marca como provisória) para `ZENY_SEED_ADMIN_NEW_PASSWORD`. Nas seguintes, o programa entra direto com a senha nova.
+- Se não houver senha nova a definir, **omita** `ZENY_SEED_ADMIN_NEW_PASSWORD` (`Remove-Item Env:ZENY_SEED_ADMIN_NEW_PASSWORD`); não a deixe vazia.
+- Cuidado com tentativas erradas: senha do administrador errada repetida gasta as tentativas e bloqueia a conta; se a primeira execução falhar por senha, confira os valores antes de repetir.
+- Repetir a execução é seguro: o que já existe é conferido e mantido, e a saída traz só contagens (criados e já existentes), sem nomes nem documentos de hóspedes.
+- Ajuda: `java -jar app\demo-seed.jar --help`. Códigos de saída: 0 concluído, 1 falha (mensagem em português), 2 argumento inválido.
 
 ## 4. Firewall
 
