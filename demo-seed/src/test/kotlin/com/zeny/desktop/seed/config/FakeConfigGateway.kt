@@ -49,14 +49,16 @@ class FakeConfigGateway : ConfigGateway {
         hotelName = spec.tradeName
     }
 
-    override suspend fun guaranteePolicyId(name: String) = guaranteePolicies[name]
+    override suspend fun guaranteePolicyId(name: String) =
+        guaranteePolicies.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
 
     override suspend fun createGuaranteePolicy(spec: GuaranteePolicySpec): String {
         write()
         return nextId("gp").also { guaranteePolicies.insertUnique(spec.name, it) }
     }
 
-    override suspend fun cancellationPolicyId(name: String) = cancellationPolicies[name]
+    override suspend fun cancellationPolicyId(name: String) =
+        cancellationPolicies.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
 
     override suspend fun createCancellationPolicy(spec: CancellationPolicySpec): String {
         write()
