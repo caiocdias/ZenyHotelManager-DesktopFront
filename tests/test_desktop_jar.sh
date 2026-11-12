@@ -43,12 +43,15 @@ done < <(grep '^META-INF/services/.' <<<"$names")
 
 # Com display, o JAR abre e segue rodando sem nada em stderr. Sem DISPLAY, registra o pulo.
 if [[ -n "${DISPLAY:-}" ]] && command -v java >/dev/null; then
+  # Preferências isoladas (raiz nova sob app/build): o teste não lê nem cria ~/.java/.userPrefs do usuário.
+  prefs="$ROOT/app/build/test-prefs-jar.$$"
+  rm -rf "$prefs"; mkdir -p "$prefs"
   errf="$(mktemp)"
-  timeout 12 java -jar "$jar" >/dev/null 2>"$errf"
+  timeout 12 java -Djava.util.prefs.userRoot="$prefs" -jar "$jar" >/dev/null 2>"$errf"
   code=$?
   assert_eq "124" "$code" "java -jar segue rodando até o timeout"
   assert_eq "" "$(cat "$errf")" "java -jar sem nada em stderr"
-  rm -f "$errf"
+  rm -rf "$errf" "$prefs"
 else
   skip_case "sem DISPLAY ou java: java -jar não exercitado"
 fi
