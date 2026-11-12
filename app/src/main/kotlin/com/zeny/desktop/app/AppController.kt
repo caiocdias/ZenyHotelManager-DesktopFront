@@ -8,6 +8,7 @@ import com.zeny.desktop.app.login.LoginOutcome
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
+import com.zeny.desktop.core.config.ServerUrlResolver
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ProbeResult
 import com.zeny.desktop.core.session.SessionState
@@ -40,7 +41,8 @@ sealed interface Screen {
  * `PasswordChange`, `Active` a `Shell`, `Ended` volta a `Login` com aviso e o logout volta a `Login` sem aviso.
  * A conexão nasce no login, para o endereço digitado; trocar de endereço encerra e fecha a anterior.
  * Em disco só vão o endereço e o último login, depois de um login aceito e em melhor esforço.
- * O `scope` observa a sessão até o `close()`.
+ * O `scope` observa a sessão até o `close()`. A tela de login abre com o endereço de `resolveServer` (ADR 0004)
+ * e o último login aceito.
  */
 class AppController(
     private val settings: LocalSettings,
@@ -48,6 +50,7 @@ class AppController(
     probe: suspend (ServerUrl) -> ProbeResult,
     private val scope: CoroutineScope,
     private val logoutTimeout: Duration = LOGOUT_TIMEOUT,
+    private val resolveServer: () -> ServerUrl = { ServerUrlResolver(settings, envFileDir = null).resolve() },
 ) : LoginBackend,
     AutoCloseable {
     private val prober = probe
@@ -62,6 +65,11 @@ class AppController(
         private set
     private var connectionUrl: ServerUrl? = null
     private var watcher: Job? = null
+
+    /** Endereço com que a tela de login abre; depois de um login aceito, é o desse login. */
+    val initialServer: String get() = resolveServer().value
+
+    val initialLogin: String? get() = settings.lastLogin
 
     override suspend fun probe(url: ServerUrl): ProbeResult = prober(url)
 

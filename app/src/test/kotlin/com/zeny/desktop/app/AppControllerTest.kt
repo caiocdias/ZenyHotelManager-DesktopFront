@@ -282,6 +282,34 @@ class AppControllerTest {
         }
 
     @Test
+    fun loginDefaultsComeFromResolverAndLastLogin() =
+        runTest {
+            val settings = RecordingSettings().apply { lastLogin = "ana" }
+            val controller =
+                AppController(
+                    settings = settings,
+                    connect = { error("sem conexão") },
+                    probe = { ProbeResult.Ok("1.0") },
+                    scope = backgroundScope,
+                    resolveServer = { serverB },
+                )
+
+            assertEquals("http://outro:9090", controller.initialServer)
+            assertEquals("ana", controller.initialLogin)
+        }
+
+    @Test
+    fun defaultResolverPrefersTheSavedServer() =
+        runTest {
+            val settings = RecordingSettings().apply { serverUrl = "http://salvo:9000" }
+            val controller =
+                AppController(settings, { error("sem conexão") }, { ProbeResult.Ok("1.0") }, backgroundScope)
+
+            assertEquals("http://salvo:9000", controller.initialServer)
+            assertEquals(null, controller.initialLogin)
+        }
+
+    @Test
     fun nothingButAllowedKeysPersisted() =
         runTest {
             val settings = RecordingSettings()
