@@ -1,6 +1,7 @@
 package com.zeny.desktop.seed.sdk
 
 import com.zeny.desktop.core.RawSdkAccess
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.sdk.model.AddressDto
@@ -53,15 +54,25 @@ class SdkConfigGateway(
         return all
     }
 
-    /** `configured` falso (ou nome ausente) é hotel ainda não configurado. */
+    /**
+     * Só `configured` falso é hotel ainda não configurado (nulo). Com `configured` verdadeiro e nome fantasia
+     * ausente ou nulo, devolve "" (nunca nulo): o semeador vê "outro hotel configurado" e não o sobrescreve.
+     */
     override suspend fun configuredHotelName(): String? {
         val hotel = executor.execute { hotelApi.getHotel(it.headers) }.value
-        return if (hotel.configured) (hotel.tradeName as? Option.Some)?.value else null
+        return if (hotel.configured) (hotel.tradeName as? Option.Some)?.value.orEmpty() else null
     }
 
-    /** O `PUT` leva o `ETag` do `GET` no `If-Match`. */
+    /**
+     * O `PUT` leva o `ETag` do `GET` no `If-Match`, que o contrato exige. Sem `ETag` na resposta, falha com
+     * `ApiError.IncompatibleResponse` (mensagem pt-BR por `userMessage`) antes de enviar o `PUT`: o servidor não
+     * cumpriu o contrato, e sobrescrever às cegas apagaria uma edição concorrente.
+     */
     override suspend fun configureHotel(spec: HotelSpec) {
         val current = executor.execute { hotelApi.getHotel(it.headers) }
+        val etag =
+            current.etag
+                ?: throw ApiError.IncompatibleResponse(IllegalStateException("GET do hotel sem ETag"))
         val request =
             HotelRequest(
                 address =
@@ -80,7 +91,7 @@ class SdkConfigGateway(
                 timezone = spec.timezone,
                 tradeName = spec.tradeName,
             )
-        executor.execute { hotelApi.updateHotel(current.etag, request, it.headers) }
+        executor.execute { hotelApi.updateHotel(etag, request, it.headers) }
     }
 
     override suspend fun guaranteePolicyId(name: String): String? =

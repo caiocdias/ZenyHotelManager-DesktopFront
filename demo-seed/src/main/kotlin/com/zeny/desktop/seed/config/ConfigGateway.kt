@@ -11,7 +11,10 @@ import com.zeny.desktop.seed.data.SeasonSpec
 import java.math.BigDecimal
 import java.time.LocalDate
 
-/** Estado de uma UH no servidor; `housekeeping` é o valor cru (`DIRTY`, `CLEAN`, `INSPECTED` ou outro). */
+/**
+ * Estado de uma UH no servidor; `housekeeping` é o valor do contrato (`DIRTY`, `CLEAN` ou `INSPECTED`). O
+ * adaptador não entrega outro valor (status desconhecido é resposta incompatível); o plano ainda o tolera.
+ */
 data class RoomState(
     val id: String,
     val number: String,
