@@ -11,8 +11,6 @@ import com.zeny.desktop.seed.people.AdminSignIn
 import com.zeny.desktop.seed.people.shutDown
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assumptions.assumeTrue
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -28,11 +26,14 @@ class LiveConfigCheck {
         val parsed = SeedArgs.parse(emptyList(), System.getenv())
         assertTrue(parsed is ParseResult.Ok, "variáveis ZENY_SEED_* incompletas")
         val config = parsed.config
-        val today = LocalDate.now(ZoneId.of("America/Sao_Paulo"))
-        val data = DemoCatalog.build(today)
         runBlocking {
             val session = AdminSignIn(SdkSessionFactory(config.server)).open(config)
             try {
+                val today =
+                    session.seed.core.hotel
+                        .businessDate()
+                        .value
+                val data = DemoCatalog.build(today)
                 val gateway = SdkConfigGateway(session.seed)
                 val first = SeedReport()
                 val result = ConfigSeeder(gateway, first).seed(data, today)

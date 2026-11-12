@@ -207,6 +207,15 @@ class SdkConfigGatewayTest {
         }
 
     @Test
+    fun hotelBlankEtagFailsBeforeThePut() =
+        runTest {
+            val hotel = hotelJson(false)
+            val gateway = gateway { json(hotel, etag = " ") }
+            assertFailsWith<ApiError.IncompatibleResponse> { gateway.configureHotel(HOTEL_SPEC) }
+            assertEquals(listOf(HttpMethod.Get), requests.map { it.method })
+        }
+
+    @Test
     fun policiesFoundByNameIgnoringCase() =
         runTest {
             val guarantee = guaranteeJson("Sem Garantia")

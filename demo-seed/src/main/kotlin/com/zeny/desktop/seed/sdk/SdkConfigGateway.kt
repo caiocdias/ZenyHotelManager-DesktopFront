@@ -72,14 +72,15 @@ class SdkConfigGateway(
     }
 
     /**
-     * O `PUT` leva o `ETag` do `GET` no `If-Match`, que o seed exige. Sem `ETag` na resposta, falha com
-     * `ApiError.IncompatibleResponse` (mensagem pt-BR por `userMessage`) antes de enviar o `PUT`: o servidor não
-     * cumpriu o contrato, e sobrescrever às cegas apagaria uma edição concorrente.
+     * O `PUT` leva o `ETag` do `GET` no `If-Match`, que o seed exige. Sem `ETag` (ausente ou em branco) na
+     * resposta, falha com `ApiError.IncompatibleResponse` (mensagem pt-BR por `userMessage`) antes de enviar o
+     * `PUT`: o servidor não cumpriu o contrato, e sobrescrever às cegas apagaria uma edição concorrente.
      */
     override suspend fun configureHotel(spec: HotelSpec) {
         val current = executor.execute { hotelApi.getHotel(it.headers) }
         val etag =
             current.etag
+                ?.takeIf { it.isNotBlank() }
                 ?: throw ApiError.IncompatibleResponse(IllegalStateException("GET do hotel sem ETag"))
         val request =
             HotelRequest(
@@ -211,7 +212,7 @@ class SdkConfigGateway(
 
     /**
      * Lê o `ETag` do status da UH e o manda no `If-Match` (o servidor responde 428 sem ele e 412 se a versão
-     * mudou). Sem `ETag` na resposta, falha com `ApiError.IncompatibleResponse` antes do `POST`.
+     * mudou). Sem `ETag` (ausente ou em branco) na resposta, falha com `ApiError.IncompatibleResponse` antes do `POST`.
      * `MARK_CLEAN_PENDING_INSPECTION` é `MARK_CLEAN` com `requiresInspection`; não há `Idempotency-Key`.
      */
     override suspend fun changeHousekeeping(
@@ -220,7 +221,10 @@ class SdkConfigGateway(
     ) {
         val id = Uuid.parse(roomId)
         val etag =
-            executor.execute { roomsApi.getRoomStatus(id, it.headers) }.etag
+            executor
+                .execute { roomsApi.getRoomStatus(id, it.headers) }
+                .etag
+                ?.takeIf { it.isNotBlank() }
                 ?: throw ApiError.IncompatibleResponse(IllegalStateException("GET do status da UH sem ETag"))
         val requiresInspection = transition == HousekeepingTransition.MARK_CLEAN_PENDING_INSPECTION
         val request =
