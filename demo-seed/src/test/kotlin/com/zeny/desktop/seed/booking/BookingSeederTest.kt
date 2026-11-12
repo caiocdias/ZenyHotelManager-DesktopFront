@@ -96,6 +96,14 @@ class BookingSeederTest {
         }
 
     @Test
+    fun waitStopsExactlyAtTheLimit() =
+        runTest {
+            fake.inventoryStaleReads = Int.MAX_VALUE
+            assertFailsWith<SeedFailure> { seeder().seed(data, config) }
+            assertEquals(60_000, currentTime)
+        }
+
+    @Test
     fun retriesUnavailableOnce() =
         runTest {
             fake.createFailures += ApiError.Problem(409, "ROOM_TYPE_UNAVAILABLE", null, emptyList())

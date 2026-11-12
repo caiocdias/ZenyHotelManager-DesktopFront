@@ -13,7 +13,10 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
-/** Espera crescente (500 ms, 1 s, 2 s, até 5 s) medida pelo que foi dormido, para valer em tempo virtual. */
+/**
+ * Espera crescente (500 ms, 1 s, 2 s, até 5 s) medida pelo que foi dormido, para valer em tempo virtual;
+ * a última espera é cortada no que resta do limite.
+ */
 private class Backoff(
     private val limit: Duration,
 ) {
@@ -23,8 +26,9 @@ private class Backoff(
     /** Dorme o próximo intervalo; falha com a mensagem do operador quando o limite já foi gasto. */
     suspend fun pause() {
         if (waited >= limit) throw SeedFailure(INVENTORY_TIMEOUT_MESSAGE)
-        delay(next)
-        waited += next
+        val step = minOf(next, limit - waited)
+        delay(step)
+        waited += step
         next = minOf(next * 2, MAX_WAIT)
     }
 
@@ -72,8 +76,9 @@ class BookingSeeder(
                 report.kept(SeedItem.COMPANY)
                 spec.cnpj to existing
             } else {
+                val id = gateway.createCompany(spec)
                 report.created(SeedItem.COMPANY)
-                spec.cnpj to gateway.createCompany(spec)
+                spec.cnpj to id
             }
         }
 
