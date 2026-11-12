@@ -42,9 +42,16 @@ data class ApprovalDialogModel(
         "ApprovalDialogModel(detail=$detail, login=$login, pin=***, reason=$reason, message=$message, busy=$busy)"
 }
 
+/** Corta em `MAX_REASON` unidades UTF-16 sem deixar a metade alta de um par substituto no fim. */
+private fun cutReason(text: String): String {
+    val cut = text.take(MAX_REASON)
+    return if (cut.length == MAX_REASON && cut.last().isHighSurrogate()) cut.dropLast(1) else cut
+}
+
 /**
  * Login e PIN (mascarado) de quem aprova e o motivo; "Aprovar" só com os campos válidos. Na digitação, o PIN
- * aceita só dígitos de 0 a 9 até 8 (outra edição é ignorada) e o motivo é cortado em 500 caracteres.
+ * aceita só dígitos de 0 a 9 até 8 (outra edição é ignorada) e o motivo é cortado em 500 unidades UTF-16, sem
+ * partir um par substituto.
  */
 @Composable
 @Suppress("LongParameterList") // assinatura fixada pelo plano
@@ -86,7 +93,7 @@ fun ApprovalDialog(
                 )
                 OutlinedTextField(
                     value = model.reason,
-                    onValueChange = { onReason(it.take(MAX_REASON)) },
+                    onValueChange = { onReason(cutReason(it)) },
                     label = { Text("Motivo") },
                     supportingText = { Text("Obrigatório, até $MAX_REASON caracteres.") },
                     enabled = !model.busy,
