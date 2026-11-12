@@ -62,7 +62,7 @@ object DemoSeed {
     }
 
     /** `clock` em nanossegundos. Falhas viram uma linha em pt-BR e o código 1, nunca pilha nem a causa do erro. */
-    @Suppress("TooGenericExceptionCaught") // última fronteira: nenhuma exceção chega ao operador como pilha
+    @Suppress("TooGenericExceptionCaught") // última fronteira: nenhum erro, nem Error, chega ao operador como pilha
     internal suspend fun run(
         config: SeedConfig,
         openAdmin: suspend (SeedConfig) -> AdminContext,
@@ -82,14 +82,25 @@ object DemoSeed {
             out(e.message.orEmpty())
             FAILURE
         } catch (e: ApiError) {
-            out("Falha: " + e.userMessage)
+            out("Falha: " + printable(e))
             FAILURE
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // sem a mensagem: pode ecoar dado de hóspede ou segredo
             out("Falha inesperada (${e::class.simpleName}).")
             FAILURE
         }
     }
+
+    /**
+     * Sem mensagem de catálogo, a `userMessage` de um `Problem` é o `detail` cru do servidor, que pode ecoar
+     * dado de hóspede (LGPD): nesse caso só o status é impresso.
+     */
+    private fun printable(e: ApiError): String =
+        if (e is ApiError.Problem && e.userMessage == e.detail) {
+            "o servidor recusou a operação (HTTP ${e.status})."
+        } else {
+            e.userMessage
+        }
 
     private suspend fun seedAll(
         config: SeedConfig,
