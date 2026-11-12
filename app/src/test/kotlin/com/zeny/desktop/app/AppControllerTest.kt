@@ -11,8 +11,10 @@ import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.ProbeResult
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
@@ -33,7 +35,9 @@ class AppControllerTest {
         override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
         var passwordChangeRequired = false
         var loginError: Exception? = null
+        var activeBeforeLoginError = false
         var logoutHangs = false
+        var logoutGate: CompletableDeferred<Unit>? = null
         var closed = false
         val calls = mutableListOf<String>()
 
@@ -42,7 +46,12 @@ class AppControllerTest {
             password: String,
         ) {
             calls += "login:$login"
-            loginError?.let { throw it }
+            loginError?.let {
+                if (activeBeforeLoginError) {
+                    state.value = SessionState.Active("user-1", "session-1", passwordChangeRequired)
+                }
+                throw it
+            }
             state.value = SessionState.Active("user-1", "session-1", passwordChangeRequired)
         }
 
@@ -61,6 +70,7 @@ class AppControllerTest {
         override suspend fun logout() {
             calls += "logout"
             if (logoutHangs) awaitCancellation()
+            logoutGate?.await()
             state.value = SessionState.LoggedOut
         }
 
@@ -111,6 +121,7 @@ class AppControllerTest {
 
     private val serverA = ServerUrl.parse("http://localhost:8088")!!
     private val serverB = ServerUrl.parse("http://outro:9090")!!
+    private val serverC = ServerUrl.parse("http://terceiro:7070")!!
 
     private class Fixture(
         val settings: RecordingSettings,
@@ -162,13 +173,62 @@ class AppControllerTest {
         }
 
     @Test
-    fun passwordChangeRequiredErrorBecomesItsOutcome() =
+    fun passwordChangeRequiredErrorWithoutSessionFails() =
         runTest {
-            val f = Fixture(RecordingSettings(), backgroundScope) { it.loginError = ApiError.PasswordChangeRequired }
+            val settings = RecordingSettings()
+            val f = Fixture(settings, backgroundScope) { it.loginError = ApiError.PasswordChangeRequired }
 
             val outcome = f.controller.login(serverA, "ana", "segredo")
+            runCurrent()
+
+            assertEquals(LoginOutcome.Failed(ApiError.PasswordChangeRequired.userMessage), outcome)
+            assertEquals(Screen.Login, f.controller.screen.value)
+            assertTrue(settings.writes.isEmpty())
+        }
+
+    @Test
+    fun passwordChangeRequiredErrorWithSessionAskingChangeGoesToPasswordChange() =
+        runTest {
+            val settings = RecordingSettings()
+            val f =
+                Fixture(settings, backgroundScope) {
+                    it.passwordChangeRequired = true
+                    it.activeBeforeLoginError = true
+                    it.loginError = ApiError.PasswordChangeRequired
+                }
+
+            val outcome = f.controller.login(serverA, "ana", "segredo")
+            runCurrent()
 
             assertEquals(LoginOutcome.PasswordChangeRequired, outcome)
+            assertEquals(Screen.PasswordChange, f.controller.screen.value)
+            assertEquals("http://localhost:8088", settings.serverUrl)
+            assertEquals("ana", settings.lastLogin)
+        }
+
+    @Test
+    fun concurrentServerSwitchesLeaveOnlyOneOpenConnection() =
+        runTest {
+            val gateA = CompletableDeferred<Unit>()
+            val f = Fixture(RecordingSettings(), backgroundScope) { if (it.url == serverA) it.logoutGate = gateA }
+            f.controller.login(serverA, "ana", "segredo")
+            runCurrent()
+
+            // B fica preso no logout de A; C chega no meio.
+            val toB = async { f.controller.login(serverB, "ana", "segredo") }
+            runCurrent()
+            val toC = async { f.controller.login(serverC, "ana", "segredo") }
+            runCurrent()
+            gateA.complete(Unit)
+            runCurrent()
+            toB.await()
+            toC.await()
+            runCurrent()
+
+            val open = f.created.filterNot { it.closed }
+            assertEquals(1, open.size, "conexões abertas: ${open.map { it.url }}")
+            assertSame(open.single(), f.controller.connection)
+            assertEquals(serverC, open.single().url)
         }
 
     @Test

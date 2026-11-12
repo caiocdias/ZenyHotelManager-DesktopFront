@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -66,6 +68,9 @@ class AppController(
     private var connectionUrl: ServerUrl? = null
     private var watcher: Job? = null
 
+    /** Uma troca de conexão por vez: outro login não cria conexão enquanto a anterior encerra. */
+    private val switching = Mutex()
+
     /** Endereço com que a tela de login abre; depois de um login aceito, é o desse login. */
     val initialServer: String get() = resolveServer().value
 
@@ -82,10 +87,14 @@ class AppController(
         return try {
             conn.login(login, password)
             accepted(conn, url, login)
-        } catch (
-            @Suppress("SwallowedException") e: ApiError.PasswordChangeRequired,
-        ) {
-            LoginOutcome.PasswordChangeRequired
+        } catch (e: ApiError.PasswordChangeRequired) {
+            // Só vale com sessão aberta pedindo a troca; sem ela não haveria como trocar a senha.
+            val state = conn.state.value
+            if (state is SessionState.Active && state.passwordChangeRequired) {
+                accepted(conn, url, login)
+            } else {
+                LoginOutcome.Failed(e.userMessage)
+            }
         } catch (e: ApiError) {
             LoginOutcome.Failed(e.userMessage)
         }
@@ -130,23 +139,24 @@ class AppController(
         runBlocking { shutdown(conn) }
     }
 
-    private suspend fun connectionFor(url: ServerUrl): ServerConnection {
-        val current = connection
-        if (current != null && connectionUrl == url) return current
-        if (current != null) {
-            watcher?.cancel()
-            connection = null
-            connectionUrl = null
-            // Sem conexão não sobra a casca, mesmo se o `connect` abaixo lançar.
-            currentScreen.value = Screen.Login
-            shutdown(current)
+    private suspend fun connectionFor(url: ServerUrl): ServerConnection =
+        switching.withLock {
+            val current = connection
+            if (current != null && connectionUrl == url) return@withLock current
+            if (current != null) {
+                watcher?.cancel()
+                connection = null
+                connectionUrl = null
+                // Sem conexão não sobra a casca, mesmo se o `connect` abaixo lançar.
+                currentScreen.value = Screen.Login
+                shutdown(current)
+            }
+            connect(url).also {
+                connection = it
+                connectionUrl = url
+                watch(it)
+            }
         }
-        return connect(url).also {
-            connection = it
-            connectionUrl = url
-            watch(it)
-        }
-    }
 
     /** O logout é melhor esforço: se falhar, a conexão fecha do mesmo jeito e a falha não sobe. */
     private suspend fun shutdown(conn: ServerConnection) {
