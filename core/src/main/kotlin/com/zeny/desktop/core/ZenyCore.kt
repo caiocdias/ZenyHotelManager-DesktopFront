@@ -14,9 +14,11 @@ import com.zeny.desktop.core.session.IamTokenRefresher
 import com.zeny.desktop.core.session.SessionManager
 import com.zeny.desktop.core.session.TokenStore
 import com.zeny.desktop.sdk.client.FrontdeskApi
+import com.zeny.desktop.sdk.client.GuestsApi
 import com.zeny.desktop.sdk.client.HotelApi
 import com.zeny.desktop.sdk.client.IamApi
 import com.zeny.desktop.sdk.client.MetaApi
+import com.zeny.desktop.sdk.client.RatesApi
 import com.zeny.desktop.sdk.client.ReservationsApi
 import com.zeny.desktop.sdk.client.RoomsApi
 import com.zeny.desktop.sdk.client.StreamApi
@@ -79,7 +81,7 @@ class ZenyCore(
     }
 }
 
-/** As `<Tag>Api` geradas usadas até a E06, sobre a mesma base, criadas no primeiro uso. */
+/** As `<Tag>Api` geradas usadas pelo `core` e pelo `demo-seed`, sobre a mesma base, criadas no primeiro uso. */
 class Apis(
     base: HttpClientOgen,
 ) {
@@ -90,4 +92,6 @@ class Apis(
     val frontdesk: FrontdeskApi by lazy { FrontdeskApi(base) }
     val reservations: ReservationsApi by lazy { ReservationsApi(base) }
     val stream: StreamApi by lazy { StreamApi(base) }
+    val rates: RatesApi by lazy { RatesApi(base) }
+    val guests: GuestsApi by lazy { GuestsApi(base) }
 }
