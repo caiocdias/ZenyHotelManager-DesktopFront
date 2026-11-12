@@ -11,6 +11,7 @@ import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ProbeResult
 import com.zeny.desktop.core.session.SessionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +24,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 private const val SESSION_ENDED_NOTICE = "Sua sessão foi encerrada. Entre novamente."
+private const val REPLACED_DURING_LOGIN = "O servidor mudou durante o login. Entre novamente."
 private val LOGOUT_TIMEOUT = 3.seconds
 
 sealed interface Screen {
@@ -86,6 +88,8 @@ class AppController(
         url: ServerUrl,
         login: String,
     ): LoginOutcome {
+        // Outro login trocou de servidor enquanto este estava em voo: esta conexão não vale mais.
+        if (conn !== connection) return LoginOutcome.Failed(REPLACED_DURING_LOGIN)
         bestEffort { settings.serverUrl = url.value }
         bestEffort { settings.lastLogin = login }
         val state = conn.state.value
@@ -125,6 +129,8 @@ class AppController(
             watcher?.cancel()
             connection = null
             connectionUrl = null
+            // Sem conexão não sobra a casca, mesmo se o `connect` abaixo lançar.
+            currentScreen.value = Screen.Login
             shutdown(current)
         }
         return connect(url).also {
@@ -134,9 +140,16 @@ class AppController(
         }
     }
 
+    /** O logout é melhor esforço: se falhar, a conexão fecha do mesmo jeito e a falha não sobe. */
     private suspend fun shutdown(conn: ServerConnection) {
         try {
             if (conn.state.value is SessionState.Active) withTimeoutOrNull(logoutTimeout) { conn.logout() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (
+            @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
+        ) {
+            // A sessão local some com a conexão; o servidor a expira sozinho.
         } finally {
             conn.close()
         }
