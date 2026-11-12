@@ -38,6 +38,7 @@ class AppRootTest {
     private class FakeConnection : ServerConnection {
         override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
         val changes = mutableListOf<Pair<String, String>>()
+        var logouts = 0
 
         override suspend fun login(
             login: String,
@@ -57,6 +58,7 @@ class AppRootTest {
         override suspend fun retryPasswordChangeRefresh() = Unit
 
         override suspend fun logout() {
+            logouts++
             state.value = SessionState.LoggedOut
         }
 
@@ -138,5 +140,33 @@ class AppRootTest {
             assertEquals(listOf("senha-antiga" to "uma-senha-bem-longa"), connection.changes)
             onNodeWithText("Entrar").assertDoesNotExist()
             onNodeWithText("Trocar senha").assertDoesNotExist()
+        }
+
+    @Test
+    fun logoutFromThePasswordChangeReturnsToLogin() =
+        runComposeUiTest {
+            val connection = FakeConnection()
+            setContent {
+                val scope = rememberCoroutineScope()
+                val controller =
+                    remember {
+                        AppController(MemorySettings(), { connection }, { ProbeResult.Ok("1.0") }, scope)
+                    }
+                ZenyTheme { AppRoot(controller, devMode = false) }
+            }
+            onNodeWithTag("login-user").performTextInput("ana")
+            onNodeWithTag("login-password").performTextInput("senha-antiga")
+            onNodeWithText("Entrar").performClick()
+            waitForIdle()
+            onNodeWithTag("password-current").assertExists()
+
+            onNodeWithText("Sair").performClick()
+            waitForIdle()
+
+            assertEquals(1, connection.logouts)
+            assertTrue(connection.changes.isEmpty())
+            onNodeWithTag("password-current").assertDoesNotExist()
+            onNodeWithText("Entrar").assertExists()
+            onNodeWithTag("login-notice").assertDoesNotExist()
         }
 }

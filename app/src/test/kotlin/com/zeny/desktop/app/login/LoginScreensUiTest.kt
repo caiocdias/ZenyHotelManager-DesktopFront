@@ -110,7 +110,7 @@ class LoginScreensUiTest {
                             scope = scope,
                         )
                     }
-                ZenyTheme { PasswordChangeScreen(state) }
+                ZenyTheme { PasswordChangeScreen(state, onLogout = {}) }
             }
             onNodeWithTag("password-current").performTextInput("senha-antiga")
             onNodeWithTag("password-new").performTextInput("uma-senha-bem-longa")

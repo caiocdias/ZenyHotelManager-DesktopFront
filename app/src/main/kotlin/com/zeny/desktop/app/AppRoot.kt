@@ -73,7 +73,7 @@ internal fun AppRoot(
                             scope = scope,
                         )
                     }
-                PasswordChangeScreen(state)
+                PasswordChangeScreen(state, onLogout = { scope.launch { controller.logout() } })
             }
 
             Screen.Shell -> {

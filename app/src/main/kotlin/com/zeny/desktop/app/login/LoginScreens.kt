@@ -41,19 +41,22 @@ fun LoginScreen(
     }
 }
 
-/** Troca de senha pedida pelo servidor: senha atual, nova e confirmação, todas mascaradas. */
+/** Troca de senha pedida pelo servidor: senha atual, nova e confirmação, todas mascaradas; "Sair" desiste e sai. */
 @Composable
-fun PasswordChangeScreen(state: PasswordChangeState) =
-    FormPanel(title = "Troque sua senha") {
-        Hint("O servidor pede uma senha nova antes de continuar. Use de 12 a 128 caracteres.", "password-hint")
-        PasswordField(state.current, { state.current = it }, "Senha atual", "password-current")
-        PasswordField(state.new, { state.new = it }, "Nova senha", "password-new")
-        PasswordField(state.confirm, { state.confirm = it }, "Confirme a nova senha", "password-confirm")
-        state.message?.let { Message(it, "password-message") }
-        Button(onClick = { state.submit {} }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
-            Text("Trocar senha")
-        }
+fun PasswordChangeScreen(
+    state: PasswordChangeState,
+    onLogout: () -> Unit,
+) = FormPanel(title = "Troque sua senha") {
+    Hint("O servidor pede uma senha nova antes de continuar. Use de 12 a 128 caracteres.", "password-hint")
+    PasswordField(state.current, { state.current = it }, "Senha atual", "password-current")
+    PasswordField(state.new, { state.new = it }, "Nova senha", "password-new")
+    PasswordField(state.confirm, { state.confirm = it }, "Confirme a nova senha", "password-confirm")
+    state.message?.let { Message(it, "password-message") }
+    Button(onClick = { state.submit {} }, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+        Text("Trocar senha")
     }
+    OutlinedButton(onClick = onLogout, modifier = Modifier.fillMaxWidth()) { Text("Sair") }
+}
 
 @Composable
 private fun FormPanel(
