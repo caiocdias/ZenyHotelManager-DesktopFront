@@ -8,6 +8,8 @@ import com.zeny.desktop.seed.data.SeedItem
 import com.zeny.desktop.seed.data.SeedReport
 import com.zeny.desktop.seed.data.UserSpec
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 
 /** Senhas provisórias aleatórias, com maiúscula, minúscula, dígito e símbolo. */
@@ -34,7 +36,8 @@ object ProvisionalPasswords {
 @Suppress("TooGenericExceptionCaught", "SwallowedException") // a saída é melhor esforço: sem sessão ou sem rede, segue
 internal suspend fun SessionPort.shutDown() {
     try {
-        signOut()
+        // NonCancellable: com a corrotina já cancelada, o logout no servidor ainda tem de sair
+        withContext(NonCancellable) { signOut() }
     } catch (e: CancellationException) {
         throw e
     } catch (_: Exception) {
@@ -82,7 +85,8 @@ class AdminSignIn<S : SessionPort>(
         when (session.signIn(login, new)) {
             SignIn.Active -> true
             SignIn.Locked -> throw SeedFailure(LOCKED)
-            SignIn.MustChangePassword, SignIn.InvalidCredentials -> false
+            SignIn.MustChangePassword -> throw SeedFailure(NEW_STILL_PROVISIONAL)
+            SignIn.InvalidCredentials -> false
         }
 
     private suspend fun changeInitial(
@@ -98,6 +102,9 @@ class AdminSignIn<S : SessionPort>(
         const val MUST_CHANGE =
             "O administrador precisa trocar a senha: informe --admin-new-password " +
                 "(ou ZENY_SEED_ADMIN_NEW_PASSWORD)."
+        const val NEW_STILL_PROVISIONAL =
+            "A senha nova do administrador ainda é provisória no servidor; " +
+                "troque-a pelo app ou redefina-a e rode de novo."
         const val REJECTED = "Login ou senha do administrador recusados."
         const val LOCKED = "A conta do administrador está bloqueada por tentativas; espere e tente de novo."
     }
