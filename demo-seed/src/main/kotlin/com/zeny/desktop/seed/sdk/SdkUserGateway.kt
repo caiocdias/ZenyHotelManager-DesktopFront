@@ -4,7 +4,6 @@ package com.zeny.desktop.seed.sdk
 
 import com.zeny.desktop.core.RawSdkAccess
 import com.zeny.desktop.core.error.ApiError
-import com.zeny.desktop.core.error.FieldError
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.sdk.model.CreateUserRequest
@@ -21,7 +20,6 @@ import kotlin.uuid.Uuid
 
 private const val PAGE_SIZE = 200
 private const val PRECONDITION_REQUIRED = 428
-private const val MASK = "***"
 
 /**
  * Usuários e perfis sobre o `sdk`. As operações usadas não levam `Idempotency-Key` no contrato; o admin tem
@@ -124,34 +122,7 @@ private suspend fun <I> allPages(fetch: suspend (cursor: String?, limit: Int) ->
     return all
 }
 
-/**
- * O servidor pode ecoar o que recebeu (senha, PIN) em `detail` e nas mensagens de campo; o `userMessage` do
- * `Problem` nasce do `detail`. Aqui o erro é refeito, com o mesmo status, código e campos, sem os segredos.
- */
-@Suppress("SwallowedException") // o erro original traz o eco do segredo: é descartado de propósito
 private suspend fun <T> redacting(
     vararg secrets: Secret?,
     block: suspend () -> T,
-): T {
-    val values = secrets.mapNotNull { it?.value?.takeIf(String::isNotEmpty) }
-
-    fun String.clean() = values.fold(this) { text, secret -> text.replace(secret, MASK) }
-    try {
-        return block()
-    } catch (e: ApiError.Problem) {
-        throw ApiError.Problem(
-            e.status,
-            e.code?.clean(),
-            e.detail?.clean(),
-            e.fieldErrors.map { FieldError(it.field.clean(), it.code.clean(), it.message.clean()) },
-        )
-    } catch (e: ApiError.ApprovalRequired) {
-        throw ApiError.ApprovalRequired(
-            e.action.clean(),
-            e.permission.clean(),
-            e.resourceRef.clean(),
-            e.limit,
-            e.detail?.clean(),
-        )
-    }
-}
+): T = redactingValues(secrets.mapNotNull { it?.value }, block)

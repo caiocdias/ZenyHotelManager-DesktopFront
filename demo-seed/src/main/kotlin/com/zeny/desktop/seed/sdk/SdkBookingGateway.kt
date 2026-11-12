@@ -48,7 +48,9 @@ class SdkBookingGateway(
     /** Adultos reservados por reserva já vista, para o `guestCount` do check-in (a porta só passa os hóspedes). */
     private val adultsByReservation = mutableMapOf<String, Int>()
 
-    override suspend fun companyId(cnpj: String): String? {
+    override suspend fun companyId(cnpj: String): String? = redactingValues(listOf(cnpj)) { findCompany(cnpj) }
+
+    private suspend fun findCompany(cnpj: String): String? {
         val pager =
             CursorPager<CompanyResponse> { cursor, limit ->
                 val page =
@@ -78,20 +80,24 @@ class SdkBookingGateway(
                 legalName = spec.legalName,
                 tradeName = Option.Some(spec.tradeName),
             )
-        return executor
-            .execute { guestsApi.createCompany(request, it.headers) }
-            .value.id
-            .toString()
+        return redactingValues(listOf(spec.cnpj, spec.legalName, spec.tradeName)) {
+            executor
+                .execute { guestsApi.createCompany(request, it.headers) }
+                .value.id
+                .toString()
+        }
     }
 
     override suspend fun guestId(cpf: String): String? {
         val request = GuestDocumentSearchRequest(number = cpf, type = GuestDocumentSearchRequest.Type.CPF)
-        return executor
-            .execute { guestsApi.searchGuestsByDocument(request, it.headers) }
-            .value.items
-            .firstOrNull()
-            ?.id
-            ?.toString()
+        return redactingValues(listOf(cpf)) {
+            executor
+                .execute { guestsApi.searchGuestsByDocument(request, it.headers) }
+                .value.items
+                .firstOrNull()
+                ?.id
+                ?.toString()
+        }
     }
 
     override suspend fun createGuest(
@@ -111,10 +117,12 @@ class SdkBookingGateway(
                         vip = false,
                     ),
             )
-        return executor
-            .execute { guestsApi.createGuest(request, it.headers) }
-            .value.id
-            .toString()
+        return redactingValues(listOf(spec.cpf, spec.fullName)) {
+            executor
+                .execute { guestsApi.createGuest(request, it.headers) }
+                .value.id
+                .toString()
+        }
     }
 
     override suspend fun inventory(
