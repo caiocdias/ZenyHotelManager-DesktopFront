@@ -283,6 +283,8 @@ class ShellStateTest {
             assertEquals("Recepcionista", state.userName)
             assertEquals(Area.RECEPTION, state.areas.first().first)
             assertFalse(state.loading)
+            // A carga cancelada pelo reload não vira erro.
+            assertNull(state.error)
         }
 
     @Test
@@ -330,12 +332,17 @@ class ShellStateTest {
             val state = ShellState(connection, devMode = false, scope = this)
             advanceUntilIdle()
 
+            assertNull(state.error)
+
             state.close()
             advanceUntilIdle()
+            // A carga cancelada pelo close não vira erro.
+            assertNull(state.error)
             state.reload()
             advanceUntilIdle()
 
             assertEquals(1, cancelled)
             assertEquals(1, connection.meCalls)
+            assertNull(state.error)
         }
 }
