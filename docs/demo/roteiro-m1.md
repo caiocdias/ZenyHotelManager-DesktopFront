@@ -41,7 +41,7 @@ $LASTEXITCODE
   tipos de UH: 3 criados, 0 já existiam
   áreas: 3 criados, 0 já existiam
   UHs: 20 criados, 0 já existiam
-  status de UH: 16 criados, 0 já existiam
+  status de UH: 16 criados, 4 já existiam
   bloqueios OOO: 1 criados, 0 já existiam
   temporadas: 2 criados, 0 já existiam
   planos: 1 criados, 0 já existiam
@@ -163,14 +163,14 @@ $session.passwordChangeRequired
 
 **Resultado esperado:** a última linha mostra `False`. Uma mensagem de erro em vermelho com `INVALID_CREDENTIALS` quer dizer senha errada: confira e repita o bloco, com cuidado, porque erros seguidos bloqueiam o usuário (`ACCOUNT_LOCKED`).
 
-**7.2. Achar a UH 106 e ler a versão dela.** O `ETag` da resposta é a versão atual da UH; ele vai intacto, com as aspas, no `If-Match` da mudança.
+**7.2. Achar a UH 106 e ler a versão dela.** O `ETag` da resposta é a versão atual da UH; ele vai intacto, com as aspas, no `If-Match` da mudança. O `[string]` garante um texto só (no PowerShell 7 o cabeçalho vem como lista); não corte nem tire as aspas do valor.
 
 ```powershell
 $rooms = Invoke-RestMethod -Uri "$base/api/v1/rooms/status?limit=200" -Headers $auth
 $id = ($rooms.items | Where-Object { $_.number -eq "106" }).roomId
 $id
 $status = Invoke-WebRequest -UseBasicParsing -Uri "$base/api/v1/rooms/$id/status" -Headers $auth
-$etag = $status.Headers["ETag"]
+$etag = [string]$status.Headers["ETag"]
 $etag
 ($status.Content | ConvertFrom-Json).housekeepingStatus
 ```
@@ -190,17 +190,17 @@ $result | Select-Object number, housekeepingStatus, inspectionPending, version
 - No PowerShell: `106`, `CLEAN`, `False` e uma versão maior que a do `ETag` do bloco 7.2.
 - No app, em até 2 segundos e sem recarregar nada: o ladrilho da UH 106 muda de "Suja" para "Limpa"; a legenda passa a "Suja: 2" e "Limpa: 3"; o selo continua "Ao vivo".
 
-**7.4. Voltar a UH para suja (para ensaiar de novo).** Repetir o `MARK_CLEAN` numa UH já limpa não muda nada (o servidor responde sem erro e o mapa fica igual). Para mostrar a mudança outra vez, volte a UH para suja com `MARK_DIRTY`. A versão mudou no bloco 7.3, então o bloco relê o `ETag` antes:
+**7.4. Voltar a UH para suja (para ensaiar de novo).** Cada mudança muda a versão da UH, e o `ETag` lido antes dela deixa de valer: qualquer mudança nova precisa do `ETag` relido (bloco 7.2), ou o servidor responde `412`. Mesmo com o `ETag` relido, repetir o `MARK_CLEAN` numa UH já limpa não muda nada (o servidor responde sem erro e o mapa fica igual). Para mostrar a mudança outra vez, volte a UH para suja com `MARK_DIRTY`; o bloco abaixo relê o `ETag` antes:
 
 ```powershell
 $status = Invoke-WebRequest -UseBasicParsing -Uri "$base/api/v1/rooms/$id/status" -Headers $auth
-$etag = $status.Headers["ETag"]
+$etag = [string]$status.Headers["ETag"]
 $change = @{ transition = "MARK_DIRTY" } | ConvertTo-Json
 $result = Invoke-RestMethod -Method Post -Uri "$base/api/v1/rooms/$id/housekeeping-status" -Headers @{ Authorization = $auth.Authorization; "If-Match" = $etag } -ContentType "application/json; charset=utf-8" -Body $change
 $result | Select-Object number, housekeepingStatus, inspectionPending, version
 ```
 
-**Resultado esperado:** no PowerShell, `106`, `DIRTY`, `False` e uma versão maior; no app, em até 2 segundos, o ladrilho volta a "Suja" e a legenda a "Suja: 3" e "Limpa: 2". Para ensaiar de novo, rode o bloco 7.2 e depois o 7.3.
+**Resultado esperado:** no PowerShell, `106`, `DIRTY`, `False` e uma versão maior; no app, em até 2 segundos, o ladrilho volta a "Suja" e a legenda a "Suja: 3" e "Limpa: 2". Para ensaiar de novo, rode o bloco 7.2 (que relê o `ETag`) e só depois o 7.3; sem reler, o 7.3 recebe `412`.
 
 **7.5. Sair da sessão da Governanta.**
 
@@ -219,6 +219,7 @@ $Error[0].Exception.Response.StatusCode.value__
 | Código | O que quer dizer | O que fazer |
 |---|---|---|
 | `412` | A versão do `If-Match` não é mais a da UH: ela mudou depois do bloco 7.2, ou o `ETag` é de antes da mudança anterior. | Rode o bloco 7.2 de novo e repita a mudança. |
+| `403` | O usuário não pode mudar o status da UH: falta a permissão `rooms.status.manage` (por exemplo, o login do bloco 7.1 foi trocado para `recepcao`, que só lê o mapa). | Rode o bloco 7.5 para sair, depois o 7.1 de novo com `governanta`, e então o 7.2. |
 | `428` | Faltou o `If-Match` (`$etag` vazio). | Rode o bloco 7.2 de novo e confira que `$etag` mostra um valor entre aspas. |
 | `422` | A transição não vale no status atual da UH (`HOUSEKEEPING_TRANSITION_NOT_ALLOWED`); por exemplo, `MARK_CLEAN` numa UH inspecionada. | Confira o status na última linha do bloco 7.2 e use uma UH vaga e suja (106, 107 ou 108). |
 | `401` | A sessão venceu (o acesso dura 15 minutos) ou a senha está errada. | Rode o bloco 7.1 de novo e, depois, o 7.2. |
