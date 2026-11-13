@@ -10,6 +10,7 @@ import com.zeny.desktop.core.session.Authenticator
 import com.zeny.desktop.core.session.TokenStore
 import com.zeny.desktop.core.session.Tokens
 import com.zeny.desktop.sdk.client.StreamApi
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockEngineConfig
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -26,6 +27,7 @@ import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -96,10 +98,23 @@ class StreamConnectionTest {
                     }
                 },
             )
-        val auth = Authenticator(store, { error("sem refresh") }, CoroutineScope(Job())) { code, _ -> ended += code }
-        val http = createCoreHttpClient(engine) { install(AuthPlugin) { authenticator = { auth } } }
-        return StreamConnection(StreamApi(ogenBase(http, "http://servidor.teste")), topics, startAfter)
+        val refreshScope = CoroutineScope(Job() + StandardTestDispatcher(testScheduler))
+        val auth = Authenticator(store, { error("sem refresh") }, refreshScope) { code, _ -> ended += code }
+        val client = createCoreHttpClient(engine) { install(AuthPlugin) { authenticator = { auth } } }
+        http = client
+        httpEngine = engine
+        return StreamConnection(StreamApi(ogenBase(client, "http://servidor.teste")), topics, startAfter)
     }
+
+    /** O cliente e o engine da última [connection], para fechá-los como o `ZenyCore.close()`. */
+    private lateinit var http: HttpClient
+    private lateinit var httpEngine: MockEngine
+
+    /** Uma resposta com o [code] cujo corpo o teste escreve e que só termina quando o teste fecha o canal. */
+    private fun liveError(code: HttpStatusCode): ByteChannel =
+        ByteChannel(autoFlush = true).also { channel ->
+            responses += { respond(channel, code, headersOf(HttpHeaders.ContentType, "application/problem+json")) }
+        }
 
     private val eventStream = headersOf(HttpHeaders.ContentType, "text/event-stream")
 
@@ -415,6 +430,93 @@ class StreamConnectionTest {
             assertEquals(reconnecting(1, 1_000), items.last())
             advanceTimeBy(1_001)
             assertEquals(2, requests.size)
+        }
+
+    @Test
+    fun noResponseWithin45sReconnects() =
+        runTest {
+            responses += { awaitCancellation() }
+            stream(ready)
+            val (items, job) = collectInBackground(connection())
+            advanceTimeBy(44_999)
+            assertEquals(listOf(connecting), items.toList())
+            advanceTimeBy(2)
+            assertTrue(job.isActive)
+            assertEquals(reconnecting(1, 1_000), items.last())
+            advanceTimeBy(1_000)
+            assertEquals(listOf(0L, 46_000L), requestTimes.take(2))
+        }
+
+    @Test
+    fun errorBodyThatNeverEndsReconnects() =
+        runTest {
+            val body = liveError(HttpStatusCode.Forbidden)
+            stream(ready)
+            val (items, _) = collectInBackground(connection())
+            runCurrent()
+            body.send("""{"code":""")
+            advanceTimeBy(44_999)
+            assertEquals(listOf(connecting), items.toList())
+            advanceTimeBy(2)
+            assertEquals(reconnecting(1, 1_000), items.last())
+        }
+
+    @Test
+    fun errorBodyIsReadOnlyUpTo64KiB() =
+        runTest {
+            // Um corpo de erro grande que não termina: a leitura para no limite, sem esperar o fim.
+            val body = liveError(HttpStatusCode.Forbidden)
+            val (items, job) = collectInBackground(connection())
+            runCurrent()
+            writeInBackground { body.writeFully(ByteArray(70 * 1024) { ' '.code.toByte() }) }
+            runCurrent()
+            val failed = assertIs<RealtimeStatus.Failed>(assertIs<Status>(items.last()).status)
+            assertEquals(403, assertIs<ApiError.Unexpected>(failed.error).status)
+            assertTrue(job.isCompleted)
+            assertEquals(0L, testScheduler.currentTime)
+        }
+
+    @Test
+    fun clientClosedMidStreamTerminates() =
+        runTest {
+            val channel = liveStream()
+            val (items, job) = collectInBackground(connection())
+            runCurrent()
+            channel.send(ready)
+            runCurrent()
+            assertEquals(Event(RealtimeEvent.Ready, "e-1"), items.last())
+            http.close()
+            httpEngine.close()
+            advanceTimeBy(120_000)
+            assertTrue(job.isCompleted, "o Flow terminou")
+            assertEquals(1, requests.size)
+            assertFalse(items.any { (it as? Status)?.status is RealtimeStatus.Failed })
+        }
+
+    @Test
+    fun clientClosedDuringBackoffTerminates() =
+        runTest {
+            stream("")
+            val (_, job) = collectInBackground(connection())
+            runCurrent()
+            http.close()
+            httpEngine.close()
+            advanceTimeBy(120_000)
+            assertTrue(job.isCompleted, "o Flow terminou")
+            assertEquals(1, requests.size)
+        }
+
+    @Test
+    fun onlyVisibleAsciiIdBecomesPosition() =
+        runTest {
+            stream(ready + message("e-2") + message("e-\u00e9") + message("e 3") + message("e-\u00014"))
+            stream(ready)
+            val items = connection().run().take(10).toList()
+            assertEquals(
+                listOf("e-2", "e-2", "e-2", "e-2"),
+                items.drop(3).take(4).map { assertIs<Event>(it).position },
+            )
+            assertEquals(listOf(null, "e-2"), requests.map { it.headers["Last-Event-ID"] })
         }
 
     @Test

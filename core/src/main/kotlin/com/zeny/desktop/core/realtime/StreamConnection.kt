@@ -14,14 +14,18 @@ import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -30,6 +34,7 @@ import kotlinx.serialization.json.longOrNull
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.nio.channels.UnresolvedAddressException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** O que o stream diz ao cliente. O payload é mínimo: diante de [Message], o cliente aplica a mudança ou rebusca. */
 sealed interface RealtimeEvent {
@@ -79,7 +84,8 @@ sealed interface ConnectionItem {
 /**
  * Uma assinatura do stream: abre `GET /api/v1/stream` com os [topics] e reabre sozinha pela [ReconnectPolicy] a
  * partir do último `id` visto (de partida, [startAfter]). Termina com [RealtimeStatus.Failed] (falha definitiva),
- * sem item novo quando a sessão acabou, ou ao ser cancelada. Nada do payload vai a log ou mensagem de erro.
+ * sem item novo quando a sessão acabou ou o cliente HTTP fechou, ou ao ser cancelada. Nada do payload vai a log
+ * ou mensagem de erro.
  */
 internal class StreamConnection(
     private val stream: StreamApi,
@@ -88,10 +94,11 @@ internal class StreamConnection(
 ) {
     fun run(): Flow<ConnectionItem> =
         channelFlow {
-            val state = RunState(startAfter?.ifEmpty { null })
+            val state = RunState(startAfter?.takeIf(::isPosition))
             while (true) {
+                if (clientClosed()) return@channelFlow
                 send(ConnectionItem.Status(RealtimeStatus.Connecting))
-                when (val outcome = connectOnce(state)) {
+                when (val outcome = connectOnce(this, state)) {
                     StreamOutcome.Retry -> {
                         val delayMillis = state.policy.nextDelayMillis()
                         state.attempt++
@@ -124,12 +131,49 @@ internal class StreamConnection(
         }
     }
 
-    private suspend fun ProducerScope<ConnectionItem>.connectOnce(state: RunState): StreamOutcome =
+    /** O cliente HTTP fechado (`ZenyCore.close()`) encerra a assinatura sem erro novo. */
+    private fun clientClosed(): Boolean = !stream.client.httpClient.isActive
+
+    /**
+     * Uma tentativa, com um guarda: se em [WATCHDOG_MILLIS] a resposta não se confirmou como stream (cabeçalhos
+     * que não chegam, corpo de erro que não termina), a tentativa é interrompida e reconecta.
+     */
+    private suspend fun connectOnce(
+        out: SendChannel<ConnectionItem>,
+        state: RunState,
+    ): StreamOutcome {
+        val outcome =
+            coroutineScope {
+                val streaming = AtomicBoolean(false)
+                val attempt = async { attemptOnce(out, state, streaming) }
+                val guard =
+                    launch {
+                        delay(WATCHDOG_MILLIS)
+                        if (!streaming.get()) attempt.cancel(CancellationException("stream sem resposta"))
+                    }
+                try {
+                    attempt.await()
+                } catch (e: CancellationException) {
+                    // Quem coleta foi cancelado: propaga. Senão, foi o guarda.
+                    ensureActive()
+                    StreamFailures.classify(StreamInterruptedException("stream sem resposta", e))
+                } finally {
+                    guard.cancel()
+                }
+            }
+        return if (clientClosed()) StreamOutcome.Stop else outcome
+    }
+
+    private suspend fun attemptOnce(
+        out: SendChannel<ConnectionItem>,
+        state: RunState,
+        streaming: AtomicBoolean,
+    ): StreamOutcome =
         try {
             stream
                 .prepareOpenStream(topics.joinToString(","), state.position, EVENT_STREAM) {
                     timeout { requestTimeoutMillis = HttpTimeoutConfig.INFINITE_TIMEOUT_MS }
-                }.execute { response -> consume(response, state) }
+                }.execute { response -> consume(out, response, state, streaming) }
         } catch (e: UnresolvedAddressException) {
             StreamFailures.classify(ApiError.Network(e))
         } catch (e: CancellationException) {
@@ -142,17 +186,20 @@ internal class StreamConnection(
             StreamFailures.classify(e)
         }
 
-    private suspend fun ProducerScope<ConnectionItem>.consume(
+    private suspend fun consume(
+        out: SendChannel<ConnectionItem>,
         response: HttpResponse,
         state: RunState,
+        streaming: AtomicBoolean,
     ): StreamOutcome {
         val status = response.status.value
-        if (status !in HTTP_SUCCESS) return StreamFailures.classify(status, ProblemMapper.fromResponse(response))
+        if (status !in HTTP_SUCCESS) return StreamFailures.classify(status, errorOf(response))
         // Um `Content-Type` que nem se interpreta também é outro tipo.
         val contentType = runCatching { response.contentType() }.getOrNull()
         if (contentType?.match(EVENT_STREAM) != true) {
             return StreamOutcome.Fail(ApiError.IncompatibleResponse(IOException("Content-Type inesperado no stream")))
         }
+        streaming.set(true)
         val reader = SseLineReader(response.bodyAsChannel())
         val parser = SseParser()
         var eventChars = 0
@@ -165,15 +212,43 @@ internal class StreamConnection(
                     else -> eventChars + line.length
                 }
             if (eventChars > MAX_EVENT_CHARS) throw StreamInterruptedException("evento grande demais")
-            parser.feed(line)?.let { deliver(it, state) }
+            parser.feed(line)?.let { deliver(out, it, state) }
         }
     }
 
-    private suspend fun ProducerScope<ConnectionItem>.deliver(
+    /** O problema do corpo de erro, lido só até [MAX_ERROR_BODY_BYTES]; corpo cortado vira erro inesperado. */
+    private suspend fun errorOf(response: HttpResponse): ApiError {
+        val text =
+            try {
+                response.bodyAsChannel().readUpTo(MAX_ERROR_BODY_BYTES)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (
+                // Como no `ProblemMapper`: corpo ilegível (já lido pelo `AuthPlugin` no 401, rede) fica vazio.
+                @Suppress("TooGenericExceptionCaught") ignored: Exception,
+            ) {
+                ""
+            }
+        return ProblemMapper.fromBody(response.status.value, text)
+    }
+
+    private suspend fun ByteReadChannel.readUpTo(limit: Int): String {
+        val buffer = ByteArray(limit)
+        var size = 0
+        while (size < limit) {
+            val read = readAvailable(buffer, size, limit - size)
+            if (read < 0) break
+            size += read
+        }
+        return String(buffer, 0, size, Charsets.UTF_8)
+    }
+
+    private suspend fun deliver(
+        out: SendChannel<ConnectionItem>,
         event: SseEvent,
         state: RunState,
     ) {
-        event.id?.takeIf { it.isNotEmpty() }?.let { state.position = it }
+        event.id?.takeIf(::isPosition)?.let { state.position = it }
         val realtime =
             when (event.event) {
                 READY -> RealtimeEvent.Ready
@@ -183,9 +258,9 @@ internal class StreamConnection(
             }
         if (event.event == READY || event.event == RESET) {
             state.live()
-            send(ConnectionItem.Status(RealtimeStatus.Live))
+            out.send(ConnectionItem.Status(RealtimeStatus.Live))
         }
-        send(ConnectionItem.Event(realtime, state.position))
+        out.send(ConnectionItem.Event(realtime, state.position))
     }
 
     private fun messageOf(
@@ -199,6 +274,9 @@ internal class StreamConnection(
         val complete = type != null && id != null && version != null
         return if (complete) RealtimeEvent.Message(topic, type, id, version) else null
     }
+
+    /** Só ASCII visível vai ao `Last-Event-ID`: outro valor o cliente HTTP recusa no cabeçalho. */
+    private fun isPosition(id: String): Boolean = id.isNotEmpty() && id.all { it in '!'..'~' }
 
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)
@@ -214,6 +292,7 @@ internal class StreamConnection(
         /** Três *heartbeats* (15 s) sem nenhuma linha: a conexão caiu. */
         const val WATCHDOG_MILLIS = 45_000L
         const val MAX_EVENT_CHARS = 1024 * 1024
+        const val MAX_ERROR_BODY_BYTES = 64 * 1024
     }
 }
 
