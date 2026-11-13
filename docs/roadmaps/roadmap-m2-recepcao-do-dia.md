@@ -2,7 +2,7 @@
 
 > Arquivo: `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` · branch de execução: `roadmap/m2-recepcao-do-dia` · criado em 2026-11-10 · última revisão 2026-11-13
 
-> **Pré-requisito:** etapa E07 ("Gate do marco M1") de `docs/roadmaps/roadmap-m1-fundacao.md` marcada `#concluida` e etapa E02 ("Sincronizar com o servidor em `57eb5fac5b8a`") de `docs/roadmaps/roadmap-m0-sincronizacao.md` marcada `#concluida` (rodada 2, análise de 2026-11-13). Se a `main` do servidor avançou de novo desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
+> **Pré-requisito:** etapa E07 ("Gate do marco M1") de `docs/roadmaps/roadmap-m1-fundacao.md` marcada `#concluida` e etapa E02 ("Sincronizar com o servidor em `57eb5fac5b8a`") de `docs/roadmaps/roadmap-m0-sincronizacao.md` marcada `#concluida` (rodada 2, análise de 2026-11-13). Enquanto valer a regra 7 do `docs/roadmaps/README.md` (validação no Windows acumulada), uma etapa `#em-andamento` aguardando só o Windows também satisfaz o pré-requisito. Nesse caso, o handoff da etapa do M2 registra que a base ainda não foi validada no Windows. Se a `main` do servidor avançou de novo desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
 ## Como usar
 

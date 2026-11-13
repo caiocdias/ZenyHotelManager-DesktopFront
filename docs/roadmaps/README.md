@@ -42,6 +42,25 @@ O gate de cada marco é um dia de trabalho (o usuário faz um gate por dia). Se 
 4. **O repositório do servidor é só leitura.** Nenhuma sessão do front escreve em `/home/caio/repos/ZenyHotelManager`, nem com worktree, checkout ou arquivo novo. O que faltar na API vira pedido `PF-NN` pelo brain ([ADR 0005](../adr/0005-pedidos-ao-servidor-pelo-brain.md)). Até 17/11, nenhuma etapa depende de pedido.
 5. **Recriar a demo.** O roteiro de cada gate começa pela recriação: `down -v`, `up -d` e `demo-seed`. A data operacional só avança no M6 do servidor, então "hoje" é o dia da recriação.
 6. **Push e deploy ficam com o usuário.** A execução commita na branch `roadmap/<slug>` e, no fim do lote, faz merge local na `main`.
+7. **Validação no Windows acumulada (temporária).** O usuário decidiu em 2026-11-13 que, enquanto estiver sem acesso ao Windows (até domingo, 2026-11-15, pelo menos), o lote não para por isso. A regra vale até ele mesmo tirá-la deste README. Enquanto ela valer:
+   - Uma etapa com `Revisão humana: sim` cuja **única** pendência é o usuário executar algo no Windows não para o lote. Isso cobre roteiro de gate, pacote e readiness lá. O orquestrador:
+     - verifica no notebook tudo o que dá;
+     - gera o pacote;
+     - deixa a etapa `#em-andamento`, com "Aguardando o Windows" no estado do handoff;
+     - acrescenta a etapa à lista "Validações acumuladas no Windows" abaixo;
+     - segue para a próxima etapa.
+   - Para a escolha da próxima etapa e para a regra 1, essa etapa conta como concluída. Quem depende dela registra no próprio handoff que a base ainda não foi validada no Windows.
+   - O orquestrador não retoma essa etapa só para esperar o usuário.
+   - Revisão humana que não é no Windows continua parando o lote. Isso inclui entrevista de arquitetura e decisão de produto.
+   - Quando o usuário voltar ao Windows, ele executa a lista na ordem, com o pacote mais recente:
+     - cada aprovação fecha a etapa `#concluida`;
+     - uma reprovação reabre a etapa com uma rodada de correção, antes de qualquer etapa nova.
+
+## Validações acumuladas no Windows
+
+Pendentes da regra 7, na ordem em que entraram:
+
+1. **M0 E02** (servidor em `57eb5fac5b8a`): executar o `roteiro-m1.md` do pacote do zero. Para não construir a imagem no Windows, fazer antes o `docker load` de `images/zeny-server-images.tar`. A aprovação fecha a etapa `#concluida`.
 
 ## Pendências do usuário antes da primeira execução
 
@@ -57,3 +76,4 @@ Estão no design, §10:
 
 - 2026-11-10 — marcos definidos e roadmaps criados (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`), contra o servidor em `57eb5fac5b8a`. Entraram a M0 E02 (sincronização), a M2 E07 (ficha de registro), a M6 E08 (fechamento do dia, `#bloqueada`) e a M7 E12 (impressão), e cresceram a M3 E03, a M4 E02, a M5 E01 e a M7 E10. Decisões no [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md). O M2 passa a exigir a M0 E02 concluída.
+- 2026-11-13 — regra 7 e a lista "Validações acumuladas no Windows", por decisão do usuário: sem acesso ao Windows até 2026-11-15 pelo menos, a validação lá é acumulada e não para o lote. A M0 E02 é a primeira da lista (`claude --agent orquestrador`).
