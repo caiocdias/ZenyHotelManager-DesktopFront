@@ -63,4 +63,71 @@ assert_contains "$readme_text" "0007" "README cita a ADR 0007"
 assert_contains "$readme_text" "0008" "README cita a ADR 0008"
 assert_not_contains "$readme_text" "Ainda não há código do app" "README não diz mais que não há código"
 
+# Roteiro da demo do M1 (E07): passos em ordem, comandos do PowerShell 5.1 e nenhum segredo.
+roteiro="$ROOT/docs/demo/roteiro-m1.md"
+assert_file "$roteiro" "docs/demo/roteiro-m1.md existe"
+rot_text="$(cat "$roteiro" 2>/dev/null)"
+steps=(
+  "## 1. Recriar a demo"
+  "## 2. Abrir o app"
+  "## 3. Configurar o servidor"
+  "## 4. Entrar como Recepcionista"
+  "## 5. Entrar como Gerente"
+  "## 6. Mapa de UHs"
+  "## 7. Mudança de status ao vivo"
+  "## 8. Sair"
+)
+prev=0
+for step in "${steps[@]}"; do
+  line="$(grep -nFx -- "$step" "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+  if [[ -z "$line" ]]; then
+    _assert_fail "roteiro tem o passo: $step"
+  elif ((line <= prev)); then
+    _assert_fail "roteiro: passo fora de ordem: $step"
+  else
+    prev="$line"
+  fi
+done
+for word in recepcao gerente governanta '"-Dzeny.devShell=true"' "http://localhost:8088" MARK_CLEAN MARK_DIRTY \
+  If-Match Get-Credential "[guid]::NewGuid().ToString()" "charset=utf-8" "-UseBasicParsing"; do
+  assert_contains "$rot_text" "$word" "roteiro cita $word"
+done
+# Seções do LEIA-ME pelo título, nunca pelo número; cada título citado existe no LEIA-ME.
+assert_eq "" "$(grep -nE '[Ss]eção [0-9]' "$roteiro" 2>/dev/null)" "roteiro não cita seção do LEIA-ME pelo número"
+cited="$(grep -oE 'seção "[^"]+"' "$roteiro" 2>/dev/null | sed -E 's/^seção "//; s/"$//' | sort -u)"
+for t in "Parar e recriar a demo" "Primeira vez (com internet)" "Abrir o app"; do
+  assert_contains "$cited" "$t" "roteiro remete à seção \"$t\" do LEIA-ME"
+done
+while IFS= read -r t; do
+  [[ -n "$t" ]] || continue
+  grep -qE "^## ([0-9]+\. )?$(sed 's/[][\.*^$()+?{}|]/\\&/g' <<<"$t")\$" "$ROOT/tools/server-env/LEIA-ME.md" ||
+    _assert_fail "seção citada pelo roteiro existe no LEIA-ME: $t"
+done <<<"$cited"
+# Sem segredo nem comando perigoso.
+assert_eq "" "$(grep -nE -e '-Password\b' "$roteiro" 2>/dev/null)" "roteiro sem -Password"
+assert_eq "" "$(grep -niE 'password[[:space:]]*=[[:space:]]*["'"'"']?[^$<"'"'"'[:space:]]' "$roteiro" 2>/dev/null)" \
+  "roteiro sem password= com valor literal"
+assert_eq "" "$(grep -niE '"password"[[:space:]]*:[[:space:]]*"[^<$]' "$roteiro" 2>/dev/null)" \
+  "roteiro sem \"password\":\"valor\""
+assert_eq "" "$(grep -nE 'ZENY_SEED_[A-Z_]*[[:space:]]*=[[:space:]]*"?[^<"[:space:]]' "$roteiro" 2>/dev/null)" \
+  "roteiro sem valor atribuído a ZENY_SEED_*"
+assert_eq "" "$(grep -nE -e '-p zeny( |$|`)' "$roteiro" 2>/dev/null)" "roteiro sem -p zeny"
+ps_blocks="$(awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' "$roteiro" 2>/dev/null)"
+assert_contains "$ps_blocks" "Invoke-RestMethod" "roteiro tem blocos PowerShell com os comandos HTTP"
+assert_eq "" "$(grep -nE '(^|[^.A-Za-z0-9_-])curl([[:space:]]|$)' <<<"$ps_blocks")" "bloco PowerShell sem curl (alias), só curl.exe"
+
+# LEIA-ME do pacote: abrir o app, JDK 25 e o demo-seed.jar já em app\.
+assert_contains "$leia" 'java -jar app\zeny-desktop.jar' "LEIA-ME: abrir o app"
+assert_contains "$leia" 'java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar' "LEIA-ME: abrir o app no modo da demo"
+assert_contains "$leia" "JDK 25" "LEIA-ME: JDK 25"
+assert_not_contains "$leia" "copie-o para" "LEIA-ME: o demo-seed.jar já vem em app\\"
+assert_contains "$leia" 'java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login' "LEIA-ME: comando do seed"
+
+# README: link do roteiro e os JARs gerados antes do package.sh.
+assert_contains "$readme_text" "(docs/demo/roteiro-m1.md)" "README liga o roteiro do M1"
+pkg_row="$(grep -F '`tools/server-env/package.sh`' "$readme" | head -1)"
+assert_contains "$pkg_row" ":demo-seed:seedJar" "linha do package.sh manda gerar os JARs"
+pre="${pkg_row%%\`tools/server-env/package.sh\`*}"
+assert_contains "$pre" './gradlew :app:desktopJar :demo-seed:seedJar' "JARs gerados antes do package.sh"
+
 finish

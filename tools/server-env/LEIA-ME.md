@@ -7,7 +7,7 @@ Atenção: o servidor fala HTTP puro. Use apenas em rede confiável. Nunca use `
 ## 0. Pré-requisitos
 
 - Docker Desktop com Compose v2.24.4 ou mais novo (`docker compose version`), por causa do `!override` do arquivo `compose.override.yaml`.
-- JDK 25, a partir da M1 (app e `demo-seed`).
+- JDK 25, obrigatório para o app e para o `demo-seed` (com um Java mais antigo eles não abrem). Confira com `java -version`.
 
 ## 1. Primeira vez (com internet)
 
@@ -66,7 +66,7 @@ docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.y
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env up -d
 ```
 
-Depois de recriar, popule os dados com o `demo-seed.jar` (gerado por `./gradlew :demo-seed:seedJar` em `demo-seed/build/libs/`; copie-o para `app\`). Os segredos vão por variáveis de ambiente, não pela linha de comando (que fica no histórico do shell e na lista de processos). Senhas têm de 12 a 128 caracteres; o PIN do Gerente, de 4 a 8 dígitos. Para cada variável abaixo, escolha o seu próprio valor:
+Depois de recriar, popule os dados com o `demo-seed.jar`, que já vem na pasta `app\` deste pacote. Os segredos vão por variáveis de ambiente, não pela linha de comando (que fica no histórico do shell e na lista de processos). Senhas têm de 12 a 128 caracteres; o PIN do Gerente, de 4 a 8 dígitos. Para cada variável abaixo, escolha o seu próprio valor:
 
 ```powershell
 $env:ZENY_SEED_ADMIN_PASSWORD = "<senha inicial do administrador>"
@@ -84,7 +84,23 @@ java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login <login>
 - Repetir a execução é seguro: o que já existe é conferido e mantido, e a saída traz só contagens (criados e já existentes), sem nomes nem documentos de hóspedes.
 - Ajuda: `java -jar app\demo-seed.jar --help`. Códigos de saída: 0 concluído, 1 falha (mensagem em português), 2 argumento inválido.
 
-## 4. Firewall
+## 4. Abrir o app
+
+O app (`app\zeny-desktop.jar`) abre com o JDK 25, a partir da pasta deste pacote:
+
+```powershell
+java -jar app\zeny-desktop.jar
+```
+
+Para a demo, abra no modo que mostra no menu todas as áreas do perfil, com "(em breve)" nas que ainda não têm tela. As aspas são necessárias: sem elas, o PowerShell parte o argumento no ponto e o Java não encontra a classe.
+
+```powershell
+java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar
+```
+
+O PowerShell fica ocupado enquanto a janela do app estiver aberta; fechar a janela devolve o prompt. Na tela inicial, informe o servidor (`http://localhost:8088` nesta máquina) e entre com um usuário da demo. O roteiro da demo está em `roteiro-m1.md`, nesta pasta.
+
+## 5. Firewall
 
 Para outras máquinas da rede acessarem a porta 8088, abra o PowerShell como administrador:
 
