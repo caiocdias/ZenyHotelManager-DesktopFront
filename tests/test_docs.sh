@@ -92,6 +92,11 @@ for word in recepcao gerente governanta '"-Dzeny.devShell=true"' "http://localho
   If-Match Get-Credential "[guid]::NewGuid().ToString()" "charset=utf-8" "-UseBasicParsing"; do
   assert_contains "$rot_text" "$word" "roteiro cita $word"
 done
+# Seed repetido (conferido ao vivo na E07): as reservas com check-in saem das alocações e a linha check-ins some.
+rerun="$(grep -F 'Rodar o seed de novo' "$roteiro" 2>/dev/null)"
+assert_contains "$rerun" '`alocações: 0 criados, 2 já existiam`' "roteiro: no seed repetido, alocações ficam em 2"
+assert_contains "$rerun" 'a linha `check-ins` não aparece' "roteiro: no seed repetido, a linha check-ins some"
+
 # Seções do LEIA-ME pelo título, nunca pelo número; cada título citado existe no LEIA-ME.
 assert_eq "" "$(grep -nE '[Ss]eção [0-9]' "$roteiro" 2>/dev/null)" "roteiro não cita seção do LEIA-ME pelo número"
 cited="$(grep -oE 'seção "[^"]+"' "$roteiro" 2>/dev/null | sed -E 's/^seção "//; s/"$//' | sort -u)"

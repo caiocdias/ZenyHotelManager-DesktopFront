@@ -56,7 +56,7 @@ $LASTEXITCODE
   ```
 
 - Avisos que começam com `SLF4J` antes dessas linhas não são erro.
-- Rodar o seed de novo é seguro: as linhas passam a dizer `0 criados, N já existiam`.
+- Rodar o seed de novo é seguro: nada é criado de novo e as linhas passam a dizer `0 criados, N já existiam`, com duas diferenças. As reservas que já fizeram check-in não contam mais nas alocações, que ficam em `alocações: 0 criados, 2 já existiam`, e a linha `check-ins` não aparece.
 
 Feche esta janela do PowerShell, ou apague as variáveis com `Remove-Item Env:ZENY_SEED_*`, para as senhas não ficarem no ambiente.
 
