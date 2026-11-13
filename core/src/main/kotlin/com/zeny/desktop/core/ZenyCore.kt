@@ -31,11 +31,9 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.engine.java.Java
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 
 /**
  * O `core` montado para um servidor: cliente HTTP com o `AuthPlugin`, as operações geradas, o voo único do refresh,
@@ -85,17 +83,8 @@ class ZenyCore internal constructor(
     val realtime: RealtimeClient = RealtimeClient(sdkApis.stream, scope) { session.state.value.sessionId() }
 
     init {
-        // Sem ceder a vez: a primeira sessão observada é a do estado inicial. O `StateFlow` junta estados seguidos;
-        // a sessão que sai é a última vista (Active(A) → LoggedOut → Active(B) pode chegar como A → B).
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            var current: String? = null
-            session.state.collect { state ->
-                val next = state.sessionId()
-                // O estado já mudou: a sessão corrente não é mais a que sai quando o endSession chega.
-                current?.takeIf { it != next }?.let(realtime::endSession)
-                current = next
-            }
-        }
+        // Síncrono, na própria transição: nenhuma sessão que sai escapa, nem a que o `StateFlow` juntaria.
+        session.onSessionExit = realtime::endSession
     }
 
     private fun SessionState.sessionId(): String? = (this as? SessionState.Active)?.sessionId

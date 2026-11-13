@@ -41,8 +41,11 @@ class RealtimeClient internal constructor(
     private val subscribers = mutableListOf<Subscriber>()
     private var connection: Connection? = null
 
-    /** O job da última conexão aberta, mesmo depois de parada: a seguinte só começa quando ele terminou. */
-    private var lastConnectionJob: Job? = null
+    /**
+     * Os jobs das conexões abertas que ainda não terminaram, mesmo as paradas ou trocadas antes de rodar: a seguinte
+     * só começa quando todos terminaram.
+     */
+    private val pendingConnections = mutableListOf<Job>()
     private var position: Position? = null
     private var sessionWait: Job? = null
     private var closed = false
@@ -160,8 +163,8 @@ class RealtimeClient internal constructor(
     }
 
     /**
-     * Reabre sob [sessionId]; a nova conexão só começa quando a anterior terminou, inclusive a já parada e a que
-     * foi trocada enquanto esperava a dela. Chamada com o [lock].
+     * Reabre sob [sessionId]; a nova conexão só começa quando todas as anteriores terminaram, inclusive a já parada
+     * e a trocada antes de rodar. Chamada com o [lock].
      */
     private fun open(
         sessionId: String,
@@ -169,10 +172,11 @@ class RealtimeClient internal constructor(
     ) {
         connection?.job?.cancel()
         if (position?.sessionId != sessionId) position = null
+        pendingConnections.removeAll { it.isCompleted }
         val next = Connection(sessionId, topics)
         connection = next
-        next.start(lastConnectionJob)
-        lastConnectionJob = next.job
+        next.start(pendingConnections.toList())
+        pendingConnections += next.job
     }
 
     /** Chamada com o [lock]. */
@@ -221,12 +225,12 @@ class RealtimeClient internal constructor(
         private var failure: ApiError? = null
 
         /** Chamada com o [lock]. */
-        fun start(previous: Job?) {
+        fun start(previous: List<Job>) {
             // Preguiçoso: um dispatcher que roda na hora acharia o `job` ainda sem valor.
             val launched =
                 scope.launch(start = CoroutineStart.LAZY) {
-                    // Cancelada enquanto espera, a conexão ainda espera: a seguinte espera por ela.
-                    withContext(NonCancellable) { previous?.join() }
+                    // Mesmo cancelada (até antes de rodar), a conexão espera as anteriores.
+                    withContext(NonCancellable) { previous.forEach { it.join() } }
                     ensureActive()
                     val startAfter = synchronized(lock) { position?.takeIf { it.sessionId == sessionId }?.value }
                     StreamConnection(stream, topics, startAfter).run().collect { item ->

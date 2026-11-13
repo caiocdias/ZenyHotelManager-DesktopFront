@@ -37,6 +37,13 @@ class SessionManager(
     private val _state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
+    /**
+     * Avisado com o `sessionId` de cada sessão que sai (login por cima, logout, `Ended`), de forma síncrona, dentro
+     * da própria transição e depois de o [state] já não ser mais o dela. Roda sob o lock da sessão: não pode
+     * suspender nem bloquear. O `ZenyCore` o liga ao tempo real.
+     */
+    @Volatile internal var onSessionExit: (sessionId: String) -> Unit = {}
+
     /** Abre a sessão; um `ApiError` (por exemplo `401 INVALID_CREDENTIALS`) sai sem mudar o estado. */
     suspend fun login(
         login: String,
@@ -108,7 +115,7 @@ class SessionManager(
                 synchronized(lock) {
                     val active = _state.value as? SessionState.Active
                     if (active != null && active.sessionId == sessionId && store.current()?.sessionId == sessionId) {
-                        _state.value = active.copy(passwordChangeAwaitingRefresh = true)
+                        moveTo(active.copy(passwordChangeAwaitingRefresh = true))
                     }
                 }
                 throw e
@@ -137,7 +144,7 @@ class SessionManager(
                     val current = store.current()
                     if (current == null || current.sessionId == sessionId) {
                         store.clear()
-                        _state.value = SessionState.LoggedOut
+                        moveTo(SessionState.LoggedOut)
                     }
                 }
             }
@@ -156,11 +163,18 @@ class SessionManager(
     ) {
         synchronized(lock) {
             if ((_state.value as? SessionState.Active)?.sessionId == sessionId) {
-                _state.value = SessionState.Ended(SESSION_ENDED_MESSAGE)
+                moveTo(SessionState.Ended(SESSION_ENDED_MESSAGE))
             }
         }
     }
 
     private fun activate(tokens: Tokens): SessionState.Active =
-        SessionState.Active(tokens.userId, tokens.sessionId, tokens.passwordChangeRequired).also { _state.value = it }
+        SessionState.Active(tokens.userId, tokens.sessionId, tokens.passwordChangeRequired).also(::moveTo)
+
+    /** Toda transição passa aqui, com o [lock]: a sessão que sai é avisada depois de o estado mudar. */
+    private fun moveTo(next: SessionState) {
+        val leaving = (_state.value as? SessionState.Active)?.sessionId
+        _state.value = next
+        if (leaving != null && leaving != (next as? SessionState.Active)?.sessionId) onSessionExit(leaving)
+    }
 }
