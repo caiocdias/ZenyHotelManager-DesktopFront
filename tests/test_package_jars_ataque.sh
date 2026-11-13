@@ -246,63 +246,62 @@ assert_eq "$FAKE_C2" "$(versao "$pk" server_commit)" "worktree com pin C2: serve
 assert_eq "$(git -C "$wt" rev-parse HEAD)" "$(versao "$pk" front_commit)" "worktree com pin C2: front_commit do worktree"
 assert_not_contains "$(cat "$pk/VERSAO.txt")" "/" "worktree: VERSAO.txt sem caminho"
 
-# --- 5. aviso de JAR velho ---
-# stale_case DESCRIÇÃO CAMINHO AVISOS : commit em CAMINHO (2026-03-01), JARs de 2026-01-01; espera AVISOS linhas "aviso:".
+# --- 5. JAR com mtime antigo, futuro ou igual ao último commit: nenhum aviso, JAR copiado como está ---
+# O aviso de JAR velho por data saiu do package.sh (plano a795595, código 3b1ee93): um commit depois do build,
+# um rebase ou um merge deixavam o JAR certo "mais velho" que o commit. O frescor fica com o Gradle e com o
+# sha256 do VERSAO.txt comparado ao clone limpo (Task 4). Em nenhuma destas situações o package.sh avisa.
+# sem_aviso DESCRIÇÃO FRONT [OPÇÕES DO BASH...] : sai com 0, stderr vazio (sem "aviso:"), stdout sem aviso,
+# e os dois JARs do pacote iguais aos do checkout.
+sem_aviso() {
+  local desc="$1" f="$2" err out n
+  shift 2
+  err="$(timeout 60 bash "$@" "$f/tools/server-env/package.sh" 2>&1 >"$tmp/sem-aviso.out")"
+  assert_eq "0" "$?" "$desc: sai com 0"
+  out="$(cat "$tmp/sem-aviso.out")"
+  assert_not_contains "$err" "aviso:" "$desc: sem \"aviso:\" no stderr"
+  assert_eq "" "$err" "$desc: stderr vazio"
+  assert_not_contains "$out" "aviso" "$desc: sem aviso no stdout"
+  for n in zeny-desktop demo-seed; do
+    assert_eq "1" "$(same_file "$(jar "$f" "$n")" "$f/build/demo-package/app/$n.jar")" "$desc: $n.jar copiado como está"
+  done
+}
+# stale_case DESCRIÇÃO CAMINHO : commit em CAMINHO (2026-03-01) com os JARs de 2026-01-01 (mais antigos).
 stale_case() {
-  local f="$tmp/stale-$RANDOM$RANDOM" out err
+  local f="$tmp/stale-$RANDOM$RANDOM"
   new_front "$f"
   commit_at "$f" "$T_MAR" "$2"
   touch -d "@$T_JAN" "$(jar "$f" zeny-desktop)" "$(jar "$f" demo-seed)"
-  err="$(timeout 60 bash "$f/tools/server-env/package.sh" 2>&1 >"$tmp/stale.out")"
-  assert_eq "0" "$?" "$1: sai com 0"
-  out="$(cat "$tmp/stale.out")"
-  assert_eq "$3" "$(grep -c '^aviso:' <<<"$err")" "$1: $3 aviso(s) no stderr"
-  assert_not_contains "$err" "erro" "$1: sem erro no stderr"
-  assert_not_contains "$out" "aviso" "$1: aviso nunca no stdout"
-  if [[ "$3" == 2 ]]; then
-    assert_contains "$err" "zeny-desktop.jar" "$1: aviso cita zeny-desktop.jar"
-    assert_contains "$err" "demo-seed.jar" "$1: aviso cita demo-seed.jar"
-    assert_contains "$err" "./gradlew :app:desktopJar" "$1: aviso diz o comando do app"
-    assert_contains "$err" "./gradlew :demo-seed:seedJar" "$1: aviso diz o comando do seed"
-  else
-    assert_eq "" "$err" "$1: stderr vazio"
-  fi
+  sem_aviso "$1" "$f"
 }
-stale_case "commit só em docs/, JARs mais antigos" docs/notas.md 0
-stale_case "commit só em tools/, JARs mais antigos" tools/extra.txt 0
-stale_case "commit em apps/ (parece app/)" apps/x.txt 0
-stale_case "commit em application.md (parece app)" application.md 0
-stale_case "commit em core-notas.md (parece core)" core-notas.md 0
-stale_case "commit em app/src" app/src/Main.kt 2
-stale_case "commit em design/" design/src/Tema.kt 2
-stale_case "commit em demo-seed/src" demo-seed/src/Seed.kt 2
-stale_case "commit em gradle/libs.versions.toml" gradle/libs.versions.toml 2
-stale_case "commit em settings.gradle.kts na raiz" settings.gradle.kts 2
+stale_case "commit só em docs/, JARs mais antigos" docs/notas.md
+stale_case "commit só em tools/, JARs mais antigos" tools/extra.txt
+stale_case "commit em apps/ (parece app/), JARs mais antigos" apps/x.txt
+stale_case "commit em application.md (parece app), JARs mais antigos" application.md
+stale_case "commit em core-notas.md (parece core), JARs mais antigos" core-notas.md
+stale_case "commit em app/src, JARs mais antigos" app/src/Main.kt
+stale_case "commit em design/, JARs mais antigos" design/src/Tema.kt
+stale_case "commit em demo-seed/src, JARs mais antigos" demo-seed/src/Seed.kt
+stale_case "commit em gradle/libs.versions.toml, JARs mais antigos" gradle/libs.versions.toml
+stale_case "commit em settings.gradle.kts na raiz, JARs mais antigos" settings.gradle.kts
 
-# sem nenhum commit nos caminhos e JARs de 2001: sem aviso e sem erro de aritmética, também com bash -u
+# sem commit no código e JARs de 2001, com bash -u
 fn="$tmp/fn"
 new_front "$fn"
 commit_at "$fn" "$T_MAR" docs/so-docs.md
 touch -d @1000000000 "$(jar "$fn" zeny-desktop)" "$(jar "$fn" demo-seed)"
-err="$(timeout 60 bash -u "$fn/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_eq "0" "$?" "sem commit no código e JARs de 2001 (bash -u): sai com 0"
-assert_eq "" "$err" "sem commit no código e JARs de 2001 (bash -u): stderr vazio"
+sem_aviso "sem commit no código e JARs de 2001 (bash -u)" "$fn" -u
 
-# mtime no futuro e mtime igual ao commit: sem aviso
+# commit em app/src com mtime no futuro, igual ao commit e 1 s mais antigo que ele
 ff="$tmp/ff"
 new_front "$ff"
 commit_at "$ff" "$T_MAR" app/src/Main.kt
 touch -d @4102444800 "$(jar "$ff" zeny-desktop)" "$(jar "$ff" demo-seed)" # 2100-01-01
-err="$(timeout 60 bash "$ff/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_eq "0" "$?" "JARs com mtime no futuro: sai com 0"
-assert_eq "" "$err" "JARs com mtime no futuro: sem aviso nem erro"
+sem_aviso "JARs com mtime no futuro" "$ff"
 touch -d "@$T_MAR" "$(jar "$ff" zeny-desktop)" "$(jar "$ff" demo-seed)"
-err="$(timeout 60 bash "$ff/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_eq "" "$err" "JARs com mtime igual ao commit: sem aviso (só 'mais antigo' avisa)"
+sem_aviso "JARs com mtime igual ao commit" "$ff"
 touch -d "@$((T_MAR - 1))" "$(jar "$ff" zeny-desktop)"
-err="$(timeout 60 bash "$ff/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_eq "1" "$(grep -c '^aviso:' <<<"$err")" "zeny-desktop.jar 1 s mais antigo que o commit: um aviso"
-assert_contains "$err" "zeny-desktop.jar" "zeny-desktop.jar 1 s mais antigo: aviso cita o JAR"
+sem_aviso "zeny-desktop.jar 1 s mais antigo que o commit" "$ff"
+sem_aviso "JAR 1 s mais antigo que o commit, com bash -u" "$ff" -u
 
 # --- 6. segredos de um worktree não entram no pacote ---
 # O valor falso vem de variável: nenhum arquivo versionado atribui literal a ZENY_SEED_*PASSWORD (test_smoke_task.sh).
