@@ -63,13 +63,17 @@ class RealtimeClient internal constructor(
 
     /**
      * Encerra as assinaturas e a conexão abertas sob [sessionId] (os `Flow`s completam normalmente) e descarta a
-     * posição dela. Para outra sessão, a conexão corrente segue.
+     * posição dela. Chamada atrasada, sem nada de [sessionId], não faz nada.
      */
     internal fun endSession(sessionId: String) {
         synchronized(lock) {
-            if (position?.sessionId == sessionId) position = null
-            complete(subscribers.filter { it.sessionId == sessionId }, failure = null)
-            if (connection?.sessionId == sessionId) stopConnection()
+            val ended = subscribers.filter { it.sessionId == sessionId }
+            val ownsPosition = position?.sessionId == sessionId
+            val ownsConnection = connection?.sessionId == sessionId
+            if (ended.isEmpty() && !ownsPosition && !ownsConnection) return
+            if (ownsPosition) position = null
+            complete(ended, failure = null)
+            if (ownsConnection) stopConnection()
             reconcile()
         }
     }
