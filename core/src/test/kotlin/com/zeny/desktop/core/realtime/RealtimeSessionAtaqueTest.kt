@@ -225,14 +225,14 @@ class RealtimeSessionAtaqueTest {
                 first.send(ready("e-1") + message("e-2"))
                 runCurrent()
                 core.session.login("joao", "segredo")
-                // A sessão velha ainda manda um evento; joão assina sem ceder a vez, antes de o core ver a troca.
-                first.send(message("e-3"))
+                // João assina sem ceder a vez, logo depois do login: a sessão de maria já saiu dentro da troca.
                 val fresh = collectInBackground(core.realtime.subscribe(setOf("rooms")), CoroutineStart.UNDISPATCHED)
                 runCurrent()
+                assertTrue(first.isClosedForWrite, "o corpo da sessão de maria não foi solto")
                 second.send(ready("e-7") + message("e-8"))
                 runCurrent()
                 assertTrue(old.completedNormally)
-                assertFalse(RealtimeEvent.Message("rooms", "room.changed", "r-e-8", 3) in old.events)
+                assertEquals(listOf(RealtimeEvent.Ready, changed("e-2")), old.events, "maria recebeu evento de joão")
                 assertEquals(listOf(RealtimeEvent.Ready, changed("e-8")), fresh.events)
                 assertEquals(listOf<String?>(null, null), rig.lastEventIds())
                 assertEquals(listOf(listOf("Bearer A1"), listOf("Bearer A2")), rig.bearers())
