@@ -163,7 +163,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
-| E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #pendente | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
+| E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #em-andamento | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
 
 ---
 
@@ -282,7 +282,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) — #pendente
+## E02 — Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) — #em-andamento
 
 **Objetivo:** o front passa a apontar para a `main` do servidor em `57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`. O pin e a cópia do contrato são trocados, o SDK é regenerado com as 335 operações e o que quebrar é consertado. `tools/server-env/` é revisto diante das mudanças de `docker/` do servidor. Ao fim, o `smokeTest` e o roteiro do M1 passam contra o servidor novo, e o M2 pode começar.
 
