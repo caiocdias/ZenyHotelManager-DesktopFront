@@ -64,4 +64,10 @@ class ReconnectPolicyTest {
     fun cancellationIsNotClassified() {
         assertFailsWith<CancellationException> { StreamFailures.classify(CancellationException("fim")) }
     }
+
+    @Test
+    fun fatalErrorsAreRethrownNotClassified() {
+        assertFailsWith<OutOfMemoryError> { StreamFailures.classify(OutOfMemoryError("sem memória")) }
+        assertFailsWith<StackOverflowError> { StreamFailures.classify(StackOverflowError()) }
+    }
 }

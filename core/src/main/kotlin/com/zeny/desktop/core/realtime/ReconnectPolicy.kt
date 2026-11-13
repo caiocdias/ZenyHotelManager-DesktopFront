@@ -36,18 +36,26 @@ object StreamFailures {
             else -> StreamOutcome.Fail(error ?: ApiError.Problem(status, null, null, emptyList()))
         }
 
-    /** Fim do corpo e *watchdog* chegam aqui como [IOException]. A [CancellationException] propaga. */
+    /**
+     * Fim do corpo e *watchdog* chegam aqui como [IOException]; [ApiError.Network] (queda de rede já
+     * convertida pelo executor) também repete. A [CancellationException] e os [Error] fatais propagam.
+     */
     fun classify(cause: Throwable): StreamOutcome =
         when (cause) {
             is CancellationException -> throw cause
             is ApiError.SessionEnded -> StreamOutcome.Stop
+            is ApiError.Network -> StreamOutcome.Retry
             is ApiError -> StreamOutcome.Fail(cause)
             is IOException -> StreamOutcome.Retry
+            !is Exception -> throw cause
             else -> StreamOutcome.Fail(ApiError.Network(cause))
         }
 }
 
-/** Espera crescente entre reconexões: 1 s, 2 s, 4 s, 8 s, 16 s e teto de 30 s. */
+/**
+ * Espera crescente entre reconexões: 1 s, 2 s, 4 s, 8 s, 16 s e teto de 30 s.
+ * Não é segura para uso concorrente: o uso previsto é uma corrotina por conexão.
+ */
 class ReconnectPolicy {
     private var attempt = 0
 
