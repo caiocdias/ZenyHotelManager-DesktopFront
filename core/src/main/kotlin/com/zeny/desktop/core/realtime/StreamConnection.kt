@@ -243,6 +243,11 @@ internal class StreamConnection(
         return String(buffer, 0, size, Charsets.UTF_8)
     }
 
+    /**
+     * Divergência conhecida da especificação SSE: um `id:` vazio (ou que não iria ao cabeçalho) não zera a posição,
+     * que fica no último `id` válido. O servidor manda `id` em todo evento; um vazio seria defeito, e zerar a posição
+     * por ele faria a próxima reconexão recomeçar do zero (`ready` e recarga completa) em vez de retomar do ponto.
+     */
     private suspend fun deliver(
         out: SendChannel<ConnectionItem>,
         event: SseEvent,

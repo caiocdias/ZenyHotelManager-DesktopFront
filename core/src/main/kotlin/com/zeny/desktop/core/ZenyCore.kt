@@ -83,7 +83,8 @@ class ZenyCore internal constructor(
     val realtime: RealtimeClient = RealtimeClient(sdkApis.stream, scope) { session.state.value.sessionId() }
 
     init {
-        // Síncrono, na própria transição: nenhuma sessão que sai escapa, nem a que o `StateFlow` juntaria.
+        // Síncrono, na própria transição: nenhuma sessão que sai escapa, nem a que o `StateFlow` juntaria. Ordem de
+        // lock: sessão → tempo real; a sessão corrente acima é lida sem lock, então o inverso nunca acontece.
         session.onSessionExit = realtime::endSession
     }
 
@@ -98,8 +99,9 @@ class ZenyCore internal constructor(
     val apis: Apis get() = sdkApis
 
     /**
-     * Fecha localmente: cancela o escopo do refresh e do tempo real (as assinaturas completam e os corpos abertos
-     * do stream se soltam) e só então fecha o cliente e o `engine`. Não faz logout nem avisa o
+     * Fecha localmente: pede o cancelamento do escopo do refresh e do tempo real, sem esperar que os jobs terminem,
+     * e fecha o cliente e o `engine`. As assinaturas completam e os corpos abertos do stream se soltam à medida que
+     * os jobs cancelados terminam, o que pode ser depois de o `close()` voltar. Não faz logout nem avisa o
      * servidor; para trocar de servidor, chame `session.logout()` e depois `close()`. Chamadas feitas depois do
      * `close()`, ou em curso durante ele, terminam em `CancellationException`, não em `ApiError`.
      */

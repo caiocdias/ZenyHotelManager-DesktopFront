@@ -9,7 +9,8 @@ data class SseEvent(
 
 /**
  * Interpreta o stream de eventos do servidor (SSE) linha a linha, pela especificação HTML.
- * Não é thread-safe: uma instância por conexão.
+ * Não é thread-safe: uma instância por conexão. O `id:` vazio passa adiante como `""`; a `StreamConnection`, que
+ * guarda a posição, o ignora em vez de zerá-la (divergência conhecida da especificação, explicada lá).
  */
 class SseParser {
     private var eventName = ""

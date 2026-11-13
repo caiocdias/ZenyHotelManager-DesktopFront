@@ -2,8 +2,10 @@ package com.zeny.desktop.core.realtime
 
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.sdk.client.StreamApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -36,7 +38,11 @@ class RealtimeClient internal constructor(
     private val mutableStatus = MutableStateFlow<RealtimeStatus>(RealtimeStatus.Idle)
     val status: StateFlow<RealtimeStatus> = mutableStatus.asStateFlow()
 
-    /** Guarda o estado abaixo; nunca fica preso durante uma suspensão. */
+    /**
+     * Guarda o estado abaixo; nunca fica preso durante uma suspensão. Ordem de lock: o da sessão (`SessionManager`)
+     * vem antes deste, porque o [endSession] chega sob ele; com este preso, nada toma o da sessão: o
+     * [currentSessionId] lê o estado da sessão sem lock.
+     */
     private val lock = Any()
     private val subscribers = mutableListOf<Subscriber>()
     private var connection: Connection? = null
@@ -76,7 +82,8 @@ class RealtimeClient internal constructor(
 
     /**
      * Encerra as assinaturas e a conexão abertas sob [sessionId] (os `Flow`s completam normalmente) e descarta a
-     * posição dela. Chamada atrasada, sem nada de [sessionId], não faz nada.
+     * posição dela. Chamada atrasada, sem nada de [sessionId], não faz nada. Chega sob o lock da sessão e toma o
+     * [lock] (ordem sessão → tempo real).
      */
     internal fun endSession(sessionId: String) {
         synchronized(lock) {
@@ -233,13 +240,24 @@ class RealtimeClient internal constructor(
                     withContext(NonCancellable) { previous.forEach { it.join() } }
                     ensureActive()
                     val startAfter = synchronized(lock) { position?.takeIf { it.sessionId == sessionId }?.value }
-                    StreamConnection(stream, topics, startAfter).run().collect { item ->
-                        when (item) {
-                            is ConnectionItem.Status -> onStatus(item.status)
-                            is ConnectionItem.Event -> deliver(item)
+                    var crash: Throwable? = null
+                    try {
+                        StreamConnection(stream, topics, startAfter).run().collect { item ->
+                            when (item) {
+                                is ConnectionItem.Status -> onStatus(item.status)
+                                is ConnectionItem.Event -> deliver(item)
+                            }
                         }
+                    } catch (
+                        @Suppress("TooGenericExceptionCaught") e: Throwable,
+                    ) {
+                        crash = e
+                        throw e
+                    } finally {
+                        // Cancelada (parada, trocada, escopo fechado), quem cancelou já cuidou dela. Senão, sai de
+                        // cena aqui, até num `Error` (que segue relançado): nunca fica corrente e morta.
+                        if (crash !is CancellationException) finish(crash)
                     }
-                    finish()
                 }
             job = launched
             launched.start()
@@ -270,13 +288,16 @@ class RealtimeClient internal constructor(
             }
         }
 
-        /** A conexão terminou sozinha: parou (`Stop`) ou falhou depois do último `Failed`. */
-        private fun finish() {
+        /**
+         * A conexão terminou sozinha: parou (`Stop`), falhou depois do último `Failed` ou estourou com [crash] (um
+         * `Error`, por exemplo), que vira `Failed` com [ApiError.Network] para o [status] e os assinantes.
+         */
+        private fun finish(crash: Throwable?) {
             synchronized(lock) {
                 if (connection !== this) return
                 connection = null
-                val error = failure
-                if (error == null) mutableStatus.value = RealtimeStatus.Idle
+                val error = crash?.let { ApiError.Network(it) } ?: failure
+                mutableStatus.value = if (error == null) RealtimeStatus.Idle else RealtimeStatus.Failed(error)
                 complete(subscribers.filter { it.sessionId == sessionId }, error)
                 reconcile()
             }
@@ -304,6 +325,10 @@ internal suspend fun <E> SendChannel<E>.sendUnlessClosed(element: E) {
         @Suppress("TooGenericExceptionCaught") e: Exception,
     ) {
         currentCoroutineContext().ensureActive()
-        if (!isClosedForSend) throw e
+        // Seguro aqui: o `send` já falhou e fechar é definitivo, então a leitura não envelhece. Fechada, a falha
+        // veio do fim da fila; ainda aberta, a falha veio de outra coisa e propaga.
+        @OptIn(DelicateCoroutinesApi::class)
+        val closed = isClosedForSend
+        if (!closed) throw e
     }
 }

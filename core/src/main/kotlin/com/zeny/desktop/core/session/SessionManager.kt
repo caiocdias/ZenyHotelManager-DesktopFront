@@ -40,7 +40,8 @@ class SessionManager(
     /**
      * Avisado com o `sessionId` de cada sessão que sai (login por cima, logout, `Ended`), de forma síncrona, dentro
      * da própria transição e depois de o [state] já não ser mais o dela. Roda sob o lock da sessão: não pode
-     * suspender nem bloquear. O `ZenyCore` o liga ao tempo real.
+     * suspender nem bloquear. O `ZenyCore` o liga ao tempo real, que toma o lock dele aqui dentro: a ordem é sempre
+     * sessão → tempo real, e o tempo real lê o [state] sem lock (nunca toma o da sessão).
      */
     @Volatile internal var onSessionExit: (sessionId: String) -> Unit = {}
 
