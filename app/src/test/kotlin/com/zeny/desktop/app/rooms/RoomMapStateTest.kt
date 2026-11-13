@@ -461,7 +461,7 @@ class RoomMapStateTest {
 
             assertNull(state.error)
             assertEquals(listOf("101", "102"), state.numbers())
-            assertEquals(mapOf(typeId(1) to typeId(1)), state.roomTypeNames)
+            assertEquals(mapOf(typeId(1) to "Tipo 1"), state.roomTypeNames)
 
             state.select(a)
             runCurrent()
@@ -614,7 +614,7 @@ class RoomMapStateTest {
         }
 
     @Test
-    fun typeFilterKeepsNameOfVanishedType() =
+    fun typeFilterKeepsVanishedTypeListed() =
         runTest {
             val source = FakeRoomsSource()
             source.put(roomStatus(a, "101", type = typeId(1)), roomStatus(b, "102", type = typeId(2)))
@@ -626,7 +626,7 @@ class RoomMapStateTest {
             source.emit(RealtimeEvent.Reset)
             runCurrent()
 
-            assertEquals(mapOf(typeId(1) to "Standard", typeId(2) to typeId(2)), state.roomTypeNames)
+            assertEquals(mapOf(typeId(1) to "Standard", typeId(2) to "Tipo 1"), state.roomTypeNames)
         }
 
     @Test
@@ -642,10 +642,10 @@ class RoomMapStateTest {
             source.message(b, 2)
             runCurrent()
 
-            assertEquals(mapOf(typeId(1) to typeId(1), typeId(2) to typeId(2)), state.roomTypeNames)
+            assertEquals(mapOf(typeId(1) to "Tipo 1", typeId(2) to "Tipo 2"), state.roomTypeNames)
 
             state.toggleType(typeId(2))
-            assertEquals(mapOf(typeId(1) to typeId(1)), state.roomTypeNames, "sem filtro, o tipo sumido sai")
+            assertEquals(mapOf(typeId(1) to "Tipo 1"), state.roomTypeNames, "sem filtro, o tipo sumido sai")
         }
 
     @Test

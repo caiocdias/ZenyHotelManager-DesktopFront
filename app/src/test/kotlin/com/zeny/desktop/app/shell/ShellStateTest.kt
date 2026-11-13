@@ -345,4 +345,26 @@ class ShellStateTest {
             assertEquals(1, connection.meCalls)
             assertNull(state.error)
         }
+
+    @Test
+    fun restoredAreaOpensOnlyAfterMeAllowsIt() =
+        runTest {
+            val state = ShellState(FakeConnection(), devMode = false, scope = this, restoreArea = Area.HOUSEKEEPING)
+            assertNull(state.selected, "a área abriu antes de o me da sessão nova confirmar")
+
+            advanceUntilIdle()
+
+            assertEquals(Area.HOUSEKEEPING, state.selected)
+        }
+
+    @Test
+    fun restoredAreaDroppedWhenNotAllowed() =
+        runTest {
+            val connection = FakeConnection(me = { Me("u-2", "bia", "Bia Lima", setOf("guests.profiles.read")) })
+            val state = ShellState(connection, devMode = true, scope = this, restoreArea = Area.HOUSEKEEPING)
+
+            advanceUntilIdle()
+
+            assertNull(state.selected)
+        }
 }

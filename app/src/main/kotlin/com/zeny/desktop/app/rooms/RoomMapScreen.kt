@@ -23,6 +23,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.realtime.RealtimeStatus
@@ -55,7 +58,7 @@ fun RoomMapScreen(state: RoomMapState) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Mapa de UHs", style = MaterialTheme.typography.titleLarge)
-            RealtimeBar(state.live)
+            RealtimeBar(state.live, state.disconnected, state::retry)
         }
         val error = state.error
         if (error != null && state.floors.isNotEmpty()) ErrorBand(error, state::retry)
@@ -67,16 +70,29 @@ fun RoomMapScreen(state: RoomMapState) {
     }
 }
 
+/** O estado do tempo real; o mapa que perdeu a assinatura sem erro mostra "Desconectado" e o "Tentar de novo". */
 @Composable
-private fun RealtimeBar(live: RealtimeStatus) {
+private fun RealtimeBar(
+    live: RealtimeStatus,
+    disconnected: Boolean,
+    onRetry: () -> Unit,
+) {
     val model =
-        when (live) {
-            RealtimeStatus.Live -> ChipModel("Ao vivo", StatusTone.SUCCESS)
-            is RealtimeStatus.Reconnecting -> ChipModel("Reconectando…", StatusTone.WARNING)
-            is RealtimeStatus.Failed -> ChipModel(errorMessage(live.error), StatusTone.DANGER)
-            RealtimeStatus.Idle, RealtimeStatus.Connecting -> ChipModel("Conectando…", StatusTone.NEUTRAL)
+        when {
+            disconnected -> ChipModel("Desconectado", StatusTone.DANGER)
+            live == RealtimeStatus.Live -> ChipModel("Ao vivo", StatusTone.SUCCESS)
+            live is RealtimeStatus.Reconnecting -> ChipModel("Reconectando…", StatusTone.WARNING)
+            live is RealtimeStatus.Failed -> ChipModel(errorMessage(live.error), StatusTone.DANGER)
+            else -> ChipModel("Conectando…", StatusTone.NEUTRAL)
         }
-    StatusChip(model)
+    Row(
+        Modifier.testTag("realtime-bar"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        StatusChip(model)
+        if (disconnected) OutlinedButton(onClick = onRetry) { Text("Tentar de novo") }
+    }
 }
 
 @Composable
@@ -126,8 +142,9 @@ private fun Filters(state: RoomMapState) {
 @Composable
 private fun MapBody(state: RoomMapState) {
     val error = state.error
+    val openId = state.selected?.let { it.status.roomId.toString() }
     when {
-        state.floors.isNotEmpty() -> Floors(state.floors, state::select)
+        state.floors.isNotEmpty() -> Floors(state.floors, openId, state::select)
         state.loading -> LoadingState()
         error != null -> ErrorState(error, onRetry = state::retry)
         state.hasRooms -> EmptyState(NO_ROOMS_FILTERED)
@@ -138,6 +155,7 @@ private fun MapBody(state: RoomMapState) {
 @Composable
 private fun Floors(
     floors: List<Pair<String, List<RoomTile>>>,
+    selectedId: String?,
     onSelect: (String) -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), Arrangement.spacedBy(16.dp)) {
@@ -147,7 +165,7 @@ private fun Floors(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                tiles.forEach { Tile(it, onSelect) }
+                tiles.forEach { Tile(it, it.roomId == selectedId, onSelect) }
             }
         }
     }
@@ -156,6 +174,7 @@ private fun Floors(
 @Composable
 private fun Tile(
     tile: RoomTile,
+    isOpen: Boolean,
     onSelect: (String) -> Unit,
 ) {
     Column(
@@ -163,7 +182,8 @@ private fun Tile(
             .testTag("room-tile-${tile.roomId}")
             .width(140.dp)
             .border(1.dp, ZenyColors.Outline, MaterialTheme.shapes.small)
-            .clickable { onSelect(tile.roomId) }
+            .clickable(role = Role.Button) { onSelect(tile.roomId) }
+            .semantics { selected = isOpen }
             .padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
@@ -191,7 +211,8 @@ private fun RoomDetailPanel(
     ) {
         Text("UH ${status.number}", style = MaterialTheme.typography.titleMedium)
         Text("Andar: ${status.floor.text() ?: "Sem andar"}")
-        Text("Tipo: ${typeNames[typeId] ?: typeId}")
+        // O id nunca aparece: o rótulo vem do mapa, que tem um para todo tipo à vista.
+        typeNames[typeId]?.let { Text("Tipo: $it") }
         detail.room?.let { room -> room.notes.text()?.let { Text("Observações: $it") } }
         Text("Ocupação: ${occupancyLabel(status.occupancy)}")
         val guests = (status.guestCount as? Option.Some)?.value

@@ -2,12 +2,16 @@ package com.zeny.desktop.app.rooms
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -25,6 +29,7 @@ import com.zeny.desktop.sdk.model.RoomStatusResponse.HousekeepingStatus
 import com.zeny.desktop.sdk.model.RoomStatusResponse.Occupancy
 import de.quati.kotlin.util.Option
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -276,5 +281,99 @@ class RoomMapScreenTest {
             tile(b).performClick()
             waitForIdle()
             onAllNodesWithText("Hóspedes", substring = true).assertCountEquals(0)
+        }
+
+    /** Todo texto da árvore semântica (não as tags), para conferir que nada cru chega ao usuário. */
+    private fun ComposeUiTest.screenTexts(): List<String> =
+        onAllNodes(SemanticsMatcher("qualquer nó") { true }, useUnmergedTree = true)
+            .fetchSemanticsNodes()
+            .flatMap { node ->
+                val config = node.config
+                config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } +
+                    config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() +
+                    listOfNotNull(config.getOrNull(SemanticsProperties.StateDescription))
+            }
+
+    @Test
+    fun forbiddenTypesShowNeutralLabelsNotIds() =
+        runComposeUiTest {
+            val source = FakeRoomsSource()
+            source.roomTypesError = ApiError.Problem(403, "PERMISSION_DENIED", null, emptyList())
+            source.roomError = ApiError.Problem(403, "PERMISSION_DENIED", null, emptyList())
+            source.put(roomStatus(a, "101", type = typeId(1)), roomStatus(b, "102", type = typeId(2)))
+            map(source)
+            ready(source)
+
+            onNodeWithTag("type-filter-${typeId(1)}").assert(hasText("Tipo 1"))
+            onNodeWithTag("type-filter-${typeId(2)}").assert(hasText("Tipo 2"))
+            tile(b).performClick()
+            waitForIdle()
+            onNodeWithText("Tipo: Tipo 2").assertExists()
+
+            val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+            val texts = screenTexts()
+            assertTrue(texts.isNotEmpty())
+            texts.forEach { assertTrue(!uuid.containsMatchIn(it), "id cru na tela: $it") }
+
+            onNodeWithText("Fechar").performClick()
+            onNodeWithTag("type-filter-${typeId(2)}").performClick()
+            waitForIdle()
+            tile(a).assertDoesNotExist()
+            tile(b).assertExists()
+        }
+
+    @Test
+    fun tileIsButtonAndOpenOneIsSelected() =
+        runComposeUiTest {
+            val source = FakeRoomsSource()
+            source.put(roomStatus(a, "101"), roomStatus(b, "102"))
+            map(source)
+            ready(source)
+
+            val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+            tile(a).assert(button).assertIsNotSelected()
+            tile(b).assert(button).assertIsNotSelected()
+
+            tile(a).performClick()
+            waitForIdle()
+            tile(a).assertIsSelected()
+            tile(b).assertIsNotSelected()
+
+            tile(b).performClick()
+            waitForIdle()
+            tile(a).assertIsNotSelected()
+            tile(b).assertIsSelected()
+
+            onNodeWithText("Fechar").performClick()
+            waitForIdle()
+            tile(b).assertIsNotSelected()
+        }
+
+    @Test
+    fun syncedMapLosingSubscriptionShowsDisconnectedWithRetry() =
+        runComposeUiTest {
+            val source = FakeRoomsSource()
+            source.put(roomStatus(a, "101"))
+            source.realtimeStatus.value = RealtimeStatus.Live
+            map(source)
+            ready(source)
+            onNodeWithText("Desconectado").assertDoesNotExist()
+
+            // Um `Stop` fora do fim da sessão: a assinatura acaba sem erro e o tempo real volta ao repouso.
+            source.realtimeStatus.value = RealtimeStatus.Idle
+            source.end()
+            waitForIdle()
+
+            val inBar = hasAnyAncestor(hasTestTag("realtime-bar"))
+            onNode(hasText("Desconectado") and inBar).assertExists()
+            onNodeWithText("Conectando…").assertDoesNotExist()
+            tile(a).assertExists()
+            onNode(hasText("Tentar de novo") and inBar).performClick()
+            waitForIdle()
+
+            onNodeWithText("Desconectado").assertDoesNotExist()
+            onNodeWithText("Conectando…").assertExists()
+            assertEquals(2, source.subscriptions)
+            assertEquals(1, source.activeSubscriptions)
         }
 }

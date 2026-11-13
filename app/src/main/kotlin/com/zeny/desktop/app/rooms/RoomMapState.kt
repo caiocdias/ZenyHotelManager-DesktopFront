@@ -42,7 +42,8 @@ data class RoomDetail(
  * a cada `reset`); a mensagem de status rebusca só a UH; qualquer outra (ou a de uma UH sem ladrilho) recarrega
  * tudo, com no máximo uma recarga em voo e uma pendente. Rebusca e recarga fazem *merge* por UH pela maior
  * `version`, então resposta atrasada não desfaz uma mais nova. Sem `rooms.registry.read` (`403`), o tipo aparece
- * pelo id e o detalhe só com o status; os demais erros viram [error].
+ * por um rótulo neutro e o detalhe só com o status; os demais erros viram [error]. A assinatura que acaba sem erro
+ * depois da sincronização deixa o mapa [disconnected].
  *
  * Como o `ShellState`: as mutações correm no [scope] da UI (um dispatcher de uma thread só), e por isso o estado
  * interno dispensa trava. Quem cria chama [close] quando o mapa sai de cena.
@@ -65,7 +66,10 @@ class RoomMapState(
     var hasRooms by mutableStateOf(false)
         private set
 
-    /** Nome de cada tipo, com os do filtro vigente; o tipo sem nome lido aparece pelo próprio id. */
+    /**
+     * Rótulo de cada tipo, com os do filtro vigente: o nome lido ou, sem ele (`403`, nome em branco), um rótulo
+     * neutro ("Tipo 1", "Tipo 2"…). O id é só a chave.
+     */
     var roomTypeNames by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
@@ -85,6 +89,13 @@ class RoomMapState(
     var live by mutableStateOf(source.realtimeStatus.value)
         private set
 
+    /**
+     * O mapa já sincronizado perdeu a assinatura sem erro (um `Stop` fora do fim da sessão): os ladrilhos ficam, mas
+     * param de acompanhar o servidor até um [retry].
+     */
+    var disconnected by mutableStateOf(false)
+        private set
+
     /** Filho do job da UI: o [close] cancela só o que é do mapa. */
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val mapScope = CoroutineScope(scope.coroutineContext + jobs)
@@ -93,10 +104,20 @@ class RoomMapState(
     private val rooms = mutableMapOf<String, RoomStatusResponse>()
     private var typeNames = emptyMap<String, String>()
 
+    /** O rótulo neutro de cada tipo sem nome, dado uma vez por id, em ordem de id: não muda enquanto o mapa vive. */
+    private val neutralTypeLabels = mutableMapOf<String, String>()
+
     /** A assinatura já recebeu o primeiro `ready` ou `reset`: antes disso não há o que carregar nem aplicar. */
     private var synced = false
+
+    /** Alguma assinatura já sincronizou: há ladrilhos de uma carga, que a assinatura perdida deixa parados. */
+    private var everSynced = false
     private var subscription: Job? = null
+
+    /** As origens do [error]: cada uma limpa só a sua, e o [error] cai para a que ainda restar. */
     private var streamFailure: ApiError? = null
+    private var reloadFailure: ApiError? = null
+    private var detailFailure: ApiError? = null
     private var reload: Job? = null
     private var reloadPending = false
     private var detail: Job? = null
@@ -128,11 +149,12 @@ class RoomMapState(
                 try {
                     val room = source.room(roomId)
                     selected?.takeIf { it.status.roomId == status.roomId }?.let { selected = it.copy(room = room) }
+                    detailFailure = detailFailure.cleared()
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
                 ) {
                     currentCoroutineContext().ensureActive()
-                    if (!e.isForbidden()) error = e.asApiError()
+                    if (!e.isForbidden()) detailFailure = fail(e.asApiError())
                 }
             }
     }
@@ -150,8 +172,11 @@ class RoomMapState(
         if (closed) return
         loading = true
         error = null
+        reloadFailure = null
+        detailFailure = null
         if (subscription?.isActive != true) {
             streamFailure = null
+            disconnected = false
             subscribe()
         } else if (synced) {
             requestReload()
@@ -172,15 +197,15 @@ class RoomMapState(
                 try {
                     // Completa normalmente no fim da sessão: o mapa só para de ouvir.
                     source.events(setOf(ROOMS_TOPIC)).collect(::onEvent)
-                    // Sem `ready` nem `reset`, nenhuma carga virá: não fica esperando.
+                    // Sem `ready` nem `reset`, nenhuma carga virá: não fica esperando. Os ladrilhos de uma
+                    // sincronização ficam, mas deixam de acompanhar o servidor.
                     if (!synced) loading = false
+                    if (everSynced) disconnected = true
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
                 ) {
                     currentCoroutineContext().ensureActive()
-                    val failure = e.asApiError()
-                    streamFailure = failure
-                    error = failure
+                    streamFailure = fail(e.asApiError())
                     loading = false
                 }
             }
@@ -191,12 +216,14 @@ class RoomMapState(
             RealtimeEvent.Ready -> {
                 if (!synced) {
                     synced = true
+                    everSynced = true
                     requestReload()
                 }
             }
 
             RealtimeEvent.Reset -> {
                 synced = true
+                everSynced = true
                 requestReload()
             }
 
@@ -264,12 +291,12 @@ class RoomMapState(
             rooms.clear()
             rooms.putAll(merged)
             typeNames = names
-            error = streamFailure
+            reloadFailure = reloadFailure.cleared()
         } catch (
             @Suppress("TooGenericExceptionCaught") e: Exception,
         ) {
             currentCoroutineContext().ensureActive()
-            error = e.asApiError()
+            reloadFailure = fail(e.asApiError())
         }
         loading = false
         publish()
@@ -277,11 +304,25 @@ class RoomMapState(
 
     private suspend fun readTypeNames(): Map<String, String> =
         try {
-            source.roomTypes().associate { it.id.toString() to it.name }
+            source.roomTypes().filter { it.name.isNotBlank() }.associate { it.id.toString() to it.name }
         } catch (e: ApiError.Problem) {
             if (e.status != HTTP_FORBIDDEN) throw e
             emptyMap()
         }
+
+    /** Mostra [failure], o erro mais recente, e o devolve para quem guarda a origem dele. */
+    private fun fail(failure: ApiError): ApiError {
+        error = failure
+        return failure
+    }
+
+    /** A origem que termina bem sai do [error], se era ele, e dá lugar à que restar; devolve a origem vazia. */
+    private fun ApiError?.cleared(): ApiError? {
+        if (this != null && error === this) {
+            error = listOf(streamFailure, reloadFailure, detailFailure).firstOrNull { it != null && it !== this }
+        }
+        return null
+    }
 
     /** Recalcula o que a tela lê a partir das UHs e dos filtros. */
     private fun publish() {
@@ -295,8 +336,9 @@ class RoomMapState(
             }
         floors = groupByFloor(visible)
         // O tipo do filtro que sumiu continua listado, para que a tela possa desmarcá-lo.
-        val unnamed = (active.map { it.roomTypeId.toString() } + typeFilter).filter { it !in typeNames }
-        roomTypeNames = typeNames + unnamed.associateWith { it }
+        val unnamed = (active.map { it.roomTypeId.toString() } + typeFilter).filter { it !in typeNames }.toSortedSet()
+        unnamed.forEach { id -> neutralTypeLabels.getOrPut(id) { "Tipo ${neutralTypeLabels.size + 1}" } }
+        roomTypeNames = typeNames + unnamed.associateWith { neutralTypeLabels.getValue(it) }
         followSelection()
     }
 
