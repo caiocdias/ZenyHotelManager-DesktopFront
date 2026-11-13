@@ -32,11 +32,11 @@
 
 ## Review Focus
 
-1. **Gatilhos em rajada** (governança mudando várias UHs, foco, "Atualizar"): as mensagens de `rooms` dentro de 2 s viram uma atualização; no máximo uma atualização em voo e uma pendente; a tabela nunca pisca vazia numa atualização. Testes `roomsBurstIsDebounced`, `burstOfTriggersCoalesces` e `refreshKeepsRowsVisible` na Task 5 e `refreshKeepsRowsUntilNewPage` na Task 4.
-2. **Hóspede titular sem acesso ou apagado** (`403`/`404` em `getGuest`): a linha mostra "—" e a lista carrega; `SessionEnded`, rede e resposta incompatível continuam virando erro da aba. Testes `guestForbiddenShowsDash` e `guestNetworkErrorFailsTab` na Task 5.
-3. **Abrir outra reserva com o detalhe anterior em voo:** a resposta atrasada da primeira nunca aparece no detalhe da segunda. Teste `staleDetailDropped` na Task 6.
-4. **Fuso do hotel ilegível:** o histórico mostra a data operacional da entrada ("13/11/2026 (data operacional)") e nenhum horário no fuso da JVM. Testes `businessDayInvalidZoneIsNull` na Task 1 e `noZoneFallsBackToBusinessDate` na Task 6.
-5. **Usuário com a área Recepção e sem `reservations.reservations.read`:** as três abas mostram a mensagem de permissão em pt-BR, sem quebrar a tela. Teste `forbiddenListsShowMessage` na Task 5.
+1. **Gatilhos em rajada** (governança mudando várias UHs, foco, "Atualizar"): as mensagens de `rooms` dentro de 2 s viram uma atualização; no máximo uma atualização em voo e uma pendente; a tabela nunca pisca vazia numa atualização. Testes `roomsBurstIsDebounced`, `burstOfTriggersCoalesces` e `refreshKeepsRowsVisible` na Task 6 e `refreshKeepsRowsUntilNewPage` na Task 4.
+2. **Hóspede titular sem acesso ou apagado** (`403`/`404` em `getGuest`): a linha mostra "—" e a lista carrega; `SessionEnded`, rede e resposta incompatível continuam virando erro da aba. Testes `guestForbiddenShowsDash` e `guestNetworkErrorFailsTab` na Task 6.
+3. **Abrir outra reserva com o detalhe anterior em voo:** a resposta atrasada da primeira nunca aparece no detalhe da segunda. Teste `staleDetailDropped` na Task 7.
+4. **Fuso do hotel ilegível:** o histórico mostra a data operacional da entrada ("13/11/2026 (data operacional)") e nenhum horário no fuso da JVM. Testes `businessDayInvalidZoneIsNull` na Task 1 e `noZoneFallsBackToBusinessDate` na Task 7.
+5. **Usuário com a área Recepção e sem `reservations.reservations.read`:** as três abas mostram a mensagem de permissão em pt-BR, sem quebrar a tela. Teste `forbiddenListsShowMessage` na Task 6.
 
 ---
 
@@ -125,9 +125,9 @@
 - Test: `design/src/test/kotlin/com/zeny/desktop/design/table/TableStateRefreshTest.kt`
 
 **Interfaces:**
-- Produces: `suspend fun TableState<T>.refresh()` (membro) — pede uma listagem nova **sem esvaziar**: como `reload`, sobe a geração e cancela o `fetch` em voo (uma carga mais nova sempre vence); `loading` fica `true` durante a carga; as `rows` atuais, `hasMore` e `error` ficam como estão até a primeira página do pager novo chegar; com a página, troca de uma vez `rows`, as chaves vistas, o pager e `hasMore`, e limpa `error`; `ApiError` → mantém as `rows` e põe `error`; cancelada por um `reload`/`refresh` mais novo → nada muda. `reload`, `loadMore`, `sort`, `filter` e `visibleRows` não mudam de comportamento.
+- Produces: `suspend fun TableState<T>.refresh()` (membro) — pede uma listagem nova **sem esvaziar**: como `reload`, sobe a geração e cancela o `fetch` em voo (uma carga mais nova sempre vence); `loading` fica `true` durante a carga; as `rows` atuais, `hasMore` e `error` ficam como estão até a primeira página do pager novo chegar; com a página, troca de uma vez `rows`, as chaves vistas, o pager e `hasMore`, e limpa `error`; `ApiError` → mantém as `rows` e põe `error`; cancelada por um `reload`/`refresh` mais novo → nada muda. **Atualização pendente:** depois de um `refresh()` que falhou com `ApiError`, ou que foi cancelado sem nenhum `reload`/`refresh` mais novo (o chamador foi cancelado), a tabela fica com a atualização pendente: as `rows` antigas continuam à vista e a próxima chamada de `loadMore()` (inclusive a do "Tentar de novo" da `DataTable`, que com linhas na tela chama `loadMore`) **repete a atualização** — pager novo, primeira página e troca de uma vez —, nunca acrescenta página do pager velho nem do novo às linhas antigas; um `reload`/`refresh` posterior também desfaz a pendência. `reload`, `sort`, `filter` e `visibleRows` não mudam de comportamento; `loadMore` só muda no caso da atualização pendente.
 
-- [ ] **Step 1: Testes que falham** (`runTest`, pager falso com páginas controladas): `refreshKeepsRowsUntilNewPage` (durante a carga, `rows` é a lista antiga e `loading` é `true`; depois, a página nova inteira); `refreshReplacesHasMoreAndKeys` (linha que só existia na lista antiga some; `loadMore` seguinte usa o cursor do pager novo); `refreshErrorKeepsRows`; `newerReloadCancelsRefresh` (a página do `refresh` cancelado nunca entra); `refreshCancelsInFlightLoadMore`; `reloadStillEmpties` (o `reload` continua esvaziando, como hoje).
+- [ ] **Step 1: Testes que falham** (`runTest`, pager falso com páginas controladas): `refreshKeepsRowsUntilNewPage` (durante a carga, `rows` é a lista antiga e `loading` é `true`; depois, a página nova inteira); `refreshReplacesHasMoreAndKeys` (linha que só existia na lista antiga some; `loadMore` seguinte usa o cursor do pager novo); `refreshErrorKeepsRows`; `retryAfterRefreshErrorRefreshes` (depois do erro, `loadMore()` troca as linhas pela lista nova inteira, inclusive uma reserva cuja versão mudou, e limpa `error`); `cancelledRefreshLeavesTableUsable` (o chamador do `refresh` é cancelado no meio; as linhas antigas ficam e o `loadMore()` seguinte faz a atualização); `newerReloadCancelsRefresh` (a página do `refresh` cancelado nunca entra); `refreshCancelsInFlightLoadMore`; `reloadStillEmpties` (o `reload` continua esvaziando, como hoje); `loadMoreUnchangedWithoutPendingRefresh`.
 - [ ] **Step 2:** `./gradlew :design:test --tests '*TableStateRefreshTest*'` → FAIL.
 - [ ] **Step 3:** implemente, reaproveitando o protocolo de geração e o `mutex` da classe.
 - [ ] **Step 4:** PASS; `./gradlew build` e `bash tests/run.sh` verdes.
@@ -135,20 +135,39 @@
 
 ---
 
-### Task 5: Porta da recepção e estado do painel do dia
+### Task 5: Porta da recepção e adaptador
 
-**Estimativa:** 45 min · **Depende de:** Tasks 2, 3 e 4 · **Risco:** alto (concorrência; núcleo da etapa)
+**Estimativa:** 25 min · **Depende de:** Tasks 2 e 3 · **Risco:** alto (dado pessoal; contrato da porta)
 
 **Files:**
-- Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/ReceptionSource.kt`, `app/src/main/kotlin/com/zeny/desktop/app/reception/DayPanelState.kt`
+- Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/ReceptionSource.kt`
 - Modify: `app/src/main/kotlin/com/zeny/desktop/app/session/ServerConnection.kt` (`fun receptionSource(): ReceptionSource? = null`; o `CoreConnection` implementa sobre `core.account`, `core.hotel.businessDay()`, `core.reservations`, `core.guests`, `core.rates`, `core.rooms.roomTypes()` e `core.realtime.subscribe`; os falsos existentes não mudam)
-- Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/FakeReceptionSource.kt`, `DayPanelStateTest.kt`
+- Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/FakeReceptionSource.kt` (falso controlável, usado pelas Tasks 6 a 9), `ReceptionSourceTest.kt`
 
 **Interfaces:**
-- Consumes: Tasks 1–4; `Column` e `ChipModel` do `design`; `CursorPager`/`Page`, `RealtimeEvent` e `Me` do `core`.
+- Consumes: Tasks 1–3; `RealtimeEvent` do `core`.
 - Produces:
-  - `data class HolderSummary(val name: String, val document: String?)` — `name` = `socialName` se houver, senão `fullName`; `document` = `ReceptionText.document(tipo, maskedNumber)` do primeiro documento, ou `null`; `toString()` = `"HolderSummary(***)"`. O `CoreConnection` monta o resumo a partir do `GuestResponse`, que não sai do adaptador.
-  - `interface ReceptionSource { suspend fun permissions(): Set<String>; suspend fun businessDay(): BusinessDay; suspend fun dayPage(list: DayList, date: BusinessDate, cursor: String?, limit: Int): Page<ReservationListItemResponse>; suspend fun reservation(id: String): ReservationDetailResponse; suspend fun history(id: String): List<ReservationHistoryResponse>; suspend fun roomAssignments(id: String): List<RoomAssignmentResponse>; suspend fun holder(guestId: String): HolderSummary; suspend fun ratePlanName(id: String): String; suspend fun roomTypes(): List<RoomTypeResponse>; fun events(topics: Set<String>): Flow<RealtimeEvent> }` (`permissions()` = `core.account.me().permissions`).
+  - `data class HolderSummary(val name: String, val document: String?)` — `toString()` = `"HolderSummary(***)"`; e a função pura `fun GuestResponse.toHolderSummary(): HolderSummary` (em `ReceptionSource.kt`): `name` = `socialName` se houver e não estiver em branco, senão `fullName`; `document` = `ReceptionText.document(type, maskedNumber)` do primeiro documento, ou `null`. O `CoreConnection` usa essa função; o `GuestResponse` não sai do adaptador.
+  - `interface ReceptionSource { suspend fun permissions(): Set<String>; suspend fun businessDay(): BusinessDay; suspend fun dayPage(list: DayList, date: BusinessDate, cursor: String?, limit: Int): Page<ReservationListItemResponse>; suspend fun reservation(id: String): ReservationDetailResponse; suspend fun history(id: String): List<ReservationHistoryResponse>; suspend fun roomAssignments(id: String): List<RoomAssignmentResponse>; suspend fun holder(guestId: String): HolderSummary; suspend fun ratePlanName(id: String): String; suspend fun roomTypes(): List<RoomTypeResponse>; fun events(topics: Set<String>): Flow<RealtimeEvent> }` (`permissions()` = `core.account.me().permissions`; `ratePlanName` = `core.rates.ratePlan(id).name`).
+  - `FakeReceptionSource`: respostas por lista e página, por reserva, por titular e por plano; permissões; eventos por um canal controlado; registro de cada chamada (lista, data, cursor) e de cada assinatura (tópicos, cancelamento); chamadas que podem ficar presas até o teste soltar.
+
+- [ ] **Step 1: Testes que falham:** `summaryPrefersSocialName`; `summaryFallsBackToFullNameWhenSocialBlank`; `summaryUsesFirstMaskedDocument` (`"CPF ***.***.***-34"`); `summaryWithoutDocumentIsNull`; `summaryToStringHidesData`; `coreConnectionOffersReceptionSource` (no molde do `CoreConnectionTest`: `receptionSource()` não nulo sobre um `ZenyCore` de teste); `defaultConnectionHasNoReceptionSource` (um falso de `ServerConnection` existente devolve `null`).
+- [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build` e `bash tests/run.sh` verdes.
+- [ ] **Step 5: Commit** (`Acrescenta a porta da recepção sobre o core`).
+
+---
+
+### Task 6: Estado do painel do dia
+
+**Estimativa:** 45 min · **Depende de:** Tasks 4 e 5 · **Risco:** alto (concorrência; núcleo da etapa)
+
+**Files:**
+- Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/DayPanelState.kt`
+- Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/DayPanelStateTest.kt` (com o `FakeReceptionSource` da Task 5; pode acrescentar ao falso o que faltar)
+
+**Interfaces:**
+- Consumes: Tasks 3–5; `TableState`, `Column` e `ChipModel` do `design`; `CursorPager`/`Page` e `RealtimeEvent` do `core`.
+- Produces:
   - `data class ReservationRow(val id: String, val code: String, val holder: String, val room: String, val roomType: String, val arrival: String, val departure: String, val guests: String, val status: String)` — `holder` = `HolderSummary.name` ou "—"; `room` = `roomAssignment.roomNumber` ou "—"; `roomType` = nome do tipo ou "—"; `status` = rótulo da situação seguido, por " · ", dos alertas que valem, nesta ordem: "Day use", "Chegada pendente" (`arrivalOverdue`), "Saída pendente" (`departureOverdue`) (a busca da tabela acha os alertas); `toString()` sem `holder`.
   - `class DayPanelState(source: ReceptionSource, scope: CoroutineScope)` (mutações no escopo da UI, uma thread; como `RoomMapState`):
     - `val tabs: Map<DayList, TableState<ReservationRow>>` (`CursorPager` com `limit` 200, chave `id`); o `fetch` do pager **espera** a primeira data operacional (nenhuma `dayPage` sai antes dela, nem pela `DataTable`) e usa sempre a data da carga vigente;
@@ -161,7 +180,7 @@
     - eventos: mensagem de `end-of-day`, o primeiro `Ready` e todo `Reset` → `refresh()`; mensagens de `rooms` → `refresh()` uma vez, 2 000 ms depois da primeira mensagem da rajada (as que chegam nessa janela entram na mesma); fim da assinatura (normal ou com erro) → para de ouvir, sem erro na tela;
     - no máximo uma atualização em voo e uma pendente, venha de onde vier.
 
-- [ ] **Step 1: Testes que falham** (`FakeReceptionSource` com respostas por lista, por titular, permissões e eventos controlados; `runTest`): `loadsThreeTabsForBusinessDate` (a data do falso vai em todas as chamadas; rótulos "Chegadas (4)", "Saídas (2)", "Hospedados (7)"); `noPageBeforeBusinessDay` (um `loadMore` da aba antes da data responder não chama `dayPage`; depois, chama com a data); `emptyListShowsZero` ("Chegadas (0)", sem erro); `tabErrorKeepsOthers` (erro só nas saídas → `tabs[DEPARTURES].error` com a mensagem pt-BR; as outras carregadas); `forbiddenListsShowMessage` (`403` nas três listas → as três com a mensagem de permissão; `error` do painel nulo); `refreshAfterErrorRecovers`; `businessDayErrorShowsError`; `holderNameFromSummary`; `guestForbiddenShowsDash`; `guestNetworkErrorFailsTab`; `holderFetchedOncePerId` (mesmo titular em duas abas → uma chamada); `roomTypeForbiddenShowsDash`; `statusCellCarriesAlerts` ("Confirmada · Day use · Chegada pendente"); `labelShowsPlusWhileMorePages` ("Chegadas (200+)" com `nextCursor`; depois de `loadMore`, "Chegadas (230)"); `subscribesOnlyPermittedTopics` (só `rooms`; só `end-of-day`; os dois; nenhum); `roomsBurstIsDebounced` (5 mensagens em 1 s → uma atualização, 2 000 ms depois da primeira); `endOfDayRefreshesWithNewDate` (a data nova vai nas listas); `burstOfTriggersCoalesces` (foco + `refresh()` + `Reset` com uma carga presa → no máximo 2 cargas ao todo); `refreshKeepsRowsVisible` (durante a atualização, as linhas antigas continuam); `focusRefreshesOnlyOnGain`; `streamFailureKeepsPanel` (assinatura termina com `ApiError` → sem `error`, painel segue, `refresh()` funciona); `closeCancelsSubscriptionAndLoads`; `rowAndSummaryToStringHidePersonalData`.
+- [ ] **Step 1: Testes que falham** (`FakeReceptionSource` da Task 5; `runTest`): `loadsThreeTabsForBusinessDate` (a data do falso vai em todas as chamadas; rótulos "Chegadas (4)", "Saídas (2)", "Hospedados (7)"); `noPageBeforeBusinessDay` (um `loadMore` da aba antes da data responder não chama `dayPage`; depois, chama com a data); `emptyListShowsZero` ("Chegadas (0)", sem erro); `tabErrorKeepsOthers` (erro só nas saídas → `tabs[DEPARTURES].error` com a mensagem pt-BR; as outras carregadas); `forbiddenListsShowMessage` (`403` nas três listas → as três com a mensagem de permissão; `error` do painel nulo); `refreshAfterErrorRecovers`; `businessDayErrorShowsError`; `holderNameFromSummary`; `guestForbiddenShowsDash`; `guestNetworkErrorFailsTab`; `holderFetchedOncePerId` (mesmo titular em duas abas → uma chamada); `roomTypeForbiddenShowsDash`; `statusCellCarriesAlerts` ("Confirmada · Day use · Chegada pendente"); `labelShowsPlusWhileMorePages` ("Chegadas (200+)" com `nextCursor`; depois de `loadMore`, "Chegadas (230)"); `subscribesOnlyPermittedTopics` (só `rooms`; só `end-of-day`; os dois; nenhum); `roomsBurstIsDebounced` (5 mensagens em 1 s → uma atualização, 2 000 ms depois da primeira); `endOfDayRefreshesWithNewDate` (a data nova vai nas listas); `burstOfTriggersCoalesces` (foco + `refresh()` + `Reset` com uma carga presa → no máximo 2 cargas ao todo); `refreshKeepsRowsVisible` (durante a atualização, as linhas antigas continuam); `focusRefreshesOnlyOnGain`; `streamFailureKeepsPanel` (assinatura termina com `ApiError` → sem `error`, painel segue, `refresh()` funciona); `closeCancelsSubscriptionAndLoads`; `rowToStringHidesHolder`.
 - [ ] **Step 2:** `./gradlew :app:test --tests '*DayPanelStateTest*'` → FAIL.
 - [ ] **Step 3:** implemente.
 - [ ] **Step 4:** PASS; `./gradlew build` e `bash tests/run.sh` verdes.
@@ -169,9 +188,9 @@
 
 ---
 
-### Task 6: Estado do detalhe da reserva
+### Task 7: Estado do detalhe da reserva
 
-**Estimativa:** 40 min · **Depende de:** Task 5 · **Risco:** alto (dado pessoal; núcleo da etapa)
+**Estimativa:** 40 min · **Depende de:** Task 6 · **Risco:** alto (dado pessoal; núcleo da etapa)
 
 **Files:**
 - Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/ReservationDetailState.kt`
@@ -190,9 +209,9 @@
 
 ---
 
-### Task 7: Tela da recepção
+### Task 8: Tela da recepção
 
-**Estimativa:** 40 min · **Depende de:** Task 6 · **Risco:** alto (superfície da demo; dado pessoal na tela)
+**Estimativa:** 40 min · **Depende de:** Task 7 · **Risco:** alto (superfície da demo; dado pessoal na tela)
 
 **Files:**
 - Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/ReceptionScreen.kt`
@@ -208,9 +227,9 @@
 
 ---
 
-### Task 8: A recepção na casca
+### Task 9: A recepção na casca
 
-**Estimativa:** 40 min · **Depende de:** Task 7 · **Risco:** alto (contrato da casca; assinatura por sessão)
+**Estimativa:** 40 min · **Depende de:** Task 8 · **Risco:** alto (contrato da casca; assinatura por sessão)
 
 **Files:**
 - Modify: `app/src/main/kotlin/com/zeny/desktop/app/shell/Areas.kt` (`IMPLEMENTED_AREAS = setOf(Area.RECEPTION, Area.HOUSEKEEPING)`; a permissão da área **não muda**: `frontdesk.stays.checkin`/`checkout`, tabela do handoff da M1 E04); `app/src/main/kotlin/com/zeny/desktop/app/AppRoot.kt` (`AreaContent`: `Area.RECEPTION` → `ReceptionArea(connection)`, no molde do `HousekeepingMap`: `connection.receptionSource()` nulo → texto "Recepção indisponível nesta conexão."; com sessão `Active`, `DayPanelState` e `ReservationDetailState` criados por `remember(source, sessionId)` sobre o `rememberCoroutineScope`, fechados num `DisposableEffect`; o foco da janela vem de `LocalWindowInfo.current.isWindowFocused` por `snapshotFlow`: no ganho de foco, `panel.onWindowFocus(true)` e `detail.reload()`; na perda, `panel.onWindowFocus(false)`)
@@ -223,7 +242,7 @@
 - Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/ReceptionShellTest.kt`
 
 **Interfaces:**
-- Consumes: Task 7; `ShellState.selected`; `ServerConnection.receptionSource()`.
+- Consumes: Task 8; `ShellState.selected`; `ServerConnection.receptionSource()`.
 
 - [ ] **Step 1: Testes que falham:** `receptionAreaOpensPanel` (usuário com `frontdesk.stays.checkin` vê "Recepção" fora do modo de desenvolvimento; ao abri-la, o painel aparece e o falso recebe a assinatura e as três listas); `subscriptionOnlyWhileAreaOpen` (trocar para Governança cancela a assinatura da recepção); `logoutClosesPanel`; `sessionSwitchRecreatesPanel` (sessão nova → estado novo, cache de titulares vazio); `connectionWithoutReceptionShowsUnavailable`; `areaHiddenWithoutPermission`; e os ajustes mandados acima.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build`, `./gradlew :app:desktopJar` e `bash tests/run.sh` verdes.
@@ -231,9 +250,9 @@
 
 ---
 
-### Task 9: Verificação ao vivo contra o `zeny-front`
+### Task 10: Verificação ao vivo contra o `zeny-front`
 
-**Estimativa:** 35 min · **Depende de:** Task 8 · **Risco:** alto (segredos em uso; critérios de aceite)
+**Estimativa:** 35 min · **Depende de:** Task 9 · **Risco:** alto (segredos em uso; critérios de aceite)
 
 **Files:**
 - Create: `app/src/test/kotlin/com/zeny/desktop/app/reception/LiveReceptionCheck.kt`
@@ -250,8 +269,8 @@
 
 ## Ondas
 
-- Dependências: 2←1; 5←2,3,4; 6←5; 7←6; 8←7; 9←8. As Tasks 1, 3 e 4 não dependem de nenhuma.
-- Ondas de no máximo 2 (memória curta para Gradles simultâneos, como na M1 E07): onda 1 = Tasks 1 e 3 (`core/facade` × `app/reception`); onda 2 = Tasks 2 e 4 (`core/facade` × `design/table`). Depois 5, 6, 7, 8 e 9 em série na branch da etapa.
+- Dependências: 2←1; 5←2,3; 6←4,5; 7←6; 8←7; 9←8; 10←9. As Tasks 1, 3 e 4 não dependem de nenhuma.
+- Ondas de no máximo 2 (memória curta para Gradles simultâneos, como na M1 E07): onda 1 = Tasks 1 e 3 (`core/facade` × `app/reception`); onda 2 = Tasks 2 e 4 (`core/facade` × `design/table`). Depois 5, 6, 7, 8, 9 e 10 em série na branch da etapa (a 7 também edita o falso da Task 5).
 
 ## Para o handoff
 
