@@ -61,7 +61,7 @@ class RoomMapState(
     var floors by mutableStateOf<List<Pair<String, List<RoomTile>>>>(emptyList())
         private set
 
-    /** Nome de cada tipo; o tipo sem nome lido aparece pelo próprio id. */
+    /** Nome de cada tipo, com os do filtro vigente; o tipo sem nome lido aparece pelo próprio id. */
     var roomTypeNames by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
@@ -138,7 +138,10 @@ class RoomMapState(
         selected = null
     }
 
-    /** Depois de um erro: assina de novo se a assinatura terminou; senão, recarrega. */
+    /**
+     * Depois de um erro: assina de novo se a assinatura terminou; senão, recarrega. O detalhe aberto sem cadastro
+     * lido é relido.
+     */
     fun retry() {
         if (closed) return
         loading = true
@@ -149,6 +152,7 @@ class RoomMapState(
         } else if (synced) {
             requestReload()
         }
+        selected?.takeIf { it.room == null }?.let { select(it.status.roomId.toString()) }
     }
 
     /** O mapa saiu de cena: cancela a assinatura, as leituras em voo e não aceita mais ações que leiam. */
@@ -164,6 +168,8 @@ class RoomMapState(
                 try {
                     // Completa normalmente no fim da sessão: o mapa só para de ouvir.
                     source.events(setOf(ROOMS_TOPIC)).collect(::onEvent)
+                    // Sem `ready` nem `reset`, nenhuma carga virá: não fica esperando.
+                    if (!synced) loading = false
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
                 ) {
@@ -283,7 +289,8 @@ class RoomMapState(
                 statusFilter.isEmpty() || displayStatus(it) in statusFilter || housekeepingStatus(it) in statusFilter
             }
         floors = groupByFloor(visible)
-        val unnamed = active.map { it.roomTypeId.toString() }.filter { it !in typeNames }
+        // O tipo do filtro que sumiu continua listado, para que a tela possa desmarcá-lo.
+        val unnamed = (active.map { it.roomTypeId.toString() } + typeFilter).filter { it !in typeNames }
         roomTypeNames = typeNames + unnamed.associateWith { it }
         followSelection()
     }

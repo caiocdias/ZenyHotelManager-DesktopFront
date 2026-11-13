@@ -5,6 +5,7 @@ import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.realtime.RealtimeStatus
 import com.zeny.desktop.sdk.model.RoomStatusResponse.HousekeepingStatus
 import com.zeny.desktop.sdk.model.RoomStatusResponse.Occupancy
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -16,6 +17,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RoomMapStateTest {
     private val a = roomId(1)
     private val b = roomId(2)
@@ -552,5 +554,128 @@ class RoomMapStateTest {
             source.realtimeStatus.value = RealtimeStatus.Live
             runCurrent()
             assertEquals(RealtimeStatus.Live, state.live)
+        }
+
+    @Test
+    fun sessionEndBeforeFirstSyncStopsLoading() =
+        runTest {
+            val source = FakeRoomsSource().withTwoRooms()
+            val state = mapState(source)
+            runCurrent()
+
+            source.end()
+            runCurrent()
+
+            assertFalse(state.loading, "sem ready nem reset, não há carga a esperar")
+            assertNull(state.error)
+            assertEquals(0, source.statusesCalls)
+        }
+
+    @Test
+    fun retriedSubscriptionEndingBeforeSyncStopsLoading() =
+        runTest {
+            val source = FakeRoomsSource().withTwoRooms()
+            val state = loaded(source)
+            source.end(forbidden())
+            runCurrent()
+
+            state.retry()
+            runCurrent()
+            assertTrue(state.loading)
+            source.end()
+            runCurrent()
+
+            assertFalse(state.loading)
+            assertNull(state.error)
+        }
+
+    @Test
+    fun typeFilterKeepsNameOfVanishedType() =
+        runTest {
+            val source = FakeRoomsSource()
+            source.put(roomStatus(a, "101", type = typeId(1)), roomStatus(b, "102", type = typeId(2)))
+            val state = loaded(source)
+            state.toggleType(typeId(2))
+
+            source.server.remove(b)
+            source.types.removeAt(1)
+            source.emit(RealtimeEvent.Reset)
+            runCurrent()
+
+            assertEquals(mapOf(typeId(1) to "Standard", typeId(2) to typeId(2)), state.roomTypeNames)
+        }
+
+    @Test
+    fun typeFilterKeepsVanishedTypeWithoutRegistry() =
+        runTest {
+            val source = FakeRoomsSource()
+            source.roomTypesError = forbidden()
+            source.put(roomStatus(a, "101", type = typeId(1)), roomStatus(b, "102", type = typeId(2)))
+            val state = loaded(source)
+            state.toggleType(typeId(2))
+
+            source.put(roomStatus(b, "102", type = typeId(2), version = 2, active = false))
+            source.message(b, 2)
+            runCurrent()
+
+            assertEquals(mapOf(typeId(1) to typeId(1), typeId(2) to typeId(2)), state.roomTypeNames)
+
+            state.toggleType(typeId(2))
+            assertEquals(mapOf(typeId(1) to typeId(1)), state.roomTypeNames, "sem filtro, o tipo sumido sai")
+        }
+
+    @Test
+    fun retryRereadsMissingDetail() =
+        runTest {
+            val source = FakeRoomsSource().withTwoRooms()
+            source.roomError = ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList())
+            val state = loaded(source)
+            state.select(a)
+            runCurrent()
+            assertNotNull(state.error)
+            assertNull(state.selected?.room)
+
+            source.roomError = null
+            state.retry()
+            runCurrent()
+
+            assertNull(state.error)
+            assertEquals(listOf(a, a), source.roomCalls)
+            val detail = assertNotNull(state.selected)
+            assertEquals(a, assertNotNull(detail.room).id.toString())
+        }
+
+    @Test
+    fun retryKeepsDetailAlreadyRead() =
+        runTest {
+            val source = FakeRoomsSource().withTwoRooms()
+            val state = loaded(source)
+            state.select(a)
+            runCurrent()
+
+            state.retry()
+            runCurrent()
+
+            assertEquals(listOf(a), source.roomCalls)
+            assertNotNull(state.selected?.room)
+        }
+
+    @Test
+    fun retryRereadOfDetailIsDroppedWhenAnotherRoomIsSelected() =
+        runTest {
+            val source = FakeRoomsSource().withTwoRooms()
+            source.roomError = ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList())
+            val state = loaded(source)
+            state.select(a)
+            runCurrent()
+
+            source.roomError = null
+            state.retry()
+            state.select(b)
+            runCurrent()
+
+            val detail = assertNotNull(state.selected)
+            assertEquals(b, detail.status.roomId.toString())
+            assertEquals(b, assertNotNull(detail.room).id.toString())
         }
 }
