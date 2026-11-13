@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Monta o pacote do Windows em <checkout principal>/build/demo-package/ (nunca copia .env).
+# JARs e roteiro vêm do checkout onde o script está (pode ser um worktree); o shell não chama o Gradle.
 # Uso: package.sh
 set -u
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -7,6 +8,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 (($# == 0)) || die 2 "uso: package.sh"
 
 main="$(front_main_checkout)" || exit "$?"
+root="$(front_root)" || die 2 "não foi possível localizar o checkout do front"
 commit="$(pin_get commit)" || exit "$?"
 tag="$(server_tag)" || exit "$?"
 tree="$(ensure_server_tree)" || exit "$?"
@@ -27,6 +29,46 @@ ensure_state_dir "$main/build"
 if [[ "$pkg" != "$main"/build/demo-package || -L "$pkg" ]]; then
   die 1 "caminho do pacote inesperado: $pkg"
 fi
+
+app_jar="$root/app/build/libs/zeny-desktop.jar"
+seed_jar="$root/demo-seed/build/libs/demo-seed.jar"
+roteiro="$root/docs/demo/roteiro-m1.md"
+
+# require_artifact FILE HINT [zip] : arquivo regular (não symlink), legível, não vazio e, com zip, assinatura PK\x03\x04
+# e ZIP íntegro (diretório central e CRC de cada entrada, pelo zipfile do python3; um build interrompido falha).
+require_artifact() {
+  local file="$1" hint="$2" magic
+  [[ -f "$file" && ! -L "$file" && -r "$file" && -s "$file" ]] ||
+    die 1 "artefato ausente ou inválido (precisa ser arquivo regular, legível e não vazio): $file; $hint"
+  if [[ "${3:-}" == zip ]]; then
+    magic="$(head -c 4 -- "$file" | od -An -tx1 | tr -d ' \n')"
+    [[ "$magic" == 504b0304 ]] || die 1 "artefato não é um JAR (ZIP) válido: $file; $hint"
+    command -v python3 >/dev/null 2>&1 ||
+      die 1 "python3 não encontrado: é necessário para validar os JARs antes de montar o pacote"
+    python3 -I -c '
+import sys, zipfile
+try:
+    with zipfile.ZipFile(sys.argv[1]) as z:
+        ok = zipfile.is_zipfile(sys.argv[1]) and z.testzip() is None
+except Exception:
+    ok = False
+sys.exit(0 if ok else 1)
+' "$file" || die 1 "artefato não é um JAR (ZIP) válido (truncado ou corrompido): $file; $hint"
+  fi
+}
+
+# Antes do rm -rf: um artefato ausente ou inválido deixa o pacote anterior intacto.
+require_artifact "$app_jar" "gere com ./gradlew :app:desktopJar" zip
+require_artifact "$seed_jar" "gere com ./gradlew :demo-seed:seedJar" zip
+require_artifact "$roteiro" "o roteiro docs/demo/roteiro-m1.md é versionado no front"
+# Os arquivos de origem que o pacote copia ou lê de tools/server-env (render_override lê o compose.override.yaml)
+# também são conferidos antes do rm -rf: arquivo regular, não symlink (um link para um segredo sairia com outro
+# nome, fora da salvaguarda *.env) e legível.
+for src in LEIA-ME.md .env.example gen-env.sh compose.override.yaml; do
+  [[ -f "$_SERVER_ENV_DIR/$src" && ! -L "$_SERVER_ENV_DIR/$src" && -r "$_SERVER_ENV_DIR/$src" ]] ||
+    die 1 "arquivo de origem ausente, symlink ou ilegível: $_SERVER_ENV_DIR/$src; restaure o arquivo versionado no front"
+done
+
 rm -rf -- "$pkg"
 mkdir -p "$pkg/app" "$pkg/images" "$pkg/server" || die 1 "não foi possível criar $pkg"
 
@@ -36,14 +78,28 @@ cp "$_SERVER_ENV_DIR/.env.example" "$_SERVER_ENV_DIR/gen-env.sh" "$pkg/" || die 
 chmod +x "$pkg/gen-env.sh"
 cp "$(pin_file)" "$pkg/server-pin.properties" || die 1 "falha ao copiar o pin"
 
-leia="$(<"$_SERVER_ENV_DIR/LEIA-ME.md")"
+leia="$(<"$_SERVER_ENV_DIR/LEIA-ME.md")" || die 1 "falha ao ler $_SERVER_ENV_DIR/LEIA-ME.md"
 leia="$(_replace_all "$leia" @SERVER_COMMIT@ "$commit")"
 leia="$(_replace_all "$leia" @SERVER_TAG@ "$tag")"
 printf '%s\n' "$leia" >"$pkg/LEIA-ME.md"
 
-cat >"$pkg/app/LEIA-ME.txt" <<'TXT'
-Os JARs do app e do demo-seed entram nesta pasta na M1 E07.
-TXT
+cp -- "$app_jar" "$pkg/app/zeny-desktop.jar" || die 1 "falha ao copiar zeny-desktop.jar"
+cp -- "$seed_jar" "$pkg/app/demo-seed.jar" || die 1 "falha ao copiar demo-seed.jar"
+cp -- "$roteiro" "$pkg/roteiro-m1.md" || die 1 "falha ao copiar o roteiro"
+
+# Origem dos artefatos, sem caminho absoluto. O sha256 é dos JARs copiados; não prova que saíram de front_commit.
+front_commit="$(git -C "$root" rev-parse HEAD)" || die 1 "não foi possível ler o HEAD do front"
+status="$(git -C "$root" status --porcelain --untracked-files=no)" || die 1 "não foi possível ler o git status do front"
+front_dirty=false
+[[ -z "$status" ]] || front_dirty=true
+{
+  printf 'front_commit=%s\n' "$front_commit"
+  printf 'front_dirty=%s\n' "$front_dirty"
+  printf 'server_commit=%s\n' "$commit"
+  printf 'zeny-desktop.jar sha256=%s\n' "$(sha256sum <"$pkg/app/zeny-desktop.jar" | cut -d' ' -f1)"
+  printf 'demo-seed.jar sha256=%s\n' "$(sha256sum <"$pkg/app/demo-seed.jar" | cut -d' ' -f1)"
+} >"$pkg/VERSAO.txt"
+
 cat >"$pkg/images/LEIA-ME.txt" <<'TXT'
 Para pré-carregar as imagens do servidor (uso sem internet), gere zeny-server-images.tar
 nesta pasta com tools/server-env/save-images.sh (no notebook, com as imagens já presentes)

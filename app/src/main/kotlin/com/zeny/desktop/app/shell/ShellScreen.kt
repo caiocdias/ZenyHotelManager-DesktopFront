@@ -26,11 +26,13 @@ private const val PICK_AN_AREA = "Selecione uma área no menu."
 /**
  * Casca do app: menu das áreas que o usuário vê (as sem tela com "(em breve)", só no modo de desenvolvimento da
  * casca) e topo com hotel, data operacional, usuário e "Sair". "Sair" fica disponível também no erro.
+ * [areaContent] desenha a área escolhida; sem ele, só o nome dela.
  */
 @Composable
 fun ShellScreen(
     state: ShellState,
     onLogout: () -> Unit,
+    areaContent: @Composable (Area) -> Unit = { EmptyState(it.label) },
 ) {
     val items =
         state.areas.map { (area, implemented) ->
@@ -43,12 +45,13 @@ fun ShellScreen(
         topBar = { TopBar(state, onLogout) },
     ) {
         val error = state.error
-        // Com área escolhida, mostra só o nome dela; a E06 o troca pela tela da área.
+        val selected = state.selected
         when {
             state.loading -> LoadingState()
             error != null -> ErrorState(error, onRetry = state::reload)
             state.areas.none { (_, implemented) -> implemented } -> EmptyState(NO_SCREENS_YET)
-            else -> EmptyState(state.selected?.label ?: PICK_AN_AREA)
+            selected != null -> areaContent(selected)
+            else -> EmptyState(PICK_AN_AREA)
         }
     }
 }

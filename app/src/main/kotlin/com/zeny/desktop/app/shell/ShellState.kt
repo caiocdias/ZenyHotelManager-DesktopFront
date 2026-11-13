@@ -19,12 +19,14 @@ private const val UNKNOWN_HOTEL = "Hotel"
  * Estado da casca: usuário e áreas (`me`), data operacional e nome do hotel, lidos ao nascer e a cada `reload`.
  * Falha em `me` ou na data vira `error` (com "Tentar de novo"); o nome do hotel é independente: leitura negada
  * (o `403` da Governanta) ou falha dá só o nome genérico, sem impedir a data nem o menu. Quem cria chama
- * `close()` quando a casca sai de cena.
+ * `close()` quando a casca sai de cena. [restoreArea] (a área aberta na casca da sessão anterior) só abre depois
+ * que o `me` desta sessão a confirma no menu.
  */
 class ShellState(
     private val connection: ServerConnection,
     private val devMode: Boolean,
     private val scope: CoroutineScope,
+    private var restoreArea: Area? = null,
 ) {
     var loading by mutableStateOf(true)
         private set
@@ -72,6 +74,8 @@ class ShellState(
                     userName = me.name
                     areas = visibleAreas(me.permissions, IMPLEMENTED_AREAS, devMode)
                     businessDate = DateInput.format(date)
+                    restoreArea?.let { selected = it }
+                    restoreArea = null
                     if (selected !in openableAreas()) selected = null
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,

@@ -1,7 +1,10 @@
 package com.zeny.desktop.app
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -10,20 +13,28 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.approval.ApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
 import com.zeny.desktop.app.login.PasswordChangeState
+import com.zeny.desktop.app.rooms.RoomMapScreen
+import com.zeny.desktop.app.rooms.RoomMapState
 import com.zeny.desktop.app.session.ServerConnection
+import com.zeny.desktop.app.shell.Area
 import com.zeny.desktop.app.shell.ShellScreen
 import com.zeny.desktop.app.shell.ShellState
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.approval.ApprovalDialog
+import com.zeny.desktop.design.feedback.EmptyState
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 
 /** Casca de desenvolvimento (áreas "(em breve)"): só com `ZENY_DEV_SHELL=1` ou `-Dzeny.devShell=true`. */
@@ -77,8 +88,18 @@ internal fun AppRoot(
             }
 
             Screen.Shell -> {
-                val state = remember { ShellState(controller.requireConnection(), devMode, scope) }
-                val approvals = remember { sessionApprovals(controller, scope) }
+                val connection = remember { controller.requireConnection() }
+                // A casca e a aprovação são da sessão vigente: outra sessão, mesmo sem passar pelo login, as recria
+                // e nunca mostra o nome nem o menu do usuário anterior. A área aberta segue só se o menu novo a tem.
+                val sessionId by remember(connection) { connection.activeSessionIds() }
+                    .collectAsState(connection.state.value.activeSessionId())
+                val previous = remember { PreviousShell() }
+                val state =
+                    remember(sessionId) {
+                        ShellState(connection, devMode, scope, restoreArea = previous.shell?.selected)
+                            .also { previous.shell = it }
+                    }
+                val approvals = remember(sessionId) { sessionApprovals(controller, scope) }
                 // Sair da casca (logout, sessão encerrada) cancela a carga em voo e a aprovação pendente.
                 DisposableEffect(state, approvals) {
                     onDispose {
@@ -87,13 +108,73 @@ internal fun AppRoot(
                     }
                 }
                 CompositionLocalProvider(LocalApprovalCoordinator provides approvals) {
-                    ShellScreen(state, onLogout = { scope.launch { controller.logout() } })
+                    ShellScreen(state, onLogout = { scope.launch { controller.logout() } }) { area ->
+                        AreaContent(area, connection)
+                    }
                     insideShell()
                     ApprovalHost(approvals)
                 }
             }
         }
     }
+}
+
+/** A casca da sessão anterior, lida só ao criar a da seguinte (não é estado da composição). */
+private class PreviousShell {
+    var shell: ShellState? = null
+}
+
+/** O `sessionId` de cada sessão ativa, sem repetir; a saída da sessão não emite (a tela já deixa a casca). */
+private fun ServerConnection.activeSessionIds(): Flow<String?> =
+    state.mapNotNull { it.activeSessionId() }.distinctUntilChanged()
+
+private fun SessionState.activeSessionId(): String? = (this as? SessionState.Active)?.sessionId
+
+/** A tela da área aberta na casca: a Governança é o mapa de UHs; as demais ainda mostram só o nome. */
+@Composable
+internal fun AreaContent(
+    area: Area,
+    connection: ServerConnection,
+) {
+    when (area) {
+        Area.HOUSEKEEPING -> HousekeepingMap(connection)
+        else -> EmptyState(area.label)
+    }
+}
+
+/**
+ * O mapa de UHs vive enquanto a Governança está aberta na mesma sessão: nasce com a chave do `sessionId` vigente e
+ * fecha ao sair da área, da casca ou da sessão (o `retry` de um mapa que sobrevivesse reassinaria na sessão nova).
+ * Sem sessão `Active` o quadro fica vazio de propósito: uma assinatura aberta sem sessão esperaria pela próxima e
+ * mostraria a ela um mapa nascido na anterior. Isso só dura o instante entre a sessão sair (logout, `Ended`) e a
+ * tela deixar a casca. Corre no escopo da composição, numa thread só.
+ */
+@Composable
+private fun HousekeepingMap(connection: ServerConnection) {
+    val source = remember(connection) { connection.roomsSource() }
+    val session by connection.state.collectAsState()
+    val sessionId = (session as? SessionState.Active)?.sessionId
+    val scope = rememberCoroutineScope()
+    when {
+        source == null -> {
+            MapUnavailable()
+        }
+
+        sessionId != null -> {
+            val map = remember(source, sessionId) { RoomMapState(source, scope) }
+            DisposableEffect(map) { onDispose { map.close() } }
+            RoomMapScreen(map)
+        }
+    }
+}
+
+@Composable
+private fun MapUnavailable() {
+    Text(
+        "Mapa indisponível nesta conexão.",
+        Modifier.padding(24.dp),
+        color = MaterialTheme.colorScheme.error,
+    )
 }
 
 /**

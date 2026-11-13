@@ -326,7 +326,11 @@ class LiveServerAtaqueCheck {
                 assertEquals(DateInput.format(date), state.businessDate)
                 onNodeWithText(expectedHotel).assertExists()
                 onNodeWithText("Data operacional: ${DateInput.format(date)}").assertExists()
-                Area.entries.forEach { onNodeWithText("${it.label} (em breve)").assertExists() }
+                // Expectativa independente do IMPLEMENTED_AREAS de produção: só a Governança está pronta.
+                assertEquals(Area.entries.map { it to (it == Area.HOUSEKEEPING) }, state.areas)
+                (Area.entries - Area.HOUSEKEEPING).forEach { onNodeWithText("${it.label} (em breve)").assertExists() }
+                onNodeWithText("Governança").assertExists()
+                onNodeWithText("Governança (em breve)").assertDoesNotExist()
             }
         }
 

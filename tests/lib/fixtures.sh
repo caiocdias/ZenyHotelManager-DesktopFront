@@ -2,6 +2,7 @@
 # Fixtures dos testes: servidor falso, front falso, pin, env e stubs de docker/curl.
 # Para `source`; não executa nada ao ser carregado.
 # Congelado após a Task 1: tasks seguintes só consomem.
+# Exceção: a M1 E07 (Task 1) acrescentou make_fake_jars, sem mudar os helpers existentes.
 
 _FIXTURES_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
@@ -115,6 +116,31 @@ make_fake_front() {
   [[ -d "$_FIXTURES_ROOT/api" ]] && cp -a "$_FIXTURES_ROOT/api" "$dir/api"
   _fgit "$dir" add -A >/dev/null
   _fgit "$dir" commit -q --allow-empty -m "front falso"
+}
+
+# make_fake_jars DIR : em DIR (checkout ou worktree do front falso) cria os JARs (ZIPs mínimos válidos,
+# com o caminho de cada um numa entrada, para distinguir JARs e checkouts) e o roteiro falsos, escondidos
+# do git status só pelo info/exclude do common-dir.
+make_fake_jars() {
+  local dir="$1" common pattern
+  mkdir -p "$dir/app/build/libs" "$dir/demo-seed/build/libs" "$dir/docs/demo" || return 1
+  python3 -I -c '
+import sys, zipfile
+for path in sys.argv[1:]:
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        z.writestr("origem.txt", path + "\n")
+' "$dir/app/build/libs/zeny-desktop.jar" "$dir/demo-seed/build/libs/demo-seed.jar" || return 1
+  printf '# Roteiro falso da M1\n\nTexto de teste.\n' >"$dir/docs/demo/roteiro-m1.md"
+  common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir)" || return 1
+  mkdir -p "$common/info"
+  # Um exclude sem quebra de linha final colaria o primeiro padrão na última linha.
+  if [[ -s "$common/info/exclude" && -n "$(tail -c 1 -- "$common/info/exclude")" ]]; then
+    printf '\n' >>"$common/info/exclude"
+  fi
+  for pattern in /app/build/ /demo-seed/build/ /docs/demo/; do
+    grep -qxF -- "$pattern" "$common/info/exclude" 2>/dev/null || printf '%s\n' "$pattern" >>"$common/info/exclude"
+  done
 }
 
 # Formato da Task 2: commit, contract_sha256, synced_at (nesta ordem).

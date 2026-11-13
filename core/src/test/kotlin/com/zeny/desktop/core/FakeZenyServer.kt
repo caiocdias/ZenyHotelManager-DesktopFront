@@ -1,6 +1,7 @@
 package com.zeny.desktop.core
 
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.MockEngineConfig
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
@@ -9,6 +10,7 @@ import io.ktor.client.request.HttpResponseData
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,11 +20,13 @@ import java.util.concurrent.CopyOnWriteArrayList
 /**
  * Servidor falso para o `ZenyCore`: aceita só o access atual; o refresh token vale uma vez e gira a cada
  * `/auth/refresh`; refresh token repetido revoga a sessão (`401 REFRESH_TOKEN_REUSED`). Os tokens são
- * `<accessPrefix><n>` e `<refreshPrefix><n>`, com `n` crescente a cada login ou refresh.
+ * `<accessPrefix><n>` e `<refreshPrefix><n>`, com `n` crescente a cada login ou refresh. Com [dispatcher] (um
+ * `StandardTestDispatcher`), o engine roda no tempo virtual do teste.
  */
 class FakeZenyServer(
     private val accessPrefix: String = "A",
     private val refreshPrefix: String = "R",
+    dispatcher: CoroutineDispatcher? = null,
 ) {
     val requests = CopyOnWriteArrayList<HttpRequestData>()
     val userId: String = UUID.randomUUID().toString()
@@ -50,14 +54,19 @@ class FakeZenyServer(
     private var refresh: String? = null
 
     val engine: MockEngine =
-        MockEngine { request ->
-            requests += request
-            when (request.url.encodedPath) {
-                "/api/v1/auth/login" -> login()
-                "/api/v1/auth/refresh" -> refresh(request)
-                else -> secured(request)
-            }
-        }
+        MockEngine(
+            MockEngineConfig().apply {
+                dispatcher?.let { this.dispatcher = it }
+                addHandler { request ->
+                    requests += request
+                    when (request.url.encodedPath) {
+                        "/api/v1/auth/login" -> login()
+                        "/api/v1/auth/refresh" -> refresh(request)
+                        else -> secured(request)
+                    }
+                }
+            },
+        )
 
     /** O access atual expira: a próxima requisição com ele recebe `401 UNAUTHENTICATED`; o refresh continua valendo. */
     fun expireAccess() {

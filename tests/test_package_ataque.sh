@@ -18,12 +18,14 @@ dlog="$tmp/stub/docker.log"
 C1="$FAKE_C1"
 tag="${C1:0:12}"
 
-# new_front DIR [COMMIT] [SERVIDOR] : front falso com pin.
+# new_front DIR [COMMIT] [SERVIDOR] : front falso com pin, JARs e roteiro válidos (cada caso falha pela
+# defesa que testa, não por artefato ausente).
 new_front() {
   make_fake_front "$1"
   write_fake_pin "$1" "${3:-$srv}" "${2:-$C1}"
   _fgit "$1" add -A >/dev/null
   _fgit "$1" commit -q --allow-empty -m pin
+  make_fake_jars "$1"
 }
 
 # --- 1. segredos: .env em vários lugares, .git, .env dentro da árvore do servidor ---
@@ -49,8 +51,9 @@ c_env="$(_fgit "$srvenv" rev-parse HEAD)"
 f1b="$tmp/f1b"
 new_front "$f1b" "$c_env" "$srvenv"
 code=0
-ZENY_SERVER_REPO="$srvenv" bash "$f1b/tools/server-env/package.sh" >/dev/null 2>&1 || code=$?
+ZENY_SERVER_REPO="$srvenv" bash "$f1b/tools/server-env/package.sh" >/dev/null 2>"$tmp/f1b.err" || code=$?
 assert_eq "1" "$([[ "$code" != 0 ]] && echo 1 || echo 0)" "servidor com .env versionado: package.sh falha"
+assert_contains "$(cat "$tmp/f1b.err")" "continha um arquivo .env" "servidor com .env versionado: falha pela salvaguarda de .env"
 assert_eq "" "$(grep -rl 'segredo-no-servidor' "$f1b/build/demo-package" 2>/dev/null)" "segredo do servidor não sobra no pacote"
 
 # --- 2. rm -rf seguro ---
@@ -73,10 +76,11 @@ mkdir -p "$f3/build" "$tmp/alvo3"
 echo sentinela >"$tmp/alvo3/sentinela.txt"
 ln -s "$tmp/alvo3" "$f3/build/demo-package"
 code=0
-bash "$f3/tools/server-env/package.sh" >/dev/null 2>&1 || code=$?
+bash "$f3/tools/server-env/package.sh" >/dev/null 2>"$tmp/f3.err" || code=$?
 assert_file "$tmp/alvo3/sentinela.txt" "symlink em build/demo-package: alvo preservado"
 assert_eq "1" "$([[ -L "$f3/build/demo-package" ]] && echo 1 || echo 0)" "symlink build/demo-package não foi substituído"
 assert_eq "1" "$([[ "$code" != 0 ]] && echo 1 || echo 0)" "symlink em build/demo-package: recusa com código != 0"
+assert_contains "$(cat "$tmp/f3.err")" "caminho do pacote inseguro" "symlink em build/demo-package: falha pela validação do caminho"
 
 # 2c. build como symlink para fora: nada fora do checkout pode ser apagado
 f4="$tmp/f4"
@@ -86,10 +90,11 @@ echo sentinela >"$tmp/alvo4/demo-package/sentinela.txt"
 echo outro >"$tmp/alvo4/irmao.txt"
 ln -s "$tmp/alvo4" "$f4/build"
 code=0
-bash "$f4/tools/server-env/package.sh" >/dev/null 2>&1 || code=$?
+bash "$f4/tools/server-env/package.sh" >/dev/null 2>"$tmp/f4.err" || code=$?
 assert_file "$tmp/alvo4/demo-package/sentinela.txt" "build symlink: demo-package de fora preservado"
 assert_file "$tmp/alvo4/irmao.txt" "build symlink: irmão preservado"
 assert_eq "1" "$([[ "$code" != 0 ]] && echo 1 || echo 0)" "build symlink para fora: recusa com código != 0"
+assert_contains "$(cat "$tmp/f4.err")" "caminho do pacote inseguro" "build symlink para fora: falha pela validação do caminho"
 
 # 2d. falha antes de apagar (pin com contrato adulterado): pacote anterior intacto
 f5="$tmp/f5"
@@ -107,6 +112,7 @@ assert_exit 2 "package.sh com argumento sai com 2" -- bash "$f1/tools/server-env
 f6="$tmp/f6"
 new_front "$f6"
 _fgit "$f6" worktree add -q "$tmp/f6wt" -b wt >/dev/null 2>&1
+make_fake_jars "$tmp/f6wt"
 assert_exit 0 "package.sh num worktree" -- bash "$tmp/f6wt/tools/server-env/package.sh"
 assert_file "$f6/build/demo-package/LEIA-ME.md" "pacote no checkout principal"
 assert_eq "0" "$([[ -e "$tmp/f6wt/build" ]] && echo 1 || echo 0)" "worktree sem build/"

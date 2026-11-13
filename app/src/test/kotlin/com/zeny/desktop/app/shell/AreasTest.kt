@@ -131,7 +131,7 @@ class AreasTest {
     }
 
     @Test
-    fun noAreaIsImplementedYet() {
-        assertTrue(IMPLEMENTED_AREAS.isEmpty())
+    fun onlyHousekeepingIsImplemented() {
+        assertEquals(setOf(Area.HOUSEKEEPING), IMPLEMENTED_AREAS)
     }
 }

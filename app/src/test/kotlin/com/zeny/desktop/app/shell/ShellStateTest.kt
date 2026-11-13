@@ -103,7 +103,7 @@ class ShellStateTest {
             assertEquals("Hotel Mar Azul", state.hotelName)
             assertEquals("07/03/2026", state.businessDate)
             assertEquals("Ana Souza", state.userName)
-            assertEquals(listOf(Area.HOUSEKEEPING to false), state.areas)
+            assertEquals(listOf(Area.HOUSEKEEPING to true), state.areas)
             assertNull(state.selected)
         }
 
@@ -123,7 +123,7 @@ class ShellStateTest {
 
             assertEquals("Hotel", state.hotelName)
             assertEquals("07/03/2026", state.businessDate)
-            assertEquals(listOf(Area.HOUSEKEEPING to false), state.areas)
+            assertEquals(listOf(Area.HOUSEKEEPING to true), state.areas)
             assertNull(state.error)
         }
 
@@ -139,7 +139,7 @@ class ShellStateTest {
 
                 assertEquals("Hotel", state.hotelName, failure.toString())
                 assertEquals("07/03/2026", state.businessDate)
-                assertEquals(listOf(Area.HOUSEKEEPING to false), state.areas)
+                assertEquals(listOf(Area.HOUSEKEEPING to true), state.areas)
                 assertNull(state.error)
             }
         }
@@ -246,8 +246,8 @@ class ShellStateTest {
             val dev = loaded(FakeConnection(me = me), devMode = true)
             val release = loaded(FakeConnection(me = me), devMode = false)
 
-            assertEquals(Area.entries.map { it to false }, dev.areas)
-            assertEquals(emptyList(), release.areas)
+            assertEquals(Area.entries.map { it to (it == Area.HOUSEKEEPING) }, dev.areas)
+            assertEquals(listOf(Area.HOUSEKEEPING to true), release.areas)
         }
 
     @Test
@@ -344,5 +344,27 @@ class ShellStateTest {
             assertEquals(1, cancelled)
             assertEquals(1, connection.meCalls)
             assertNull(state.error)
+        }
+
+    @Test
+    fun restoredAreaOpensOnlyAfterMeAllowsIt() =
+        runTest {
+            val state = ShellState(FakeConnection(), devMode = false, scope = this, restoreArea = Area.HOUSEKEEPING)
+            assertNull(state.selected, "a área abriu antes de o me da sessão nova confirmar")
+
+            advanceUntilIdle()
+
+            assertEquals(Area.HOUSEKEEPING, state.selected)
+        }
+
+    @Test
+    fun restoredAreaDroppedWhenNotAllowed() =
+        runTest {
+            val connection = FakeConnection(me = { Me("u-2", "bia", "Bia Lima", setOf("guests.profiles.read")) })
+            val state = ShellState(connection, devMode = true, scope = this, restoreArea = Area.HOUSEKEEPING)
+
+            advanceUntilIdle()
+
+            assertNull(state.selected)
         }
 }

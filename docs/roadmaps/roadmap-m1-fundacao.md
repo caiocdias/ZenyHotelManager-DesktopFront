@@ -78,19 +78,21 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 | H1 | Compose Multiplatform 1.12.x (estável em agosto de 2026) compila e roda com Kotlin 2.4 e JDK 25 — **confirmada na E01** (1.12.2, Kotlin 2.4.21, JDK 25.0.5) | Ajustar versões (Kotlin ou JDK alvo de bytecode) na própria E01 | E01 |
 | H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` — **confirmada na E01** com o ogen 0.16.1 (ADR 0007); o openapi-generator 7.27.0 não cumpriu | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
 | H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **confirmada na E01**: Linux pelo orquestrador; Windows pelo usuário em 2026-11-11 (`java -jar zeny-desktop.jar` abriu a janela normalmente) | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
-| H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
+| H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos — **confirmada na E06** (17 a 52 ms da escrita à mensagem no `core`; 58 a 264 ms até o ladrilho) | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
 | D1 | **Decidido pelo usuário em 2026-11-11 (entrevista da parada da E01):** fronteira `core`/`sdk` pela opção (b) da ADR 0008 — `core` expõe o `sdk` por `api`, as features usam os modelos gerados e o `ForbiddenImport` barra as classes de operação — **fechando a brecha**: barrar também `io.ktor.client.*` e `de.quati.ogen.client.*` em `app` e `design` | Ajuste do `config/detekt/detekt.yml` e da varredura de nome qualificado ainda não feito: entra no plano da E02 | E02 em diante |
 | D2 | **Decidido pelo usuário em 2026-11-11:** depois do `403 APPROVAL_REQUIRED`, a repetição com `X-Approval-Token` usa uma **nova** `Idempotency-Key`, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede continua com a mesma chave. Substitui o "mesma chave" do design §6.2 e do critério da E02 | A E02 testa a nova chave na repetição aprovada; o design §6.2 fica para o arquiteto atualizar | E02, E04 |
 | D3 | **Decidido pelo usuário em 2026-11-11:** gerador do SDK confirmado, ogen 0.16.1 (ADR 0007) | Plano B na ADR 0007 se uma versão nova quebrar | todas |
-| H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
+| H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto — **confirmada na E05** (nenhum `PF-NN`) | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
+| D4 | **Decidido pelo usuário em 2026-11-12 (entrevista do plano da E06, I7):** valor desconhecido num enum fechado do contrato (por exemplo, `housekeepingStatus`) torna a resposta inteira "versão incompatível", com a mensagem de versão em pt-BR — substitui o "Outro (VALOR)" do critério da E06; o "Outro (VALOR)" segue valendo para os enums extensíveis (`x-extensible-enum`) | Um status novo do servidor derruba o mapa até o M0 sincronizar o contrato | E06 em diante |
+| D5 | **Em aberto (E07):** verificação de checksums das dependências (`gradle/verification-metadata.xml`). Os lockfiles travam versão, não hash | Uma dependência trocada no repositório de origem passaria despercebida; recomendado decidir antes de distribuir a build fora desta máquina | M2 em diante |
 
 ## Definição global de pronto
 
-- [ ] `./gradlew build` verde, com os comandos oficiais registrados no README e na tabela de comandos do `CLAUDE.md`.
-- [ ] O JAR do app abre no Linux e no Windows (no Windows, conferido pelo usuário no gate).
-- [ ] O `smokeTest` passa contra o ambiente `zeny-front`.
+- [x] `./gradlew build` verde, com os comandos oficiais registrados no README e na tabela de comandos do `CLAUDE.md`.
+- [ ] O JAR do app abre no Linux e no Windows (no Windows, conferido pelo usuário no gate). Linux conferido na E07 (`xwininfo`); falta o Windows.
+- [x] O `smokeTest` passa contra o ambiente `zeny-front`.
 - [ ] O roteiro `docs/demo/roteiro-m1.md` foi executado pelo usuário, do jeito que está escrito, contra a demo recriada.
-- [ ] Nenhuma etapa depende de pedido ao servidor.
+- [x] Nenhuma etapa depende de pedido ao servidor.
 
 ## Protocolo de execução
 
@@ -182,9 +184,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
-| E05 | Dados de demonstração e teste de fumaça | #pendente | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
-| E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
-| E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
+| E05 | Dados de demonstração e teste de fumaça | #concluida | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
+| E06 | Tempo real e mapa de UHs ao vivo | #concluida | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
+| E07 | Gate do marco M1 | #em-andamento | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
 ---
 
@@ -527,7 +529,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Dados de demonstração e teste de fumaça — #pendente
+## E05 — Dados de demonstração e teste de fumaça — #concluida
 
 **Objetivo:** o `demo-seed` popula um servidor recém-criado pela API, de forma idempotente e em menos de 2 minutos, com um hotel crível. O `smokeTest` confere o SDK contra o servidor real.
 
@@ -557,12 +559,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Num ambiente recém-recriado (`down -v`, `up`), o seed termina sem erro em menos de 2 minutos, com o tempo registrado no handoff.
-- [ ] Rodar o seed uma segunda vez não cria duplicados (contagens de UHs, usuários, hóspedes e reservas iguais antes e depois).
-- [ ] Login como Gerente, Recepcionista e Governanta funciona com as senhas passadas.
-- [ ] `GET /api/v1/reservations/arrivals`, `/departures` e `/in-house` da data operacional devolvem reservas.
-- [ ] O `smokeTest` passa contra `zeny-front`.
-- [ ] Nenhuma senha ou chave versionada.
+- [x] Num ambiente recém-recriado (`down -v`, `up`), o seed termina sem erro em menos de 2 minutos, com o tempo registrado no handoff.
+- [x] Rodar o seed uma segunda vez não cria duplicados (contagens de UHs, usuários, hóspedes e reservas iguais antes e depois).
+- [x] Login como Gerente, Recepcionista e Governanta funciona com as senhas passadas.
+- [x] `GET /api/v1/reservations/arrivals`, `/departures` e `/in-house` da data operacional devolvem reservas.
+- [x] O `smokeTest` passa contra `zeny-front`.
+- [x] Nenhuma senha ou chave versionada.
 
 **Validação obrigatória:**
 
@@ -585,16 +587,40 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-12):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-12-m1-fundacao-e05.md`](../superpowers/plans/2026-11-12-m1-fundacao-e05.md), com 13 tarefas, todas de risco alto. A revisão de arquitetura bloqueou na rodada 0 (9 Importantes: `Apis` sem `rates`/`guests`, engine Java fora do classpath, `seedJar` × `jar`, `run` do seed × `./gradlew run`, shell chamando o Gradle, inventário assíncrono, protocolo das verificações ao vivo, tarefa grande demais, rótulos de risco) e aprovou com notas na rodada 1.
+- **Commits:** `8c15ed5..083d62d` na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`). Tarefas em ondas paralelas de até 2, em worktrees próprios; Tasks 10 a 13 em série na branch da etapa. A sessão do orquestrador reiniciou no meio da onda 4 e foi retomada pelo ledger, sem perder trabalho.
+- **Revisão final:** "Ready to merge: With fixes" (2 Importantes: um teste de ataque preso a um commit fixo e as verificações ao vivo ligadas só por `ZENY_SEED_SERVER`, com a de usuários sem a trava de "hotel alheio"). A onda única de correção resolveu os dois e 2 Menores; a re-revisão aprovou ("Ready to merge: Yes").
+  - Scanner `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Dependências novas só de teste, já no catálogo: `kotlinx-coroutines-test` 1.11.0 e `ktor-client-mock` 3.6.1.
+  - Verificação mecânica `--base 81aa8ca`: "OK: nenhum apontamento".
+  - Gate em `de578e0`/`083d62d`: `./gradlew build` BUILD SUCCESSFUL (494 testes no `core`, 226 no `design`, 278 no `app` com 12 pulados, 503 no `demo-seed` com 4 pulados — as verificações ao vivo —, 0 falhas); `bash tests/run.sh` 30 arquivos e 0 falhas.
+- **Critérios verificados** (contra o `zeny-front` recriado com `down.sh -v` e `up.sh`, data operacional 2026-11-12):
+  - **Seed em menos de 2 minutos:** `java -jar demo-seed/build/libs/demo-seed.jar --server http://127.0.0.1:8088` com os segredos por ambiente → código 0, "Concluído em 9,6 s" (`time` real **10,06 s**). Criou hotel 1, políticas 2, tipos 3, áreas 3, UHs 20 (status 16 ajustados), OOO 1, temporadas 2, plano 1, tabelas de preço 6, usuários 3, empresas 2, hóspedes 12, reservas 11, alocações 9, check-ins 7.
+  - **Segunda execução sem duplicados:** 2,0 s, só "já existiam"; contagens antes/depois iguais (UHs 20/20, usuários 4/4 com o admin, hóspedes 12/12, reservas da data 11/11).
+  - **Login dos três usuários:** `gerente`, `recepcao` e `governanta` → 200 sem `passwordChangeRequired`.
+  - **Listas do dia:** chegadas 11, saídas 2 (day use), hospedados 7.
+  - **`smokeTest`:** `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088` com os segredos por ambiente → BUILD SUCCESSFUL, 1 teste, 0 falhas; sem `-PserverUrl` falha na execução com "Informe -PserverUrl=http://endereço:porta". Fica fora do `build`/`check` (conferido por `--dry-run`).
+  - **Nenhuma senha versionada:** `git log -p 81aa8ca..HEAD` contra os valores reais de senha e PIN → 0 ocorrências; `tests/test_smoke_task.sh` varre atribuições literais de `ZENY_SEED_*PASSWORD/PIN`.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Comando oficial de run** passou a `./gradlew :app:run` (README, `CLAUDE.md`, `tests/test_docs.sh`): `./gradlew run` executaria também o `run` do seed.
+  - **Segredos do seed** só por argumento ou ambiente (`ZENY_SEED_SERVER`, `ZENY_SEED_ADMIN_LOGIN`, `ZENY_SEED_ADMIN_PASSWORD`, `ZENY_SEED_ADMIN_NEW_PASSWORD`, `ZENY_SEED_MANAGER_PASSWORD`, `ZENY_SEED_RECEPTIONIST_PASSWORD`, `ZENY_SEED_HOUSEKEEPER_PASSWORD`, `ZENY_SEED_MANAGER_PIN`; o argumento vence). A primeira execução num servidor novo troca a senha inicial do admin pela nova; a seguinte entra direto pela nova. Omitir a nova (não deixá-la vazia). Senha nova errada repetida gasta tentativas e bloqueia o admin (LEIA-ME).
+  - **Guarda de servidor alheio:** o seed para, antes de qualquer escrita, se o hotel estiver configurado com outro nome fantasia.
+  - **Usuários da demo:** criados com senha provisória aleatória e trocados para a senha passada; usuário existente com outra senha ou bloqueado é redefinido pela API (`reset-password` zera o bloqueio); o PIN do Gerente é redefinido a cada execução.
+  - **Catálogo:** Pousada Zeny Demonstração; 20 UHs (STD/LUX/SUI); UH 210 em OOO de D a D+2; temporadas Baixa e Alta para 60 dias; plano `BALCAO` sem garantia (reserva nasce confirmada); 2 empresas e 12 hóspedes com CPF/CNPJ sintéticos de dígito válido (não há como garantir que não coincidam com um documento real); 11 reservas com chegada hoje (4 chegadas, 5 hospedados, 2 day use).
+  - **Mensagens ao operador:** erro de código fora do catálogo vira "o servidor recusou a operação (HTTP n)" — o seed nunca ecoa o `detail` do servidor; os adaptadores ainda redigem CPF, CNPJ, nomes, senhas e PIN que eles próprios enviaram. Falhas saem no stdout; ruído `SLF4J(W)` no stderr (silenciar exige dependência nova).
+  - **Contrato:** `housekeepingStatus` é enum fechado; valor novo do servidor é "resposta incompatível" até o M0 sincronizar. Sem ETag no GET, nenhuma escrita com `If-Match` sai.
+  - **Arquivo de segredos da execução:** em `.server/seed-secrets.env` do checkout principal (600, ignorado pelo git; contém as credenciais do `zeny-front` atual).
+- **Notas para a próxima etapa (E06 em diante):**
+  - **Ambiente `zeny-front`:** no ar com a demo completa da data 2026-11-12; admin na senha `ZENY_SEED_ADMIN_NEW_PASSWORD` e os três usuários com as senhas de `.server/seed-secrets.env`. A Governanta pode mudar status (`rooms.status.manage`), o que serve à verificação de tempo real da E06.
+  - **Verificações ao vivo do seed:** `(set -a; . <checkout principal>/.server/seed-secrets.env; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*' --rerun)`. Sem `ZENY_SEED_LIVE=1` elas pulam mesmo com as `ZENY_SEED_*` exportadas.
+  - **Recriar a demo:** `tools/server-env/down.sh -v`, `tools/server-env/up.sh`, `./gradlew :demo-seed:seedJar` e `java -jar demo-seed/build/libs/demo-seed.jar --server …` com os segredos por ambiente (cerca de 10 s). A E07 empacota o JAR.
+  - **Inventário:** o seed espera o inventário refeito pelo servidor (até 60 s) antes das reservas; ao vivo, não precisou esperar.
+  - **Nenhum `PF-NN`:** o servidor aceitou o catálogo inteiro (day use incluso); H5 confirmada.
+  - **Menores estacionados:** redação só da string exata enviada; `PreconditionFailed` sem redação; OOO conferido só na data inicial da espera; `activeRoomsByType` conta UHs fora de OOO; servidor que aceita e não responde leva ~33 s até falhar (timeout do `core`); `guestId` pega o primeiro perfil entre duplicados; testes de ataque com iscas literais de segredo (registrar exceção quando houver scanner de CI).
 
 ---
 
-## E06 — Tempo real e mapa de UHs ao vivo — #pendente
+## E06 — Tempo real e mapa de UHs ao vivo — #concluida
 
 **Objetivo:** o `core` mantém uma conexão SSE por sessão, com reconexão. O app mostra o **mapa de UHs**: um quadro com as UHs por área ou andar, cor por status, filtros por tipo e status, e um detalhe resumido. O mapa muda sozinho quando o status de uma UH muda no servidor.
 
@@ -621,10 +647,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Teste: reconexão envia o `Last-Event-ID` do último evento. `reset` dispara o recarregamento.
-- [ ] Com o mapa aberto, uma mudança de status feita por outro cliente (por exemplo, `curl` em `POST /api/v1/rooms/{id}/housekeeping-status` com o usuário Governanta) aparece no mapa em até 2 s (RNF-04 do servidor).
-- [ ] Derrubar e subir o `api` do `zeny-front` reconecta sozinho e o mapa volta consistente.
-- [ ] Os status aparecem em pt-BR. Um status desconhecido aparece como "Outro (VALOR)".
+- [x] Teste: reconexão envia o `Last-Event-ID` do último evento. `reset` dispara o recarregamento.
+- [x] Com o mapa aberto, uma mudança de status feita por outro cliente (por exemplo, `curl` em `POST /api/v1/rooms/{id}/housekeeping-status` com o usuário Governanta) aparece no mapa em até 2 s (RNF-04 do servidor).
+- [x] Derrubar e subir o `api` do `zeny-front` reconecta sozinho e o mapa volta consistente.
+- [x] Os status aparecem em pt-BR. Um status desconhecido é tratado como versão incompatível, com a mensagem de versão em pt-BR (decisão do usuário por entrevista em 2026-11-12, I7; antes: aparece como "Outro (VALOR)").
 
 **Validação obrigatória:**
 
@@ -643,16 +669,39 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-13):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-12-m1-fundacao-e06.md`](../superpowers/plans/2026-11-12-m1-fundacao-e06.md), 10 tarefas (9 de risco alto, a Task 6 normal). A revisão de arquitetura bloqueou nas rodadas 0 (10 Importantes) e 1 (3 Importantes) e aprovou com notas na rodada 2. O critério "Outro (VALOR)" foi decidido pelo usuário por entrevista (I7: erro de versão incompatível).
+- **Commits:** `9c2214d..8eb05c4`, mais o commit de fechamento na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`). Ondas paralelas: 1 (Tasks 1 e 2) e 2 (Tasks 3 e 6), em worktrees próprios; Tasks 4, 5, 7, 8, 9 e 10 em série na branch da etapa. Testador em todas as tarefas de risco alto e testador de etapa sobre a Task 6.
+- **Revisão final:** "Ready to merge: With fixes" (0 Críticos, 0 Importantes; a onda de correção já prevista e 4 Menores novos). A onda única de correção (desenvolvedor `d653c03`, `203af69`, `6a99856`; testador `8eb05c4`) resolveu tudo; a re-revisão aprovou ("Ready to merge: Yes"). Ficaram como notas: o `finally` da conexão no `RealtimeClient` decide pelo tipo da exceção, não pelo estado do job (N1, Menor); o gate rodou na árvore final da onda, não nos commits intermediários `d653c03` e `203af69`.
+  - Scanner `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+  - Verificação mecânica `--base 9c2214d`: 11 `ASSERCAO_REMOVIDA`, todos nos testes da casca que o plano manda ajustar (Governança passa a ser área implementada) e no `ShellStateTest.devModeShowsComingSoonAreas` (ruling); justificados um a um pela revisão da Task 9 e pela revisão final (substitutas iguais ou mais fortes).
+  - Gate em `8eb05c4`: `./gradlew cleanTest build` BUILD SUCCESSFUL (app 472 com 14 pulados, core 783 com 1, demo-seed 504 com 4, design 226, sdk 30; 0 falhas; os pulados são as verificações ao vivo); `bash tests/run.sh` 31 arquivos, 0 falhas.
+- **Critérios verificados** (contra o `zeny-front` com a demo da E05, data 2026-11-12):
+  - **Reconexão com `Last-Event-ID` e `reset` recarregando:** testes do `core` (`StreamConnection`/`RealtimeClient`, inclusive `noTokenInUrl`, `cancelClosesResponse`, `expiredTokenRefreshesAndReconnects`) e do `app` (`RoomMapState`: primeiro `Ready`/`Reset` carrega, todo `Reset` recarrega).
+  - **Mudança de status em até 2 s (H4):** `LiveRealtimeCheck.propagationUnderTwoSeconds` (escrita da Governanta → `Message` + rebusca na sessão da Recepcionista): [52, 32, 28], [40, 23, 22], [42, 21, 20] e [34, 18, 17] ms. `LiveRoomMapCheck.capturesMapAndFollowsChange` (até o ladrilho mostrar a versão e o rótulo novos): 235, 62, 264, 58 e 219 ms. H4 não ocorreu; nenhum `PF-NN`.
+  - **Queda do `api`:** `recoversAfterApiRestart` com `stop`/`start` do serviço `api`: `Reconnecting` em ~6 s; com o `api` de volta e o mapa ainda reconectando, a Governanta mudou a UH 106 (57,8 s); `Live` em 67,0 s e o ladrilho com a versão nova em 67,3 s; mapa sem erro e igual a um `statuses()` novo. O token antigo seguiu aceito (refresh não observável pelo cliente).
+  - **Status em pt-BR:** rótulos e precedência (`RoomDisplay`; 48 combinações no `RoomDisplayAtaqueTest`). Valor desconhecido de enum fechado é tratado como versão incompatível, com a mensagem de versão em pt-BR (decisão do usuário, I7), em vez de "Outro (VALOR)".
+  - **Captura:** `app/build/live/room-map.png` (mapa "Ao vivo", andares 1 e 2, legenda com contadores, 20 UHs, rótulos compostos).
+  - **Nenhum segredo:** as 5 senhas de `.server/seed-secrets.env` aparecem 0 vezes no HEAD, no histórico da etapa, nos relatórios e em `build/`.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Semântica do `RealtimeClient`:** Flow frio por assinante; uma conexão por sessão com a união dos tópicos; posição por sessão; `endSession` síncrono no fim da sessão; a cada reabertura por mudança da união chega um `Ready` real (o `RoomMapState` ignora `Ready` depois do primeiro); um `403` de um tópico derruba todos os assinantes da união. Pedir ao arquiteto o registro no design §6.2 ou numa ADR.
+  - **Assinatura sem sessão:** espera e é adotada pela próxima sessão, de qualquer usuário. O mapa é seguro porque nasce por `sessionId`; toda feature do M2 deve amarrar a assinatura ao `sessionId`.
+  - **Mapa na área Governança** (`rooms.status.read`), por andar ("Andar N", "Sem andar" no fim); `GET /api/v1/areas` fica fora do mapa (são áreas comuns, sem vínculo com UH).
+  - **Precedência e cores:** fora de ordem (perigo) > fora de serviço (neutro) > ocupada (informação) > governança (suja: alerta; limpa aguardando inspeção: neutro; limpa e inspecionada: sucesso). Ocupada leva rótulo composto ("Ocupada · Suja"). OOS + ocupada mostra só "Fora de serviço" (a ocupação aparece no detalhe); alternativa: "Fora de serviço · Ocupada".
+  - **Legenda:** é também o filtro de status; o contador conta o status principal, e o filtro casa o principal ou a governança (uma UH ocupada e suja não entra em "Suja: n", mas aparece ao filtrar Suja).
+  - **Erros na tela:** com o mapa carregado, o erro vira faixa com "Tentar de novo" sobre o mapa; tela de erro só sem ladrilhos. Mapa que perde a assinatura depois de sincronizado mostra "Desconectado" com "Tentar de novo".
+  - **Tipos sem nome legível** (403 em `room-types`): rótulos "Tipo 1", "Tipo 2"… estáveis por id; nunca o UUID.
+  - **Troca de sessão dentro da casca:** a casca é recriada por `sessionId`; a área aberta reabre só se o menu da sessão nova a permitir (`restoreArea`).
+  - **Verificações ao vivo:** só com `ZENY_LIVE_REALTIME=1` (e `ZENY_LIVE_OUTAGE=1` para a queda); a escrita da Governanta no `app` é por `curl -q -K -` (o `app` não tem cliente HTTP). A queda roda sem tela (o Compose 1.12.2 encerra o teste de UI depois de 1 minuto), sobre o `RoomMapState` real numa thread.
+- **Notas para a próxima etapa (E07 em diante):**
+  - **Comandos ao vivo:** gere um arquivo 600 fora do repositório com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`/`PASSWORD` (`recepcao`) e `ZENY_LIVE_HOUSEKEEPER_LOGIN`/`PASSWORD` (`governanta`) a partir de `.server/seed-secrets.env`; depois `(set -a; . <arquivo>; set +a; ZENY_LIVE_REALTIME=1 ./gradlew :core:test --tests '*LiveRealtimeCheck*' --rerun)` e `… :app:test --tests '*LiveRoomMapCheck.capturesMap*' --rerun`. A queda: `ZENY_LIVE_OUTAGE=1` em segundo plano e, ao ver `PRONTO`, `compose stop api` / `compose start api` de `tools/server-env/lib.sh`. A janela entre o `api` voltar e o `Live` variou de 0,3 a 9,2 s; se o `Live` chegar antes da escrita, a verificação falha e é preciso repetir.
+  - **Roteiro da E07:** "mudança de status ao vivo" pode ser feita pela Governanta com `curl` em `POST /api/v1/rooms/{id}/housekeeping-status` (com `If-Match` do `GET .../status`), como faz o `LiveRoomMapCheck`.
+  - **Endurecimento para o M2:** `Authenticator.replaceIf` não confere o `sessionId` do par novo no refresh; `RoomMapState` inicia a assinatura no `init` dentro de `remember` (separar `start()`); o `LiveServerCheck` da E04 continua sem opt-in próprio (só `ZENY_LIVE_URL`).
+  - **Menores estacionados:** falha persistente da rebusca vira recarga silenciosa; uma leitura por mensagem em rajada da mesma UH; `CoreConnectionTest` não pega delegação trocada; recarga com ladrilhos sem indicador; data OOO não ISO aparece crua; `max-time` do `curl` além do prazo único da queda; dois "Tentar de novo" com desconectado + erro de detalhe; "Tipo N" pode colidir com tipo real de mesmo nome; `Error` inesperado no tempo real chega como erro de rede genérico; `id:` vazio no SSE não zera a posição (divergência documentada).
 
 ---
 
-## E07 — Gate do marco M1 — #pendente
+## E07 — Gate do marco M1 — #em-andamento
 
 **Objetivo:** o M1 entregue como build testável. O pacote da demo leva os JARs do app e do seed, o roteiro do M1 existe, e a definição global de pronto está verificada num clone limpo e no Windows.
 
@@ -670,9 +719,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Clone limpo: build, teste e lint verdes, e o JAR gerado.
-- [ ] O `smokeTest` passa contra o ambiente recriado.
-- [ ] O pacote contém os JARs, o `LEIA-ME` e o roteiro.
+- [x] Clone limpo: build, teste e lint verdes, e o JAR gerado.
+- [x] O `smokeTest` passa contra o ambiente recriado.
+- [x] O pacote contém os JARs, o `LEIA-ME` e o roteiro.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 
 **Validação obrigatória:**
@@ -693,12 +742,32 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-13):** `#em-andamento`, na parada humana. Tudo o que não depende do Windows está feito e revisado; falta o usuário executar o `roteiro-m1.md` no Windows, do jeito que está escrito, e aprovar.
+- **Plano:** [`docs/superpowers/plans/2026-11-13-m1-fundacao-e07.md`](../superpowers/plans/2026-11-13-m1-fundacao-e07.md), 4 tarefas de risco alto. A revisão de arquitetura bloqueou nas rodadas 0 (3 Importantes: fixture dos JARs × testes de pacote, ordem da evidência do gate, JAR do app abrindo no Linux) e 1 (1 Importante: casos de falha que passariam por JAR ausente) e aprovou na rodada 2. Depois da revisão, o aviso de JAR velho por data saiu do plano (ruling registrada no próprio plano).
+- **Commits:** `f7a5f07..6f08855` na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`), mais o commit deste handoff. Onda 1 (Tasks 1 e 2) em worktrees próprios, com o Gradle em série por falta de memória; Tasks 3 e 4 em série na branch da etapa.
+- **Revisão final:** "Ready to merge: Yes" (0 Críticos, 0 Importantes, 3 Menores adiados).
+  - Scanner `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+  - Verificação mecânica `--base f7a5f07`: 2 `ASSERCAO_REMOVIDA` (o `app/LEIA-ME.txt` provisório do pacote, que o plano manda trocar pelos JARs), justificados.
+  - Gate em `6f08855`: `./gradlew build` BUILD SUCCESSFUL; `bash tests/run.sh` 34 arquivos, 0 falhas.
+- **Critérios verificados:**
+  - **Clone limpo** de `6f08855`: `./gradlew build` (2015 testes, 0 falhas, 19 pulados — as verificações ao vivo), `ktlintCheck detekt`, `:app:desktopJar :demo-seed:seedJar` e `tests/run.sh` (34 arquivos, 0 falhas; 4 casos pulados por não haver o repositório do servidor ao lado do clone) → verdes, sem rede nem servidor.
+  - **Ambiente recriado:** `down.sh -v`, `up.sh` e o seed em 13,7 s, com as 16 linhas do roteiro; `smokeTest` 1/1; verificações ao vivo da E06 verdes ([40, 22, 19] ms no `core`, 220 ms no ladrilho).
+  - **Pacote** (`tools/server-env/package.sh`, em `build/demo-package/` do checkout principal): `app/zeny-desktop.jar` (60 317 939 bytes, sha256 `384d021d…`), `app/demo-seed.jar` (14 764 287 bytes, `afe7e11e…`), `roteiro-m1.md`, `LEIA-ME.md`, `VERSAO.txt` (commit do front e do servidor, árvore limpa e sha256 dos JARs, iguais aos do clone limpo); `demo-seed.jar --help` → 0.
+  - **JAR do app abre no Linux:** janela "Zeny Hotel Manager" (800x563) com e sem `-Dzeny.devShell=true`, stderr vazio (`xwininfo`).
+  - **Roteiro conferido ao vivo:** áreas por perfil por `auth/me` (Recepcionista: Recepção, Reservas, Contas e caixa e Hóspedes "(em breve)" e Governança; Gerente: as mesmas e Gestão "(em breve)"; na build normal, só Governança), hotel, data, legenda, filtros, UH 106; passo 7 com `curl`: login 200, `ETag` com aspas, `MARK_CLEAN` 200, `MARK_DIRTY` 200, logout 204, e os erros 428, 422, 403 e 412.
+  - **Nenhum segredo:** os valores gerados (senhas do seed e do admin, PIN, chaves de cifragem e JWT, chaves do storage) aparecem 0 vezes no pacote, nos JARs extraídos, no `git log -p` da etapa e nos relatórios. Só aparecem padrões já publicados no `.env.example` versionado.
+  - **Pendente (usuário, Windows):** executar o roteiro e aprovar; abrir o JAR no Windows (definição global de pronto).
+- **O que só o Windows confirma** (o PowerShell 5.1 nunca rodou aqui; a sequência HTTP foi conferida com `curl`): o `>>` ao colar o login do 7.1 (com o PSReadLine o bloco roda ao fechar o `}`); o `Get-Credential` cancelado ou com senha em branco; a variável de processo vista pelo `java`; o endereço salvo e o login preenchido depois de Sair; a acentuação da saída do seed no console; `localhost` no Docker Desktop.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Menus por permissão na demo:** o roteiro abre o app com `java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar`, porque na build normal só a Governança tem tela e Recepcionista e Gerente veriam o mesmo menu. Diverge da letra do design §6.2 e da ADR 0006 ("build apresentável"): vai como entrevista na parada.
+  - **Segredos do seed no Windows:** lidos por `Get-Credential`/`Read-Host -AsSecureString` e gravados com `SetEnvironmentVariable(..., "Process")`, nunca digitados no prompt (o PSReadLine 2.0.0 do 5.1 grava o histórico em texto puro). Rodar o bloco uma linha por vez.
+  - **Aviso de JAR velho retirado:** o frescor dos JARs fica com o Gradle; fora do gate, um `package.sh` rodado sobre JARs não regerados grava o `front_commit` novo ao lado de JARs antigos. Recomendação para o M2: gravar o commit no manifesto do JAR pelo Gradle.
+  - **`gen-env.sh` (anterior à etapa):** copia do `.env.example` a senha do banco e a chave de acesso do storage em vez de gerá-las; o `zeny-front` usa valores publicados no repositório.
+  - **Checksums das dependências** (`gradle/verification-metadata.xml`): sem decisão; recomendado antes de distribuir fora desta máquina (linha D5 em "Hipóteses e decisões em aberto").
+  - **Python 3** passou a ser exigido pelo `package.sh` (validação do ZIP dos JARs).
+- **Notas para a próxima etapa:**
+  - **Parada humana:** copie `build/demo-package/` do checkout principal para o Windows, siga o `roteiro-m1.md` como está escrito e aprove; então a E07 fica `#concluida`, o M1 fecha e a definição global de pronto é marcada.
+  - **Menores estacionados:** TOCTOU entre a validação e a cópia dos JARs; diretório pai em symlink aceito para os JARs; `server/.github` e `server/.gitignore` no pacote; `unzip` sem guarda em `test_package_jars_ataque.sh`; o BSTR do PIN sem `ZeroFreeBSTR`; sessões que sobram ao refazer o login no 401/403 do roteiro; 4 sessões abertas no `zeny-front` local pela conferência (somem no próximo `down -v`).
 
 ---
 
@@ -710,3 +779,6 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-11 — E02 `#concluida` (`claude --agent orquestrador`): núcleo HTTP e sessão no `core`, revisão final limpa após a onda única de correção.
 - 2026-11-11 — E03 `#concluida` (`claude --agent orquestrador`): design system no `design` e catálogo no `app`, revisão final limpa após a onda de correção.
 - 2026-11-12 — E04 `#concluida` (`claude --agent orquestrador`): login, troca de senha, casca com menu por permissão e diálogo de aprovação, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. Lote de 4 etapas encerrado.
+- 2026-11-12 — E05 `#concluida` (`claude --agent orquestrador`): `demo-seed` idempotente (10 s num ambiente recriado), JAR executável e `smokeTest`, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. H5 confirmada.
+- 2026-11-13 — E06 `#concluida` (`claude --agent orquestrador`): cliente SSE com reconexão no `core` e mapa de UHs ao vivo na área Governança; propagação medida de 17 a 52 ms no `core` e de 58 a 264 ms no ladrilho, e recuperação da queda do `api` verificada contra o `zeny-front`; revisão final limpa após a onda de correção. H4 não ocorreu. Critério "Outro (VALOR)" substituído por decisão do usuário (I7).
+- 2026-11-13 — E07 executada (`claude --agent orquestrador`): pacote com os JARs, o roteiro e o `VERSAO.txt`, roteiro do M1, demo recriada com `smokeTest`, clone limpo e JAR abrindo no Linux; revisão final limpa. Fica `#em-andamento` na parada humana (roteiro no Windows). Lote E05–E07 encerrado.
