@@ -54,7 +54,18 @@ A senha **inicial** do administrador não entra na folha: ela vem do arquivo `.e
 
 ## 1. Pasta nova e nada do projeto no Docker
 
-Crie uma pasta nova e vazia, `C:\zeny-demo`, e copie para dentro dela **todo o conteúdo** da pasta do pacote: as pastas `app`, `images` e `server` e os arquivos. Se `C:\zeny-demo` já existe de uma tentativa anterior, use outro nome, como `C:\zeny-demo-2`, e troque o nome no comando abaixo.
+A demo usa uma pasta só: `C:\zeny-demo`. Todos os comandos deste roteiro usam esse nome.
+
+**Se `C:\zeny-demo` já existe** de uma tentativa anterior, renomeie a antiga, sem apagar nada: ela guarda o `.env` daquela tentativa. Feche o app, as janelas do Explorador de Arquivos e os PowerShell abertos dentro dela. Depois, num PowerShell, rode o bloco abaixo; a primeira linha sai da pasta, porque não dá para renomear a pasta em que o PowerShell está.
+
+```powershell
+Set-Location C:\
+Rename-Item C:\zeny-demo zeny-demo-antiga
+```
+
+**Resultado esperado:** o prompt volta a `PS C:\>` sem mensagem em vermelho, e a pasta antiga passa a se chamar `C:\zeny-demo-antiga`. Uma mensagem em vermelho dizendo que a pasta está em uso quer dizer que algo ainda está aberto nela: feche e rode de novo. Se `C:\zeny-demo-antiga` também já existe, renomeie-a antes no Explorador de Arquivos, com qualquer outro nome. Se `C:\zeny-demo` não existe, pule este bloco.
+
+Crie a pasta nova e vazia `C:\zeny-demo` e copie para dentro dela **todo o conteúdo** da pasta do pacote: as pastas `app`, `images` e `server` e os arquivos.
 
 No PowerShell, entre na pasta:
 
@@ -70,7 +81,7 @@ Confira o conteúdo:
 Get-ChildItem -Name
 ```
 
-**Resultado esperado:** a lista tem `app`, `images`, `server`, `.env.example`, `compose.override.yaml`, `gen-env.sh`, `LEIA-ME.md`, `roteiro-m1.md`, `server-pin.properties` e `VERSAO.txt`. Não pode ter `.env` (sem `.example`): se tiver, a pasta não é nova; volte ao começo deste passo com outro nome de pasta.
+**Resultado esperado:** a lista tem `app`, `images`, `server`, `.env.example`, `compose.override.yaml`, `gen-env.sh`, `LEIA-ME.md`, `roteiro-m1.md`, `server-pin.properties` e `VERSAO.txt`. Não pode ter `.env` (sem `.example`): se tiver, a pasta não é nova. Nesse caso, volte ao começo deste passo: o bloco que renomeia a pasta para `zeny-demo-antiga` sai dela antes, e depois você cria a `C:\zeny-demo` de novo.
 
 Agora confira que o Docker não tem nada do projeto `zeny-front`. Primeiro, os projetos:
 
@@ -108,7 +119,7 @@ docker run --rm -v "${PWD}:/w" -w /w alpine:3.22@sha256:49340b346798875b5592e5d4
 
 Guarde uma cópia do `.env` fora da pasta (num pendrive ou no gerenciador de senhas). A chave de cifragem e as senhas internas valem enquanto os volumes existirem; perder o `.env` inutiliza os dados da demo.
 
-Para acessar o servidor de outra máquina da rede (não é preciso nesta demo): abra o `.env` no Bloco de Notas, troque só a linha `ZENY_STORAGE_PUBLIC_ENDPOINT` para o IP desta máquina (`http://<IP do Windows>:8088`), salve e rode de novo o `up -d` do passo 3. **Nunca** gere o `.env` de novo com `--force` com os volumes existentes: as chaves novas não abrem os dados antigos.
+Para acessar o servidor de outra máquina da rede (não é preciso nesta demo): abra o `.env` no Bloco de Notas, troque só a linha `ZENY_STORAGE_PUBLIC_ENDPOINT` para o IP desta máquina (`http://<IP do Windows>:8088`), salve, rode de novo o `up -d` do passo 3 e libere a porta 8088 no firewall do Windows. **Nunca** gere o `.env` de novo com `--force` com os volumes existentes: as chaves novas não abrem os dados antigos.
 
 ## 3. Construir e subir o servidor
 
@@ -247,7 +258,7 @@ java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin
   ```
 
 - Avisos que começam com `SLF4J` antes dessas linhas não são erro.
-- Rodar o seed de novo é seguro. Se a UH 106 voltou a suja no bloco 10.4 do passo 10 (ou se o passo 10 ainda não foi feito), nada é criado de novo e as linhas passam a dizer `0 criados, N já existiam`, com duas diferenças: as reservas que já fizeram check-in não contam mais nas alocações, que ficam em `alocações: 0 criados, 2 já existiam`, e a linha `check-ins` não aparece. Se você rodou o 10.3 sem o 10.4, o seed devolve a UH 106 a suja e a linha de status mostra `status de UH: 1 criados, 19 já existiam`.
+- Rodar o seed de novo é seguro. Antes da demo, ou se você já fez a demo e a UH 106 voltou a suja no fim do passo 10, nada é criado de novo e as linhas passam a dizer `0 criados, N já existiam`, com duas diferenças: as reservas que já fizeram check-in não contam mais nas alocações, que ficam em `alocações: 0 criados, 2 já existiam`, e a linha `check-ins` não aparece. Se você já fez a demo e voltou aqui com a UH 106 limpa, o seed a devolve a suja e a linha de status mostra `status de UH: 1 criados, 19 já existiam`.
 - Se a saída for uma linha só, com uma mensagem de falha, veja "Erros comuns" no passo 12 antes de repetir.
 
 **5.9. Conferir o código de saída.** Logo depois do seed:
@@ -476,19 +487,19 @@ Depois, siga do passo 3 em diante, na mesma pasta e com o mesmo `.env` (não rod
 
 Nas janelas dos usuários e no PIN, use os valores da folha, com o novo no lugar do esquecido. O seed redefine as senhas dos três usuários e o PIN do Gerente para os valores dados. A saída mostra `usuários: 0 criados, 3 já existiam` e o resto como em "Rodar o seed de novo", no 5.8.
 
-**Senha do administrador:** o seed não recupera a senha do administrador, porque precisa dela para entrar. O caminho é "Recomeçar do zero", acima, que apaga os dados da demo. Não fique tentando senhas: cada senha errada gasta uma tentativa, e falhas seguidas bloqueiam a conta (o bloqueio cresce a cada nova falha, de 1 minuto até 1 hora).
+**Senha do administrador:** o seed não recupera a senha do administrador, porque precisa dela para entrar. O caminho é "Recomeçar do zero", acima, que apaga os dados da demo. Não fique tentando senhas: cada execução com a senha atual do admin errada gasta até duas tentativas (o seed tenta primeiro a senha nova), e falhas seguidas bloqueiam a conta: a partir da 5ª falha seguida, o bloqueio começa em 1 minuto e cresce a cada nova falha, até 1 hora.
 
 ### Erros comuns
 
 | O que aparece | Por quê | O que fazer |
 |---|---|---|
 | `docker` não é reconhecido, ou `error during connect` | O Docker Desktop está fechado ou ainda iniciando. | Abra o Docker Desktop, espere "Engine running" e repita o comando. |
-| `gen-env: .env já existe (use --force para sobrescrever)` | A pasta não é nova: já tem um `.env`. | Volte ao passo 1 com uma pasta nova. Não use `--force`. |
+| `gen-env: .env já existe (use --force para sobrescrever)` | A pasta não é nova: já tem um `.env`. | Volte ao começo do passo 1: renomeie a pasta e crie a `C:\zeny-demo` de novo. Não use `--force`. |
 | `port is already allocated` no `up -d` | Outro programa usa a porta 8088. | Feche o outro programa (ou pare o outro projeto do Docker) e repita o `up -d`. |
 | O `curl.exe` do passo 3 não chega a `{"status":"UP"}` em 5 minutos | O servidor não subiu. | No Docker Desktop, em Containers, abra `zeny-front` e veja o log do container `api`. |
 | `java` não é reconhecido, ou `UnsupportedClassVersionError` | Falta o JDK 25, ou o `java` do PowerShell é de outra versão. | Instale o JDK 25 e abra um PowerShell novo. |
 | No seed: `Falta --… (ou ZENY_SEED_…).` | Uma janela do passo 5 foi cancelada, ou o PowerShell é outro. | No mesmo PowerShell, rode de novo só a linha que falta e depois o 5.8. |
 | No seed: `Valor inválido em --…: a senha deve ter de 12 a 128 caracteres.` (ou o PIN, de 4 a 8 dígitos) | Um valor da folha não segue a regra. | Ajuste o valor na folha, rode de novo a linha dele e depois o 5.8. |
-| No seed: `Login ou senha do administrador recusados.` | A "Senha atual do administrador" (5.1) está errada: na primeira vez é a do `.env` (passo 4); depois, o item 1 da folha. | Confira com calma antes de repetir o 5.1 e o 5.8: cada erro gasta uma tentativa. Sem a senha, "Recomeçar do zero". |
+| No seed: `Login ou senha do administrador recusados.` | A "Senha atual do administrador" (5.1) está errada: na primeira vez é a do `.env` (passo 4); depois, o item 1 da folha. | Confira com calma antes de repetir o 5.1 e o 5.8: cada execução com a senha atual do admin errada gasta até duas tentativas (o seed tenta primeiro a senha nova), e o servidor bloqueia a conta a partir da 5ª falha seguida. Sem a senha, "Recomeçar do zero". |
 | No seed: `A conta do administrador está bloqueada por tentativas; espere e tente de novo.` | Senhas erradas seguidas. | Espere alguns minutos (o bloqueio vai de 1 minuto até 1 hora) e repita com a senha certa, ou "Recomeçar do zero". |
 | No app, o login recusa a senha | A senha não é a da folha para aquele login. | Confira o item da folha; erros seguidos bloqueiam o usuário. Se esqueceu, veja "Esqueci uma senha". |

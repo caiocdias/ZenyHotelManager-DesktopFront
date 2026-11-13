@@ -135,10 +135,28 @@ for cmd in "docker compose ls -a" "docker volume ls --filter label=com.docker.co
   grep -qxF -- "$cmd" <<<"$step1_ps" || _assert_fail "roteiro, passo 1: bloco com a linha: $cmd"
 done
 assert_contains "$step1" "apaga os dados" "roteiro, passo 1: avisa que o down -v apaga os dados"
+# Uma pasta só, C:\zeny-demo: a de uma tentativa anterior é renomeada (sem apagar o .env dela), de fora dela,
+# antes de entrar na nova; nenhum outro nome de pasta aparece como pasta de trabalho.
+assert_eq "" "$(grep -oE 'C:\\zeny-[A-Za-z0-9_-]*' "$roteiro" 2>/dev/null | sort -u | grep -vxF -e 'C:\zeny-demo' -e 'C:\zeny-demo-antiga')" \
+  "roteiro: todo caminho C:\\zeny-… é C:\\zeny-demo (ou a antiga renomeada)"
+assert_eq "" "$(grep -nF 'zeny-demo-2' "$roteiro" 2>/dev/null)" "roteiro: sem zeny-demo-2"
+assert_eq "" "$(grep -n 'zeny-demo-antiga' "$roteiro" 2>/dev/null | cut -d: -f1 | while read -r n; do
+  awk -v n="$n" 'NR <= n && /^## / {h = $0} NR == n {print h; exit}' "$roteiro"; done | sort -u | grep -vF '## 1. ')" \
+  "roteiro: a zeny-demo-antiga só aparece no passo 1 (o rename)"
+rename_block="$(awk '/^```powershell/ {b = ""; inb = 1; next} /^```/ && inb {if (b ~ /Rename-Item/) print b; inb = 0; next} inb {b = b $0 "\n"}' <<<"$step1")"
+assert_eq $'Set-Location C:\\\nRename-Item C:\\zeny-demo zeny-demo-antiga' "$rename_block" \
+  "roteiro, passo 1: sai da pasta e renomeia a antiga para zeny-demo-antiga"
+rename_ln="$(grep -nxF 'Rename-Item C:\zeny-demo zeny-demo-antiga' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+enter_ln="$(grep -nxF 'Set-Location C:\zeny-demo' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+if [[ -z "$rename_ln" || -z "$enter_ln" ]] || ((rename_ln > enter_ln)); then
+  _assert_fail "roteiro, passo 1: o rename da pasta antiga vem antes de entrar na nova"
+fi
+assert_contains "$(grep -F 'Não pode ter `.env`' "$roteiro" 2>/dev/null)" "zeny-demo-antiga" \
+  "roteiro, passo 1: com .env na pasta, renomeia para zeny-demo-antiga"
 
 # Passo 2: a nota do endereço troca só o ZENY_STORAGE_PUBLIC_ENDPOINT, sem regerar o .env com --force.
 step2="$(rot_section "## 2. ")"
-for word in "ZENY_STORAGE_PUBLIC_ENDPOINT" "--force" "fora da pasta"; do
+for word in "ZENY_STORAGE_PUBLIC_ENDPOINT" "--force" "fora da pasta" "libere a porta 8088 no firewall do Windows"; do
   assert_contains "$step2" "$word" "roteiro, passo 2: cita $word"
 done
 # Passo 4: só as duas linhas do administrador.
@@ -234,9 +252,15 @@ assert_eq "" "$(grep -E 'Headers\["ETag"\]' <<<"$rot_ps_code" | grep -vF '[strin
 rerun="$(grep -F 'Rodar o seed de novo' "$roteiro" 2>/dev/null)"
 assert_contains "$rerun" '`alocações: 0 criados, 2 já existiam`' "roteiro: no seed repetido, alocações ficam em 2"
 assert_contains "$rerun" 'a linha `check-ins` não aparece' "roteiro: no seed repetido, a linha check-ins some"
-# O seed repetido só não cria nada se a UH 106 voltou a suja no 10.4 (senão o status dela é recriado).
-assert_contains "$rerun" "10.4" "roteiro: \"nada é criado de novo\" condicionado à volta da UH 106 no 10.4"
-assert_contains "$rerun" '`status de UH: 1 criados, 19 já existiam`' "roteiro: sem o 10.4, a linha de status mostra 1 criado"
+# O seed repetido só não cria nada se a UH 106 voltou a suja (senão o status dela é recriado); no passo 5,
+# sem remissão aos blocos do passo da mudança ao vivo.
+assert_contains "$rerun" "voltou a suja" "roteiro: \"nada é criado de novo\" condicionado à volta da UH 106 a suja"
+assert_contains "$rerun" '`status de UH: 1 criados, 19 já existiam`' "roteiro: com a UH 106 limpa, a linha de status mostra 1 criado"
+assert_eq "" "$(grep -oE '(^|[^0-9.])10\.[0-9]+' <<<"$rerun")" "roteiro: o seed repetido não remete aos blocos 10.x"
+# Senha atual do admin errada: o seed tenta antes a senha nova, então cada execução gasta até duas tentativas.
+assert_contains "$rot_text" "cada execução com a senha atual do admin errada gasta até duas tentativas (o seed tenta primeiro a senha nova)" \
+  "roteiro: a execução com a senha do admin errada gasta até duas tentativas"
+assert_eq "" "$(grep -nE 'cada (erro|senha errada) gasta uma tentativa' "$roteiro" 2>/dev/null)" "roteiro: sem \"gasta uma tentativa\""
 # Bloco com Get-Credential ou Read-Host: a linha que pede a credencial é a única do bloco (colada junto com
 # outras, ela leria a linha seguinte como resposta), e o parágrafo logo antes diz como rodá-la. No passo 5,
 # o parágrafo liga a janela a um item da folha (ou à senha inicial do passo 4).
