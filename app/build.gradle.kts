@@ -42,6 +42,9 @@ tasks.test {
     val isolatedTmp = File(testTmpRoot, "test-tmp")
     systemProperty("java.util.prefs.userRoot", isolatedPrefs.absolutePath)
     systemProperty("java.io.tmpdir", isolatedTmp.absolutePath)
+    // O opt-in das verificações ao vivo é estado da tarefa: mudá-lo faz os testes rodarem de novo.
+    inputs.property("zenyLiveRealtime", providers.environmentVariable("ZENY_LIVE_REALTIME").orElse(""))
+    inputs.property("zenyLiveOutage", providers.environmentVariable("ZENY_LIVE_OUTAGE").orElse(""))
     doFirst {
         isolatedPrefs.mkdirs()
         isolatedTmp.mkdirs()

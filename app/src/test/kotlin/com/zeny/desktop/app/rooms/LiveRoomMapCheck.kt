@@ -5,7 +5,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.zeny.desktop.app.session.CoreConnection
@@ -32,6 +35,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.jupiter.api.Assumptions.assumeTrue
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -86,8 +90,9 @@ class LiveRoomMapCheck {
 
     @Test
     fun capturesMapAndFollowsChange() {
-        val housekeeper = HousekeeperCurl(url.value)
-        housekeeper.login(env("ZENY_LIVE_HOUSEKEEPER_LOGIN"), env("ZENY_LIVE_HOUSEKEEPER_PASSWORD"))
+        val housekeeper =
+            HousekeeperCurl(url.value, env("ZENY_LIVE_HOUSEKEEPER_LOGIN"), env("ZENY_LIVE_HOUSEKEEPER_PASSWORD"))
+        housekeeper.login()
         try {
             withViewer { source ->
                 runDesktopComposeUiTest(WIDTH, HEIGHT) {
@@ -111,60 +116,107 @@ class LiveRoomMapCheck {
         }
     }
 
-    /** A Governanta muda uma UH vaga; o ladrilho mostra a versão nova em até 2 s; grava a captura. */
+    /**
+     * A Governanta muda uma UH vaga; em até 2 s o ladrilho tem a versão nova **e** mostra o rótulo novo na árvore
+     * semântica; grava a captura. O relógio começa quando chegam os últimos bytes da resposta da escrita.
+     */
     private fun DesktopComposeUiTest.followChange(
         state: RoomMapState,
         housekeeper: HousekeeperCurl,
     ) {
-        val tiles = state.floors.flatMap { it.second }
-        val tile =
-            tiles.firstOrNull { it.status == RoomDisplayStatus.DIRTY }
-                ?: tiles.firstOrNull { it.status in VACANT_FREE }
-                ?: fail("nenhuma UH vaga e sem bloqueio no mapa")
+        val tile = pickVacant(state.floors.flatMap { it.second })
         println("LiveRoomMapCheck: UH ${tile.number} (${tile.roomId})")
         val original = housekeeper.status(tile.roomId)
-        try {
-            val newVersion = housekeeper.change(tile.roomId, forward(original))
-            val writeEnd = TimeSource.Monotonic.markNow()
-            waitUntil(timeoutMillis = CHANGE_TIMEOUT_MILLIS) { (state.tile(tile.roomId)?.version ?: -1) >= newVersion }
-            val elapsed = writeEnd.elapsedNow().inWholeMilliseconds
-            println("LiveRoomMapCheck: ladrilho em $elapsed ms (versão $newVersion)")
-            onNodeWithTag("room-tile-${tile.roomId}").assertExists()
+        restoringAfter({ housekeeper.restore(tile.roomId, original) }) {
+            val written = housekeeper.change(tile.roomId, forward(original))
+            val label = vacantLabel(written.housekeeping)
+            val inTile = hasAnyAncestor(hasTestTag("room-tile-${tile.roomId}"))
+            waitUntil(timeoutMillis = CHANGE_TIMEOUT_MILLIS) {
+                (state.tile(tile.roomId)?.version ?: -1) >= written.version &&
+                    onAllNodes(hasText(label) and inTile, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+            }
+            val elapsed = written.receivedAt.elapsedNow().inWholeMilliseconds
+            println("LiveRoomMapCheck: ladrilho em $elapsed ms (versão ${written.version}, rótulo \"$label\")")
+            onAllNodes(hasText(tile.label) and inTile, useUnmergedTree = true).assertCountEquals(0)
             capture()
             assertTrue(elapsed <= LIMIT_MILLIS, "o ladrilho levou $elapsed ms (limite $LIMIT_MILLIS ms)")
-        } finally {
-            housekeeper.restore(tile.roomId, original)
         }
     }
 
     /**
-     * Sem tela: o `runTest` de fora do teste de UI tem limite fixo de um minuto, e a queda passa disso. O estado corre
-     * numa thread só, como na UI, e é lido nela.
+     * A queda do `api`, sem tela (o `runTest` de fora do teste de UI tem limite fixo de um minuto). O estado corre numa
+     * thread só, como na UI, e é lido nela. Com o `api` de volta e o mapa ainda reconectando, a Governanta muda uma UH:
+     * o mapa só a vê se a reconexão recuperar o que perdeu (`reset` e recarga, ou a repetição pelo `Last-Event-ID`).
+     * Tudo em até 240 s depois do `PRONTO`; o `Live` antes da escrita falha a verificação.
      */
     @Test
     fun recoversAfterApiRestart() {
         assumeTrue(System.getenv("ZENY_LIVE_OUTAGE") == "1", "sem ZENY_LIVE_OUTAGE=1: queda do api pulada")
-        withViewer { source ->
-            Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { ui ->
-                val scope = CoroutineScope(SupervisorJob() + ui)
-                val state = runBlocking(ui) { RoomMapState(source, scope) }
-                try {
-                    awaitOn(ui, LOAD_TIMEOUT_MILLIS) { state.isLoadedLive() }
-                    assertNull(runBlocking(ui) { state.error }, "o mapa falhou")
-                    val started = TimeSource.Monotonic.markNow()
-                    println("PRONTO: derrube o api")
-                    System.out.flush()
-                    awaitOn(ui, OUTAGE_TIMEOUT_MILLIS) { state.live is RealtimeStatus.Reconnecting }
-                    println("LiveRoomMapCheck: Reconnecting em ${started.elapsedNow().inWholeMilliseconds} ms")
-                    awaitOn(ui, OUTAGE_TIMEOUT_MILLIS) { state.live == RealtimeStatus.Live }
-                    println("LiveRoomMapCheck: Live de novo em ${started.elapsedNow().inWholeMilliseconds} ms")
-                    assertMatchesServer(ui, state, source)
-                } finally {
-                    runBlocking(ui) { state.close() }
-                    scope.cancel()
+        val housekeeper =
+            HousekeeperCurl(url.value, env("ZENY_LIVE_HOUSEKEEPER_LOGIN"), env("ZENY_LIVE_HOUSEKEEPER_PASSWORD"))
+        housekeeper.login()
+        try {
+            withViewer { source ->
+                Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { ui ->
+                    val scope = CoroutineScope(SupervisorJob() + ui)
+                    val state = runBlocking(ui) { RoomMapState(source, scope) }
+                    try {
+                        awaitOn(ui, LOAD_TIMEOUT_MILLIS) { state.isLoadedLive() }
+                        assertNull(runBlocking(ui) { state.error }, "o mapa falhou")
+                        val tile = pickVacant(runBlocking(ui) { state.floors.flatMap { it.second } })
+                        println("LiveRoomMapCheck: UH ${tile.number} (${tile.roomId})")
+                        val original = housekeeper.status(tile.roomId)
+                        restoringAfter({ housekeeper.restore(tile.roomId, original) }) {
+                            outage(ui, state, source, housekeeper, tile)
+                        }
+                    } finally {
+                        runBlocking(ui) { state.close() }
+                        scope.cancel()
+                    }
                 }
             }
+        } finally {
+            housekeeper.logout()
         }
+    }
+
+    private fun outage(
+        ui: CoroutineDispatcher,
+        state: RoomMapState,
+        source: RoomsSource,
+        housekeeper: HousekeeperCurl,
+        tile: RoomTile,
+    ) {
+        val started = TimeSource.Monotonic.markNow()
+        val remaining = { (OUTAGE_TIMEOUT_MILLIS - started.elapsedNow().inWholeMilliseconds).coerceAtLeast(1) }
+        println("PRONTO: derrube o api")
+        System.out.flush()
+        awaitOn(ui, remaining()) { state.live is RealtimeStatus.Reconnecting }
+        println("LiveRoomMapCheck: Reconnecting em ${started.elapsedNow().inWholeMilliseconds} ms")
+        // O `api` de volta e o mapa ainda fora do ar: a escrita cai na janela que a reconexão precisa recuperar.
+        // Fora da thread do estado: o `curl` bloqueia.
+        while (!housekeeper.answers(tile.roomId)) {
+            check(runBlocking(ui) { state.live } != RealtimeStatus.Live) {
+                "o mapa voltou ao vivo antes de o api responder à Governanta: a queda não provou nada, repita"
+            }
+            check(remaining() > 1) { "o api não voltou em $OUTAGE_TIMEOUT_MILLIS ms" }
+            Thread.sleep(POLL_MILLIS)
+        }
+        println("LiveRoomMapCheck: api respondeu em ${started.elapsedNow().inWholeMilliseconds} ms")
+        check(runBlocking(ui) { state.live } != RealtimeStatus.Live) { "o mapa voltou ao vivo antes da escrita" }
+        val written = housekeeper.change(tile.roomId, forward(housekeeper.status(tile.roomId)))
+        val afterWrite = runBlocking(ui) { state.live }
+        val writtenAt = started.elapsedNow().inWholeMilliseconds
+        println("LiveRoomMapCheck: UH mudada em $writtenAt ms (versão ${written.version}), mapa $afterWrite")
+        check(afterWrite != RealtimeStatus.Live) {
+            "o mapa voltou ao vivo antes de a escrita terminar: a queda não provou nada, repita"
+        }
+        awaitOn(ui, remaining()) { state.live == RealtimeStatus.Live }
+        println("LiveRoomMapCheck: Live de novo em ${started.elapsedNow().inWholeMilliseconds} ms")
+        awaitOn(ui, remaining()) { (state.tile(tile.roomId)?.version ?: -1) >= written.version }
+        println("LiveRoomMapCheck: ladrilho da UH mudada em ${started.elapsedNow().inWholeMilliseconds} ms")
+        assertNull(runBlocking(ui) { state.error }, "o mapa ficou com erro depois da queda")
+        assertMatchesServer(ui, state, source)
     }
 
     /** Entra como Recepcionista pelo `CoreConnection` real; a sessão tem de seguir ativa no fim; fecha tudo. */
@@ -216,6 +268,11 @@ class LiveRoomMapCheck {
         withTimeout(timeoutMillis) { while (!withContext(ui) { condition() }) delay(POLL_MILLIS) }
     }
 
+    private fun pickVacant(tiles: List<RoomTile>): RoomTile =
+        tiles.firstOrNull { it.status == RoomDisplayStatus.DIRTY }
+            ?: tiles.firstOrNull { it.status in VACANT_FREE }
+            ?: fail("nenhuma UH vaga e sem bloqueio no mapa")
+
     private fun RoomMapState.isLoadedLive() = !loading && hasRooms && live == RealtimeStatus.Live
 
     private fun DesktopComposeUiTest.capture() {
@@ -251,6 +308,15 @@ private data class Housekeeping(
     val inspectionPending: Boolean,
 )
 
+/** O rótulo do ladrilho de uma UH vaga e sem bloqueio com a governança [housekeeping]. */
+private fun vacantLabel(housekeeping: Housekeeping): String =
+    when {
+        housekeeping.status == "DIRTY" -> RoomDisplayStatus.DIRTY
+        housekeeping.status == "INSPECTED" -> RoomDisplayStatus.INSPECTED
+        housekeeping.inspectionPending -> RoomDisplayStatus.CLEAN_PENDING_INSPECTION
+        else -> RoomDisplayStatus.CLEAN
+    }.label
+
 private fun forward(original: Housekeeping): JsonObject =
     if (original.status == "DIRTY") transition("MARK_CLEAN", requiresInspection = false) else transition("MARK_DIRTY")
 
@@ -280,18 +346,55 @@ private fun transition(
     )
 
 /**
+ * Roda [block] e depois [restore], também quando [block] falha; a falha da restauração vai para os `suppressed` da
+ * falha de [block], sem escondê-la.
+ */
+private inline fun <T> restoringAfter(
+    restore: () -> Unit,
+    block: () -> T,
+): T {
+    val result =
+        try {
+            block()
+        } catch (
+            @Suppress("TooGenericExceptionCaught") failure: Throwable,
+        ) {
+            try {
+                restore()
+            } catch (
+                @Suppress("TooGenericExceptionCaught") restoreFailure: Throwable,
+            ) {
+                failure.addSuppressed(restoreFailure)
+            }
+            throw failure
+        }
+    restore()
+    return result
+}
+
+/** A resposta de uma escrita: a versão e a governança novas e o instante em que chegaram os últimos bytes. */
+private class Written(
+    val version: Long,
+    val housekeeping: Housekeeping,
+    val receivedAt: TimeSource.Monotonic.ValueTimeMark,
+)
+
+/**
  * A Governanta por `curl`: cada chamada passa URL, cabeçalhos e corpo só pela configuração lida da entrada padrão
- * (`curl -K -`), nunca pela linha de comando; o token e as respostas nunca são impressos.
+ * (`curl -q -K -`: sem o `~/.curlrc`, que poderia ligar `verbose` ou `trace`), nunca pela linha de comando. O `curl`
+ * roda com ambiente enxuto (sem as senhas do ambiente do teste) e com o `stderr` descartado; o token e as respostas
+ * nunca são impressos, e as falhas dizem só a etapa e o código.
  */
 private class HousekeeperCurl(
     private val baseUrl: String,
+    private val login: String,
+    private val password: String,
 ) {
     private var token: String? = null
 
-    fun login(
-        login: String,
-        password: String,
-    ) {
+    override fun toString() = "HousekeeperCurl($login)"
+
+    fun login() {
         val device =
             JsonObject(
                 mapOf(
@@ -303,31 +406,52 @@ private class HousekeeperCurl(
             JsonObject(
                 mapOf("device" to device, "login" to JsonPrimitive(login), "password" to JsonPrimitive(password)),
             )
-        val response = call("POST", "/api/v1/auth/login", body = body)
+        token = null
+        val response = call("login", "POST", "/api/v1/auth/login", body = body)
         check(response.code == HTTP_OK) { "login da Governanta recusado: HTTP ${response.code}" }
         token = response.json()["accessToken"]?.jsonPrimitive?.content ?: error("login sem accessToken")
     }
 
     fun logout() {
         if (token == null) return
-        runCatching { call("POST", "/api/v1/auth/logout") }
+        runCatching { call("logout", "POST", "/api/v1/auth/logout") }
         token = null
+    }
+
+    /**
+     * O `api` responde ao status da UH? Durante a queda, o proxy devolve erro ou o `curl` falha: `false`. Um `401`
+     * (token recusado depois do reinício) refaz o login.
+     */
+    fun answers(roomId: String): Boolean {
+        val code =
+            try {
+                call("sondagem", "GET", "/api/v1/rooms/$roomId/status").code
+            } catch (
+                @Suppress("SwallowedException") e: RuntimeException,
+            ) {
+                // O `api` ainda fora: o `curl` falhou ou a resposta não veio inteira.
+                return false
+            }
+        if (code == HTTP_UNAUTHORIZED) {
+            println("LiveRoomMapCheck: token da Governanta recusado depois do reinício; novo login")
+            runCatching { login() }
+        }
+        return code == HTTP_OK
     }
 
     fun status(roomId: String): Housekeeping = read(roomId).first
 
-    /** Lê o `ETag` pelo `GET` de status e aplica [request]; devolve a versão nova. */
+    /** Lê o `ETag` pelo `GET` de status e aplica [request]. */
     fun change(
         roomId: String,
         request: JsonObject,
-    ): Long {
+    ): Written {
         val etag = read(roomId).second
-        val response = call("POST", "/api/v1/rooms/$roomId/housekeeping-status", ifMatch = etag, body = request)
+        val response =
+            call("mudança", "POST", "/api/v1/rooms/$roomId/housekeeping-status", ifMatch = etag, body = request)
         check(response.code == HTTP_OK) { "mudança de governança recusada: HTTP ${response.code}" }
-        return response
-            .json()
-            .getValue("version")
-            .jsonPrimitive.long
+        val json = response.json()
+        return Written(json.getValue("version").jsonPrimitive.long, housekeepingOf(json), response.receivedAt)
     }
 
     /** Volta a governança de [roomId] à [original]; se não conseguir, diz qual UH ficou alterada. */
@@ -350,18 +474,19 @@ private class HousekeeperCurl(
     }
 
     private fun read(roomId: String): Pair<Housekeeping, String> {
-        val response = call("GET", "/api/v1/rooms/$roomId/status")
+        val response = call("status", "GET", "/api/v1/rooms/$roomId/status")
         check(response.code == HTTP_OK) { "status da UH recusado: HTTP ${response.code}" }
-        val json = response.json()
-        val housekeeping =
-            Housekeeping(
-                json.getValue("housekeepingStatus").jsonPrimitive.content,
-                json.getValue("inspectionPending").jsonPrimitive.boolean,
-            )
-        return housekeeping to (response.headers["etag"] ?: error("status sem ETag"))
+        return housekeepingOf(response.json()) to (response.headers["etag"] ?: error("status sem ETag"))
     }
 
+    private fun housekeepingOf(json: JsonObject) =
+        Housekeeping(
+            json.getValue("housekeepingStatus").jsonPrimitive.content,
+            json.getValue("inspectionPending").jsonPrimitive.boolean,
+        )
+
     private fun call(
+        step: String,
         method: String,
         path: String,
         ifMatch: String? = null,
@@ -370,8 +495,10 @@ private class HousekeeperCurl(
         val config =
             buildString {
                 appendLine("silent")
-                appendLine("show-error")
                 appendLine("include")
+                // Sem buffer: o `write-out` sai logo depois do fim da resposta, não na saída do processo.
+                appendLine("no-buffer")
+                appendLine("connect-timeout = $CURL_CONNECT_TIMEOUT_SECONDS")
                 appendLine("max-time = $CURL_TIMEOUT_SECONDS")
                 appendLine("request = ${quoted(method)}")
                 appendLine("url = ${quoted(baseUrl.trimEnd('/') + path)}")
@@ -384,9 +511,15 @@ private class HousekeeperCurl(
                 }
                 appendLine("write-out = ${quoted("\n%{http_code}")}")
             }
+        val builder = ProcessBuilder("curl", "-q", "-K", "-").redirectError(ProcessBuilder.Redirect.DISCARD)
+        builder.environment().apply {
+            val kept = KEPT_ENVIRONMENT.associateWith { System.getenv(it) }
+            clear()
+            kept.forEach { (name, value) -> if (value != null) put(name, value) }
+        }
         val process =
             try {
-                ProcessBuilder("curl", "-K", "-").start()
+                builder.start()
             } catch (e: IOException) {
                 throw IllegalStateException(
                     "curl não encontrado: a verificação ao vivo do mapa precisa dele no PATH",
@@ -394,11 +527,26 @@ private class HousekeeperCurl(
                 )
             }
         process.outputStream.use { it.write(config.toByteArray()) }
-        val output = process.inputStream.bufferedReader().readText()
-        val errors = process.errorStream.bufferedReader().readText()
-        check(process.waitFor(CURL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) { "curl não terminou" }
-        check(process.exitValue() == 0) { "curl falhou (${process.exitValue()}): ${errors.trim()}" }
-        return CurlResponse.parse(output)
+        val (output, receivedAt) = readAll(process)
+        check(process.waitFor(CURL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) { "curl não terminou ($step)" }
+        check(process.exitValue() == 0) { "curl falhou na etapa $step (código ${process.exitValue()})" }
+        return CurlResponse.parse(output, receivedAt)
+    }
+
+    /** Lê a saída inteira e marca quando chegou o último trecho (o `write-out`, logo depois do fim da resposta). */
+    private fun readAll(process: Process): Pair<String, TimeSource.Monotonic.ValueTimeMark> {
+        val bytes = ByteArrayOutputStream()
+        var last = TimeSource.Monotonic.markNow()
+        val buffer = ByteArray(READ_BUFFER_BYTES)
+        process.inputStream.use { input ->
+            while (true) {
+                val read = input.read(buffer)
+                if (read < 0) break
+                last = TimeSource.Monotonic.markNow()
+                bytes.write(buffer, 0, read)
+            }
+        }
+        return bytes.toString(Charsets.UTF_8) to last
     }
 
     /** Uma string da configuração do `curl`, entre aspas e com `\` e `"` escapados. */
@@ -407,6 +555,12 @@ private class HousekeeperCurl(
 
     private companion object {
         const val HTTP_OK = 200
+        const val HTTP_UNAUTHORIZED = 401
+        const val READ_BUFFER_BYTES = 8192
+        const val CURL_CONNECT_TIMEOUT_SECONDS = 5
+
+        /** O mínimo para achar e rodar o `curl`; nada de credencial. */
+        val KEPT_ENVIRONMENT = listOf("PATH", "HOME")
     }
 }
 
@@ -414,12 +568,16 @@ private class CurlResponse(
     val code: Int,
     val headers: Map<String, String>,
     val body: String,
+    val receivedAt: TimeSource.Monotonic.ValueTimeMark,
 ) {
     fun json(): JsonObject = Json.parseToJsonElement(body).jsonObject
 
     companion object {
         /** Cabeçalhos (`include`; o último bloco vale), corpo e, na última linha, o código (`write-out`). */
-        fun parse(output: String): CurlResponse {
+        fun parse(
+            output: String,
+            receivedAt: TimeSource.Monotonic.ValueTimeMark,
+        ): CurlResponse {
             val code = output.substringAfterLast('\n').trim().toInt()
             var rest = output.substringBeforeLast('\n')
             var headerBlock = ""
@@ -433,7 +591,7 @@ private class CurlResponse(
                     .drop(1)
                     .filter { ':' in it }
                     .associate { it.substringBefore(':').trim().lowercase() to it.substringAfter(':').trim() }
-            return CurlResponse(code, headers, rest)
+            return CurlResponse(code, headers, rest, receivedAt)
         }
     }
 }

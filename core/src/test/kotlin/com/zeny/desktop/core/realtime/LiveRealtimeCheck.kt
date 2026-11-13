@@ -115,17 +115,42 @@ class LiveRealtimeCheck {
         round: Int,
     ): Long {
         val original = statusOf(housekeeper, roomId)
-        try {
+        return restoringAfter({ restore(housekeeper, roomId, original) }) {
             val (newVersion, writeEnd) = change(housekeeper, roomId, forward(original))
             withTimeout(STEP_TIMEOUT) { announced.first { it >= newVersion } }
             val refetched = viewer.rooms.status(roomId)
             val elapsed = writeEnd.elapsedNow().inWholeMilliseconds
             assertTrue(refetched.version >= newVersion, "rebusca sem a versão $newVersion")
             println("LiveRealtimeCheck: rodada $round: $elapsed ms (versão $newVersion)")
-            return elapsed
-        } finally {
-            restore(housekeeper, roomId, original)
+            elapsed
         }
+    }
+
+    /**
+     * Roda [block] e depois [restore], também quando [block] falha; a falha da restauração vai para os `suppressed` da
+     * falha de [block], sem escondê-la.
+     */
+    private inline fun <T> restoringAfter(
+        restore: () -> Unit,
+        block: () -> T,
+    ): T {
+        val result =
+            try {
+                block()
+            } catch (
+                @Suppress("TooGenericExceptionCaught") failure: Throwable,
+            ) {
+                try {
+                    restore()
+                } catch (
+                    @Suppress("TooGenericExceptionCaught") restoreFailure: Throwable,
+                ) {
+                    failure.addSuppressed(restoreFailure)
+                }
+                throw failure
+            }
+        restore()
+        return result
     }
 
     private fun forward(status: RoomStatusResponse): HousekeepingStatusRequest =
