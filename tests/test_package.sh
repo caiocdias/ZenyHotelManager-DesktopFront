@@ -177,11 +177,22 @@ for tipo in "${tipos_roteiro[@]}"; do
   troca "$roteiro" "$tipo" "$tmp/outro-roteiro.md"
   falha_preserva "roteiro $tipo" "docs/demo/roteiro-m1.md"
 done
-# Arquivos de origem do pacote (LEIA-ME, .env.example, gen-env.sh) ilegíveis: falha antes do rm -rf.
+# Arquivos de origem do pacote (LEIA-ME, .env.example, gen-env.sh e compose.override.yaml):
+# ilegível ou symlink (por exemplo, para um arquivo de segredo) falha antes do rm -rf.
+origens=(LEIA-ME.md .env.example gen-env.sh compose.override.yaml)
+printf 'ZENY_SEGREDO=nao-pode-sair\n' >"$tmp/segredo.env"
+for origem in "${origens[@]}"; do
+  arq="$fa/tools/server-env/$origem"
+  mv -- "$arq" "$arq.orig"
+  ln -s -- "$tmp/segredo.env" "$arq"
+  falha_preserva "$origem symlink" "$origem"
+  rm -f -- "$arq"
+  mv -- "$arq.orig" "$arq"
+done
 if (($(id -u) == 0)); then
   skip_case "arquivo de origem ilegível (rodando como root)"
 else
-  for origem in LEIA-ME.md .env.example gen-env.sh; do
+  for origem in "${origens[@]}"; do
     arq="$fa/tools/server-env/$origem"
     modo="$(stat -c %a -- "$arq")"
     chmod 000 -- "$arq"

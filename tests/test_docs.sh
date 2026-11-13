@@ -100,12 +100,25 @@ assert_contains "$rerun" 'a linha `check-ins` não aparece' "roteiro: no seed re
 # O seed repetido só não cria nada se a UH 106 voltou a suja no 7.4 (senão o status dela é recriado).
 assert_contains "$rerun" "7.4" "roteiro: \"nada é criado de novo\" condicionado à volta da UH 106 no 7.4"
 assert_contains "$rerun" '`status de UH: 1 criados, 19 já existiam`' "roteiro: sem o 7.4, a linha de status mostra 1 criado"
-# Bloco com Get-Credential ou Read-Host: o parágrafo logo antes manda rodar uma linha por vez.
-while IFS=: read -r start; do
+# Bloco com Get-Credential ou Read-Host: a linha que pede a credencial é a única do bloco (colada junto com
+# outras, ela leria a linha seguinte como resposta), e o parágrafo logo antes diz como rodá-la.
+n_prompt_blocks=0
+while IFS=: read -r start end prompt_ln; do
+  n_prompt_blocks=$((n_prompt_blocks + 1))
+  assert_eq "1" "$((end - start - 1))" "roteiro: o bloco da linha $start (com credencial) tem só a linha da credencial"
   prev="$(awk -v s="$start" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
-  assert_contains "$prev" "rode uma linha por vez (cole, Enter, responda a janela)" \
-    "roteiro: o bloco da linha $start (com credencial) vem depois de \"uma linha por vez\""
-done < <(awk '/^```powershell/ { s = NR; next } /^```/ { s = 0; next } s && /Get-Credential|Read-Host/ { print s; s = 0 }' "$roteiro")
+  assert_contains "$prev" "(cole, Enter, responda a janela)" \
+    "roteiro: o bloco da linha $start (com credencial) diz como rodá-lo"
+done < <(awk '
+  /^```powershell/ { s = NR; p = ""; next }
+  /^```/ && s { if (p != "") print s ":" NR ":" p; s = 0; next }
+  s && /Get-Credential|Read-Host/ && p == "" { p = NR }
+' "$roteiro")
+assert_eq "1" "$n_prompt_blocks" "roteiro: um bloco com credencial (7.1)"
+# O bloco do corpo do login (hashtable em várias linhas) avisa que o >> do PowerShell é esperado.
+body_start="$(awk '/^```powershell/ { s = NR; next } /^```/ { s = 0; next } s && /\$loginBody = @\{/ { print s; exit }' "$roteiro")"
+body_prev="$(awk -v s="${body_start:-1}" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
+assert_contains "$body_prev" '`>>`' "roteiro: o parágrafo antes do corpo do login explica o >>"
 
 # Seções do LEIA-ME pelo título, nunca pelo número; cada título citado existe no LEIA-ME.
 assert_eq "" "$(grep -nE '[Ss]eção [0-9]' "$roteiro" 2>/dev/null)" "roteiro não cita seção do LEIA-ME pelo número"

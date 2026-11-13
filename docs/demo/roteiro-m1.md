@@ -145,11 +145,18 @@ Com o mapa aberto, a Governanta marca a UH 106 (vaga e suja) como limpa a partir
 
 Abra uma segunda janela do PowerShell (pode ser em qualquer pasta) e rode os blocos abaixo em ordem, na mesma janela. Nos blocos, `curl` não é usado: no Windows PowerShell 5.1, `curl` é outro nome do `Invoke-WebRequest`. Os comandos usam `Invoke-RestMethod` e `Invoke-WebRequest -UseBasicParsing`.
 
-**7.1. Login da Governanta.** O `Get-Credential` abre uma janela de credencial com o usuário `governanta` já preenchido; digite ali a senha da Governança que você escolheu no seed. Neste bloco, rode uma linha por vez (cole, Enter, responda a janela): colado inteiro, o `Get-Credential` lê a linha seguinte do bloco como resposta. Se você cancelar a janela, aparecem erros em vermelho e o login não acontece: rode o bloco 7.1 de novo desde a primeira linha, também uma linha por vez.
+**7.1. Login da Governanta.** Primeiro, a senha. Rode a linha abaixo sozinha (cole, Enter, responda a janela): o `Get-Credential` abre uma janela de credencial com o usuário `governanta` já preenchido; digite ali a senha da Governança que você escolheu no seed. Ela fica num bloco próprio porque, colada junto com outras linhas, o `Get-Credential` lê a linha seguinte como resposta. Se você cancelar a janela, aparece um erro em vermelho e `$cred` fica vazio: rode esta linha de novo.
+
+```powershell
+$cred = Get-Credential governanta
+```
+
+**Resultado esperado:** a janela fecha e o prompt volta sem mensagem em vermelho.
+
+Depois, cole o bloco abaixo inteiro e tecle Enter. Ao ler o `@{` sem o `}`, o PowerShell passa a mostrar `>>` no começo das linhas seguintes: é o esperado, porque o comando continua na linha seguinte. Nesse modo, ele só roda o que recebeu quando chega uma linha vazia; se, depois de colar, o cursor ficar parado num `>>`, tecle Enter mais uma vez.
 
 ```powershell
 $base = "http://localhost:8088"
-$cred = Get-Credential governanta
 $loginBody = @{
     login    = "governanta"
     password = $cred.GetNetworkCredential().Password
@@ -161,7 +168,7 @@ $auth = @{ Authorization = "Bearer $($session.accessToken)" }
 $session.passwordChangeRequired
 ```
 
-**Resultado esperado:** a última linha mostra `False`. Uma mensagem de erro em vermelho com `INVALID_CREDENTIALS` quer dizer senha errada: confira e repita o bloco, com cuidado, porque erros seguidos bloqueiam o usuário (`ACCOUNT_LOCKED`).
+**Resultado esperado:** a última linha mostra `False`. Uma mensagem de erro em vermelho com `INVALID_CREDENTIALS` quer dizer senha errada: confira e repita os dois blocos do 7.1, com cuidado, porque erros seguidos bloqueiam o usuário (`ACCOUNT_LOCKED`).
 
 **7.2. Achar a UH 106 e ler a versão dela.** O `ETag` da resposta é a versão atual da UH; ele vai intacto, com as aspas, no `If-Match` da mudança. O `[string]` garante um texto só (no PowerShell 7 o cabeçalho vem como lista); não corte nem tire as aspas do valor.
 
@@ -219,10 +226,10 @@ $Error[0].Exception.Response.StatusCode.value__
 | Código | O que quer dizer | O que fazer |
 |---|---|---|
 | `412` | A versão do `If-Match` não é mais a da UH: ela mudou depois do bloco 7.2, ou o `ETag` é de antes da mudança anterior. | Rode o bloco 7.2 de novo e repita a mudança. |
-| `403` | O usuário não pode mudar o status da UH: falta a permissão `rooms.status.manage` (por exemplo, o login do bloco 7.1 foi trocado para `recepcao`, que só lê o mapa). | Rode o bloco 7.5 para sair, depois o 7.1 de novo com `governanta`, e então o 7.2. |
+| `403` | O usuário não pode mudar o status da UH: falta a permissão `rooms.status.manage` (por exemplo, o login do bloco 7.1 foi trocado para `recepcao`, que só lê o mapa). | Rode o bloco 7.5 para sair, depois os dois blocos do 7.1 de novo com `governanta`, e então o 7.2. |
 | `428` | Faltou o `If-Match` (`$etag` vazio). | Rode o bloco 7.2 de novo e confira que `$etag` mostra um valor entre aspas. |
 | `422` | A transição não vale no status atual da UH (`HOUSEKEEPING_TRANSITION_NOT_ALLOWED`); por exemplo, `MARK_CLEAN` numa UH inspecionada. | Confira o status na última linha do bloco 7.2 e use uma UH vaga e suja (106, 107 ou 108). |
-| `401` | A sessão venceu (o acesso dura 15 minutos) ou a senha está errada. | Rode o bloco 7.1 de novo e, depois, o 7.2. |
+| `401` | A sessão venceu (o acesso dura 15 minutos) ou a senha está errada. | Rode os dois blocos do 7.1 de novo e, depois, o 7.2. |
 
 ## 8. Sair
 
