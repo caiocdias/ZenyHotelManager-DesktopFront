@@ -152,7 +152,7 @@ object ReceptionText {
                 "${from.format(dateFormat)} · day use"
             }
 
-            to == null -> {
+            to == null || to < from -> {
                 UNKNOWN
             }
 
