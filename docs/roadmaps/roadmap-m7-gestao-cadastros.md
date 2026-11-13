@@ -749,6 +749,8 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Notas para o plano:** sem agente, um job fica `PENDING` para sempre, e a tela deixa isso claro. O README do servidor, seção "Impressão", e a nota `ZenyHotelManager - Módulo printing`, se já existir no brain, trazem os detalhes do agente (long-poll, SSE, confirmação e reenvio). O front não implementa nada disso.
 
+*Nota da M0 E02 (2026-11-13, ruling R4):* o `core` não serve às 5 operações `/api/v1/print-agents/me/*`, que usam o esquema `printAgentToken`. O `AuthPlugin` (`core/.../session/AuthPlugin.kt:34-37`) põe o `Bearer` do usuário em qualquer requisição com `ogenAuthAttr` não vazio, e o `ApiExecutor` (`core/.../http/ApiExecutor.kt:81-87`) transforma o `401` dela em `SessionEnded`: chamar uma dessas rotas pelo `core` encerraria a sessão do usuário. Esta etapa não as chama (as rotas do agente ficam fora do desktop, ADR 0009). Se o plano precisar delas, a correção recomendada é o `AuthPlugin` e o `ApiExecutor` só tratarem como sessão de usuário as requisições cujo requisito se chame `bearerAuth`, falhando fechado. O teste `SdkAttackTest.printAgentOperationsDeclarePrintAgentTokenScheme` caracteriza o atributo.
+
 **Bloqueios:** Nenhum bloqueio conhecido.
 
 **Riscos e mitigação:**

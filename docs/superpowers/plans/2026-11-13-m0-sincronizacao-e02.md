@@ -159,7 +159,7 @@ Não é tarefa de implementação: são comandos do projeto que o orquestrador r
 ## Revisão de arquitetura
 
 - **Veredito:** aprovado com notas (2026-11-13).
-- **Rodadas:** 1 (rodada 0 bloqueada com 4 Importantes — `Option` em `genderDescription`, `printAgentToken` × `AuthPlugin`/`ApiExecutor`, segredos no `compose config`, `smokeTest` sem caminho no fallback de memória — e 6 Menores; todos resolvidos na rodada 1).
+- **Rodadas:** 1 (rodada 0 bloqueada com 4 Importantes — `Option` em `genderDescription`, `printAgentToken` × `AuthPlugin`/`ApiExecutor`, segredos no `compose config`, `smokeTest` sem caminho no fallback de memória — e 7 Menores (M7 só nota); todos resolvidos na rodada 1).
 - **Modelo:** `revisor-arquitetura` no opus.
 - **Notas Menores:**
   - M7: o repositório não tem `ARCHITECTURE.md`; o plano foi julgado contra o design e os ADRs.
