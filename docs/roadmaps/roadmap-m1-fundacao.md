@@ -183,7 +183,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #concluida | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
-| E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
+| E06 | Tempo real e mapa de UHs ao vivo | #em-andamento | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
 ---
@@ -618,7 +618,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Tempo real e mapa de UHs ao vivo — #pendente
+## E06 — Tempo real e mapa de UHs ao vivo — #em-andamento
 
 **Objetivo:** o `core` mantém uma conexão SSE por sessão, com reconexão. O app mostra o **mapa de UHs**: um quadro com as UHs por área ou andar, cor por status, filtros por tipo e status, e um detalhe resumido. O mapa muda sozinho quando o status de uma UH muda no servidor.
 
