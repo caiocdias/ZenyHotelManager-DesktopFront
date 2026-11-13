@@ -1,6 +1,6 @@
 # Roadmap — M0 Sincronização com o servidor
 
-> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-13
 
 ## Como usar
 
@@ -328,14 +328,14 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] `api/server-pin.properties` tem `commit=57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`, e `sha256sum api/openapi.yaml` é igual a `contract_sha256` e ao hash de `git -C <servidor> show 57eb5fac5b8a:api/openapi.yaml`.
-- [ ] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `57eb5fac5b8a`. Se ela tiver andado, a saída é registrada no handoff e o pin continua em `57eb5fac5b8a`.
-- [ ] O SDK compila as 335 operações, e o teste de cobertura do SDK amarra os 335 `operationId` a métodos gerados.
-- [ ] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde.
-- [ ] `zeny-front` sobe em `57eb5fac5b8a` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele.
-- [ ] A revisão de `tools/server-env/` está registrada no handoff, arquivo por arquivo, com o que mudou ou "sem mudança" e o motivo.
+- [x] `api/server-pin.properties` tem `commit=57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`, e `sha256sum api/openapi.yaml` é igual a `contract_sha256` e ao hash de `git -C <servidor> show 57eb5fac5b8a:api/openapi.yaml`. *(Os três: `60b309db82622662e2a1196504fe48bac8dd742b1ed51f7bcde1e769535c2d08`.)*
+- [x] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `57eb5fac5b8a`. Se ela tiver andado, a saída é registrada no handoff e o pin continua em `57eb5fac5b8a`. *(`igual (código 0)`, base e alvo `57eb5fac5b8a`.)*
+- [x] O SDK compila as 335 operações, e o teste de cobertura do SDK amarra os 335 `operationId` a métodos gerados. *(`everyOperationInTheContractHasAGeneratedMethod`: 335 métodos e 335 `prepare*`, com `PrintingApi` e `EndOfDayApi`.)*
+- [x] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde. *(Em `d9d1c02`: 2032 testes, 0 falhas, 19 pulados; 36 arquivos, 0 falhas; lint verde.)*
+- [x] `zeny-front` sobe em `57eb5fac5b8a` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele. *(No notebook: `{"status":"UP"}` com `zeny-hotel-manager:57eb5fac5b8a`; `smokeTest` 1/1.)*
+- [x] A revisão de `tools/server-env/` está registrada no handoff, arquivo por arquivo, com o que mudou ou "sem mudança" e o motivo.
 - [ ] O usuário executou o roteiro do M1 contra o servidor novo, no Windows, com o pacote regenerado, e aprovou na parada da etapa.
-- [ ] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`).
+- [x] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`). *(`status --porcelain` vazio antes e depois; o `worktree list` mudou só por sessões do servidor, ver o handoff.)*
 
 **Validação obrigatória:**
 
@@ -364,12 +364,54 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-13):** `#em-andamento`, na parada humana. Implementação revisada, verificação da etapa feita no notebook e pacote regenerado. Falta o usuário executar o `roteiro-m1.md` no Windows com o pacote novo e aprovar; com isso a etapa fecha `#concluida` e o M2 pode começar.
+- **Plano:** [`docs/superpowers/plans/2026-11-13-m0-sincronizacao-e02.md`](../superpowers/plans/2026-11-13-m0-sincronizacao-e02.md), 2 tasks. Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (4 Importantes: `Option` em `genderDescription`, `printAgentToken` × `AuthPlugin`/`ApiExecutor`, segredos no `compose config`, `smokeTest` sem caminho no fallback de memória) e aprovado com notas na rodada 1.
+- **Commits** na branch `roadmap/m0-sincronizacao` (cada um com o trailer `Soul:`):
+  - documentação: `29cc674` (análise da rodada 2 trazida do checkout principal), `4145959` (início), `3796ab9`, `494b9a9`, `45b7d79` (plano e revisão);
+  - Task 1, pin, contrato e SDK: `45b7d79..5667625` (`f234b33` catálogo de erros, `3f69d0f` pin e SDK, `5667625` testes do testador);
+  - Task 2, revisão de `tools/server-env/`: `5667625..7b8c99e`;
+  - testador de etapa: `d9d1c02`; nota na M7 E12: `9bf0bb2`; este handoff.
+- **Revisão final** (`revisor-seguranca`, opus): aprovado com ressalvas, "Ready to merge: With fixes", 0 Críticos. Os dois Importantes eram de documentação e procedimento: registrar o R4 (abaixo e na M7 E12) e fazer o merge sem perder as mudanças não commitadas do checkout principal (R1). Sem onda de correção de código.
+  - Scanner `osv-scanner 2.7.0 -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+  - Verificação mecânica `check_test_integrity.py --base 83fd21f`: 2 `ASSERCAO_REMOVIDA` (`assertEquals(303, contract)` → 335 e `assertEquals(353, codes.size)` → 377), justificadas pela revisora: atualização de contagem pelo contrato novo, com teste mais específico ao lado.
+  - Gate em `d9d1c02`: `./gradlew build` BUILD SUCCESSFUL (2032 testes, 0 falhas, 19 pulados, as verificações ao vivo); `bash tests/run.sh` 36 arquivos, 0 falhas; `ktlintCheck detekt` verde.
+- **Critérios verificados:**
+  - **Pin:** `commit=57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`; sha256 `60b309db82622662e2a1196504fe48bac8dd742b1ed51f7bcde1e769535c2d08` na cópia, no pin e no `git show` do servidor; 335 `operationId`.
+  - **Pré-voo:** antes da troca, aditivo (código 11), `ca9f9e2f9808` × `57eb5fac5b8a`; depois, `igual (código 0)`.
+  - **SDK:** o ogen gerou o contrato inteiro sem erro e sem código à mão. Tags novas em `PrintingApi` e `EndOfDayApi`. Caracterização no `SdkAttackTest`: os PDFs (ficha, confirmação, extrato e `getPrintJobContent`) saem como `HttpResponseTyped<Any>` e os bytes vêm íntegros por `raw` (os 256 valores de byte e 70 KB); `genderDescription` é `Option<String?>` (`Some`, `Some(null)`, `Undefined`, nos dois sentidos, também pelo `demo-seed`); o `ogenAuthAttr` de `/print-agents/me/identity` é `printAgentToken`, e o de uma operação comum é `bearerAuth`.
+  - **Conserto:** a compilação não quebrou. O que quebrou foram os testes do catálogo de erros do `core`: o contrato trouxe 24 códigos novos, e o `ErrorCatalog.kt` ganhou 24 mensagens pt-BR (R5).
+  - **Ambiente no notebook:** `down.sh -v`, `up.sh` (build da imagem `zeny-hotel-manager:57eb5fac5b8a`, `cc6ee5ad27bd`), readiness `{"status":"UP"}`, `smokeTest -PserverUrl=http://127.0.0.1:8088` 1/1 (14,9 s), com os segredos de `.server/seed-secrets.env`.
+  - **Pacote** (`build/demo-package/` do checkout principal, 90 MB mais `images/zeny-server-images.tar` de 427 MB): `VERSAO.txt` com `front_commit=9bf0bb2…`, `front_dirty=false`, `server_commit=57eb5fac5b8a…`, `zeny-desktop.jar` sha256 `803f4eb8…` e `demo-seed.jar` `7b9e668d…`; nenhum `.env`.
+  - **Revisão de `tools/server-env/`** (Task 2). No servidor, entre `ca9f9e2f9808` e `57eb5fac5b8a`, só mudaram `docker/gate/` e `docker/prometheus/alerts.yaml`; o diff de `docker/compose.yaml`, `docker/.env.example` e `docker/Dockerfile` é vazio, e os dois `.env.example` têm as mesmas 21 chaves.
+
+    | Arquivo | Resultado | Motivo |
+    |---|---|---|
+    | `compose.override.yaml` | sem mudança | só toca `api.image`, o endpoint público e `proxy.ports`; o compose do servidor não mudou; `compose config` dá projeto `zeny-front` e `127.0.0.1:8088->80` |
+    | `up.sh` | sem mudança | sobe só `docker/compose.yaml`; `compose config --services` = api, db, proxy, storage, storage-init |
+    | `down.sh` | sem mudança | mesmo projeto `zeny-front` |
+    | `package.sh` | sem mudança | o `git archive` leva `docker/gate/` para `server/` (inerte, sem segredo); override e `LEIA-ME` não o citam (testes novos) |
+    | `save-images.sh` | sem mudança | lê só `docker/compose.yaml`; `compose config --images` = caddy, minio, postgres e `zeny-hotel-manager:57eb5fac5b8a` (testes novos) |
+    | `gen-env.sh` | sem mudança | as chaves do `.env.example` não mudaram |
+    | `lib.sh` | sem mudança | `server_tag` resolve `57eb5fac5b8a`; `ensure_server_tree` extraiu a árvore nova e conferiu o sha256 |
+    | `.env.example` | sem mudança | idêntico em chaves ao do servidor |
+    | `LEIA-ME.md` | sem mudança | não cita o gate |
+
+    Testes de regressão: dois casos em `tests/test_package.sh` e o arquivo `tests/test_package_gate_etapa_ataque.sh` (imagem repetida no gate, outros compose em `docker/`, caminho de erro, pacote sem `.env`), todos com teste de mutação.
+  - **Servidor só leitura:** `status --porcelain` vazio antes e depois. O `worktree list` tem os mesmos caminhos e branches do início, mais `/tmp/claude-1000/-home-caio-repos-ZenyHotelManager/399fb2e7-…/scratchpad/old-89601c2` (de uma sessão aberta no repositório do servidor, com outro id) e o `roadmap/m6-operacao-fechamento` avançado de `29ff8d7` para `69588ca` pelo orquestrador do servidor. Nada foi criado por esta sessão.
+  - **Pedidos:** `docs/pedidos-servidor.md` só ganhou a tabela da rodada 2 da análise; nenhum `PF-NN`.
+  - **Pendente (usuário, Windows):** o roteiro do M1 com o pacote novo.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  1. **R1, análise trazida do checkout principal:** a análise da rodada 2 (esta etapa, o ADR 0009, as etapas novas da M2 à M7, `pedidos-servidor.md` e o design) só existia sem commit no checkout principal. Ela foi copiada byte a byte para a branch (`29cc674`). No merge, as mesmas mudanças sem commit do checkout principal são conferidas contra esse commit antes de restauradas. Custo se errado: reverter `29cc674`.
+  2. **R4, `printAgentToken` fora do `core` (segurança):** o `AuthPlugin` (`core/.../session/AuthPlugin.kt:34-37`) põe o `Bearer` do usuário em qualquer requisição com `ogenAuthAttr` não vazio, e o `ApiExecutor` (`core/.../http/ApiExecutor.kt:81-87`) transforma o `401` em `SessionEnded`. Nas 5 rotas `/print-agents/me/*`, isso encerraria a sessão do usuário. Hoje ninguém as chama (ADR 0009). O defeito ficou caracterizado por teste e registrado na M7 E12, sem mudança no `core`. Correção recomendada, quando for preciso: só tratar como sessão de usuário o requisito `bearerAuth`, falhando fechado. **Pendência do arquiteto:** a frase do ADR 0007 ("o `ogenAuthAttr` diz se a operação exige `bearerAuth`") deixou de valer para essas 5 operações.
+  3. **R5, 24 mensagens de erro novas:** o catálogo de erros do `core` ganhou mensagens pt-BR para os códigos novos (fechamento do dia, envios à FNRH, impressão, ficha e confirmação), escritas pelo desenvolvedor a partir das descrições do contrato. A redação é revista nos marcos que exibem esses códigos.
+  4. **R6, demo local recriada:** o `zeny-front` do notebook foi recriado com `down.sh -v` no servidor novo e semeado pelo `smokeTest`. A demo da E05 do M1 deixou de existir (as senhas continuam em `.server/seed-secrets.env`). A imagem `zeny-hotel-manager:ca9f9e2f9808` continua no Docker.
+  5. **Pacote com `server/docker/gate/`:** inerte (o fluxo do `LEIA-ME` não o usa) e sem segredo; só aumenta o pacote. Excluí-lo do `git archive` é decisão do arquiteto.
+- **Notas para a próxima etapa:**
+  - **Na parada:** o usuário segue o `roteiro-m1.md` do pacote novo (`build/demo-package/`) no Windows, do zero. Para não construir a imagem lá, use o `docker load` de `images/zeny-server-images.tar`, que já traz `zeny-hotel-manager:57eb5fac5b8a`. A aprovação fecha esta etapa como `#concluida`.
+  - **M2 E07 (ficha em PDF):** `ApiExecutor.run` chama `typed.body()` (`ApiExecutor.kt:54`). Com `HttpResponseTyped<Any>`, uma fachada de PDF que passe por ali provavelmente vira `IncompatibleResponse` (não testado no `core`). A fachada deve ler os bytes de `raw`, sem log e sem disco (design §6.2).
+  - **M7 E12:** ver a nota do R4 na própria etapa.
+  - **Menores estacionados:** a checagem de "português" e de "fechamento" no `ErrorCatalogNewContractCodesTest` é frouxa (a cobertura real é o `ErrorCatalogTest`); a redação de 3 mensagens ("agente de impressão", "trabalho de impressão", `PRINT_CONTENT_TOO_LARGE` sem dizer o que fazer); a ordem de `"EndOfDay"` na lista do `SdkAttackTest`; a asserção solta `"gate"` em `tests/test_package.sh` (a versão ancorada está no arquivo de ataque); a caracterização do `printAgentToken` cobre só `identity`, não as 5 rotas.
+  - **Ambiente local:** `zeny-front` no ar em `57eb5fac5b8a`, semeado pelo `smokeTest`; `.server/57eb5fac5b8a…/` criado. As ondas paralelas não foram usadas (as 2 tasks eram dependentes).
 
 ---
 
@@ -380,3 +422,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-10 — E01 `#concluida` pelo `claude --agent orquestrador`, com a evidência do usuário: readiness `UP` no Windows pelo `LEIA-ME`. H2 confirmada. Não resta etapa elegível no M0 até a próxima rodada de sincronização.
 - 2026-11-10 — `.gitattributes` acrescentado (Menor adiado da E01), com plano revisado e revisão final aprovada (`claude --agent orquestrador`).
 - 2026-11-13 — análise da rodada 2 (`claude --agent arquiteto`, `development-roadmap` em modo atualização), contra a `main` do servidor em `57eb5fac5b8a` (271 commits à frente; pré-voo aditivo, código 11). Entra a E02, a etapa mecânica, com a revisão de `tools/server-env/` diante de `docker/gate/` no escopo. As capacidades novas foram distribuídas: M2 E07, M3 E03, M4 E02, M5 E01, M6 E08, M7 E10 e M7 E12. Decisões no [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md). Nenhum `PF-NN` existia, nenhum foi aberto, e nenhuma captura "atende PF-NN" foi achada.
+- 2026-11-13 — E02 executada pelo `claude --agent orquestrador`: pin e contrato em `57eb5fac5b8a` (335 operações), SDK regenerado, 24 mensagens de erro novas no `core`, `tools/server-env/` revisto (sem mudança, com testes de regressão para `docker/gate/`), `zeny-front` no ar e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando a parada humana (roteiro do M1 no Windows).
