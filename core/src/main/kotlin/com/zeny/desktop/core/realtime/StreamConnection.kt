@@ -12,10 +12,13 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.channelFlow
@@ -129,10 +132,13 @@ internal class StreamConnection(
                 }.execute { response -> consume(response, state) }
         } catch (e: UnresolvedAddressException) {
             StreamFailures.classify(ApiError.Network(e))
+        } catch (e: CancellationException) {
+            // Só o cancelamento de quem coleta propaga; o corpo fechado pelo engine com ela é queda do stream.
+            currentCoroutineContext().ensureActive()
+            StreamFailures.classify(StreamInterruptedException("stream interrompido", e))
         } catch (
             @Suppress("TooGenericExceptionCaught") e: Exception,
         ) {
-            // A `CancellationException` sai daqui: o `classify` a relança.
             StreamFailures.classify(e)
         }
 
@@ -142,7 +148,9 @@ internal class StreamConnection(
     ): StreamOutcome {
         val status = response.status.value
         if (status !in HTTP_SUCCESS) return StreamFailures.classify(status, ProblemMapper.fromResponse(response))
-        if (response.contentType()?.match(EVENT_STREAM) != true) {
+        // Um `Content-Type` que nem se interpreta também é outro tipo.
+        val contentType = runCatching { response.contentType() }.getOrNull()
+        if (contentType?.match(EVENT_STREAM) != true) {
             return StreamOutcome.Fail(ApiError.IncompatibleResponse(IOException("Content-Type inesperado no stream")))
         }
         val reader = SseLineReader(response.bodyAsChannel())

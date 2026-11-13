@@ -23,6 +23,7 @@ import io.ktor.utils.io.ByteChannel
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.writeFully
 import io.ktor.utils.io.writeStringUtf8
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.take
@@ -396,6 +397,24 @@ class StreamConnectionTest {
             assertTrue(job.isCancelled)
             assertTrue(channel.isClosedForWrite, "o corpo da resposta foi liberado")
             assertEquals(1, requests.size)
+        }
+
+    @Test
+    fun bodyCancelledByEngineWhileCollectingReconnects() =
+        runTest {
+            // O engine fecha o corpo com uma CancellationException; quem coleta continua ativo.
+            val channel = liveStream()
+            stream(ready)
+            val (items, job) = collectInBackground(connection())
+            runCurrent()
+            channel.send(ready)
+            runCurrent()
+            channel.cancel(CancellationException("corpo fechado pelo engine"))
+            runCurrent()
+            assertTrue(job.isActive)
+            assertEquals(reconnecting(1, 1_000), items.last())
+            advanceTimeBy(1_001)
+            assertEquals(2, requests.size)
         }
 
     @Test
