@@ -7,6 +7,8 @@ import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.client.HotelApi
 import com.zeny.desktop.sdk.client.IamApi
 import de.quati.kotlin.util.Option
+import java.time.DateTimeException
+import java.time.ZoneId
 
 /** O usuário corrente; `permissions` são só os códigos, e quem decide é o servidor (`403` tratado em cada ação). */
 data class Me(
@@ -37,6 +39,12 @@ data class HotelInfo(
     val configured: Boolean,
 )
 
+/** O dia operacional e o fuso do hotel; `zone` é nulo quando o servidor não manda um fuso válido (nunca o da JVM). */
+data class BusinessDay(
+    val date: BusinessDate,
+    val zone: ZoneId?,
+)
+
 /** As duas leituras são separadas: um `403` em `hotel()` não impede `businessDate()`. */
 class HotelFacade internal constructor(
     private val hotel: HotelApi,
@@ -55,5 +63,23 @@ class HotelFacade internal constructor(
         } catch (e: IllegalArgumentException) {
             throw ApiError.IncompatibleResponse(ResponseFormatException(e))
         }
+    }
+
+    /** Uma chamada só: data ilegível é resposta incompatível; fuso ausente, em branco ou inválido vira `null`. */
+    suspend fun businessDay(): BusinessDay {
+        val response = executor.execute { hotel.getBusinessDate(it.headers) }.value
+        val date =
+            try {
+                BusinessDate.parse(response.businessDate)
+            } catch (e: IllegalArgumentException) {
+                throw ApiError.IncompatibleResponse(ResponseFormatException(e))
+            }
+        val zone =
+            try {
+                response.timezone.takeIf { it.isNotBlank() }?.let(ZoneId::of)
+            } catch (_: DateTimeException) {
+                null
+            }
+        return BusinessDay(date, zone)
     }
 }

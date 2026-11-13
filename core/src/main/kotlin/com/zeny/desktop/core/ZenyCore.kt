@@ -5,6 +5,7 @@ import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.facade.AccountFacade
 import com.zeny.desktop.core.facade.ApprovalFacade
 import com.zeny.desktop.core.facade.HotelFacade
+import com.zeny.desktop.core.facade.ReservationsFacade
 import com.zeny.desktop.core.facade.RoomsFacade
 import com.zeny.desktop.core.http.ApiExecutor
 import com.zeny.desktop.core.http.createCoreHttpClient
@@ -75,6 +76,7 @@ class ZenyCore internal constructor(
     val hotel: HotelFacade = HotelFacade(sdkApis.hotel, sdkExecutor)
     val approvals: ApprovalFacade = ApprovalFacade(sdkApis.iam, sdkExecutor)
     val rooms: RoomsFacade = RoomsFacade(sdkApis.rooms, sdkExecutor)
+    val reservations: ReservationsFacade = ReservationsFacade(sdkApis.reservations, sdkExecutor)
 
     /**
      * O stream da sessão corrente: cada conexão leva o `Bearer` da sessão aberta quando ela abre. Sair de uma sessão
