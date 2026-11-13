@@ -78,11 +78,12 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 | H1 | Compose Multiplatform 1.12.x (estável em agosto de 2026) compila e roda com Kotlin 2.4 e JDK 25 — **confirmada na E01** (1.12.2, Kotlin 2.4.21, JDK 25.0.5) | Ajustar versões (Kotlin ou JDK alvo de bytecode) na própria E01 | E01 |
 | H2 | Um gerador Kotlin cumpre o critério do design §9: compila o contrato inteiro, expõe `ETag` e headers de resposta, aceita headers por chamada e gera `x-extensible-enum` como `String` — **confirmada na E01** com o ogen 0.16.1 (ADR 0007); o openapi-generator 7.27.0 não cumpriu | Cliente escrito à mão no `core` para os recursos das features da demo; registrar a decisão em ADR | E01 |
 | H3 | Um JAR único com as bibliotecas nativas do Skia de Linux x64 e Windows x64 roda com `java -jar` nos dois sistemas — **confirmada na E01**: Linux pelo orquestrador; Windows pelo usuário em 2026-11-11 (`java -jar zeny-desktop.jar` abriu a janela normalmente) | Distribuir por `./gradlew run` num clone no Windows | E01, E07 |
-| H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
+| H4 | O SSE passa pelo proxy Caddy do servidor sem buffering que atrase os eventos — **confirmada na E06** (17 a 52 ms da escrita à mensagem no `core`; 58 a 264 ms até o ladrilho) | Pedido `PF-NN` ao servidor e, até lá, atualização periódica no mapa | E06 |
 | D1 | **Decidido pelo usuário em 2026-11-11 (entrevista da parada da E01):** fronteira `core`/`sdk` pela opção (b) da ADR 0008 — `core` expõe o `sdk` por `api`, as features usam os modelos gerados e o `ForbiddenImport` barra as classes de operação — **fechando a brecha**: barrar também `io.ktor.client.*` e `de.quati.ogen.client.*` em `app` e `design` | Ajuste do `config/detekt/detekt.yml` e da varredura de nome qualificado ainda não feito: entra no plano da E02 | E02 em diante |
 | D2 | **Decidido pelo usuário em 2026-11-11:** depois do `403 APPROVAL_REQUIRED`, a repetição com `X-Approval-Token` usa uma **nova** `Idempotency-Key`, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede continua com a mesma chave. Substitui o "mesma chave" do design §6.2 e do critério da E02 | A E02 testa a nova chave na repetição aprovada; o design §6.2 fica para o arquiteto atualizar | E02, E04 |
 | D3 | **Decidido pelo usuário em 2026-11-11:** gerador do SDK confirmado, ogen 0.16.1 (ADR 0007) | Plano B na ADR 0007 se uma versão nova quebrar | todas |
 | H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto — **confirmada na E05** (nenhum `PF-NN`) | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
+| D4 | **Decidido pelo usuário em 2026-11-12 (entrevista do plano da E06, I7):** valor desconhecido num enum fechado do contrato (por exemplo, `housekeepingStatus`) torna a resposta inteira "versão incompatível", com a mensagem de versão em pt-BR — substitui o "Outro (VALOR)" do critério da E06; o "Outro (VALOR)" segue valendo para os enums extensíveis (`x-extensible-enum`) | Um status novo do servidor derruba o mapa até o M0 sincronizar o contrato | E06 em diante |
 
 ## Definição global de pronto
 
@@ -183,7 +184,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #concluida | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
-| E06 | Tempo real e mapa de UHs ao vivo | #em-andamento | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
+| E06 | Tempo real e mapa de UHs ao vivo | #concluida | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
 ---
@@ -618,7 +619,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Tempo real e mapa de UHs ao vivo — #em-andamento
+## E06 — Tempo real e mapa de UHs ao vivo — #concluida
 
 **Objetivo:** o `core` mantém uma conexão SSE por sessão, com reconexão. O app mostra o **mapa de UHs**: um quadro com as UHs por área ou andar, cor por status, filtros por tipo e status, e um detalhe resumido. O mapa muda sozinho quando o status de uma UH muda no servidor.
 
@@ -645,10 +646,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Teste: reconexão envia o `Last-Event-ID` do último evento. `reset` dispara o recarregamento.
-- [ ] Com o mapa aberto, uma mudança de status feita por outro cliente (por exemplo, `curl` em `POST /api/v1/rooms/{id}/housekeeping-status` com o usuário Governanta) aparece no mapa em até 2 s (RNF-04 do servidor).
-- [ ] Derrubar e subir o `api` do `zeny-front` reconecta sozinho e o mapa volta consistente.
-- [ ] Os status aparecem em pt-BR. Um status desconhecido aparece como "Outro (VALOR)".
+- [x] Teste: reconexão envia o `Last-Event-ID` do último evento. `reset` dispara o recarregamento.
+- [x] Com o mapa aberto, uma mudança de status feita por outro cliente (por exemplo, `curl` em `POST /api/v1/rooms/{id}/housekeeping-status` com o usuário Governanta) aparece no mapa em até 2 s (RNF-04 do servidor).
+- [x] Derrubar e subir o `api` do `zeny-front` reconecta sozinho e o mapa volta consistente.
+- [x] Os status aparecem em pt-BR. Um status desconhecido é tratado como versão incompatível, com a mensagem de versão em pt-BR (decisão do usuário por entrevista em 2026-11-12, I7; antes: aparece como "Outro (VALOR)").
 
 **Validação obrigatória:**
 
@@ -667,12 +668,35 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-13):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-12-m1-fundacao-e06.md`](../superpowers/plans/2026-11-12-m1-fundacao-e06.md), 10 tarefas (9 de risco alto, a Task 6 normal). A revisão de arquitetura bloqueou nas rodadas 0 (10 Importantes) e 1 (3 Importantes) e aprovou com notas na rodada 2. O critério "Outro (VALOR)" foi decidido pelo usuário por entrevista (I7: erro de versão incompatível).
+- **Commits:** `9c2214d..8eb05c4`, mais o commit de fechamento na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`). Ondas paralelas: 1 (Tasks 1 e 2) e 2 (Tasks 3 e 6), em worktrees próprios; Tasks 4, 5, 7, 8, 9 e 10 em série na branch da etapa. Testador em todas as tarefas de risco alto e testador de etapa sobre a Task 6.
+- **Revisão final:** "Ready to merge: With fixes" (0 Críticos, 0 Importantes; a onda de correção já prevista e 4 Menores novos). A onda única de correção (desenvolvedor `d653c03`, `203af69`, `6a99856`; testador `8eb05c4`) resolveu tudo; a re-revisão aprovou ("Ready to merge: Yes"). Ficaram como notas: o `finally` da conexão no `RealtimeClient` decide pelo tipo da exceção, não pelo estado do job (N1, Menor); o gate rodou na árvore final da onda, não nos commits intermediários `d653c03` e `203af69`.
+  - Scanner `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+  - Verificação mecânica `--base 9c2214d`: 11 `ASSERCAO_REMOVIDA`, todos nos testes da casca que o plano manda ajustar (Governança passa a ser área implementada) e no `ShellStateTest.devModeShowsComingSoonAreas` (ruling); justificados um a um pela revisão da Task 9 e pela revisão final (substitutas iguais ou mais fortes).
+  - Gate em `8eb05c4`: `./gradlew cleanTest build` BUILD SUCCESSFUL (app 472 com 14 pulados, core 783 com 1, demo-seed 504 com 4, design 226, sdk 30; 0 falhas; os pulados são as verificações ao vivo); `bash tests/run.sh` 31 arquivos, 0 falhas.
+- **Critérios verificados** (contra o `zeny-front` com a demo da E05, data 2026-11-12):
+  - **Reconexão com `Last-Event-ID` e `reset` recarregando:** testes do `core` (`StreamConnection`/`RealtimeClient`, inclusive `noTokenInUrl`, `cancelClosesResponse`, `expiredTokenRefreshesAndReconnects`) e do `app` (`RoomMapState`: primeiro `Ready`/`Reset` carrega, todo `Reset` recarrega).
+  - **Mudança de status em até 2 s (H4):** `LiveRealtimeCheck.propagationUnderTwoSeconds` (escrita da Governanta → `Message` + rebusca na sessão da Recepcionista): [52, 32, 28], [40, 23, 22], [42, 21, 20] e [34, 18, 17] ms. `LiveRoomMapCheck.capturesMapAndFollowsChange` (até o ladrilho mostrar a versão e o rótulo novos): 235, 62, 264, 58 e 219 ms. H4 não ocorreu; nenhum `PF-NN`.
+  - **Queda do `api`:** `recoversAfterApiRestart` com `stop`/`start` do serviço `api`: `Reconnecting` em ~6 s; com o `api` de volta e o mapa ainda reconectando, a Governanta mudou a UH 106 (57,8 s); `Live` em 67,0 s e o ladrilho com a versão nova em 67,3 s; mapa sem erro e igual a um `statuses()` novo. O token antigo seguiu aceito (refresh não observável pelo cliente).
+  - **Status em pt-BR:** rótulos e precedência (`RoomDisplay`; 48 combinações no `RoomDisplayAtaqueTest`). Valor desconhecido de enum fechado é tratado como versão incompatível, com a mensagem de versão em pt-BR (decisão do usuário, I7), em vez de "Outro (VALOR)".
+  - **Captura:** `app/build/live/room-map.png` (mapa "Ao vivo", andares 1 e 2, legenda com contadores, 20 UHs, rótulos compostos).
+  - **Nenhum segredo:** as 5 senhas de `.server/seed-secrets.env` aparecem 0 vezes no HEAD, no histórico da etapa, nos relatórios e em `build/`.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Semântica do `RealtimeClient`:** Flow frio por assinante; uma conexão por sessão com a união dos tópicos; posição por sessão; `endSession` síncrono no fim da sessão; a cada reabertura por mudança da união chega um `Ready` real (o `RoomMapState` ignora `Ready` depois do primeiro); um `403` de um tópico derruba todos os assinantes da união. Pedir ao arquiteto o registro no design §6.2 ou numa ADR.
+  - **Assinatura sem sessão:** espera e é adotada pela próxima sessão, de qualquer usuário. O mapa é seguro porque nasce por `sessionId`; toda feature do M2 deve amarrar a assinatura ao `sessionId`.
+  - **Mapa na área Governança** (`rooms.status.read`), por andar ("Andar N", "Sem andar" no fim); `GET /api/v1/areas` fica fora do mapa (são áreas comuns, sem vínculo com UH).
+  - **Precedência e cores:** fora de ordem (perigo) > fora de serviço (neutro) > ocupada (informação) > governança (suja: alerta; limpa aguardando inspeção: neutro; limpa e inspecionada: sucesso). Ocupada leva rótulo composto ("Ocupada · Suja"). OOS + ocupada mostra só "Fora de serviço" (a ocupação aparece no detalhe); alternativa: "Fora de serviço · Ocupada".
+  - **Legenda:** é também o filtro de status; o contador conta o status principal, e o filtro casa o principal ou a governança (uma UH ocupada e suja não entra em "Suja: n", mas aparece ao filtrar Suja).
+  - **Erros na tela:** com o mapa carregado, o erro vira faixa com "Tentar de novo" sobre o mapa; tela de erro só sem ladrilhos. Mapa que perde a assinatura depois de sincronizado mostra "Desconectado" com "Tentar de novo".
+  - **Tipos sem nome legível** (403 em `room-types`): rótulos "Tipo 1", "Tipo 2"… estáveis por id; nunca o UUID.
+  - **Troca de sessão dentro da casca:** a casca é recriada por `sessionId`; a área aberta reabre só se o menu da sessão nova a permitir (`restoreArea`).
+  - **Verificações ao vivo:** só com `ZENY_LIVE_REALTIME=1` (e `ZENY_LIVE_OUTAGE=1` para a queda); a escrita da Governanta no `app` é por `curl -q -K -` (o `app` não tem cliente HTTP). A queda roda sem tela (o Compose 1.12.2 encerra o teste de UI depois de 1 minuto), sobre o `RoomMapState` real numa thread.
+- **Notas para a próxima etapa (E07 em diante):**
+  - **Comandos ao vivo:** gere um arquivo 600 fora do repositório com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`/`PASSWORD` (`recepcao`) e `ZENY_LIVE_HOUSEKEEPER_LOGIN`/`PASSWORD` (`governanta`) a partir de `.server/seed-secrets.env`; depois `(set -a; . <arquivo>; set +a; ZENY_LIVE_REALTIME=1 ./gradlew :core:test --tests '*LiveRealtimeCheck*' --rerun)` e `… :app:test --tests '*LiveRoomMapCheck.capturesMap*' --rerun`. A queda: `ZENY_LIVE_OUTAGE=1` em segundo plano e, ao ver `PRONTO`, `compose stop api` / `compose start api` de `tools/server-env/lib.sh`. A janela entre o `api` voltar e o `Live` variou de 0,3 a 9,2 s; se o `Live` chegar antes da escrita, a verificação falha e é preciso repetir.
+  - **Roteiro da E07:** "mudança de status ao vivo" pode ser feita pela Governanta com `curl` em `POST /api/v1/rooms/{id}/housekeeping-status` (com `If-Match` do `GET .../status`), como faz o `LiveRoomMapCheck`.
+  - **Endurecimento para o M2:** `Authenticator.replaceIf` não confere o `sessionId` do par novo no refresh; `RoomMapState` inicia a assinatura no `init` dentro de `remember` (separar `start()`); o `LiveServerCheck` da E04 continua sem opt-in próprio (só `ZENY_LIVE_URL`).
+  - **Menores estacionados:** falha persistente da rebusca vira recarga silenciosa; uma leitura por mensagem em rajada da mesma UH; `CoreConnectionTest` não pega delegação trocada; recarga com ladrilhos sem indicador; data OOO não ISO aparece crua; `max-time` do `curl` além do prazo único da queda; dois "Tentar de novo" com desconectado + erro de detalhe; "Tipo N" pode colidir com tipo real de mesmo nome; `Error` inesperado no tempo real chega como erro de rede genérico; `id:` vazio no SSE não zera a posição (divergência documentada).
 
 ---
 
@@ -735,3 +759,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-11 — E03 `#concluida` (`claude --agent orquestrador`): design system no `design` e catálogo no `app`, revisão final limpa após a onda de correção.
 - 2026-11-12 — E04 `#concluida` (`claude --agent orquestrador`): login, troca de senha, casca com menu por permissão e diálogo de aprovação, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. Lote de 4 etapas encerrado.
 - 2026-11-12 — E05 `#concluida` (`claude --agent orquestrador`): `demo-seed` idempotente (10 s num ambiente recriado), JAR executável e `smokeTest`, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. H5 confirmada.
+- 2026-11-13 — E06 `#concluida` (`claude --agent orquestrador`): cliente SSE com reconexão no `core` e mapa de UHs ao vivo na área Governança; propagação medida de 17 a 52 ms no `core` e de 58 a 264 ms no ladrilho, e recuperação da queda do `api` verificada contra o `zeny-front`; revisão final limpa após a onda de correção. H4 não ocorreu. Critério "Outro (VALOR)" substituído por decisão do usuário (I7).
