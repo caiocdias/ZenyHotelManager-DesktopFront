@@ -2,15 +2,20 @@ package com.zeny.desktop.sdk
 
 import com.zeny.desktop.sdk.client.BillingApi
 import com.zeny.desktop.sdk.client.FNRHApi
+import com.zeny.desktop.sdk.client.FrontdeskApi
 import com.zeny.desktop.sdk.client.HotelApi
+import com.zeny.desktop.sdk.client.PrintingApi
 import com.zeny.desktop.sdk.client.ReservationsApi
 import com.zeny.desktop.sdk.client.RoomsApi
 import com.zeny.desktop.sdk.model.AddressDto
+import com.zeny.desktop.sdk.model.GuestResponse
 import com.zeny.desktop.sdk.model.HotelRequest
 import com.zeny.desktop.sdk.model.RegisterPreAuthorizationRequest
 import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpClientOgen
+import de.quati.ogen.client.ktor.ogenAuthAttr
+import de.quati.ogen.core.SecurityRequirementObject
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -18,7 +23,9 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestData
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.readRawBytes
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
@@ -29,6 +36,7 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
@@ -63,6 +71,19 @@ class SdkAttackTest {
                         *headers.map { it.first to listOf(it.second) }.toTypedArray(),
                     ),
                 )
+            }
+        val http = HttpClient(engine) { install(ContentNegotiation) { json(json) } }
+        return HttpClientOgen.Base(http, "http://servidor.teste", {}, json)
+    }
+
+    private fun bytesClient(
+        body: ByteArray,
+        contentType: String,
+    ): HttpClientOgen {
+        val engine =
+            MockEngine { request ->
+                requests += request
+                respond(body, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, contentType))
             }
         val http = HttpClient(engine) { install(ContentNegotiation) { json(json) } }
         return HttpClientOgen.Base(http, "http://servidor.teste", {}, json)
@@ -411,6 +432,61 @@ class SdkAttackTest {
             assertEquals(HttpStatusCode.NoContent, response.raw.status)
         }
 
+    // ---- Mudanças do contrato em 57eb5fac5b8a ----
+
+    // Caracterização: o método gerado devolve HttpResponseTyped<Any>; os bytes saem de raw, sem passar por JSON.
+    @Test
+    fun pdfOperationReturnsRawBytes() =
+        runBlocking {
+            val pdf = "%PDF-1.7\n".toByteArray() + byteArrayOf(0xFF.toByte(), 0x00, 0xE2.toByte())
+
+            val response = FrontdeskApi(bytesClient(pdf, "application/pdf")).getRegistrationCardPdf(someId)
+
+            assertContentEquals(pdf, response.raw.readRawBytes())
+            val request = requests.single()
+            assertEquals(HttpMethod.Get, request.method)
+            assertEquals("/api/v1/reservations/$id/registration-card/pdf", request.url.encodedPath)
+            assertTrue(
+                request.headers
+                    .getAll("Accept")
+                    .orEmpty()
+                    .any { it.contains("application/pdf") },
+            )
+        }
+
+    private fun guestJson(gender: String) =
+        """{"createdAt":"2026-11-10T13:00:00Z","documents":[],"fullName":"Maria","hasSensitiveData":false,""" +
+            """"id":"$id","preferences":{},"status":"ACTIVE","updatedAt":"2026-11-10T13:00:00Z","vip":false$gender}"""
+
+    @Test
+    fun guestResponseToleratesGenderDescription() {
+        fun decode(gender: String) = json.decodeFromString<GuestResponse>(guestJson(gender))
+
+        val some = decode(""","genderDescription":"Não binário"""")
+        val explicitNull = decode(""","genderDescription":null""")
+        val absent = decode("")
+
+        assertEquals(Option.Some("Não binário"), some.genderDescription)
+        assertEquals(Option.Some(null), explicitNull.genderDescription)
+        assertEquals(Option.Undefined, absent.genderDescription)
+        assertEquals(absent, some.copy(genderDescription = Option.Undefined))
+        assertEquals(absent, explicitNull.copy(genderDescription = Option.Undefined))
+    }
+
+    private fun securitySchemesOf(request: HttpRequestData) =
+        request.attributes[ogenAuthAttr].flatMap { it.requirements }.map { (it as SecurityRequirementObject.Http).name }
+
+    // Caracterização: o core não muda; o esquema printAgentToken só aparece nas operações do agente.
+    @Test
+    fun printAgentOperationsDeclarePrintAgentTokenScheme() =
+        runBlocking {
+            PrintingApi(client("{}")).prepareGetPrintAgentIdentity().execute()
+            HotelApi(client(hotelJson)).prepareGetHotel().execute()
+
+            assertEquals(listOf("printAgentToken"), securitySchemesOf(requests[0]))
+            assertEquals(listOf("bearerAuth"), securitySchemesOf(requests[1]))
+        }
+
     // ---- Cobertura do contrato ----
 
     @Test
@@ -427,8 +503,10 @@ class SdkAttackTest {
                 "Guests",
                 "Hotel",
                 "Iam",
+                "EndOfDay",
                 "Meta",
                 "Notifications",
+                "Printing",
                 "Rates",
                 "Reservations",
                 "Rooms",
@@ -445,7 +523,7 @@ class SdkAttackTest {
                 .flatMap { it.declaredMethods.toList() }
                 .filter { it.name.startsWith("prepare") && it.name.contains('$').not() }
 
-        assertEquals(303, contract)
+        assertEquals(335, contract)
         assertEquals(contract, methods.size)
         assertEquals(contract, prepares.size)
     }
