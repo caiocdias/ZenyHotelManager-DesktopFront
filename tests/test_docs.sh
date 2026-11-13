@@ -123,6 +123,31 @@ assert_contains "$leia" "JDK 25" "LEIA-ME: JDK 25"
 assert_not_contains "$leia" "copie-o para" "LEIA-ME: o demo-seed.jar já vem em app\\"
 assert_contains "$leia" 'java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login' "LEIA-ME: comando do seed"
 
+# Segredos do seed: nenhum valor digitado numa linha (o PSReadLine do 5.1 grava o histórico em texto puro);
+# cada senha vem do Get-Credential e o PIN do Read-Host -AsSecureString.
+leia_file="$ROOT/tools/server-env/LEIA-ME.md"
+for f in "$leia_file" "$roteiro"; do
+  n="${f#"$ROOT"/}"
+  assert_eq "" "$(grep -nE 'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[A-Z_]*["'"'"']?[[:space:]]*=' "$f" 2>/dev/null)" \
+    "$n: nenhuma atribuição a ZENY_SEED_*PASSWORD ou *_PIN"
+  assert_eq "" "$(grep -nE 'SetEnvironmentVariable\([^,]*ZENY_SEED_[^,]*,[[:space:]]*["'"'"']' "$f" 2>/dev/null)" \
+    "$n: SetEnvironmentVariable de ZENY_SEED_* sem valor literal"
+done
+for v in ADMIN_PASSWORD ADMIN_NEW_PASSWORD MANAGER_PASSWORD RECEPTIONIST_PASSWORD HOUSEKEEPER_PASSWORD; do
+  set_line="$(grep -E "SetEnvironmentVariable\\(\"ZENY_SEED_$v\"," "$leia_file" 2>/dev/null)"
+  assert_contains "$set_line" "(Get-Credential " "LEIA-ME: ZENY_SEED_$v vem do Get-Credential"
+  assert_contains "$set_line" ".GetNetworkCredential().Password, \"Process\")" "LEIA-ME: ZENY_SEED_$v só no processo"
+done
+pin_line="$(grep -E 'SetEnvironmentVariable\("ZENY_SEED_MANAGER_PIN",' "$leia_file" 2>/dev/null)"
+pin_var="$(grep -oE 'SecureStringToBSTR\(\$[A-Za-z_]+\)' <<<"$pin_line" | sed -E 's/.*\(\$//; s/\)$//')"
+if [[ -z "$pin_var" ]]; then
+  _assert_fail "LEIA-ME: ZENY_SEED_MANAGER_PIN vem de uma SecureString" "linha: $pin_line"
+else
+  assert_contains "$(grep -E "^\\\$$pin_var[[:space:]]*=" "$leia_file")" "Read-Host -AsSecureString" \
+    "LEIA-ME: o PIN é lido por Read-Host -AsSecureString"
+fi
+assert_contains "$leia" "ConsoleHost_history.txt" "LEIA-ME explica por que não digitar o valor"
+
 # README: link do roteiro e os JARs gerados antes do package.sh.
 assert_contains "$readme_text" "(docs/demo/roteiro-m1.md)" "README liga o roteiro do M1"
 pkg_row="$(grep -F '`tools/server-env/package.sh`' "$readme" | head -1)"

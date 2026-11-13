@@ -7,7 +7,7 @@ Antes de começar:
 - O pacote da demo está extraído numa pasta do Windows. O `LEIA-ME.md` e este `roteiro-m1.md` ficam na raiz dela; os JARs ficam em `app\`.
 - Docker Desktop e JDK 25 instalados (seção "Pré-requisitos" do `LEIA-ME.md`).
 - Todos os comandos são do Windows PowerShell 5.1, o que vem com o Windows, rodados a partir da pasta do pacote (`Set-Location <pasta do pacote>`), salvo onde o passo diz outra coisa.
-- As senhas dos usuários da demo são as que você escolheu no passo 1, ao rodar o `demo-seed.jar`. Elas nunca vão na linha de comando: o app pede a senha na tela, e o PowerShell, numa janela de credencial.
+- As senhas dos usuários da demo são as que você escolheu no passo 1, ao rodar o `demo-seed.jar`. Nenhuma senha nem o PIN são digitados numa linha de comando: o seed os recebe por janelas de credencial e por um prompt sem eco, o app pede a senha na tela e o passo 7 usa a janela do `Get-Credential`.
 
 Os usuários da demo:
 
@@ -21,8 +21,8 @@ Os usuários da demo:
 
 Comece com o servidor recém-criado e os dados da demo frescos.
 
-- **Primeira vez nesta máquina:** siga a seção "Primeira vez (com internet)" do `LEIA-ME.md` (gerar o `.env`, `build`, `up -d` e esperar o readiness). Depois, rode o `demo-seed.jar` como na seção "Parar e recriar a demo" (o bloco com as variáveis `$env:ZENY_SEED_*` e o `java -jar app\demo-seed.jar`). Na primeira vez, a senha inicial do administrador é a `ZENY_ADMIN_PASSWORD` do `.env`.
-- **Já usou a demo antes:** siga a seção "Parar e recriar a demo" do `LEIA-ME.md` inteira: `down -v` e `up -d`, espere o readiness com o `curl.exe` da seção "Primeira vez (com internet)" e rode o `demo-seed.jar` com as variáveis `$env:ZENY_SEED_*`.
+- **Primeira vez nesta máquina:** siga a seção "Primeira vez (com internet)" do `LEIA-ME.md` (gerar o `.env`, `build`, `up -d` e esperar o readiness). Depois, rode o `demo-seed.jar` como na seção "Parar e recriar a demo" (o bloco que define as variáveis `ZENY_SEED_*` pelas janelas de credencial e roda o `java -jar app\demo-seed.jar`). Na primeira vez, a senha inicial do administrador é a `ZENY_ADMIN_PASSWORD` do `.env`.
+- **Já usou a demo antes:** na seção "Parar e recriar a demo" do `LEIA-ME.md`, siga a parte "Recriar a demo do zero": `down -v` e `up -d`. Espere o readiness com o `curl.exe` da seção "Primeira vez (com internet)" e rode o `demo-seed.jar` com o bloco das variáveis `ZENY_SEED_*`. Depois do `down -v`, a senha inicial do administrador volta a ser a `ZENY_ADMIN_PASSWORD` do `.env`: é ela que vai na janela "Senha atual do administrador". A senha nova da rodada anterior não vale mais; usá-la ali gasta tentativas e pode bloquear o administrador (`ACCOUNT_LOCKED`).
 
 Logo depois do seed, confira o código de saída:
 
@@ -145,7 +145,7 @@ Com o mapa aberto, a Governanta marca a UH 106 (vaga e suja) como limpa a partir
 
 Abra uma segunda janela do PowerShell (pode ser em qualquer pasta) e rode os blocos abaixo em ordem, na mesma janela. Nos blocos, `curl` não é usado: no Windows PowerShell 5.1, `curl` é outro nome do `Invoke-WebRequest`. Os comandos usam `Invoke-RestMethod` e `Invoke-WebRequest -UseBasicParsing`.
 
-**7.1. Login da Governanta.** O `Get-Credential` abre uma janela de credencial com o usuário `governanta` já preenchido; digite ali a senha da Governança que você escolheu no seed.
+**7.1. Login da Governanta.** O `Get-Credential` abre uma janela de credencial com o usuário `governanta` já preenchido; digite ali a senha da Governança que você escolheu no seed. Se você cancelar a janela, aparecem erros em vermelho e o login não acontece: rode o bloco 7.1 inteiro de novo.
 
 ```powershell
 $base = "http://localhost:8088"

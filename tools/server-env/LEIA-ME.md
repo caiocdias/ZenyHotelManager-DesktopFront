@@ -66,18 +66,25 @@ docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.y
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env up -d
 ```
 
-Depois de recriar, popule os dados com o `demo-seed.jar`, que já vem na pasta `app\` deste pacote. Os segredos vão por variáveis de ambiente, não pela linha de comando (que fica no histórico do shell e na lista de processos). Senhas têm de 12 a 128 caracteres; o PIN do Gerente, de 4 a 8 dígitos. Para cada variável abaixo, escolha o seu próprio valor:
+Depois de recriar, popule os dados com o `demo-seed.jar`, que já vem na pasta `app\` deste pacote. Depois do `down -v`, a senha inicial do administrador volta a ser a `ZENY_ADMIN_PASSWORD` do `.env`, mesmo que uma execução anterior a tenha trocado.
+
+O seed lê os segredos de variáveis de ambiente (`$env:ZENY_SEED_ADMIN_PASSWORD` e as demais abaixo), nunca da linha de comando, que fica na lista de processos. O bloco abaixo pede cada valor numa janela de credencial ou num prompt sem eco. Não digite o valor numa linha do PowerShell (por exemplo, `$env:… =` com a senha): o PowerShell 5.1 grava em texto puro cada linha digitada no histórico (`ConsoleHost_history.txt`). Senhas têm de 12 a 128 caracteres; o PIN do Gerente, de 4 a 8 dígitos. Escolha os seus próprios valores; em cada janela, só a senha importa (o nome do usuário é só um rótulo):
 
 ```powershell
-$env:ZENY_SEED_ADMIN_PASSWORD = "<senha inicial do administrador>"
-$env:ZENY_SEED_ADMIN_NEW_PASSWORD = "<senha nova do administrador>"
-$env:ZENY_SEED_MANAGER_PASSWORD = "<senha do Gerente>"
-$env:ZENY_SEED_RECEPTIONIST_PASSWORD = "<senha da Recepção>"
-$env:ZENY_SEED_HOUSEKEEPER_PASSWORD = "<senha da Governança>"
-$env:ZENY_SEED_MANAGER_PIN = "<PIN do Gerente>"
+[Environment]::SetEnvironmentVariable("ZENY_SEED_ADMIN_PASSWORD", (Get-Credential -UserName administrador -Message "Senha atual do administrador").GetNetworkCredential().Password, "Process")
+[Environment]::SetEnvironmentVariable("ZENY_SEED_ADMIN_NEW_PASSWORD", (Get-Credential -UserName administrador -Message "Senha nova do administrador").GetNetworkCredential().Password, "Process")
+[Environment]::SetEnvironmentVariable("ZENY_SEED_MANAGER_PASSWORD", (Get-Credential -UserName gerente -Message "Senha do Gerente").GetNetworkCredential().Password, "Process")
+[Environment]::SetEnvironmentVariable("ZENY_SEED_RECEPTIONIST_PASSWORD", (Get-Credential -UserName recepcao -Message "Senha da Recepção").GetNetworkCredential().Password, "Process")
+[Environment]::SetEnvironmentVariable("ZENY_SEED_HOUSEKEEPER_PASSWORD", (Get-Credential -UserName governanta -Message "Senha da Governança").GetNetworkCredential().Password, "Process")
+$pin = Read-Host -AsSecureString "PIN do Gerente"
+[Environment]::SetEnvironmentVariable("ZENY_SEED_MANAGER_PIN", [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pin)), "Process")
+Remove-Variable pin
 java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login <login>
 ```
 
+- Troque `<login>` pelo `ZENY_ADMIN_LOGIN` do `.env`.
+- Se você cancelar uma janela de credencial, aparece um erro em vermelho e aquela variável não é definida: rode de novo só a linha dela antes do `java -jar`.
+- Ao terminar, feche este PowerShell ou apague as variáveis com `Remove-Item Env:ZENY_SEED_*`.
 - A primeira execução troca a senha inicial do administrador (que o servidor marca como provisória) para `ZENY_SEED_ADMIN_NEW_PASSWORD`. Nas seguintes, o programa entra direto com a senha nova.
 - Se não houver senha nova a definir, **omita** `ZENY_SEED_ADMIN_NEW_PASSWORD` (`Remove-Item Env:ZENY_SEED_ADMIN_NEW_PASSWORD`); não a deixe vazia.
 - Cuidado com tentativas erradas: senha do administrador errada repetida gasta as tentativas e bloqueia a conta; se a primeira execução falhar por senha, confira os valores antes de repetir.
