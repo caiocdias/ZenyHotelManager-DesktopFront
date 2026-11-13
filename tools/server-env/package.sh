@@ -70,7 +70,9 @@ for src in LEIA-ME.md .env.example gen-env.sh compose.override.yaml; do
 done
 
 # JAR mais antigo que o último commit no código dos JARs: avisa (o pacote sai mesmo assim).
-code_ct="$(git -C "$root" log -1 --format=%ct -- app core design sdk demo-seed gradle '*.kts')"
+# Testes (*/src/test/) não entram nos JARs: um commit só neles não torna um JAR velho.
+code_ct="$(git -C "$root" log -1 --format=%ct -- app core design sdk demo-seed gradle '*.kts' \
+  ':(exclude,glob)**/src/test/**')"
 # warn_if_stale JAR COMANDO
 warn_if_stale() {
   [[ -n "$code_ct" ]] || return 0

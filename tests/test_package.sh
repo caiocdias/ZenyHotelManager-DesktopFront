@@ -260,6 +260,26 @@ err="$(bash "$fo/tools/server-env/package.sh" 2>&1 >/dev/null)"
 assert_contains "$err" "zeny-desktop.jar" "commit em core/ depois do JAR: aviso cita zeny-desktop.jar"
 assert_contains "$err" "demo-seed.jar" "commit em core/ depois do JAR: aviso cita demo-seed.jar"
 
+# commits só em testes (*/src/test/) não entram nos JARs: JAR mais antigo que eles não gera aviso
+ft="$tmp/front-testes"
+jar_front "$ft"
+for f in app/src/test/kotlin/AppTest.kt core/src/test/kotlin/CoreTest.kt demo-seed/src/test/kotlin/SeedTest.kt; do
+  mkdir -p "$ft/${f%/*}"
+  echo "// $f" >"$ft/$f"
+  _fgit "$ft" add -- "$f" >/dev/null
+  GIT_COMMITTER_DATE=@1772323200 GIT_AUTHOR_DATE=@1772323200 _fgit "$ft" commit -q -m "teste $f" # 2026-03-01
+done
+touch -d @1769904000 "$ft/app/build/libs/zeny-desktop.jar" "$ft/demo-seed/build/libs/demo-seed.jar" # 2026-02-01
+err="$(bash "$ft/tools/server-env/package.sh" 2>&1 >/dev/null)"
+assert_eq "" "$err" "commit só em */src/test/ depois dos JARs: sem aviso"
+mkdir -p "$ft/app/src/main/kotlin"
+echo 'fun main() {}' >"$ft/app/src/main/kotlin/Main.kt"
+_fgit "$ft" add app/src/main >/dev/null
+GIT_COMMITTER_DATE=@1775001600 GIT_AUTHOR_DATE=@1775001600 _fgit "$ft" commit -q -m "código do app" # 2026-04-01
+err="$(bash "$ft/tools/server-env/package.sh" 2>&1 >/dev/null)"
+assert_contains "$err" "aviso: zeny-desktop.jar" "commit em app/src/main/ depois dos JARs: aviso para zeny-desktop.jar"
+assert_contains "$err" "aviso: demo-seed.jar" "commit em app/src/main/ depois dos JARs: aviso para demo-seed.jar"
+
 # --- de um worktree: JARs e commit do worktree, pacote no checkout principal ---
 fw="$tmp/front-wt"
 jar_front "$fw"
