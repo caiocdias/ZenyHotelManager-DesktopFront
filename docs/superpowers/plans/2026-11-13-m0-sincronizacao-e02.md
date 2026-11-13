@@ -26,10 +26,10 @@
 ## Review Focus
 
 1. **Resposta `application/pdf`:** `getRegistrationCardPdf` (e as outras duas rotas de PDF) devolvem bytes crus; um método gerado que tente decodificar JSON quebraria a M2 E07 sem aviso. Teste de caracterização na Task 1 (`pdfOperationReturnsRawBytes`).
-2. **`genderDescription` presente, ausente e `null`:** o `core` e o `demo-seed` leem `GuestResponse` do servidor novo; o campo novo não pode quebrar a leitura de respostas antigas nem novas. Teste na Task 1 (`guestResponseToleratesGenderDescription`).
-3. **Cobertura do SDK com as tags novas (`Printing`, `end-of-day`):** a contagem de 335 só fecha se as classes geradas das tags novas entrarem na lista. Teste existente atualizado na Task 1.
-4. **`docker/gate/` no `git archive`:** `save-images.sh` não pode gravar imagens do `compose.gate.yaml` (`zeny-hotel-manager:gate`, WireMock). Teste na Task 2 (`save-images ignora docker/gate`).
-5. **Pacote com `docker/gate/`:** `package.sh` continua gerando o pacote com o override e o `LEIA-ME` só sobre `docker/compose.yaml`, mesmo com `docker/gate/` presente na árvore do servidor. Teste na Task 2 (`pacote com docker/gate`).
+2. **`printAgentToken` × `AuthPlugin`/`ApiExecutor`:** o `core` trata qualquer `ogenAuthAttr` não vazio como `bearerAuth` (`core/.../session/AuthPlugin.kt:34`, `core/.../http/ApiExecutor.kt:81-87`); nas 5 operações `/print-agents/me/*` o atributo passa a ser `printAgentToken`, e um `401` ali encerraria a sessão do usuário. Ninguém chama essas operações (ADR 0009). Teste de caracterização na Task 1 (`printAgentOperationsDeclarePrintAgentTokenScheme`); o `core` não muda nesta etapa (ruling R4 no ledger: o defeito latente vai para o handoff, para a M7 E12 e para "Decisões para o usuário"; a frase do ADR 0007 sobre o `ogenAuthAttr` fica para o arquiteto).
+3. **`genderDescription` presente, ausente e `null`:** o `demo-seed` lê `GuestResponse` do servidor novo (`createGuest`, `SdkBookingGateway.kt:103-125`, pelo executor do `core`); o campo novo não pode quebrar a leitura de respostas antigas nem novas. Teste na Task 1 (`guestResponseToleratesGenderDescription`).
+4. **Cobertura do SDK com as tags novas (`Printing`, `end-of-day`):** a contagem de 335 só fecha se as classes geradas das tags novas entrarem na lista. Teste existente atualizado na Task 1.
+5. **`docker/gate/` no `git archive`:** `save-images.sh` não pode gravar imagens do `compose.gate.yaml` (`zeny-hotel-manager:gate`, WireMock), e o pacote continua só sobre `docker/compose.yaml`. Testes na Task 2 (`save-images ignora docker/gate` e `pacote com docker/gate`).
 
 ---
 
@@ -68,14 +68,15 @@ Expected: `BUILD SUCCESSFUL`. Se falhar por `application/pdf`/`format: binary` o
 
 - [ ] **Step 5: Testes de caracterização das mudanças do contrato**
 
-No `SdkAttackTest`, no estilo dos testes de MockEngine já existentes (`client(body, status)`):
-- `pdfOperationReturnsRawBytes`: chame o método gerado de `getRegistrationCardPdf` com um id qualquer, com o mock respondendo `200`, `Content-Type: application/pdf` e o corpo `"%PDF-1.7\n%âãÏÓ\n"` em bytes (inclua bytes fora de UTF-8 válido, por exemplo `0xFF 0x00`); assert: os bytes obtidos pelo meio público que o método gerado oferece (corpo tipado ou `raw`) são iguais aos enviados, e a requisição foi `GET /api/v1/reservations/{id}/registration-card/pdf`. Se o método gerado não der acesso aos bytes sem passar por JSON (falha de desserialização), **não commite o teste**: termine como DONE_WITH_CONCERNS, cole a saída e diga o que o método gerado expõe. Isso não bloqueia a etapa; vira nota para a M2 E07.
-- `guestResponseToleratesGenderDescription`: desserialize, pelo `Json` que o SDK usa, um `GuestResponse` com `"genderDescription": "Não binário"`, um com `"genderDescription": null` e um sem a chave; assert: o campo vale `"Não binário"`, `null` e `null`, e os demais campos lidos são iguais nos três.
+No `SdkAttackTest`, no estilo dos testes de MockEngine já existentes:
+- `pdfOperationReturnsRawBytes`: acrescente um helper de mock que responda com `ByteArray` (o `client(body: String, …)` atual recodifica a string em UTF-8 e não serve). Chame o método gerado de `getRegistrationCardPdf` com um id qualquer, com o mock respondendo `200`, `Content-Type: application/pdf` e o corpo `"%PDF-1.7\n".toByteArray() + byteArrayOf(0xFF.toByte(), 0x00, 0xE2.toByte())`; assert: os bytes lidos de `raw` (como no precedente `downloadFileContent`, que sai como `HttpResponseTyped<Any>`) são iguais aos enviados, a requisição foi `GET /api/v1/reservations/{id}/registration-card/pdf` e levou `Accept` com `application/pdf`. Se o método gerado não der acesso aos bytes sem passar por JSON (falha de desserialização), **não commite o teste**: termine como DONE_WITH_CONCERNS, cole a saída e diga o que o método gerado expõe. Isso não bloqueia a etapa; vira nota para a M2 E07.
+- `guestResponseToleratesGenderDescription`: desserialize, pelo `Json` que o SDK usa, um `GuestResponse` com `"genderDescription": "Não binário"`, um com `"genderDescription": null` e um sem a chave. Pela "Forma de uso" do ADR 0007 (campo opcional → `Option<T?>`, como no teste `nullableExtensibleEnumDistinguishesAbsentNullAndUnknownValue`), assert: `Option.Some("Não binário")`, `Option.Some(null)` e `Option.Undefined`, e os demais campos lidos são iguais nos três. Se o ogen gerar outro tipo para o campo, cole a assinatura gerada no relatório antes de ajustar a asserção.
+- `printAgentOperationsDeclarePrintAgentTokenScheme`: leia o `ogenAuthAttr` (o atributo de segurança que o método `prepare*` grava na requisição) de `prepareGetPrintAgentIdentity` (ou do `prepare*` gerado para `GET /api/v1/print-agents/me/identity`) e de uma operação comum já testada (por exemplo, de `HotelApi`); assert: o primeiro cita o esquema `printAgentToken` e não `bearerAuth`; o segundo cita `bearerAuth`. É caracterização: o `core` não muda (Review Focus 2).
 
 - [ ] **Step 6: Rode os testes do SDK**
 
 Run: `./gradlew :sdk:test`
-Expected: `BUILD SUCCESSFUL`, com os testes do Step 1 e do Step 5 passando.
+Expected: `BUILD SUCCESSFUL`, com os testes do Step 1 e do Step 5 passando. Se a contagem de métodos não fechar com 335 (por exemplo, `getPrintJobContent`, que declara `application/octet-stream` e `application/pdf`, gerando mais de um método), **pare** e devolva DONE_WITH_CONCERNS com as assinaturas geradas: o filtro do teste não pode ser afrouxado sem ruling (é o critério 1 do ADR 0007).
 
 - [ ] **Step 7: Build inteiro e conserto mínimo**
 
@@ -120,14 +121,14 @@ Expected: só `docker/gate/` e `docker/prometheus/alerts.yaml` mudaram; o `diff`
 
 - [ ] **Step 2: Testes novos (vermelho primeiro, se couber)**
 
-Em `tests/test_package.sh`, faça o servidor falso ter `docker/gate/compose.gate.yaml` com `image: zeny-hotel-manager:gate` e `image: wiremock/wiremock:3.13.1` (e um `docker/gate/README.md`), e acrescente:
+Não altere a fixture compartilhada `make_fake_server` (`tests/lib/fixtures.sh`), que serve a cerca de 15 arquivos, entre eles o do pré-voo. Monte o gate só dentro de `tests/test_package.sh`: um commit extra no servidor falso com `docker/gate/compose.gate.yaml` (com `image: zeny-hotel-manager:gate` e `image: wiremock/wiremock:3.13.1`) e um `docker/gate/README.md`, seguido de um repin do front falso nesse commit, ou um segundo servidor falso, como em `tests/test_package_ataque.sh:235`. Acrescente:
 - `save-images ignora docker/gate`: com o stub de imagens presentes, a linha do `docker save` não contém `zeny-hotel-manager:gate` nem `wiremock`, e continua com as quatro imagens de `docker/compose.yaml`.
 - `pacote com docker/gate`: `package.sh` sai com 0; `server/docker/gate/` está no pacote (vem do `git archive`); o `compose.override.yaml` do pacote e o `LEIA-ME.md` não citam `gate`.
 Se os casos já passarem sem mudança de script (o esperado), registre no relatório que são testes de regressão que confirmam o comportamento, com a saída.
 
 - [ ] **Step 3: Confira o compose real**
 
-Com o pin novo, monte a árvore e a configuração efetiva sem subir nada: use as funções de `tools/server-env/lib.sh` (`ensure_server_tree` e o `compose config`) e confirme no resultado: projeto `zeny-front`, imagem `zeny-hotel-manager:57eb5fac5b8a`, porta 8088, nenhum serviço do `compose.gate.yaml`. Cite o comando e as linhas.
+Com o pin novo, monte a árvore e a configuração efetiva sem subir nada, pelas funções de `tools/server-env/lib.sh` (`ensure_server_tree` e `compose`). **A função `compose` passa o `.env` real (`--env-file .server/zeny-front.env`), e `docker compose config` interpola chaves e senhas: nunca rode `config` sem filtro nem cole a saída inteira.** Use só saídas sem valores: `compose config --services` e `compose config --images`, e, para o projeto e a porta, `compose config --format json` filtrado por `python3 -I` só nos campos `name` e `services.proxy.ports` (como em `tests/test_package.sh:271-276`). Confirme: projeto `zeny-front`, imagem `zeny-hotel-manager:57eb5fac5b8a`, porta 8088, nenhum serviço do `compose.gate.yaml`. Cite os comandos e só essas saídas filtradas.
 
 - [ ] **Step 4: Documentação**
 
@@ -146,10 +147,11 @@ git commit -m "Confirma que docker/gate do servidor não entra no ambiente nem n
 
 ## Verificação da etapa (orquestrador, depois da revisão final)
 
-Não é tarefa de implementação: são comandos do projeto que o orquestrador roda e registra no handoff. Falha vira rodada de correção do desenvolvedor.
+Não é tarefa de implementação: são comandos do projeto que o orquestrador roda e registra no handoff. Falha vira rodada de correção do desenvolvedor, e a correção passa pela verificação mecânica, pela revisão de tarefa e pela re-revisão final antes de a etapa fechar.
 
 1. `tools/server-drift.sh` → "igual" (código 0) se a `main` do servidor ainda estiver em `57eb5fac5b8a`; senão, registrar a saída, com o pin mantido.
 2. Snapshot do servidor (`status --porcelain` e `worktree list`) igual ao do início.
-3. Ambiente: com `MemAvailable` ≥ 6 GiB (esperar e tentar de novo se faltar; sem memória, registrar e passar a subida ao Windows na parada), `tools/server-env/down.sh -v`, `tools/server-env/up.sh` (constrói `zeny-hotel-manager:57eb5fac5b8a`), readiness `UP`, administrador inicial e `smokeTest` com os segredos de `.server/seed-secrets.env` e do `.env` (`./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`); depois, o seed da demo como no roteiro.
-4. Pacote: JARs (`./gradlew :app:desktopJar :demo-seed:seedJar`), `tools/server-env/package.sh` e `tools/server-env/save-images.sh`, com o `VERSAO.txt` citando o servidor `57eb5fac5b8a`.
-5. Parada humana: o usuário executa `roteiro-m1.md` no Windows com o pacote novo e aprova.
+3. Pedidos: `git diff main -- docs/pedidos-servidor.md` sem mudança de estado de `PF-NN` (não há `PF-NN`; a branch só traz a tabela da rodada 2 da análise).
+4. Ambiente: com `MemAvailable` ≥ 6 GiB (esperar e tentar de novo se faltar), `tools/server-env/down.sh -v`, `tools/server-env/up.sh` (constrói `zeny-hotel-manager:57eb5fac5b8a`), readiness `UP`, administrador inicial e `smokeTest` com os segredos de `.server/seed-secrets.env` e do `.env` (`./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`); depois, o seed da demo como no roteiro. **Sem memória no notebook:** registrar; a subida vai ao Windows na parada, e o `smokeTest` roda do notebook contra `http://<IP do Windows>:8088` (como a M1 E05 previu), com os segredos `ZENY_SEED_*` daquele ambiente.
+5. Pacote: JARs (`./gradlew :app:desktopJar :demo-seed:seedJar`) e `tools/server-env/package.sh`, com o `VERSAO.txt` citando o servidor `57eb5fac5b8a`. `tools/server-env/save-images.sh` só se a imagem `zeny-hotel-manager:57eb5fac5b8a` existir no notebook; senão, registrar que as imagens são salvas depois do build no Windows.
+6. Parada humana: o usuário executa `roteiro-m1.md` no Windows com o pacote novo e aprova.
