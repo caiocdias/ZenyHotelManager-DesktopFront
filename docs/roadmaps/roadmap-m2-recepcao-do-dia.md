@@ -183,7 +183,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Painel do dia e detalhe da reserva | #pendente | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
+| E01 | Painel do dia e detalhe da reserva | #em-andamento | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
 | E02 | Alocação de UH e check-in | #pendente | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
@@ -193,7 +193,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Painel do dia e detalhe da reserva — #pendente
+## E01 — Painel do dia e detalhe da reserva — #em-andamento
 
 **Objetivo:** a área Recepção abre num painel com três abas: chegadas, saídas e hospedados da data operacional. Cada aba mostra contagem, busca local e status. Clicar numa reserva abre o detalhe: hóspede titular (documento mascarado), período, tipo e UH alocada, plano, situação, alocações e histórico.
 
