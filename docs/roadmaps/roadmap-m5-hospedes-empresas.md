@@ -1,6 +1,6 @@
 # Roadmap — M5 Hóspedes e empresas
 
-> Arquivo: `docs/roadmaps/roadmap-m5-hospedes-empresas.md` · branch de execução: `roadmap/m5-hospedes-empresas` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m5-hospedes-empresas.md` · branch de execução: `roadmap/m5-hospedes-empresas` · criado em 2026-11-10 · última revisão 2026-11-13
 
 > **Pré-requisito:** a etapa E05 ("Gate do marco M4") de `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -46,7 +46,9 @@ O app passa a cuidar do cadastro de hóspedes e empresas com LGPD de verdade:
   - revelar exige permissão e fica na trilha;
   - mesclagem repõe as reservas;
   - anonimização é recusada com estadia ativa e exige aprovação;
-  - anexos sensíveis são cifrados e servidos por URL assinada de curta duração.
+  - anexos sensíveis são cifrados e servidos por URL assinada de curta duração;
+  - **descrição do gênero** (desde o pin `57eb5fac5b8a`, M5 E15 do servidor): `genderDescription` em `GuestProfileRequest` e `GuestResponse`, exigida pela FNRH quando o gênero é `OTHER`. É dado pessoal gravado cifrado, recusado com outro gênero (`400 GENDER_DESCRIPTION_REQUIRES_OTHER_GENDER`) e apagado quando o gênero muda sem reenviá-la. Na mesclagem, acompanha o gênero (`GENDER`);
+  - o servidor envia à FNRH de forma assíncrona e revalida os hóspedes a cada tentativa: um perfil editado depois do check-in pode deixar a submissão `INVALID` (decisão E08 (d) do servidor). A fila é da M7 E10.
 
   As fontes são a ARCHITECTURE §8.3, a nota do brain `ZenyHotelManager - Módulo files` e as notas de hóspedes ligadas ao hub do servidor, além dos gates do M3 e do M4 do servidor.
 - **Design:** [`docs/superpowers/specs/2026-11-10-front-desktop-design.md`](../superpowers/specs/2026-11-10-front-desktop-design.md), §6.2 (LGPD no cliente) e §6.4 (`ZENY_STORAGE_PUBLIC_ENDPOINT` para as URLs assinadas).
@@ -68,8 +70,7 @@ O app passa a cuidar do cadastro de hóspedes e empresas com LGPD de verdade:
 
 **Fora de escopo:**
 
-- envio à FNRH, que o servidor ainda não faz (M5 E08 dele, pendente);
-- configuração da FNRH (M7);
+- configuração da FNRH e a fila de envio (lista, reenvio e encerramento das submissões), na M7 E10;
 - anonimização por prazo, que é job do servidor no M10.
 
 ## Restrições e invariantes
@@ -226,6 +227,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
   - `POST /api/v1/files`, `GET /api/v1/files/{id}/download-url` e `/content`.
 - **Consentimentos:** `GET`/`POST /api/v1/guests/{id}/consents` e `/revoke`.
 - **Seleções da FNRH:** valores de `GET /api/v1/fnrh/domains/{domain}` (H1).
+- **Descrição do gênero:** campo `genderDescription` na aba de dados, visível e exigido só com o gênero `OTHER`. Ao trocar o gênero, o campo some e a tela avisa que a descrição será apagada.
 
 **Fora de escopo:** mesclagem (E02) e exportação e anonimização (E03).
 
@@ -236,6 +238,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 - [ ] A revelação aparece na trilha de auditoria do servidor, conferida por `curl` em `GET /api/v1/audit-entries` como administrador.
 - [ ] O anexo enviado aparece no perfil e abre pelo download assinado contra `zeny-front`.
 - [ ] Os dados sensíveis gravados não aparecem em nenhuma listagem.
+- [ ] Gênero `OTHER` com descrição grava e reaparece no perfil. Mandar descrição com outro gênero mostra em pt-BR a recusa `GENDER_DESCRIPTION_REQUIRES_OTHER_GENDER`, sem `code` cru. A descrição não vai para log nem para cache (teste do *state holder*).
 
 **Validação obrigatória:**
 
@@ -453,3 +456,4 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
+- 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E01 ganha a descrição do gênero (`genderDescription`). "Fora de escopo" foi corrigido: o servidor já envia à FNRH, e a fila vai para a M7 E10. A M6 E17 do servidor, ainda pendente, vai reduzir o corpo das respostas de `restrict`, `lift-restriction` e `merge` para quem não tem `guests.profiles.read`. A E02 deve reler o contrato na rodada do M0 que vier antes deste marco. Nenhuma tag mudou.

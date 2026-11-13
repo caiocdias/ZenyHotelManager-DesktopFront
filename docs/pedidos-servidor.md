@@ -41,3 +41,11 @@ A resposta do servidor é a captura de fechamento da etapa dele, que cita **"ate
 
 | PF-NN | título | estado | captura | etapa do front | commit de entrega |
 |---|---|---|---|---|---|
+
+## Rodadas de análise do M0
+
+Registro de cada análise do M0: pedidos atendidos, pedidos novos e o que o servidor entregou por conta própria e que o front aguarda.
+
+| Rodada | Data | Servidor analisado | Pedidos atendidos | Pedidos novos | Observações |
+|---|---|---|---|---|---|
+| 2 | 2026-11-13 | `57eb5fac5b8a` (pin anterior `ca9f9e2f9808`) | nenhum: não havia `PF-NN`, e nenhuma captura do brain cita "atende PF-NN" | nenhum | O servidor entregou sem pedido a FNRH assíncrona, os documentos em PDF, a impressão e o motor do fechamento, distribuídos nos marcos pelo [ADR 0009](adr/0009-documentos-pdf-e-impressao.md) e pela M0 E02. Ficam esperando o próprio roadmap do servidor, sem pedido: as etapas do fechamento (M6 E11 dele), que desbloqueiam a M6 E08 do front, e os rótulos da FNRH na ficha (M6 E15 dele) |

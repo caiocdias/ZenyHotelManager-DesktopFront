@@ -1,6 +1,6 @@
 # Roadmap — M4 Contas, caixa e check-out
 
-> Arquivo: `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` · branch de execução: `roadmap/m4-contas-caixa-checkout` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` · branch de execução: `roadmap/m4-contas-caixa-checkout` · criado em 2026-11-10 · última revisão 2026-11-13
 
 > **Pré-requisito:** a etapa E05 ("Gate do marco M3") de `docs/roadmaps/roadmap-m3-reservas.md` está `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -19,7 +19,8 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
   - **contas:**
     - `GET /api/v1/folios`, `GET /api/v1/folios/{id}` e `PUT /api/v1/folios/{id}` (pagador e limite de crédito);
     - `POST /api/v1/folios/{id}/close` e `/reopen`;
-    - `GET /api/v1/folios/{id}/statement`.
+    - `GET /api/v1/folios/{id}/statement`;
+    - `GET /api/v1/folios/{id}/statement/pdf` (desde o pin `57eb5fac5b8a`, M0 E02), o mesmo extrato em PDF A4, com `audience` (padrão `GUEST`) e `billing.folios.read`. O `POST …/statement/print` (fila do servidor) é da M7 E12 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)).
   - **lançamentos:**
     - `GET`/`POST /api/v1/folios/{id}/postings`;
     - `POST /api/v1/folios/{id}/postings/{postingId}/reverse`, `/adjust`, `/split` e `/remove-service-charge`;
@@ -60,7 +61,7 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 - pagamentos e reembolsos manuais;
 - cauções;
 - check-out;
-- extrato;
+- extrato, na tela e em PDF, no visualizador da M2 E07;
 - seed ampliado;
 - roteiro do M4.
 
@@ -68,7 +69,8 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 
 - cadastro de pontos de caixa, códigos de lançamento e regras de roteamento (M7);
 - Pix e cartão integrados, TEF e fiscal (M7 e M8 do servidor, ainda não existem);
-- impressão do extrato (servidor M5 E11, pendente).
+- envio do extrato pela fila de impressão do servidor (M7 E12). O PDF e a impressão local entram na E02 (ADR 0009);
+- fechamento do dia, que lança as diárias (M6 E08, depois da M6 E11 do servidor).
 
 ## Restrições e invariantes
 
@@ -259,7 +261,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - `/reverse`, `/adjust`, `/split` e `/remove-service-charge` em `POST /api/v1/folios/{id}/postings/{postingId}/…`;
   - `POST /api/v1/folios/{id}/postings/transfer`.
 - **Códigos de lançamento:** `GET /api/v1/transaction-codes`.
-- **Extrato:** `GET /api/v1/folios/{id}/statement`.
+- **Extrato:** `GET /api/v1/folios/{id}/statement` na tela e `GET /api/v1/folios/{id}/statement/pdf` no visualizador da M2 E07 (em memória, "Salvar como…" e impressão local, ADR 0009), com a mesma escolha de `audience`.
 - **Aprovação de superior:** diálogo onde o servidor exigir.
 - **Atalho:** "Conta" no detalhe da reserva.
 
@@ -274,6 +276,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Estornar como Recepcionista sem permissão abre o diálogo de aprovação. Aprovado pelo Gerente, o estorno aparece como lançamento novo, sem apagar o original.
 - [ ] Duplo clique em "lançar" gera um só lançamento (teste com a mesma `Idempotency-Key`).
 - [ ] O extrato `GUEST` não mostra os lançamentos internos que o servidor omite.
+- [ ] O extrato em PDF abre no visualizador com o mesmo saldo do extrato na tela, para `GUEST` e para `INTERNAL`, e nenhum arquivo é criado sem "Salvar como…".
 - [ ] Um tipo de lançamento desconhecido aparece como "Outro (VALOR)".
 
 **Validação obrigatória:**
@@ -461,3 +464,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
+- 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`): a E02 ganha o extrato em PDF, no visualizador da M2 E07 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)). A impressão pela fila do servidor fica com a M7 E12, e o fechamento do dia com a M6 E08. Nenhuma tag mudou.
