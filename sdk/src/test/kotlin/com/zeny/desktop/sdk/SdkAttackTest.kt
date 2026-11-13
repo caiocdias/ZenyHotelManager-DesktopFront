@@ -8,6 +8,7 @@ import com.zeny.desktop.sdk.client.PrintingApi
 import com.zeny.desktop.sdk.client.ReservationsApi
 import com.zeny.desktop.sdk.client.RoomsApi
 import com.zeny.desktop.sdk.model.AddressDto
+import com.zeny.desktop.sdk.model.GuestProfileRequest
 import com.zeny.desktop.sdk.model.GuestResponse
 import com.zeny.desktop.sdk.model.HotelRequest
 import com.zeny.desktop.sdk.model.RegisterPreAuthorizationRequest
@@ -453,6 +454,84 @@ class SdkAttackTest {
                     .any { it.contains("application/pdf") },
             )
         }
+
+    // Todos os 256 valores de byte, incluindo sequências que não são UTF-8 válido: qualquer decodificação
+    // textual ou JSON no caminho trocaria bytes por U+FFFD e o teste ficaria vermelho.
+    private val everyByte =
+        "%PDF-1.7\n".toByteArray() + ByteArray(256) { it.toByte() } + ByteArray(70_000) { (it * 31).toByte() }
+
+    @Test
+    fun confirmationPdfOperationReturnsRawBytes() =
+        runBlocking {
+            val response =
+                ReservationsApi(
+                    bytesClient(everyByte, "application/pdf"),
+                ).getReservationConfirmationPdf(someId)
+
+            assertContentEquals(everyByte, response.raw.readRawBytes())
+            assertEquals("/api/v1/reservations/$id/confirmation/pdf", requests.single().url.encodedPath)
+        }
+
+    @Test
+    fun folioStatementPdfOperationReturnsRawBytes() =
+        runBlocking {
+            val response = BillingApi(bytesClient(everyByte, "application/pdf")).getFolioStatementPdf(someId)
+
+            assertContentEquals(everyByte, response.raw.readRawBytes())
+            assertEquals("/api/v1/folios/$id/statement/pdf", requests.single().url.encodedPath)
+        }
+
+    @Test
+    fun printJobContentReturnsRawBytesForBothMediaTypes() =
+        runBlocking {
+            for (type in listOf("application/pdf", "application/octet-stream")) {
+                val response = PrintingApi(bytesClient(everyByte, type)).getPrintJobContent(someId)
+
+                assertContentEquals(everyByte, response.raw.readRawBytes(), type)
+            }
+            assertTrue(requests.all { it.url.encodedPath == "/api/v1/print-agents/me/jobs/$id/content" })
+        }
+
+    @Test
+    fun pdfOperationWithEmptyBodyReturnsNoBytes() =
+        runBlocking {
+            val response = FrontdeskApi(bytesClient(ByteArray(0), "application/pdf")).getRegistrationCardPdf(someId)
+
+            assertEquals(0, response.raw.readRawBytes().size)
+        }
+
+    @Test
+    fun pdfOperationSendsNoRequestBody() =
+        runBlocking {
+            FrontdeskApi(bytesClient(everyByte, "application/pdf")).getRegistrationCardPdf(someId)
+
+            val request = requests.single()
+            assertEquals(HttpMethod.Get, request.method)
+            assertTrue(request.body is OutgoingContent.NoContent)
+        }
+
+    @Test
+    fun guestProfileRequestOmitsGenderDescriptionWhenUndefined() {
+        val strict = Json { encodeDefaults = false }
+        val profile = GuestProfileRequest(fullName = "Maria", vip = false)
+
+        assertEquals(Option.Undefined, profile.genderDescription)
+        assertTrue("genderDescription" !in strict.encodeToString(GuestProfileRequest.serializer(), profile))
+    }
+
+    @Test
+    fun guestProfileRequestDistinguishesNullFromTextWhenSerializing() {
+        val strict = Json { encodeDefaults = false }
+
+        fun encode(value: Option<String?>) =
+            strict.encodeToString(
+                GuestProfileRequest.serializer(),
+                GuestProfileRequest(fullName = "Maria", vip = false, genderDescription = value),
+            )
+
+        assertTrue(""""genderDescription":"Não binário"""" in encode(Option.Some("Não binário")))
+        assertTrue(""""genderDescription":null""" in encode(Option.Some(null)))
+    }
 
     private fun guestJson(gender: String) =
         """{"createdAt":"2026-11-10T13:00:00Z","documents":[],"fullName":"Maria","hasSensitiveData":false,""" +
