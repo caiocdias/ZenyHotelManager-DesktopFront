@@ -65,7 +65,7 @@ Rename-Item C:\zeny-demo zeny-demo-antiga
 
 **Resultado esperado:** o prompt volta a `PS C:\>` sem mensagem em vermelho, e a pasta antiga passa a se chamar `C:\zeny-demo-antiga`. Uma mensagem em vermelho dizendo que a pasta está em uso quer dizer que algo ainda está aberto nela: feche e rode de novo. Se `C:\zeny-demo-antiga` também já existe, renomeie-a antes no Explorador de Arquivos, com qualquer outro nome. Se `C:\zeny-demo` não existe, pule este bloco.
 
-Crie a pasta nova e vazia `C:\zeny-demo` e copie para dentro dela **todo o conteúdo** da pasta do pacote: as pastas `app`, `images` e `server` e os arquivos.
+Crie a pasta nova e vazia `C:\zeny-demo` e copie para dentro dela **todo o conteúdo** da pasta do pacote (a que veio do notebook, não a `zeny-demo-antiga`): as pastas `app`, `images` e `server` e os arquivos.
 
 No PowerShell, entre na pasta:
 
@@ -115,7 +115,7 @@ O `.env` guarda os segredos do servidor: chaves de cifragem, a senha inicial do 
 docker run --rm -v "${PWD}:/w" -w /w alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f sh -c "apk add --no-cache bash openssl >/dev/null && bash gen-env.sh --public-endpoint http://localhost:8088 .env"
 ```
 
-**Resultado esperado:** na primeira vez, o Docker baixa a imagem do Alpine (linhas `Pulling from library/alpine` e `Downloaded newer image`). No fim, aparece `Gerado .env (segredos: ZENY_ENCRYPTION_KEYS, ZENY_JWT_KEYS, ZENY_ADMIN_PASSWORD, ZENY_STORAGE_ROOT_PASSWORD, ZENY_STORAGE_SECRET_KEY)`. Se aparecer também `gen-env: aviso: não foi possível aplicar chmod 600`, não é erro no Windows.
+**Resultado esperado:** na primeira vez, o Docker baixa a imagem do Alpine (linhas `Pulling from library/alpine` e `Downloaded newer image`). Depois aparecem duas linhas longas de pontos e `+`: é o progresso da geração da chave, não é erro. No fim, aparece `Gerado .env (segredos: ZENY_ENCRYPTION_KEYS, ZENY_JWT_KEYS, ZENY_ADMIN_PASSWORD, ZENY_STORAGE_ROOT_PASSWORD, ZENY_STORAGE_SECRET_KEY)`. Se aparecer também `gen-env: aviso: não foi possível aplicar chmod 600`, não é erro no Windows.
 
 Guarde uma cópia do `.env` fora da pasta (num pendrive ou no gerenciador de senhas). A chave de cifragem e as senhas internas valem enquanto os volumes existirem; perder o `.env` inutiliza os dados da demo.
 
@@ -137,7 +137,7 @@ Suba o servidor:
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env up -d
 ```
 
-**Resultado esperado:** linhas `Network zeny-front_default  Created`, `Volume "zeny-front_…"  Created` e `Container zeny-front-…` com `Started` ou `Healthy`, sem `Error`. O prompt volta.
+**Resultado esperado:** linhas `Network zeny-front_default  Created`, `Volume zeny-front_…  Created` e `Container zeny-front-…` com `Started` ou `Healthy`, sem `Error`. O prompt volta.
 
 Espere o servidor ficar pronto. Rode o comando abaixo e repita a cada 15 segundos até aparecer `{"status":"UP"}`. É `curl.exe`, com `.exe`: no Windows PowerShell 5.1, `curl` sozinho é outro comando.
 
@@ -145,7 +145,7 @@ Espere o servidor ficar pronto. Rode o comando abaixo e repita a cada 15 segundo
 curl.exe -fsS http://localhost:8088/actuator/health/readiness
 ```
 
-**Resultado esperado:** enquanto o servidor sobe, aparece `curl: (7) Failed to connect …` ou `curl: (22) The requested URL returned error: 502` (ou `503`); isso é normal. Em 1 a 3 minutos (o tempo varia), aparece `{"status":"UP"}`.
+**Resultado esperado:** enquanto o servidor sobe, aparece uma mensagem de falha do `curl`, como `curl: (56) Recv failure: Connection reset by peer`, `curl: (7) Failed to connect …` ou `curl: (22) The requested URL returned error: 502` (ou `503`); isso é normal. Em 1 a 3 minutos (o tempo varia), aparece `{"status":"UP"}`.
 
 ## 4. Login e senha inicial do administrador
 

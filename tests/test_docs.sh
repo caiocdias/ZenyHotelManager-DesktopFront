@@ -159,6 +159,14 @@ step2="$(rot_section "## 2. ")"
 for word in "ZENY_STORAGE_PUBLIC_ENDPOINT" "--force" "fora da pasta" "libere a porta 8088 no firewall do Windows"; do
   assert_contains "$step2" "$word" "roteiro, passo 2: cita $word"
 done
+# Saídas reais conferidas na execução do zero (5b): o pacote a copiar é o do notebook; o gen-env imprime o
+# progresso do openssl; a readiness pode começar em (56); o up -d escreve o volume sem aspas.
+assert_contains "$step1" "(a que veio do notebook, não a \`zeny-demo-antiga\`)" "roteiro, passo 1: copia o pacote do notebook, não a antiga"
+assert_contains "$step2" "duas linhas longas de pontos e \`+\`" "roteiro, passo 2: o progresso do openssl é esperado"
+step3="$(rot_section "## 3. ")"
+assert_contains "$step3" "curl: (56) Recv failure: Connection reset by peer" "roteiro, passo 3: (56) é esperado enquanto sobe"
+assert_contains "$step3" "Volume zeny-front_" "roteiro, passo 3: a linha do volume como o compose a escreve"
+assert_eq "" "$(grep -nF 'Volume "' "$roteiro" 2>/dev/null)" "roteiro: nome do volume sem aspas"
 # Passo 4: só as duas linhas do administrador.
 assert_contains "$(rot_section "## 4. ")" "Select-String" "roteiro, passo 4: mostra o login e a senha por Select-String"
 assert_contains "$(rot_section "## 5. ")" "Remove-Item Env:ZENY_SEED_*" "roteiro, passo 5: apaga as variáveis do seed"
