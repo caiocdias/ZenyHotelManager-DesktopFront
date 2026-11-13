@@ -171,8 +171,14 @@ for h in "## 0." "## 1." "## 2." "## 3." "## 4."; do
   assert_contains "$leia" "$h" "LEIA-ME: seção $h"
 done
 assert_eq "" "$(grep -nE -e '-p zeny( |$|`)' "$lm" | grep -viE 'nunca')" "LEIA-ME: nenhum comando usa -p zeny sem -front"
-bad="$(grep -E '^docker compose ' "$lm" | grep -v -e '-p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env ')"
-assert_eq "" "$bad" "LEIA-ME: todo docker compose com -p zeny-front, os dois -f e --env-file"
+# Todo docker compose leva -p zeny-front, os dois -f e --env-file, com duas exceções exatas (linha inteira), pedidas
+# pelo plano da M1 E07 (Task 5a) e decididas pelo orquestrador: a conferência "docker compose ls -a" e a limpeza só
+# pelo projeto "docker compose -p zeny-front down -v", que roda sem .env e sem os arquivos do compose. Qualquer outra
+# forma (até a mesma limpeza com mais um argumento) continua presa à regra.
+compose_exceptions=$'docker compose ls -a\ndocker compose -p zeny-front down -v'
+bad="$(grep -E '^docker compose ' "$lm" | grep -vxF -- "$compose_exceptions" |
+  grep -v -e '-p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env ')"
+assert_eq "" "$bad" "LEIA-ME: todo docker compose com -p zeny-front, os dois -f e --env-file (fora ls -a e o down -v só pelo projeto)"
 assert_eq "" "$(grep -oE '@[A-Z_]+@' "$ROOT/tools/server-env/LEIA-ME.md" | sort -u | grep -vE '^@(SERVER_COMMIT|SERVER_TAG)@$')" "modelo só usa os marcadores conhecidos"
 assert_contains "$(cat "$f7/build/demo-package/images/LEIA-ME.txt")" "docker load" "images/LEIA-ME.txt ensina docker load"
 

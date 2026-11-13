@@ -70,9 +70,53 @@ leia_ps="$(ps_lines "$leia_f" LEIA-ME)"
 all_ps="$(printf '%s\n%s\n' "$rot_ps" "$leia_ps")"
 rot_stmts="$(statements <<<"$rot_ps")"
 all_stmts="$(statements <<<"$all_ps")"
-step7="$(section "$rot" "## 7.")"
-step7_ps="$(awk '/^```powershell/{inb=1; print "---"; next} /^```/{inb=0; next} inb {print "passo7:" NR "\t" $0}' <<<"$step7")"
-step7_stmts="$(statements <<<"$step7_ps")"
+
+# Passos do roteiro achados pelo conteúdo, não pelo número: a Task 5a da E07 reescreveu o roteiro do zero (passos
+# 0 a 12) e a numeração antiga (seed no 1, app no 2, demo do 4 ao 8) mudou de lugar. Cada passo é a ÚNICA seção
+# "## N. ..." cujo texto casa com o padrão (ERE); nenhuma ou mais de uma é falha. A ordem entre eles é afirmada
+# logo abaixo, então trocar dois passos de lugar continua vermelho.
+step_heading() {
+  PAT="$1" awk '
+    function flush() { if (h != "" && hit) { n++; out = h } }
+    /^## / { flush(); h = $0; hit = 0; next }
+    h != "" && $0 ~ ENVIRON["PAT"] { hit = 1 }
+    END { flush(); if (n == 1) print out; else if (n > 1) print "AMBIGUO" }' "$rot"
+}
+step_num() { grep -oE '^## [0-9]+\.' <<<"$1" | grep -oE '[0-9]+'; }
+step_text() { [[ "$1" == "## "* ]] && section "$rot" "$1"; }
+h_seed="$(step_heading 'demo-seed\.jar --server')"
+h_app="$(step_heading 'app\\zeny-desktop\.jar')"
+h_recep="$(step_heading 'digite `recepcao`')"
+h_ger="$(step_heading 'digite `gerente`')"
+h_map="$(step_heading 'Ficam só as UHs sujas')"
+h_live="$(step_heading 'auth/login')"
+for pair in "seed (demo-seed.jar --server)|$h_seed" "abrir o app (app\\zeny-desktop.jar)|$h_app" \
+  "Recepcionista (digite \`recepcao\`)|$h_recep" "Gerente (digite \`gerente\`)|$h_ger" \
+  "mapa (Ficam só as UHs sujas)|$h_map" "mudança ao vivo (auth/login)|$h_live"; do
+  [[ "${pair#*|}" == "## "[0-9]* ]] || _assert_fail "roteiro tem um único passo de ${pair%%|*}" "achado: ${pair#*|}"
+done
+n_seed="$(step_num "$h_seed")"
+n_app="$(step_num "$h_app")"
+n_recep="$(step_num "$h_recep")"
+n_ger="$(step_num "$h_ger")"
+n_map="$(step_num "$h_map")"
+n_live="$(step_num "$h_live")"
+# O passo depois da mudança ao vivo é o de sair do app (antigo passo 8).
+h_exit="$([[ -n "$n_live" ]] && grep -m1 -E "^## $((n_live + 1))\\. " "$rot")"
+n_exit="$(step_num "$h_exit")"
+if [[ -z "$n_seed" || -z "$n_app" || -z "$n_recep" || -z "$n_ger" || -z "$n_map" || -z "$n_live" || -z "$n_exit" ]] ||
+  ! ((n_seed < n_app && n_app < n_recep && n_recep < n_ger && n_ger < n_map && n_map < n_live && n_live < n_exit)); then
+  _assert_fail "roteiro em ordem: seed < abrir o app < Recepcionista < Gerente < mapa < mudança ao vivo < sair" \
+    "passos: $n_seed $n_app $n_recep $n_ger $n_map $n_live $n_exit"
+fi
+seed_step="$(step_text "$h_seed")"
+recep_step="$(step_text "$h_recep")"
+ger_step="$(step_text "$h_ger")"
+map_step="$(step_text "$h_map")"
+live="$(step_text "$h_live")"
+live_ps="$(awk '/^```powershell/{inb=1; print "---"; next} /^```/{inb=0; next} inb {print "ao-vivo:" NR "\t" $0}' <<<"$live")"
+live_stmts="$(statements <<<"$live_ps")"
+P="passo ${n_live:-?}"
 
 # =============================================================================================================
 # 1. PowerShell 5.1
@@ -206,7 +250,10 @@ assert_contains "$(cut -f2- <<<"$rot_ps")" "java \"-D${prop_name}=true\" -jar ap
 # 1.11 Sem crase no fim da linha (continuação que quebra com um espaço depois dela ao copiar).
 assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE '`[[:space:]]*$')" "sem crase de continuação nos blocos PowerShell"
 
-# 1.12 Variáveis do passo 7 definidas antes do uso, na ordem dos blocos (a segunda janela começa vazia).
+# 1.12 Variáveis do passo da mudança ao vivo definidas antes do uso, na ordem dos blocos (a segunda janela começa
+#      vazia). Sem os comandos do passo, a asserção passaria no vazio.
+(($(grep -c . <<<"$live_stmts") >= 15)) ||
+  _assert_fail "$P (mudança ao vivo) tem os comandos do login ao logout (achados: $(grep -c . <<<"$live_stmts"))"
 defined=" "
 while IFS=$'\t' read -r where st; do
   [[ -n "$where" ]] || continue
@@ -218,21 +265,21 @@ while IFS=$'\t' read -r where st; do
     case "$u" in
       '$_' | '$Error' | '$true' | '$false' | '$null' | '$env' | '$PWD' | '$LASTEXITCODE' | "$lhs") continue ;;
     esac
-    [[ "$defined" == *" $u "* ]] || _assert_fail "passo 7: $u usada antes de ser definida ($where)" "comando: $st"
+    [[ "$defined" == *" $u "* ]] || _assert_fail "$P: $u usada antes de ser definida ($where)" "comando: $st"
   done
   [[ -n "$lhs" ]] && defined="$defined$lhs "
   # Remove-Variable tira a variável da sessão: usá-la depois manda $null.
   for rv in $(grep -oE 'Remove-Variable[[:space:]]+(-Name[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*' <<<"$st" | awk '{print $NF}'); do
     defined="${defined// \$$rv / }"
   done
-done <<<"$step7_stmts"
+done <<<"$live_stmts"
 
 # =============================================================================================================
 # 2. Fidelidade ao contrato (api/openapi.yaml)
 # =============================================================================================================
 
-base_val="$(cut -f2- <<<"$step7_stmts" | grep -oE '^\$base[[:space:]]*=[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"/\1/')"
-assert_eq "http://localhost:8088" "$base_val" "\$base do passo 7 é o servidor da demo"
+base_val="$(cut -f2- <<<"$live_stmts" | grep -oE '^\$base[[:space:]]*=[[:space:]]*"[^"]*"' | sed -E 's/.*"([^"]*)"/\1/')"
+assert_eq "http://localhost:8088" "$base_val" "\$base do $P (mudança ao vivo) é o servidor da demo"
 
 # 2.1 Cada URI chamada existe no contrato com o método usado.
 n_calls=0
@@ -273,7 +320,7 @@ while IFS=$'\t' read -r where st; do
 done <<<"$rot_stmts"
 for want in "post /api/v1/auth/login" "get /api/v1/rooms/status" "get /api/v1/rooms/{id}/status" \
   "post /api/v1/rooms/{id}/housekeeping-status" "post /api/v1/auth/logout"; do
-  in_list "$want" "$seen_paths" || _assert_fail "passo 7 chama $want"
+  in_list "$want" "$seen_paths" || _assert_fail "$P chama $want"
 done
 
 # 2.2 Corpo do login: as chaves do LoginRequest e do DeviceRequest, nenhuma a mais.
@@ -303,7 +350,7 @@ assert_contains "$login_stmt" 'id = [guid]::NewGuid().ToString()' "device.id é 
 transitions="$(schema_block HousekeepingStatusRequest | awk '/^        transition:/ {on = 1; next} on && /^        [^ ]/ {on = 0} on && /^          - / {print $2}')"
 [[ -n "$transitions" ]] || _assert_fail "contrato tem o enum de transition"
 used_tr="$(grep -oE 'transition[[:space:]]*=[[:space:]]*"[A-Z_]+"' <<<"$rot_stmts" | grep -oE '[A-Z_]+' | sort -u)"
-assert_eq $'MARK_CLEAN\nMARK_DIRTY' "$used_tr" "passo 7 usa MARK_CLEAN e MARK_DIRTY"
+assert_eq $'MARK_CLEAN\nMARK_DIRTY' "$used_tr" "$P usa MARK_CLEAN e MARK_DIRTY"
 for t in $used_tr; do
   in_list "$t" "$transitions" || _assert_fail "transição $t existe no contrato"
 done
@@ -325,7 +372,7 @@ room_fields="$(
     grep -oE 'Select-Object[[:space:]]+[A-Za-z, ]+' <<<"$rot_stmts" | sed -E 's/^Select-Object[[:space:]]+//' | tr ',' '\n' | tr -d ' '
   } | sort -u
 )"
-[[ -n "$room_fields" ]] || _assert_fail "passo 7 lê campos da UH"
+[[ -n "$room_fields" ]] || _assert_fail "$P lê campos da UH"
 for f in $room_fields; do
   in_list "$f" "$room_props" || _assert_fail "campo $f da UH existe no RoomStatusResponse"
 done
@@ -342,7 +389,7 @@ done <<<"$rot_stmts"
 
 # 2.6 Logout responde 204 no contrato e no roteiro; 412, 428 e 422 são os do contrato.
 assert_contains "$(api_path_block /api/v1/auth/logout)" '"204":' "contrato: logout 204"
-logout_after="$(awk '/auth\/logout/ {on = 1} on' <<<"$step7" | grep -m1 -E '\*\*Resultado esperado')"
+logout_after="$(awk '/auth\/logout/ {on = 1} on' <<<"$live" | grep -m1 -E '\*\*Resultado esperado')"
 assert_contains "$logout_after" '`204`' "roteiro espera 204 no logout"
 hk_desc="$(api_path_block '/api/v1/rooms/{id}/housekeeping-status' | tr -d '\n\\' | tr -s ' ')"
 for c in 412 428 422; do
@@ -363,48 +410,59 @@ for f in "$rot" "$leia_f"; do
   bad="$(grep -nE 'ZENY_SEED_[A-Z_]*[[:space:]]*=' "$f" | grep -vE 'ZENY_SEED_[A-Z_]*[[:space:]]*=[[:space:]]*"<[^>"]+>"[[:space:]]*$')"
   assert_eq "" "$bad" "${f#"$ROOT"/}: ZENY_SEED_* só com \"<...>\""
 done
-# 3.1b Os 6 segredos do seed: definidos no LEIA-ME por SetEnvironmentVariable(..., "Process"), num bloco
-#      PowerShell, antes do java -jar; o valor vem da janela do Get-Credential (senhas) ou de um
-#      Read-Host -AsSecureString (PIN), nunca de texto digitado na linha (o 5.1 grava cada linha no histórico).
+# 3.1b Os 6 segredos do seed: definidos por SetEnvironmentVariable(..., "Process"), num bloco PowerShell, antes do
+#      java -jar; o valor vem da janela do Get-Credential (senhas) ou de um Read-Host -AsSecureString (PIN), nunca de
+#      texto digitado na linha (o 5.1 grava cada linha no histórico); o $pin sai da sessão antes do java -jar.
+#      Vale para o LEIA-ME e, desde a Task 5a da E07 (o roteiro tem o seu próprio bloco do seed, passo a passo),
+#      também para o roteiro.
 seed_secrets="ZENY_SEED_ADMIN_PASSWORD ZENY_SEED_ADMIN_NEW_PASSWORD ZENY_SEED_MANAGER_PASSWORD
 ZENY_SEED_RECEPTIONIST_PASSWORD ZENY_SEED_HOUSEKEEPER_PASSWORD ZENY_SEED_MANAGER_PIN"
 # A lista acima é a dos segredos que o seed lê (senhas e PIN do SeedArgs.kt): nenhum a mais, nenhum a menos.
 assert_eq "$(tr ' ' '\n' <<<"$seed_secrets" | grep . | sort)" \
   "$(grep -oE 'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)' "$seedargs_kt" | sort -u)" "os 6 segredos são os que o seed lê"
 leia_ps_text="$(cut -f2- <<<"$leia_ps")"
-seed_java_ln="$(grep -nF 'java -jar app\demo-seed.jar --server' <<<"$leia_ps_text" | head -1 | cut -d: -f1)"
-[[ -n "$seed_java_ln" ]] || _assert_fail "LEIA-ME: bloco PowerShell roda o demo-seed.jar"
+rot_ps_text="$(cut -f2- <<<"$rot_ps")"
 gc_value='^\(Get-Credential( -UserName [A-Za-z0-9_.-]+)?( -Message "[^"$`]*")?\)\.GetNetworkCredential\(\)\.Password$'
 pin_value='^\[Runtime\.InteropServices\.Marshal\]::PtrToStringBSTR\(\[Runtime\.InteropServices\.Marshal\]::SecureStringToBSTR\(\$[A-Za-z_][A-Za-z0-9_]*\)\)$'
-for v in $seed_secrets; do
-  lines="$(grep -nE "^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\"," <<<"$leia_ps_text")"
-  if [[ "$(grep -c . <<<"$lines")" != 1 ]]; then
-    _assert_fail "LEIA-ME define $v uma vez por [Environment]::SetEnvironmentVariable num bloco PowerShell" "linhas: $lines"
-    continue
-  fi
-  ln="${lines%%:*}"
-  line="${lines#*:}"
-  value="$(sed -nE "s/^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\", (.*), \"Process\"\\)$/\\1/p" <<<"$line")"
-  if [[ -z "$value" ]]; then
-    _assert_fail "$v definida no escopo \"Process\"" "linha: $line"
-    continue
-  fi
-  [[ -n "$seed_java_ln" ]] && ((ln < seed_java_ln)) || _assert_fail "$v definida antes do java -jar do seed"
-  if [[ "$v" == *_PIN ]]; then
-    if ! grep -qE "$pin_value" <<<"$value"; then
-      _assert_fail "$v vem de um SecureString convertido pelo Marshal" "valor: $value"
+# check_seed_secrets RÓTULO TEXTO : TEXTO são as linhas dos blocos PowerShell do arquivo, na ordem.
+check_seed_secrets() {
+  local lbl="$1" text="$2" java_ln v lines ln line value sv sv_ln rm_ln
+  java_ln="$(grep -nF 'java -jar app\demo-seed.jar --server' <<<"$text" | head -1 | cut -d: -f1)"
+  [[ -n "$java_ln" ]] || _assert_fail "$lbl: bloco PowerShell roda o demo-seed.jar"
+  for v in $seed_secrets; do
+    lines="$(grep -nE "^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\"," <<<"$text")"
+    if [[ "$(grep -c . <<<"$lines")" != 1 ]]; then
+      _assert_fail "$lbl define $v uma vez por [Environment]::SetEnvironmentVariable num bloco PowerShell" "linhas: $lines"
       continue
     fi
-    sv="$(grep -oE '\$[A-Za-z_][A-Za-z0-9_]*\)\)$' <<<"$value" | tr -d ')$')"
-    sv_ln="$(grep -nE "^\\\$${sv}[[:space:]]*=[[:space:]]*Read-Host[[:space:]]+-AsSecureString([[:space:]]|$)" <<<"$leia_ps_text" | tail -1 | cut -d: -f1)"
-    [[ -n "$sv_ln" ]] && ((sv_ln < ln)) || _assert_fail "\$$sv do $v vem de Read-Host -AsSecureString antes do uso"
-    rm_ln="$(grep -nE "^Remove-Variable[[:space:]]+(-Name[[:space:]]+)?${sv}([[:space:]]|$)" <<<"$leia_ps_text" | head -1 | cut -d: -f1)"
-    [[ -n "$rm_ln" ]] && ((rm_ln > ln)) || _assert_fail "Remove-Variable $sv depois de definir $v"
-  else
-    grep -qE "$gc_value" <<<"$value" ||
-      _assert_fail "$v vem de (Get-Credential ...).GetNetworkCredential().Password, sem valor literal" "valor: $value"
-  fi
-done
+    ln="${lines%%:*}"
+    line="${lines#*:}"
+    value="$(sed -nE "s/^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\", (.*), \"Process\"\\)$/\\1/p" <<<"$line")"
+    if [[ -z "$value" ]]; then
+      _assert_fail "$lbl: $v definida no escopo \"Process\"" "linha: $line"
+      continue
+    fi
+    [[ -n "$java_ln" ]] && ((ln < java_ln)) || _assert_fail "$lbl: $v definida antes do java -jar do seed"
+    if [[ "$v" == *_PIN ]]; then
+      if ! grep -qE "$pin_value" <<<"$value"; then
+        _assert_fail "$lbl: $v vem de um SecureString convertido pelo Marshal" "valor: $value"
+        continue
+      fi
+      sv="$(grep -oE '\$[A-Za-z_][A-Za-z0-9_]*\)\)$' <<<"$value" | tr -d ')$')"
+      sv_ln="$(grep -nE "^\\\$${sv}[[:space:]]*=[[:space:]]*Read-Host[[:space:]]+-AsSecureString([[:space:]]|$)" <<<"$text" | tail -1 | cut -d: -f1)"
+      [[ -n "$sv_ln" ]] && ((sv_ln < ln)) || _assert_fail "$lbl: \$$sv do $v vem de Read-Host -AsSecureString antes do uso"
+      rm_ln="$(grep -nE "^Remove-Variable[[:space:]]+(-Name[[:space:]]+)?${sv}([[:space:]]|$)" <<<"$text" | head -1 | cut -d: -f1)"
+      [[ -n "$rm_ln" ]] && ((rm_ln > ln)) || _assert_fail "$lbl: Remove-Variable $sv depois de definir $v"
+      [[ -n "$rm_ln" && -n "$java_ln" ]] && ((rm_ln < java_ln)) ||
+        _assert_fail "$lbl: Remove-Variable $sv antes do java -jar do seed"
+    else
+      grep -qE "$gc_value" <<<"$value" ||
+        _assert_fail "$lbl: $v vem de (Get-Credential ...).GetNetworkCredential().Password, sem valor literal" "valor: $value"
+    fi
+  done
+}
+check_seed_secrets LEIA-ME "$leia_ps_text"
+check_seed_secrets roteiro "$rot_ps_text"
 # 3.1c A volta do padrão antigo: segredo do seed atribuído na linha, com qualquer valor (até "<...>"), nos blocos.
 assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE '\$env:ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[[:space:]]*=')" \
   "blocos PowerShell sem \$env:ZENY_SEED_*PASSWORD/PIN = (o 5.1 grava a linha no histórico)"
@@ -451,11 +509,12 @@ for f in "$rot" "$leia_f"; do
     "${f#"$ROOT"/}: não manda copiar JAR"
 done
 
-# 4.4 O comando do passo 2 é o mesmo da seção "Abrir o app" do LEIA-ME.
-step2_cmd="$(section "$rot" "## 2." | awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' | head -1)"
+# 4.4 O comando do passo de abrir o app (antigo passo 2) é o mesmo da seção "Abrir o app" do LEIA-ME.
+app_cmd="$(step_text "$h_app" | awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' | head -1)"
 leia_app="$(section "$leia_f" "## ${ln_app:+$(sed -n "${ln_app}p" "$leia_f" | grep -oE '[0-9]+')}." | awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb')"
-[[ -n "$step2_cmd" ]] || _assert_fail "passo 2 tem o comando de abrir o app"
-in_list "$step2_cmd" "$leia_app" || _assert_fail "comando do passo 2 igual ao do LEIA-ME" "passo 2: $step2_cmd" "LEIA-ME: $leia_app"
+[[ -n "$app_cmd" ]] || _assert_fail "passo ${n_app:-?} tem o comando de abrir o app"
+in_list "$app_cmd" "$leia_app" ||
+  _assert_fail "comando do passo ${n_app:-?} (abrir o app) igual ao do LEIA-ME" "roteiro: $app_cmd" "LEIA-ME: $leia_app"
 
 # 4.5 As variáveis de senha citadas pelo roteiro são as do LEIA-ME e as que o seed lê.
 for v in $(grep -oE 'ZENY_SEED_[A-Z_]+' "$rot" | sort -u); do
@@ -471,15 +530,14 @@ done
 # 5. Ordem e resultados esperados
 # =============================================================================================================
 
-# 5.1 Cada um dos 8 passos tem resultado esperado.
-for n in 1 2 3 4 5 6 7 8; do
-  s="$(section "$rot" "## $n.")"
-  [[ -n "$s" ]] || {
-    _assert_fail "passo $n existe"
-    continue
-  }
-  assert_contains "$s" "**Resultado esperado" "passo $n tem resultado esperado"
-done
+# 5.1 Passos numerados em sequência, sem buraco nem repetição, e cada um tem resultado esperado.
+rot_nums="$(grep -E '^## ' "$rot" | grep -oE '^## [0-9]+\.' | grep -oE '[0-9]+' | tr '\n' ' ')"
+assert_eq "$(seq 0 $(($(grep -cE '^## ' "$rot") - 1)) | tr '\n' ' ')" "$rot_nums" "roteiro: todo título ## é um passo numerado em sequência"
+(($(grep -cE '^## ' "$rot") >= 8)) || _assert_fail "roteiro tem ao menos os 8 passos da demo"
+while IFS= read -r h; do
+  [[ -n "$h" ]] || continue
+  assert_contains "$(section "$rot" "$h")" "**Resultado esperado" "${h#\#\# } tem resultado esperado"
+done < <(grep -E '^## ' "$rot")
 
 # 5.2 Cada bloco PowerShell é seguido do resultado esperado (ou da tabela de códigos) antes do próximo bloco.
 missing_res="$(awk '
@@ -491,9 +549,9 @@ missing_res="$(awk '
   END { if (pending) print pending_ln }' "$rot")"
 assert_eq "" "$missing_res" "todo bloco PowerShell do roteiro tem resultado esperado (linhas sem: $missing_res)"
 
-# 5.3 Passo 7 na ordem: login, lista, ETag, MARK_CLEAN, ETag de novo, MARK_DIRTY, logout.
-ln_of() { grep -nE "$1" <<<"$step7_ps" | head -1 | cut -d: -f1; }
-ln_last() { grep -nE "$1" <<<"$step7_ps" | tail -1 | cut -d: -f1; }
+# 5.3 Passo da mudança ao vivo na ordem: login, lista, ETag, MARK_CLEAN, ETag de novo, MARK_DIRTY, logout.
+ln_of() { grep -nE "$1" <<<"$live_ps" | head -1 | cut -d: -f1; }
+ln_last() { grep -nE "$1" <<<"$live_ps" | tail -1 | cut -d: -f1; }
 l_login="$(ln_of 'auth/login')"
 l_list="$(ln_of 'rooms/status\?')"
 l_get1="$(ln_of 'rooms/\$[A-Za-z_]+/status"')"
@@ -506,26 +564,26 @@ for v in "$l_login" "$l_list" "$l_get1" "$l_clean" "$l_get2" "$l_dirty" "$l_logo
 if ((order_ok)); then
   ((l_login < l_list && l_list < l_get1 && l_get1 < l_clean && l_clean < l_get2 && l_get2 < l_dirty && l_dirty < l_logout)) || order_ok=0
 fi
-((order_ok)) || _assert_fail "passo 7 em ordem: login < lista < ETag < MARK_CLEAN < ETag relido < MARK_DIRTY < logout" \
+((order_ok)) || _assert_fail "$P em ordem: login < lista < ETag < MARK_CLEAN < ETag relido < MARK_DIRTY < logout" \
   "linhas: $l_login $l_list $l_get1 $l_clean $l_get2 $l_dirty $l_logout"
 
 # 5.4 412 e 422 com o que fazer; o código HTTP do erro do 5.1 vem de Exception.Response.StatusCode.
 for c in 412 422; do
-  row="$(grep -E "^\\| \`$c\` \\|" <<<"$step7")"
+  row="$(grep -E "^\\| \`$c\` \\|" <<<"$live")"
   cells="$(awk -F'|' '{n = 0; for (i = 2; i < NF; i++) if ($i ~ /[^[:space:]]/) n++; print n}' <<<"$row")"
-  [[ "$cells" == "3" ]] || _assert_fail "passo 7: linha do $c com o que quer dizer e o que fazer" "linha: $row"
+  [[ "$cells" == "3" ]] || _assert_fail "$P: linha do $c com o que quer dizer e o que fazer" "linha: $row"
 done
-assert_contains "$step7" "Exception.Response.StatusCode" "passo 7: como ver o código HTTP do erro"
-assert_contains "$step7" "lançam exceção" "passo 7: diz que o cmdlet lança exceção no erro"
+assert_contains "$live" "Exception.Response.StatusCode" "$P: como ver o código HTTP do erro"
+assert_contains "$live" "lançam exceção" "$P: diz que o cmdlet lança exceção no erro"
 
 # 5.5 Resultado ao vivo: Suja -> Limpa em até 2 s, sem recarregar.
-assert_contains "$step7" 'de "Suja" para "Limpa"' "passo 7: ladrilho muda de Suja para Limpa"
-assert_contains "$step7" "2 segundos" "passo 7: em até 2 segundos"
-assert_contains "$step7" "sem recarregar" "passo 7: sem recarregar"
-assert_contains "$(section "$rot" "## 4.")" "Clique em **Sair**" "passo 4 termina em Sair"
-assert_contains "$(section "$rot" "## 8.")" "Sair" "passo 8 sai"
+assert_contains "$live" 'de "Suja" para "Limpa"' "$P: ladrilho muda de Suja para Limpa"
+assert_contains "$live" "2 segundos" "$P: em até 2 segundos"
+assert_contains "$live" "sem recarregar" "$P: sem recarregar"
+assert_contains "$recep_step" "Clique em **Sair**" "passo ${n_recep:-?} (Recepcionista) termina em Sair"
+assert_contains "$(step_text "$h_exit")" "Sair" "passo ${n_exit:-?} (depois da mudança ao vivo) sai"
 
-# 5.6 Menus dos passos 4 e 5: rótulos e ordem do enum Area; "(em breve)" só nas áreas sem tela; menus diferentes.
+# 5.6 Menus da Recepcionista e do Gerente: rótulos e ordem do enum Area; "(em breve)" só nas áreas sem tela; menus diferentes.
 labels_in_order="$(awk '
   /^    [A-Z_]+\("[a-z]+", "[^"]+"/ { match($0, /", "[^"]+"/); print substr($0, RSTART + 4, RLENGTH - 5); next }
   /^    [A-Z_]+\($/ { want = 2; next }
@@ -536,8 +594,8 @@ impl_labels="$(for nm in $impl_names; do
     want > 0 && /^        "[^"]+",$/ { want--; if (want == 0) { gsub(/^ +"|",$/, ""); print; exit } }' "$areas_kt"
 done)"
 [[ "$(wc -l <<<"$labels_in_order")" -ge 6 && -n "$impl_labels" ]] || _assert_fail "li as áreas do Areas.kt" "$labels_in_order"
-menu_of() { section "$rot" "$1" | grep -E '^  [0-9]+\. ' | sed -E 's/^  [0-9]+\. //'; }
-for step in "## 4." "## 5."; do
+menu_of() { step_text "$1" | grep -E '^  [0-9]+\. ' | sed -E 's/^  [0-9]+\. //'; }
+for step in "$h_recep" "$h_ger"; do
   menu="$(menu_of "$step")"
   [[ -n "$menu" ]] || _assert_fail "$step lista as áreas do menu"
   prev=-1
@@ -558,11 +616,11 @@ for step in "## 4." "## 5."; do
     fi
   done <<<"$menu"
 done
-m4="$(menu_of "## 4.")"
-m5="$(menu_of "## 5.")"
+m4="$(menu_of "$h_recep")"
+m5="$(menu_of "$h_ger")"
 [[ -n "$m4" && "$m4" != "$m5" ]] || _assert_fail "menus da Recepcionista e do Gerente diferem"
 for item in $(comm -13 <(sort <<<"$m4") <(sort <<<"$m5") | sed 's/ (em breve)//' | tr ' ' '_'); do
-  assert_contains "$(section "$rot" "## 5.")" "\"${item//_/ }\"" "passo 5 nomeia a diferença ($item)"
+  assert_contains "$ger_step" "\"${item//_/ }\"" "passo ${n_ger:-?} (Gerente) nomeia a diferença ($item)"
 done
 
 # 5.7 Rótulos de tela citados existem no app (um rótulo trocado no app deixaria o roteiro mentindo).
@@ -578,7 +636,7 @@ done
 
 # 5.8 Seed: as linhas na ordem e com os rótulos do SeedItem; contagens coerentes com o DemoCatalog.
 seed_labels="$(grep -oE '^    [A-Z_]+\("[^"]+"\)' "$report_kt" | sed -E 's/.*\("([^"]+)"\)/\1/')"
-seed_out="$(section "$rot" "## 1." | grep -E '^  [^ ].*: [0-9]+ criados, [0-9]+ já existiam$' | sed -E 's/^  //')"
+seed_out="$(grep -E '^  [^ ].*: [0-9]+ criados, [0-9]+ já existiam$' <<<"$seed_step" | sed -E 's/^  //')"
 assert_eq "$seed_labels" "$(sed -E 's/: [0-9]+ criados.*//' <<<"$seed_out")" "saída do seed com os rótulos e a ordem do SeedItem"
 seed_total() { grep -E "^$1: " <<<"$seed_out" | sed -E 's/.*: ([0-9]+) criados, ([0-9]+) já existiam/\1 \2/' | awk '{print $1 + $2}'; }
 cat_txt="$(cat "$catalog_kt")"
@@ -593,9 +651,9 @@ res_lines="$(grep -E '^ +r\("[A-Z][0-9]+",' <<<"$cat_txt")"
 assert_eq "$(grep -c . <<<"$res_lines")" "$(seed_total "reservas")" "seed: reservas = DemoCatalog"
 assert_eq "$(grep -cE '"[0-9]{3}", (true|false)\)' <<<"$res_lines")" "$(seed_total "alocações")" "seed: alocações = DemoCatalog"
 assert_eq "$(grep -cE ', true\)' <<<"$res_lines")" "$(seed_total "check-ins")" "seed: check-ins = DemoCatalog"
-assert_contains "$(section "$rot" "## 1.")" "Concluído em " "seed: linha final Concluído em N s."
+assert_contains "$seed_step" "Concluído em " "seed: linha final Concluído em N s."
 
-# 5.9 Mapa (passos 6 e 7): legenda, UH da mudança e filtros coerentes com o DemoCatalog e o RoomDisplay.
+# 5.9 Mapa e mudança ao vivo: legenda, UH da mudança e filtros coerentes com o DemoCatalog e o RoomDisplay.
 set_of() { grep -oE "val $1 = setOf\\([^)]*\\)" <<<"$cat_txt" | grep -oE '[0-9]{3}'; }
 dirty="$(set_of dirty)"
 pending="$(set_of pending)"
@@ -620,24 +678,24 @@ display_pairs="$(grep -oE '^    [A-Z_]+\("[^"]+",' "$display_kt" | sed -E 's/^  
 expected_legend="$(while IFS='|' read -r nm lbl; do
   printf '%s: %s\n' "$lbl" "$(awk -v c="$nm" '$2 == c' <<<"$cats" | grep -c .)"
 done <<<"$display_pairs")"
-legend_line="$(section "$rot" "## 6." | grep -m1 'Fora de ordem: ')"
+legend_line="$(grep -m1 'Fora de ordem: ' <<<"$map_step")"
 got_legend="$(grep -oE '"[^"]+: [0-9]+"' <<<"$legend_line" | tr -d '"')"
-assert_eq "$expected_legend" "$got_legend" "passo 6: legenda (rótulos, ordem e contadores) = RoomDisplay + DemoCatalog"
-uh="$(grep -oE 'marca a UH [0-9]{3}' <<<"$step7" | grep -oE '[0-9]{3}')"
-assert_eq "DIRTY" "$(category "${uh:-x}")" "passo 7: a UH $uh é vaga, fora de OOO e suja no seed"
-assert_contains "$(cut -f2- <<<"$step7_ps")" "-eq \"$uh\"" "passo 7: os comandos pegam a mesma UH $uh"
-for n in $(grep -E '^\| `422`' <<<"$step7" | grep -oE '[0-9]{3}' | grep -v 422); do
+assert_eq "$expected_legend" "$got_legend" "passo ${n_map:-?}: legenda (rótulos, ordem e contadores) = RoomDisplay + DemoCatalog"
+uh="$(grep -oE 'marca a UH [0-9]{3}' <<<"$live" | grep -oE '[0-9]{3}')"
+assert_eq "DIRTY" "$(category "${uh:-x}")" "$P: a UH $uh é vaga, fora de OOO e suja no seed"
+assert_contains "$(cut -f2- <<<"$live_ps")" "-eq \"$uh\"" "$P: os comandos pegam a mesma UH $uh"
+for n in $(grep -E '^\| `422`' <<<"$live" | grep -oE '[0-9]{3}' | grep -v 422); do
   assert_eq "DIRTY" "$(category "$n")" "tabela do 422: a UH $n sugerida é vaga e suja"
 done
 hk_dirty="$(printf '%s\n%s\n' "$dirty" "$dirty_extra" | grep . | sort -u)"
-got_dirty="$(section "$rot" "## 6." | grep -m1 'Ficam só as UHs sujas' | grep -oE '[0-9]{3}' | sort -u)"
-assert_eq "$hk_dirty" "$got_dirty" "passo 6: o filtro Suja mostra as UHs sujas do seed"
+got_dirty="$(grep -m1 'Ficam só as UHs sujas' <<<"$map_step" | grep -oE '[0-9]{3}' | sort -u)"
+assert_eq "$hk_dirty" "$got_dirty" "passo ${n_map:-?}: o filtro Suja mostra as UHs sujas do seed"
 suites="$(awk '$2 == "SUI" {print $1}' <<<"$rooms" | sort -u)"
-got_suites="$(section "$rot" "## 6." | grep -m1 'Suíte\*\*\. Ficam' | grep -oE '[0-9]{3}' | sort -u)"
-assert_eq "$suites" "$got_suites" "passo 6: o filtro Suíte mostra as suítes do seed"
+got_suites="$(grep -m1 'Suíte\*\*\. Ficam' <<<"$map_step" | grep -oE '[0-9]{3}' | sort -u)"
+assert_eq "$suites" "$got_suites" "passo ${n_map:-?}: o filtro Suíte mostra as suítes do seed"
 n_dirty_tile="$(awk '$2 == "DIRTY"' <<<"$cats" | grep -c .)"
 n_clean_tile="$(awk '$2 == "CLEAN"' <<<"$cats" | grep -c .)"
-assert_contains "$step7" "\"Suja: $((n_dirty_tile - 1))\" e \"Limpa: $((n_clean_tile + 1))\"" "passo 7: legenda depois do MARK_CLEAN"
-assert_contains "$step7" "\"Suja: $n_dirty_tile\" e \"Limpa: $n_clean_tile\"" "passo 7: legenda depois da volta com MARK_DIRTY"
+assert_contains "$live" "\"Suja: $((n_dirty_tile - 1))\" e \"Limpa: $((n_clean_tile + 1))\"" "$P: legenda depois do MARK_CLEAN"
+assert_contains "$live" "\"Suja: $n_dirty_tile\" e \"Limpa: $n_clean_tile\"" "$P: legenda depois da volta com MARK_DIRTY"
 
 finish

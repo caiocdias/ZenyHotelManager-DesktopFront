@@ -187,7 +187,7 @@ if [[ "$leia_rule" == *Get-Credential* ]]; then
   ' "$rot_file")
 fi
 
-# 2e. Seed repetido (roteiro, passo 1) contra o código:
+# 2e. Seed repetido (roteiro, passo do seed: o 5 desde a Task 5a da E07) contra o código:
 #     - alocações: só as reservas ainda CONFIRMED com UH, ou seja, as do catálogo com UH e sem check-in;
 #     - check-ins: o BookingSeeder nunca conta check-in como "já existia" e o SeedReport some com a linha de total 0.
 catalog_kt="$seed_src/data/DemoCatalog.kt"
