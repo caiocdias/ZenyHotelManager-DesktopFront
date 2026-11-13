@@ -82,7 +82,7 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 | D1 | **Decidido pelo usuário em 2026-11-11 (entrevista da parada da E01):** fronteira `core`/`sdk` pela opção (b) da ADR 0008 — `core` expõe o `sdk` por `api`, as features usam os modelos gerados e o `ForbiddenImport` barra as classes de operação — **fechando a brecha**: barrar também `io.ktor.client.*` e `de.quati.ogen.client.*` em `app` e `design` | Ajuste do `config/detekt/detekt.yml` e da varredura de nome qualificado ainda não feito: entra no plano da E02 | E02 em diante |
 | D2 | **Decidido pelo usuário em 2026-11-11:** depois do `403 APPROVAL_REQUIRED`, a repetição com `X-Approval-Token` usa uma **nova** `Idempotency-Key`, como diz o contrato (por exemplo, `cancelReservation`); o reenvio por falha de rede continua com a mesma chave. Substitui o "mesma chave" do design §6.2 e do critério da E02 | A E02 testa a nova chave na repetição aprovada; o design §6.2 fica para o arquiteto atualizar | E02, E04 |
 | D3 | **Decidido pelo usuário em 2026-11-11:** gerador do SDK confirmado, ogen 0.16.1 (ADR 0007) | Plano B na ADR 0007 se uma versão nova quebrar | todas |
-| H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
+| H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto — **confirmada na E05** (nenhum `PF-NN`) | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
 
 ## Definição global de pronto
 
@@ -182,7 +182,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Núcleo HTTP e sessão | #concluida | E01 | Login, refresh em voo único, erros em pt-BR, idempotência, ETag, enum extensível, tokens em memória |
 | E03 | Design system | #concluida | E01 | Tema, tabela com cursor, formulário com erros por campo, campos de dinheiro, data e documento, diálogos e estados |
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
-| E05 | Dados de demonstração e teste de fumaça | #em-andamento | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
+| E05 | Dados de demonstração e teste de fumaça | #concluida | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #pendente | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
 | E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
@@ -527,7 +527,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Dados de demonstração e teste de fumaça — #em-andamento
+## E05 — Dados de demonstração e teste de fumaça — #concluida
 
 **Objetivo:** o `demo-seed` popula um servidor recém-criado pela API, de forma idempotente e em menos de 2 minutos, com um hotel crível. O `smokeTest` confere o SDK contra o servidor real.
 
@@ -557,12 +557,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Num ambiente recém-recriado (`down -v`, `up`), o seed termina sem erro em menos de 2 minutos, com o tempo registrado no handoff.
-- [ ] Rodar o seed uma segunda vez não cria duplicados (contagens de UHs, usuários, hóspedes e reservas iguais antes e depois).
-- [ ] Login como Gerente, Recepcionista e Governanta funciona com as senhas passadas.
-- [ ] `GET /api/v1/reservations/arrivals`, `/departures` e `/in-house` da data operacional devolvem reservas.
-- [ ] O `smokeTest` passa contra `zeny-front`.
-- [ ] Nenhuma senha ou chave versionada.
+- [x] Num ambiente recém-recriado (`down -v`, `up`), o seed termina sem erro em menos de 2 minutos, com o tempo registrado no handoff.
+- [x] Rodar o seed uma segunda vez não cria duplicados (contagens de UHs, usuários, hóspedes e reservas iguais antes e depois).
+- [x] Login como Gerente, Recepcionista e Governanta funciona com as senhas passadas.
+- [x] `GET /api/v1/reservations/arrivals`, `/departures` e `/in-house` da data operacional devolvem reservas.
+- [x] O `smokeTest` passa contra `zeny-front`.
+- [x] Nenhuma senha ou chave versionada.
 
 **Validação obrigatória:**
 
@@ -585,12 +585,36 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-12):** `#concluida`.
+- **Plano:** [`docs/superpowers/plans/2026-11-12-m1-fundacao-e05.md`](../superpowers/plans/2026-11-12-m1-fundacao-e05.md), com 13 tarefas, todas de risco alto. A revisão de arquitetura bloqueou na rodada 0 (9 Importantes: `Apis` sem `rates`/`guests`, engine Java fora do classpath, `seedJar` × `jar`, `run` do seed × `./gradlew run`, shell chamando o Gradle, inventário assíncrono, protocolo das verificações ao vivo, tarefa grande demais, rótulos de risco) e aprovou com notas na rodada 1.
+- **Commits:** `8c15ed5..083d62d` na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`). Tarefas em ondas paralelas de até 2, em worktrees próprios; Tasks 10 a 13 em série na branch da etapa. A sessão do orquestrador reiniciou no meio da onda 4 e foi retomada pelo ledger, sem perder trabalho.
+- **Revisão final:** "Ready to merge: With fixes" (2 Importantes: um teste de ataque preso a um commit fixo e as verificações ao vivo ligadas só por `ZENY_SEED_SERVER`, com a de usuários sem a trava de "hotel alheio"). A onda única de correção resolveu os dois e 2 Menores; a re-revisão aprovou ("Ready to merge: Yes").
+  - Scanner `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Dependências novas só de teste, já no catálogo: `kotlinx-coroutines-test` 1.11.0 e `ktor-client-mock` 3.6.1.
+  - Verificação mecânica `--base 81aa8ca`: "OK: nenhum apontamento".
+  - Gate em `de578e0`/`083d62d`: `./gradlew build` BUILD SUCCESSFUL (494 testes no `core`, 226 no `design`, 278 no `app` com 12 pulados, 503 no `demo-seed` com 4 pulados — as verificações ao vivo —, 0 falhas); `bash tests/run.sh` 30 arquivos e 0 falhas.
+- **Critérios verificados** (contra o `zeny-front` recriado com `down.sh -v` e `up.sh`, data operacional 2026-11-12):
+  - **Seed em menos de 2 minutos:** `java -jar demo-seed/build/libs/demo-seed.jar --server http://127.0.0.1:8088` com os segredos por ambiente → código 0, "Concluído em 9,6 s" (`time` real **10,06 s**). Criou hotel 1, políticas 2, tipos 3, áreas 3, UHs 20 (status 16 ajustados), OOO 1, temporadas 2, plano 1, tabelas de preço 6, usuários 3, empresas 2, hóspedes 12, reservas 11, alocações 9, check-ins 7.
+  - **Segunda execução sem duplicados:** 2,0 s, só "já existiam"; contagens antes/depois iguais (UHs 20/20, usuários 4/4 com o admin, hóspedes 12/12, reservas da data 11/11).
+  - **Login dos três usuários:** `gerente`, `recepcao` e `governanta` → 200 sem `passwordChangeRequired`.
+  - **Listas do dia:** chegadas 11, saídas 2 (day use), hospedados 7.
+  - **`smokeTest`:** `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088` com os segredos por ambiente → BUILD SUCCESSFUL, 1 teste, 0 falhas; sem `-PserverUrl` falha na execução com "Informe -PserverUrl=http://endereço:porta". Fica fora do `build`/`check` (conferido por `--dry-run`).
+  - **Nenhuma senha versionada:** `git log -p 81aa8ca..HEAD` contra os valores reais de senha e PIN → 0 ocorrências; `tests/test_smoke_task.sh` varre atribuições literais de `ZENY_SEED_*PASSWORD/PIN`.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Comando oficial de run** passou a `./gradlew :app:run` (README, `CLAUDE.md`, `tests/test_docs.sh`): `./gradlew run` executaria também o `run` do seed.
+  - **Segredos do seed** só por argumento ou ambiente (`ZENY_SEED_SERVER`, `ZENY_SEED_ADMIN_LOGIN`, `ZENY_SEED_ADMIN_PASSWORD`, `ZENY_SEED_ADMIN_NEW_PASSWORD`, `ZENY_SEED_MANAGER_PASSWORD`, `ZENY_SEED_RECEPTIONIST_PASSWORD`, `ZENY_SEED_HOUSEKEEPER_PASSWORD`, `ZENY_SEED_MANAGER_PIN`; o argumento vence). A primeira execução num servidor novo troca a senha inicial do admin pela nova; a seguinte entra direto pela nova. Omitir a nova (não deixá-la vazia). Senha nova errada repetida gasta tentativas e bloqueia o admin (LEIA-ME).
+  - **Guarda de servidor alheio:** o seed para, antes de qualquer escrita, se o hotel estiver configurado com outro nome fantasia.
+  - **Usuários da demo:** criados com senha provisória aleatória e trocados para a senha passada; usuário existente com outra senha ou bloqueado é redefinido pela API (`reset-password` zera o bloqueio); o PIN do Gerente é redefinido a cada execução.
+  - **Catálogo:** Pousada Zeny Demonstração; 20 UHs (STD/LUX/SUI); UH 210 em OOO de D a D+2; temporadas Baixa e Alta para 60 dias; plano `BALCAO` sem garantia (reserva nasce confirmada); 2 empresas e 12 hóspedes com CPF/CNPJ sintéticos de dígito válido (não há como garantir que não coincidam com um documento real); 11 reservas com chegada hoje (4 chegadas, 5 hospedados, 2 day use).
+  - **Mensagens ao operador:** erro de código fora do catálogo vira "o servidor recusou a operação (HTTP n)" — o seed nunca ecoa o `detail` do servidor; os adaptadores ainda redigem CPF, CNPJ, nomes, senhas e PIN que eles próprios enviaram. Falhas saem no stdout; ruído `SLF4J(W)` no stderr (silenciar exige dependência nova).
+  - **Contrato:** `housekeepingStatus` é enum fechado; valor novo do servidor é "resposta incompatível" até o M0 sincronizar. Sem ETag no GET, nenhuma escrita com `If-Match` sai.
+  - **Arquivo de segredos da execução:** em `.server/seed-secrets.env` do checkout principal (600, ignorado pelo git; contém as credenciais do `zeny-front` atual).
+- **Notas para a próxima etapa (E06 em diante):**
+  - **Ambiente `zeny-front`:** no ar com a demo completa da data 2026-11-12; admin na senha `ZENY_SEED_ADMIN_NEW_PASSWORD` e os três usuários com as senhas de `.server/seed-secrets.env`. A Governanta pode mudar status (`rooms.status.manage`), o que serve à verificação de tempo real da E06.
+  - **Verificações ao vivo do seed:** `(set -a; . <checkout principal>/.server/seed-secrets.env; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*' --rerun)`. Sem `ZENY_SEED_LIVE=1` elas pulam mesmo com as `ZENY_SEED_*` exportadas.
+  - **Recriar a demo:** `tools/server-env/down.sh -v`, `tools/server-env/up.sh`, `./gradlew :demo-seed:seedJar` e `java -jar demo-seed/build/libs/demo-seed.jar --server …` com os segredos por ambiente (cerca de 10 s). A E07 empacota o JAR.
+  - **Inventário:** o seed espera o inventário refeito pelo servidor (até 60 s) antes das reservas; ao vivo, não precisou esperar.
+  - **Nenhum `PF-NN`:** o servidor aceitou o catálogo inteiro (day use incluso); H5 confirmada.
+  - **Menores estacionados:** redação só da string exata enviada; `PreconditionFailed` sem redação; OOO conferido só na data inicial da espera; `activeRoomsByType` conta UHs fora de OOO; servidor que aceita e não responde leva ~33 s até falhar (timeout do `core`); `guestId` pega o primeiro perfil entre duplicados; testes de ataque com iscas literais de segredo (registrar exceção quando houver scanner de CI).
 
 ---
 
@@ -710,3 +734,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-11 — E02 `#concluida` (`claude --agent orquestrador`): núcleo HTTP e sessão no `core`, revisão final limpa após a onda única de correção.
 - 2026-11-11 — E03 `#concluida` (`claude --agent orquestrador`): design system no `design` e catálogo no `app`, revisão final limpa após a onda de correção.
 - 2026-11-12 — E04 `#concluida` (`claude --agent orquestrador`): login, troca de senha, casca com menu por permissão e diálogo de aprovação, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. Lote de 4 etapas encerrado.
+- 2026-11-12 — E05 `#concluida` (`claude --agent orquestrador`): `demo-seed` idempotente (10 s num ambiente recriado), JAR executável e `smokeTest`, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. H5 confirmada.
