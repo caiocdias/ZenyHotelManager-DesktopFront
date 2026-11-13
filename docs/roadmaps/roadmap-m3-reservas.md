@@ -1,6 +1,6 @@
 # Roadmap — M3 Reservas
 
-> Arquivo: `docs/roadmaps/roadmap-m3-reservas.md` · branch de execução: `roadmap/m3-reservas` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m3-reservas.md` · branch de execução: `roadmap/m3-reservas` · criado em 2026-11-10 · última revisão 2026-11-13
 
 > **Pré-requisito:** etapa E06 ("Gate do marco M2") de `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` marcada `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -37,6 +37,7 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
   - **pendências:**
     - `GET /api/v1/reservations/pending-guarantees`, `/deposit-shortfalls` e `/expected-no-shows`;
     - `GET /api/v1/room-assignments/reallocation-required`.
+  - **confirmação da reserva** (desde o pin `57eb5fac5b8a`, M0 E02): `GET /api/v1/reservations/{id}/confirmation/pdf`, que exige `reservations.reservations.read` e devolve `409 CONFIRMATION_UNAVAILABLE` para reserva cancelada ou no-show. O `POST …/confirmation/print` (fila do servidor) é da M7 E12 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)).
 - **Regras do servidor:**
   - disponibilidade sem overbooking;
   - preço congelado na reserva;
@@ -57,6 +58,7 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 - nova reserva (individual, e agrupadora se o contrato de `bookings` a cobrir);
 - alteração, inclusive estender e reduzir uma estadia em curso;
 - confirmar, cancelar e reativar;
+- confirmação da reserva em PDF, no visualizador da M2 E07;
 - histórico;
 - pendências;
 - seed ampliado;
@@ -66,7 +68,8 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 
 - bloqueios de grupo, rooming list e limite de overbooking, que vão para o M7 (cadastros e gestão);
 - cadastro de tarifas (M7);
-- conta e pagamento de depósito (M4).
+- conta e pagamento de depósito (M4);
+- envio da confirmação pela fila de impressão do servidor (M7 E12) e envio por e-mail, que o contrato não tem.
 
 ## Restrições e invariantes
 
@@ -292,7 +295,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ## E03 — Nova reserva e alteração — #pendente
 
-**Objetivo:** a partir de uma cotação, o usuário cria a reserva: titular buscado ou criado, plano, garantia exigida pela política e observações. Ele também altera uma reserva existente (datas, tipo, plano, hóspede), o que inclui estender ou reduzir a estadia de um hospedado, e confirma uma pré-reserva. Desconto acima do limite pede aprovação.
+**Objetivo:** a partir de uma cotação, o usuário cria a reserva: titular buscado ou criado, plano, garantia exigida pela política e observações. Ele também altera uma reserva existente (datas, tipo, plano, hóspede), o que inclui estender ou reduzir a estadia de um hospedado, e confirma uma pré-reserva. Desconto acima do limite pede aprovação. Depois de criar ou confirmar, abre a confirmação da reserva em PDF para salvar ou imprimir.
 
 **Por que agora:** completa o ciclo comercial da reserva.
 
@@ -304,8 +307,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - Alteração e confirmação: `PUT /api/v1/reservations/{id}` com `If-Match` e `POST /api/v1/reservations/{id}/confirm`.
 - Diálogo de hóspede da M2 E02.
 - Diálogo de aprovação para desconto.
+- Confirmação: `GET /api/v1/reservations/{id}/confirmation/pdf` no visualizador da M2 E07 (em memória, "Salvar como…" e impressão local, ADR 0009), a partir do detalhe da reserva e logo após criar ou confirmar.
 
-**Fora de escopo:** pagamento de depósito (M4) e bloqueios de grupo (M7).
+**Fora de escopo:** pagamento de depósito (M4), bloqueios de grupo (M7) e envio da confirmação pela fila de impressão do servidor (M7 E12).
 
 **Critérios de aceite:**
 
@@ -313,6 +317,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Desconto acima do limite do Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente do seed, a reserva é criada uma vez só.
 - [ ] Estender um hospedado em 1 noite atualiza o período e o histórico.
 - [ ] A alteração concorrente trata o `412` com recarga e aviso.
+- [ ] A confirmação da reserva criada abre no visualizador com o código, as datas e o total iguais aos da API. Numa reserva cancelada, a ação não aparece, ou mostra em pt-BR a recusa `CONFIRMATION_UNAVAILABLE`. Nenhum arquivo é criado sem "Salvar como…".
 
 **Validação obrigatória:**
 
@@ -442,3 +447,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
+- 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`): a E03 ganha a confirmação da reserva em PDF, no visualizador da M2 E07 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)). A impressão pela fila do servidor fica com a M7 E12. Nenhuma tag mudou.

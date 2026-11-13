@@ -31,7 +31,7 @@ Depois da demo, o front acompanha o servidor conforme ele avança.
 - PDV, tela de produção, agente de impressão e TEF. O TEF depende da Q-13 e da Q-05 do servidor, e a JVM deixa o caminho aberto.
 - Instalador nativo assinado (`.msi`/`.deb`) e atualização automática.
 - Compartilhar código com o app mobile. Fica a porta aberta: `sdk` e `core` em módulos Gradle separados (§6.1) podem virar Kotlin Multiplatform depois.
-- Funcionalidades que o servidor ainda não tem (avanço da data operacional, FNRH em produção, impressão, fiscal).
+- Funcionalidades que o servidor ainda não tem (avanço da data operacional, FNRH em produção, impressão, fiscal). *Atualização de 2026-11-13 (rodada 2 do M0):* em `57eb5fac5b8a`, o servidor já gera documentos em PDF e tem a fila de impressão, que entram nos marcos pelo [ADR 0009](../../adr/0009-documentos-pdf-e-impressao.md). O agente de impressão continua fora do desktop.
 
 **Anti-objetivos** (falharia mesmo "funcionando")
 

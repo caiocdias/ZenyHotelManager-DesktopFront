@@ -32,7 +32,7 @@ As dependências são travadas em lockfiles estritos: regrave-os no mesmo commit
 
 O front fala com um commit específico do servidor, registrado em `api/server-pin.properties` (`commit`, `contract_sha256`, `synced_at`). `api/openapi.yaml` é cópia byte a byte do contrato nesse commit, e o hash do pin confere com ela.
 
-Hoje: `ca9f9e2f9808c74c98154f1e8e60381fecbf1b5d`.
+Hoje: `57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`.
 
 O repositório do servidor é **só leitura** para o front: só `rev-parse`, `cat-file`, `show`, `archive` e `diff`. Nada de `checkout`, `worktree add`, `fetch` ou arquivos novos lá. Se faltar algo na API, o front abre um pedido (veja `docs/pedidos-servidor.md`) em vez de remendar o servidor.
 

@@ -1,8 +1,8 @@
 # Roadmap — M2 Recepção do dia
 
-> Arquivo: `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` · branch de execução: `roadmap/m2-recepcao-do-dia` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` · branch de execução: `roadmap/m2-recepcao-do-dia` · criado em 2026-11-10 · última revisão 2026-11-13
 
-> **Pré-requisito:** etapa E07 ("Gate do marco M1") de `docs/roadmaps/roadmap-m1-fundacao.md` marcada `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
+> **Pré-requisito:** etapa E07 ("Gate do marco M1") de `docs/roadmaps/roadmap-m1-fundacao.md` marcada `#concluida` e etapa E02 ("Sincronizar com o servidor em `57eb5fac5b8a`") de `docs/roadmaps/roadmap-m0-sincronizacao.md` marcada `#concluida` (rodada 2, análise de 2026-11-13). Enquanto valer a regra 7 do `docs/roadmaps/README.md` (validação no Windows acumulada), uma etapa `#em-andamento` aguardando só o Windows também satisfaz o pré-requisito. Nesse caso, o handoff da etapa do M2 registra que a base ainda não foi validada no Windows. Se a `main` do servidor avançou de novo desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
 ## Como usar
 
@@ -10,24 +10,31 @@ Inicie uma sessão limpa do Claude Code na raiz do repositório com `claude --ag
 
 ## Objetivo
 
-O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da data operacional e abre o detalhe de uma reserva. Faz o check-in, alocando a UH com sugestão e cotando early check-in, e faz walk-in. Também troca a UH de um hóspede, desfaz um check-in com aprovação do gerente e registra e resolve recados. Tudo isso contra o servidor real, com as listas e o mapa de UHs atualizados em tempo real.
+O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da data operacional e abre o detalhe de uma reserva. Faz o check-in, alocando a UH com sugestão e cotando early check-in, e faz walk-in. Abre e imprime a ficha de registro da hospedagem. Também troca a UH de um hóspede, desfaz um check-in com aprovação do gerente e registra e resolve recados. Tudo isso contra o servidor real, com as listas e o mapa de UHs atualizados em tempo real.
 
 ## Contexto confirmado
 
 - **Base do M1:** módulos `core`, `design` e `app`, sessão, pipeline HTTP, diálogo de aprovação, SSE, mapa de UHs e `demo-seed`. Os caminhos e comandos reais estão nos handoffs de `docs/roadmaps/roadmap-m1-fundacao.md`.
+- **Servidor deste marco:** `57eb5fac5b8a`, fixado pela M0 E02 (o pin anterior, `ca9f9e2f9808`, não tinha a ficha). Pré-voo de 2026-11-13: aditivo (código 11), 303 → 335 operações, nenhuma removida, nenhuma operação existente alterada; mudaram só os schemas `GuestProfileRequest`, `GuestResponse`, `MergeGuestRequest` (`genderDescription`, M5 front) e a descrição de `OperationalSettingsDto.endOfDayTime`.
 - **Operações do contrato** (`api/openapi.yaml`, commit fixado em `api/server-pin.properties`):
   - **reservas do dia e detalhe:** `GET /api/v1/reservations/arrivals`, `/departures` e `/in-house`; `GET /api/v1/reservations/{id}`, `/{id}/history`, `/{id}/room-assignments` e `/{id}/room-suggestions`;
   - **alocação:** `POST /api/v1/reservations/{id}/assign-room`, `/unassign-room` e `/do-not-move`;
   - **check-in e estadia:** `GET /api/v1/reservations/{id}/early-late-quote`; `POST /api/v1/reservations/{id}/check-in`, `/undo-check-in` e `/room-moves`; `POST /api/v1/walk-ins`;
   - **recados:** `GET`/`POST /api/v1/traces`, `GET`/`PUT /api/v1/traces/{id}` e `POST /api/v1/traces/{id}/resolve`;
-  - **hóspedes:** `GET`/`POST /api/v1/guests` e `POST /api/v1/guests/search-by-document`.
+  - **hóspedes:** `GET`/`POST /api/v1/guests` e `POST /api/v1/guests/search-by-document`;
+  - **ficha de registro:** `GET /api/v1/reservations/{id}/registration-card/pdf` (`application/pdf`, exige `frontdesk.stays.checkin`; reserva fora de `CONFIRMED`, `IN_HOUSE` e `CHECKED_OUT`: `409 REGISTRATION_CARD_UNAVAILABLE`).
+- **FNRH no servidor fixado** (M5 E08 e E16 dele, `#concluida`; a E09, homologação com o Serpro, está `#bloqueada`):
+  - o envio é **assíncrono**: cada evento de reserva e de hospedagem (registro, alteração, confirmação, reativação, cancelamento, check-in, desfazer check-in e check-out) grava uma submissão (`REGISTER_RESERVATION`, `CHECK_IN`, `UNDO_CHECK_IN`…), e um job a envia; o `frontdesk` nunca chama o `fnrh`;
+  - o check-in não muda de contrato e conclui com `200` mesmo com a FNRH fora (critério da M5 E08 do servidor);
+  - sem credencial configurada, que é o caso do ambiente `zeny-front`, as submissões ficam `PENDING` sem gastar tentativa;
+  - desfazer um check-in já enviado vira submissão `FAILED` (`NO_REMOTE_OPERATION`), corrigida no portal e encerrada por `dismiss`; a fila e essas ações são da M7 E10 do front.
 - **Regras do servidor:**
   - check-in orquestrado numa transação (ARCHITECTURE §6.1);
   - desfazer check-in é ação sensível, com aprovação de superior;
   - cotação de early/late pela política do `hotel`.
 
   Detalhes nas notas do brain `ZenyHotelManager - Hospedagem e recepção` e `ZenyHotelManager - Módulo reservations (ciclo de vida, alocação, grupos e busca)` e no roadmap do servidor `docs/roadmaps/roadmap-m5-recepcao-fnrh.md` (E01 a E06, `#concluida`).
-- **Design:** [`docs/superpowers/specs/2026-11-10-front-desktop-design.md`](../superpowers/specs/2026-11-10-front-desktop-design.md), §6.2 e §7.
+- **Design:** [`docs/superpowers/specs/2026-11-10-front-desktop-design.md`](../superpowers/specs/2026-11-10-front-desktop-design.md), §6.2 e §7; documentos em PDF e impressão: [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md).
 - **Second Brain:** o hub `ZenyHotelManager-DesktopFront` e as notas do servidor citadas acima.
 
 ## Escopo
@@ -39,6 +46,7 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 - alocação e sugestão de UH;
 - check-in com cotação de early;
 - walk-in;
+- ficha de registro: visualizador de PDF em memória, "Salvar como…" e impressão local (ADR 0009);
 - troca de UH;
 - desfazer check-in;
 - recados;
@@ -51,7 +59,10 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 - busca geral e criação de reservas (M3);
 - conta, pagamento e check-out (M4);
 - perfil completo do hóspede (M5);
-- FNRH, que o servidor ainda não envia (M5 E08 dele, pendente).
+- a fila de envio à FNRH (lista, reenvio e encerramento) e a limpeza da credencial (M7 E10). O servidor já envia, de forma assíncrona e fora do check-in; a recepção não muda por isso;
+- confirmação da reserva em PDF (M3 E03) e extrato da conta em PDF (M4 E02), que reaproveitam o visualizador da E07;
+- impressão pela fila do servidor ("Enviar à impressora do hotel"), que entra com o cadastro de impressoras e agentes (M7 E12, ADR 0009);
+- fechamento do dia (M6 E08).
 
 ## Restrições e invariantes
 
@@ -65,6 +76,7 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
   - instantes no fuso do hotel.
 - **Uso do `core`:** as features usam só o `core` e o `design` do M1. Ação recusada com `APPROVAL_REQUIRED` passa sempre pelo diálogo de aprovação do M1.
 - **Dados pessoais:** documento sempre mascarado. Nenhum dado de hóspede em log nem em cache de disco. O seed usa só dados fictícios.
+- **Documentos em PDF (ADR 0009):** o PDF fica só em memória. Nada de arquivo temporário nem de leitor do sistema; o disco só recebe o arquivo por "Salvar como…", ação explícita do usuário. "Imprimir" usa a impressora do sistema operacional a partir da memória.
 - **Servidor:** é só leitura, e o commit fixado não muda no marco. Lacuna na API vira `PF-NN`, mas nenhuma etapa até 17/11 depende de pedido.
 - **Idioma:** UI e documentação em pt-BR; código em inglês.
 
@@ -75,6 +87,8 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 | H1 | O cadastro mínimo de hóspede exigido pelo check-in cabe num diálogo curto (nome e documento), sem os dados sensíveis da FNRH | O diálogo cresce, ou o check-in pede o perfil completo do M5 | E02, E03 |
 | H2 | O seed consegue deixar UHs prontas e alocadas para as chegadas de hoje | O roteiro de check-in precisa de passos manuais extras | E02 |
 | H3 | Os tópicos SSE existentes (`rooms` e outros do contrato) bastam para manter as listas do dia em dia; senão, a tela rebusca ao voltar ao foco | Listas desatualizadas durante a demo; avaliar `PF-NN` | E01 |
+| H4 | Uma biblioteca de PDF para a JVM (candidata: Apache PDFBox) renderiza em memória a ficha do servidor e a manda para a impressora do sistema, no Linux e no Windows, dentro do JAR multiplataforma e sem estourar a memória do build | Trocar de biblioteca, registrando no handoff; se nenhuma servir, a decisão volta ao usuário (ADR 0009) antes de cair para arquivo temporário | E07 |
+| H5 | O Recepcionista do seed tem `frontdesk.stays.checkin`, que abre a ficha (D-E11-10 do servidor) | O botão some para ele; o roteiro mostra a ficha logado como Gerente | E07 |
 
 ## Definição global de pronto
 
@@ -174,7 +188,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
-| E06 | Gate do marco M2 | #pendente | E03, E04, E05 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
+| E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
+| E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
 
@@ -364,7 +379,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** o desfazer check-in tem efeito na FNRH, e quem cuida dele é o servidor: grava a submissão `UNDO_CHECK_IN`, que vira `FAILED` (`NO_REMOTE_OPERATION`) se o check-in já tinha sido enviado. A tela não mostra nada disso e não chama o `fnrh`. A fila é da M7 E10. No `zeny-front`, sem credencial, tudo fica `PENDING`.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -431,18 +446,89 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E07 — Ficha de registro e visualizador de PDF — #pendente
+
+**Objetivo:** depois do check-in, ou no detalhe de uma reserva confirmada, hospedada ou encerrada, o recepcionista abre a ficha de registro da hospedagem dentro do app. Ele a confere na tela, salva o arquivo onde escolher ou a imprime na impressora do computador. O PDF nunca toca o disco sem a ação dele.
+
+**Por que agora:** fecha a história do check-in com o documento que o gerente conhece em papel. Também cria o visualizador que a confirmação (M3 E03) e o extrato (M4 E02) reaproveitam (ADR 0009).
+
+**Dependências:** E02.
+
+**Escopo:**
+
+- **Download:** `GET /api/v1/reservations/{id}/registration-card/pdf`, por uma fachada do `core` que devolve os bytes do PDF ou o problema RFC 9457 mapeado. As features não tocam no `sdk` (ADR 0008).
+- **Visualizador**, componente reaproveitável no `design`:
+  - páginas renderizadas em memória;
+  - navegação entre páginas e zoom;
+  - "Salvar como…", com o nome sugerido pelo servidor (`ficha-<código>.pdf`);
+  - "Imprimir", pelo diálogo de impressão do sistema operacional, a partir da memória.
+- **Acesso:**
+  - ação "Ficha de registro" no detalhe da reserva (E01), só com `frontdesk.stays.checkin` e nas situações `CONFIRMED`, `IN_HOUSE` e `CHECKED_OUT`;
+  - atalho logo após o check-in (E02).
+- **Erros:** `409 REGISTRATION_CARD_UNAVAILABLE`, `404 RESERVATION_NOT_FOUND` e falha de rede, em pt-BR, sem abrir o visualizador vazio.
+- **Dependência nova:** a biblioteca de PDF (H4), no catálogo e nos lockfiles do mesmo commit.
+
+**Fora de escopo:**
+
+- confirmação da reserva (M3 E03) e extrato (M4 E02);
+- "Enviar à impressora do hotel" pela fila do servidor (M7 E12);
+- corrigir o conteúdo da ficha: os rótulos de motivo de viagem e de meio de transporte saem como "(código FNRH)" até a M6 E15 do servidor.
+
+**Critérios de aceite:**
+
+- [ ] Contra o seed, a ficha de um hospedado abre no app com o código da reserva, a UH e o nome do hóspede, e o documento aparece mascarado como o servidor manda.
+- [ ] Teste: abrir, navegar e fechar o visualizador não cria arquivo nenhum. A pasta temporária da JVM e a pasta do usuário são comparadas antes e depois, com o diretório temporário redirecionado no teste.
+- [ ] "Salvar como…" grava exatamente os bytes recebidos (hash igual ao da resposta) no destino escolhido. Cancelar o diálogo não grava nada.
+- [ ] "Imprimir" abre o diálogo de impressão do sistema, e cancelar não deixa efeito. Uma impressão real (ou para PDF, pela impressora virtual do Windows) é conferida pelo usuário no gate (E06).
+- [ ] Reserva cancelada ou sem ficha: o botão não aparece. Se o servidor recusar, a mensagem sai em pt-BR, sem `code` cru.
+- [ ] O `smokeTest` baixa a ficha de um hospedado do seed e confere que a resposta começa com `%PDF-`.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- `./gradlew resolveAndLockAll --write-locks` no commit da dependência nova, sem lockfile pendente.
+- `./gradlew :app:desktopJar` e abertura da ficha pelo JAR, para conferir que a biblioteca vai dentro do JAR multiplataforma.
+- Inspeção manual contra `zeny-front` com o seed.
+
+**Revisão humana:** não. A convenção, a dependência e a regra de disco foram fixadas pelo ADR 0009, e o gate (E06) mostra a ficha ao usuário.
+
+**Notas para o plano:**
+
+- A ficha é gerada na hora e o servidor não a guarda em cache. Cada abertura é um `GET` novo, sem trilha no servidor (D-E11-10 dele).
+- `java.awt.Desktop.open` e `File.createTempFile` violam o ADR 0009. A impressão vai da memória para o `PrinterJob`, sem arquivo intermediário.
+- O teste de "nenhum arquivo criado" precisa redirecionar `java.io.tmpdir`, porque bibliotecas de PDF costumam usar cache de fontes em disco. Cache de fonte não tem dado de hóspede, mas registre no handoff o que a biblioteca grava.
+- Ler o handoff da M1 E01 sobre o tamanho do JAR multiplataforma e a memória do build antes de escolher a biblioteca (H4).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- A biblioteca de PDF aumenta o JAR ou o tempo de build. Medir antes e depois no handoff.
+- A impressão real no Windows não pode ser testada no notebook. Fica para o roteiro do gate, com a impressora "Microsoft Print to PDF" como alternativa.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E06 — Gate do marco M2 — #pendente
 
 **Objetivo:** o M2 entregue como build testável. O seed tem dados para todos os fluxos do marco, o roteiro do M2 existe e a definição global de pronto foi verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o marco e passa a ser a build de demo.
 
-**Dependências:** E03, E04, E05.
+**Dependências:** E03, E04, E05, E07.
 
 **Escopo:**
 
 - **Seed ampliado:** chegadas sem UH, um hospedado para troca e recados de exemplo.
-- **Roteiro:** `docs/demo/roteiro-m2.md` (a criar), que acumula o do M1 e conta "um dia na recepção": painel, check-in, walk-in, troca de UH, desfazer check-in com aprovação do gerente e recados.
+- **Roteiro:** `docs/demo/roteiro-m2.md` (a criar), que acumula o do M1 e conta "um dia na recepção": painel, check-in com a ficha de registro aberta e impressa, walk-in, troca de UH, desfazer check-in com aprovação do gerente e recados.
 - **Pacote:** atualizado.
 - **Verificação:** num clone limpo.
 
@@ -484,3 +570,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
+- 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`), contra a `main` do servidor em `57eb5fac5b8a`. O marco passa a exigir a M0 E02 concluída. O contexto foi corrigido: a FNRH já é enviada pelo servidor, de forma assíncrona e sem mudar o check-in, e sua fila vai para a M7 E10. Entra a E07 (ficha de registro e visualizador de PDF), por decisão do usuário em entrevista ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E06 passa a depender dela. Confirmação, extrato, impressão pela fila do servidor e fechamento do dia ficam fora de escopo, com destino. H4 e H5 novas. Nenhuma tag mudou.

@@ -304,4 +304,45 @@ assert_exit 2 "save-images com imagem ausente sai com 2" -- \
 assert_contains "$ASSERT_OUT" "up.sh --build" "dica de up.sh --build"
 assert_eq "0" "$(grep -c ' save ' "$dlog")" "nenhum save quando falta imagem"
 
+# --- docker/gate do servidor (fixture local: make_fake_server é compartilhada) ---
+srvg="$tmp/ZenyHotelManagerGate"
+make_fake_server "$srvg"
+mkdir -p "$srvg/docker/gate"
+cat >"$srvg/docker/gate/compose.gate.yaml" <<'YAML'
+name: zeny-gate
+services:
+  api:
+    image: zeny-hotel-manager:gate
+  fnrh-mock:
+    image: wiremock/wiremock:3.13.1
+YAML
+printf '# Gate do servidor\n' >"$srvg/docker/gate/README.md"
+_fgit "$srvg" add -A >/dev/null
+_fgit "$srvg" commit -q -m "docker/gate"
+cg="$(_fgit "$srvg" rev-parse HEAD)"
+fg="$tmp/front-gate"
+make_fake_front "$fg"
+write_fake_pin "$fg" "$srvg" "$cg"
+_fgit "$fg" add -A >/dev/null
+_fgit "$fg" commit -q --allow-empty -m "pin"
+make_fake_jars "$fg"
+
+: >"$dlog"
+assert_exit 0 "save-images com docker/gate no servidor" -- \
+  env PATH="$stubpath" ZENY_SERVER_REPO="$srvg" STUB_IMAGE_PRESENT=1 bash "$fg/tools/server-env/save-images.sh" "$tmp/gate.tar"
+saveline="$(grep ' save -o ' "$dlog")"
+assert_not_contains "$saveline" "zeny-hotel-manager:gate" "save-images ignora docker/gate: sem a imagem :gate"
+assert_not_contains "$saveline" "wiremock" "save-images ignora docker/gate: sem wiremock"
+for img in "zeny-hotel-manager:${cg:0:12}" postgres:18 pgsty/minio:RELEASE.2026-08-04T00-00-00Z caddy:2.11-alpine; do
+  assert_contains "$saveline" "$img" "save-images com docker/gate inclui $img"
+done
+
+assert_exit 0 "pacote com docker/gate: package.sh sai com 0" -- \
+  env ZENY_SERVER_REPO="$srvg" bash "$fg/tools/server-env/package.sh"
+pkgg="$fg/build/demo-package"
+assert_file "$pkgg/server/docker/gate/compose.gate.yaml" "pacote com docker/gate: gate vem do git archive"
+assert_file "$pkgg/server/docker/gate/README.md" "pacote com docker/gate: README do gate no pacote"
+assert_not_contains "$(cat "$pkgg/compose.override.yaml")" "gate" "pacote com docker/gate: override sem gate"
+assert_not_contains "$(cat "$pkgg/LEIA-ME.md")" "gate" "pacote com docker/gate: LEIA-ME sem gate"
+
 finish

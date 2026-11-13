@@ -1,6 +1,6 @@
 # Roadmap — M0 Sincronização com o servidor
 
-> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-13
 
 ## Como usar
 
@@ -163,6 +163,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
+| E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #em-andamento | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
 
 ---
 
@@ -281,9 +282,145 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E02 — Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) — #em-andamento
+
+**Objetivo:** o front passa a apontar para a `main` do servidor em `57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`. O pin e a cópia do contrato são trocados, o SDK é regenerado com as 335 operações e o que quebrar é consertado. `tools/server-env/` é revisto diante das mudanças de `docker/` do servidor. Ao fim, o `smokeTest` e o roteiro do M1 passam contra o servidor novo, e o M2 pode começar.
+
+**Por que agora:** a regra 3 de `docs/roadmaps/README.md` manda sincronizar antes do M2. A ficha de registro, que o M2 ganhou na análise desta rodada (M2 E07), só existe no servidor novo.
+
+**Dependências:** E01.
+
+**Contexto (análise de 2026-11-13, `claude --agent arquiteto`):**
+
+- Pré-voo de 2026-11-13: aditivo (código 11), com o pin `ca9f9e2f9808` 271 commits atrás da `main`, sem breaking change em `/api/v1`.
+- Contrato, comparado por script entre `git show <commit>:api/openapi.yaml` dos dois commits:
+  - de 303 para 335 operações, nenhuma removida e nenhuma existente alterada;
+  - 23 schemas novos, um esquema de segurança novo (`printAgentToken`) e 4 schemas alterados (`GuestProfileRequest`, `GuestResponse`, `MergeGuestRequest`, `OperationalSettingsDto`), só com `genderDescription` e descrições;
+  - as 32 operações novas, por tag:
+    - `end-of-day`: 5;
+    - `FNRH`: 4;
+    - `Printing`: 17, das quais 5 de `/print-agents/me/*`, com `printAgentToken`;
+    - documentos em PDF e impressão: 6, nas tags `frontdesk`, `reservations` e `billing`.
+- Onde cada coisa entrou: ficha → M2 E07; confirmação → M3 E03; extrato → M4 E02; `genderDescription` → M5 E01; fechamento do dia → M6 E08; fila da FNRH e limpeza da credencial → M7 E10; impressoras, agentes e fila de impressão → M7 E12. Decisões em [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md).
+- `docker/` do servidor entre os dois commits:
+  - `compose.yaml`, `.env.example`, `Dockerfile`, `caddy/`, `postgres/`, `storage/` e `.dockerignore` estão **iguais**;
+  - mudaram só `docker/gate/` (novo: o compose isolado do gate do servidor, projeto `zeny-gate`, imagem `zeny-hotel-manager:gate`, WireMock fazendo o papel da FNRH, `gate-env.sh`, `run-gate.sh` e o roteiro `m5-roteiro.sh`) e `docker/prometheus/alerts.yaml` (regras novas de fechamento e FNRH; o compose não sobe Prometheus).
+- Pedidos ao servidor: nenhum `PF-NN` registrado e nenhuma captura "atende PF-NN" no brain.
+
+**Escopo:**
+
+- **Pin e contrato:** `api/server-pin.properties` e `api/openapi.yaml` em `57eb5fac5b8a`, pelo mecanismo da E01.
+- **SDK:** regenerar e compilar o contrato inteiro (ADR 0007, item 1). O teste que amarra o total de operações passa a esperar 335.
+- **Conserto:** o que quebrar em `core`, `app`, `demo-seed` e nos testes. Nada de funcionalidade nova: as telas das operações novas são dos marcos citados acima.
+- **Revisão de `tools/server-env/`:**
+  - confirmar que o override, `up.sh`, `package.sh`, `save-images.sh` e o `.env.example` do front continuam valendo com o compose e o `.env.example` do servidor iguais;
+  - confirmar que `docker/gate/` vai no `git archive` sem efeito no projeto `zeny-front`, porque só é usado com `-f docker/gate/compose.gate.yaml`, e que o `save-images.sh` continua achando só as imagens do `docker/compose.yaml`;
+  - registrar no `LEIA-ME` ou no README do front só o que mudar.
+- **Ambiente e pacote:** subir `zeny-front` em `57eb5fac5b8a` e regenerar `build/demo-package/`.
+- **Verificação:** `smokeTest` e o roteiro acumulado (`docs/demo/roteiro-m1.md`) contra o servidor novo.
+- **Pedidos:** `docs/pedidos-servidor.md` sem mudança de estado (não há `PF-NN`).
+
+**Fora de escopo:**
+
+- telas para as operações novas (M2 a M7, conforme acima);
+- adotar o WireMock da FNRH (`docker/gate/fnrh-mock`) no `zeny-front`. Ruling da análise: sem tela da FNRH antes da M7 E10, ele só acrescentaria uma imagem ao pacote. Sem credencial, as submissões ficam `PENDING` e não atrapalham o check-in. A M7 E10 reavalia;
+- qualquer escrita no repositório do servidor.
+
+**Critérios de aceite:**
+
+- [x] `api/server-pin.properties` tem `commit=57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`, e `sha256sum api/openapi.yaml` é igual a `contract_sha256` e ao hash de `git -C <servidor> show 57eb5fac5b8a:api/openapi.yaml`. *(Os três: `60b309db82622662e2a1196504fe48bac8dd742b1ed51f7bcde1e769535c2d08`.)*
+- [x] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `57eb5fac5b8a`. Se ela tiver andado, a saída é registrada no handoff e o pin continua em `57eb5fac5b8a`. *(`igual (código 0)`, base e alvo `57eb5fac5b8a`.)*
+- [x] O SDK compila as 335 operações, e o teste de cobertura do SDK amarra os 335 `operationId` a métodos gerados. *(`everyOperationInTheContractHasAGeneratedMethod`: 335 métodos e 335 `prepare*`, com `PrintingApi` e `EndOfDayApi`.)*
+- [x] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde. *(Em `d9d1c02`: 2032 testes, 0 falhas, 19 pulados; 36 arquivos, 0 falhas; lint verde.)*
+- [x] `zeny-front` sobe em `57eb5fac5b8a` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele. *(No notebook: `{"status":"UP"}` com `zeny-hotel-manager:57eb5fac5b8a`; `smokeTest` 1/1.)*
+- [x] A revisão de `tools/server-env/` está registrada no handoff, arquivo por arquivo, com o que mudou ou "sem mudança" e o motivo.
+- [ ] O usuário executou o roteiro do M1 contra o servidor novo, no Windows, com o pacote regenerado, e aprovou na parada da etapa.
+- [x] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`). *(`status --porcelain` vazio antes e depois; o `worktree list` mudou só por sessões do servidor, ver o handoff.)*
+
+**Validação obrigatória:**
+
+- `tools/server-drift.sh` → "igual" (ou o registro da defasagem nova).
+- `./gradlew build` + `bash tests/run.sh` → verdes.
+- `./gradlew smokeTest -PserverUrl=…` contra `zeny-front` em `57eb5fac5b8a` → verde.
+- Roteiro do M1 executado pelo usuário.
+
+**Revisão humana:** sim. Troca o servidor da build de demo a 4 dias de 17/11. O roteiro acumulado só o usuário executa.
+
+**Notas para o plano:**
+
+- O ogen (ADR 0007) ainda não viu duas coisas do contrato novo: respostas `application/pdf` (`type: string, format: binary`) e um segundo esquema de segurança (`printAgentToken`). Se a geração ou a compilação falhar por causa delas, pare e relate. Trocar de gerador, excluir operação ou escrever código à mão no `sdk` é decisão de arquitetura (ADR 0007, critério 1).
+- As propriedades novas do servidor (`zeny.fnrh.submissions.*`, `zeny.endofday.*`, `zeny.printing.*`) têm padrão no `application.yaml` dele, e o `.env.example` não mudou. Se o `up.sh` reclamar de variável, confira no README do servidor em `57eb5fac5b8a` antes de mexer no `.env.example` do front.
+- O job `end-of-day-trigger` roda a cada minuto. Sem etapas registradas (a M6 E11 do servidor está pendente), ele não fecha nada e a data operacional não avança. A recriação na manhã da demo (design §7.2) continua necessária.
+- O job `fnrh-submissions-send` roda sem credencial e não gasta tentativa.
+- A suíte do front com o servidor novo pede memória (M1). Não rode junto com o gate do servidor (design §5).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- O SDK novo quebra a compilação do `core` por mudança nos tipos gerados de `GuestProfileRequest` ou `GuestResponse`, que ganharam um campo anulável. Ajustar os construtores no `core` e no `demo-seed`.
+- A `main` do servidor anda de novo durante a etapa. O pin fica em `57eb5fac5b8a`, que foi o analisado, e a próxima rodada do M0 trata o resto.
+- O build da imagem no Windows leva minutos e precisa de internet (ADR 0003). Fazer antes do roteiro.
+
+**Evidências e handoff:**
+
+- **Estado (2026-11-13):** `#em-andamento`, **aguardando o Windows**. A implementação foi revisada e integrada na `main`, a verificação da etapa foi feita no notebook e o pacote foi regenerado. Falta o usuário executar o `roteiro-m1.md` no Windows com o pacote novo e aprovar; com isso a etapa fecha `#concluida`. O usuário decidiu acumular essa validação até voltar a ter o Windows (regra 7 do [README](README.md); item 1 de "Validações acumuladas no Windows"). Por essa regra, a etapa conta como concluída para dependências, e o M2 pode começar. Não retomar esta etapa antes da aprovação do usuário.
+- **Plano:** [`docs/superpowers/plans/2026-11-13-m0-sincronizacao-e02.md`](../superpowers/plans/2026-11-13-m0-sincronizacao-e02.md), 2 tasks. Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (4 Importantes: `Option` em `genderDescription`, `printAgentToken` × `AuthPlugin`/`ApiExecutor`, segredos no `compose config`, `smokeTest` sem caminho no fallback de memória) e aprovado com notas na rodada 1.
+- **Commits** na branch `roadmap/m0-sincronizacao` (cada um com o trailer `Soul:`):
+  - documentação: `29cc674` (análise da rodada 2 trazida do checkout principal), `4145959` (início), `3796ab9`, `494b9a9`, `45b7d79` (plano e revisão);
+  - Task 1, pin, contrato e SDK: `45b7d79..5667625` (`f234b33` catálogo de erros, `3f69d0f` pin e SDK, `5667625` testes do testador);
+  - Task 2, revisão de `tools/server-env/`: `5667625..7b8c99e`;
+  - testador de etapa: `d9d1c02`; nota na M7 E12: `9bf0bb2`; este handoff.
+- **Revisão final** (`revisor-seguranca`, opus): aprovado com ressalvas, "Ready to merge: With fixes", 0 Críticos. Os dois Importantes eram de documentação e procedimento: registrar o R4 (abaixo e na M7 E12) e fazer o merge sem perder as mudanças não commitadas do checkout principal (R1). Sem onda de correção de código.
+  - Scanner `osv-scanner 2.7.0 -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+  - Verificação mecânica `check_test_integrity.py --base 83fd21f`: 2 `ASSERCAO_REMOVIDA` (`assertEquals(303, contract)` → 335 e `assertEquals(353, codes.size)` → 377), justificadas pela revisora: atualização de contagem pelo contrato novo, com teste mais específico ao lado.
+  - Gate em `d9d1c02`: `./gradlew build` BUILD SUCCESSFUL (2032 testes, 0 falhas, 19 pulados, as verificações ao vivo); `bash tests/run.sh` 36 arquivos, 0 falhas; `ktlintCheck detekt` verde.
+- **Critérios verificados:**
+  - **Pin:** `commit=57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`; sha256 `60b309db82622662e2a1196504fe48bac8dd742b1ed51f7bcde1e769535c2d08` na cópia, no pin e no `git show` do servidor; 335 `operationId`.
+  - **Pré-voo:** antes da troca, aditivo (código 11), `ca9f9e2f9808` × `57eb5fac5b8a`; depois, `igual (código 0)`.
+  - **SDK:** o ogen gerou o contrato inteiro sem erro e sem código à mão. Tags novas em `PrintingApi` e `EndOfDayApi`. Caracterização no `SdkAttackTest`: os PDFs (ficha, confirmação, extrato e `getPrintJobContent`) saem como `HttpResponseTyped<Any>` e os bytes vêm íntegros por `raw` (os 256 valores de byte e 70 KB); `genderDescription` é `Option<String?>` (`Some`, `Some(null)`, `Undefined`, nos dois sentidos, também pelo `demo-seed`); o `ogenAuthAttr` de `/print-agents/me/identity` é `printAgentToken`, e o de uma operação comum é `bearerAuth`.
+  - **Conserto:** a compilação não quebrou. O que quebrou foram os testes do catálogo de erros do `core`: o contrato trouxe 24 códigos novos, e o `ErrorCatalog.kt` ganhou 24 mensagens pt-BR (R5).
+  - **Ambiente no notebook:** `down.sh -v`, `up.sh` (build da imagem `zeny-hotel-manager:57eb5fac5b8a`, `cc6ee5ad27bd`), readiness `{"status":"UP"}`, `smokeTest -PserverUrl=http://127.0.0.1:8088` 1/1 (14,9 s), com os segredos de `.server/seed-secrets.env`.
+  - **Pacote** (`build/demo-package/` do checkout principal, 90 MB mais `images/zeny-server-images.tar` de 427 MB): `VERSAO.txt` com `front_commit=9bf0bb2…`, `front_dirty=false`, `server_commit=57eb5fac5b8a…`, `zeny-desktop.jar` sha256 `803f4eb8…` e `demo-seed.jar` `7b9e668d…`; nenhum `.env`.
+  - **Revisão de `tools/server-env/`** (Task 2). No servidor, entre `ca9f9e2f9808` e `57eb5fac5b8a`, só mudaram `docker/gate/` e `docker/prometheus/alerts.yaml`; o diff de `docker/compose.yaml`, `docker/.env.example` e `docker/Dockerfile` é vazio, e os dois `.env.example` têm as mesmas 21 chaves.
+
+    | Arquivo | Resultado | Motivo |
+    |---|---|---|
+    | `compose.override.yaml` | sem mudança | só toca `api.image`, o endpoint público e `proxy.ports`; o compose do servidor não mudou; `compose config` dá projeto `zeny-front` e `127.0.0.1:8088->80` |
+    | `up.sh` | sem mudança | sobe só `docker/compose.yaml`; `compose config --services` = api, db, proxy, storage, storage-init |
+    | `down.sh` | sem mudança | mesmo projeto `zeny-front` |
+    | `package.sh` | sem mudança | o `git archive` leva `docker/gate/` para `server/` (inerte, sem segredo); override e `LEIA-ME` não o citam (testes novos) |
+    | `save-images.sh` | sem mudança | lê só `docker/compose.yaml`; `compose config --images` = caddy, minio, postgres e `zeny-hotel-manager:57eb5fac5b8a` (testes novos) |
+    | `gen-env.sh` | sem mudança | as chaves do `.env.example` não mudaram |
+    | `lib.sh` | sem mudança | `server_tag` resolve `57eb5fac5b8a`; `ensure_server_tree` extraiu a árvore nova e conferiu o sha256 |
+    | `.env.example` | sem mudança | idêntico em chaves ao do servidor |
+    | `LEIA-ME.md` | sem mudança | não cita o gate |
+
+    Testes de regressão: dois casos em `tests/test_package.sh` e o arquivo `tests/test_package_gate_etapa_ataque.sh` (imagem repetida no gate, outros compose em `docker/`, caminho de erro, pacote sem `.env`), todos com teste de mutação.
+  - **Servidor só leitura:** `status --porcelain` vazio antes e depois. O `worktree list` tem os mesmos caminhos e branches do início, mais `/tmp/claude-1000/-home-caio-repos-ZenyHotelManager/399fb2e7-…/scratchpad/old-89601c2` (de uma sessão aberta no repositório do servidor, com outro id) e o `roadmap/m6-operacao-fechamento` avançado de `29ff8d7` para `69588ca` pelo orquestrador do servidor. Nada foi criado por esta sessão.
+  - **Pedidos:** `docs/pedidos-servidor.md` só ganhou a tabela da rodada 2 da análise; nenhum `PF-NN`.
+  - **Pendente (usuário, Windows):** o roteiro do M1 com o pacote novo.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  1. **R1, análise trazida do checkout principal:** a análise da rodada 2 (esta etapa, o ADR 0009, as etapas novas da M2 à M7, `pedidos-servidor.md` e o design) só existia sem commit no checkout principal. Ela foi copiada byte a byte para a branch (`29cc674`). No merge, as mesmas mudanças sem commit do checkout principal são conferidas contra esse commit antes de restauradas. Custo se errado: reverter `29cc674`.
+  2. **R4, `printAgentToken` fora do `core` (segurança):** o `AuthPlugin` (`core/.../session/AuthPlugin.kt:34-37`) põe o `Bearer` do usuário em qualquer requisição com `ogenAuthAttr` não vazio, e o `ApiExecutor` (`core/.../http/ApiExecutor.kt:81-87`) transforma o `401` em `SessionEnded`. Nas 5 rotas `/print-agents/me/*`, isso encerraria a sessão do usuário. Hoje ninguém as chama (ADR 0009). O defeito ficou caracterizado por teste e registrado na M7 E12, sem mudança no `core`. Correção recomendada, quando for preciso: só tratar como sessão de usuário o requisito `bearerAuth`, falhando fechado. **Pendência do arquiteto:** a frase do ADR 0007 ("o `ogenAuthAttr` diz se a operação exige `bearerAuth`") deixou de valer para essas 5 operações.
+  3. **R5, 24 mensagens de erro novas:** o catálogo de erros do `core` ganhou mensagens pt-BR para os códigos novos (fechamento do dia, envios à FNRH, impressão, ficha e confirmação), escritas pelo desenvolvedor a partir das descrições do contrato. A redação é revista nos marcos que exibem esses códigos.
+  4. **R6, demo local recriada:** o `zeny-front` do notebook foi recriado com `down.sh -v` no servidor novo e semeado pelo `smokeTest`. A demo da E05 do M1 deixou de existir (as senhas continuam em `.server/seed-secrets.env`). A imagem `zeny-hotel-manager:ca9f9e2f9808` continua no Docker.
+  5. **Pacote com `server/docker/gate/`:** inerte (o fluxo do `LEIA-ME` não o usa) e sem segredo; só aumenta o pacote. Excluí-lo do `git archive` é decisão do arquiteto.
+- **Notas para a próxima etapa:**
+  - **Na volta ao Windows:** o usuário segue o `roteiro-m1.md` do pacote mais recente (`build/demo-package/`) no Windows, do zero. Para não construir a imagem lá, use o `docker load` de `images/zeny-server-images.tar`, que traz a imagem do servidor fixado. A aprovação fecha esta etapa como `#concluida`.
+  - **M2 E07 (ficha em PDF):** `ApiExecutor.run` chama `typed.body()` (`ApiExecutor.kt:54`). Com `HttpResponseTyped<Any>`, uma fachada de PDF que passe por ali provavelmente vira `IncompatibleResponse` (não testado no `core`). A fachada deve ler os bytes de `raw`, sem log e sem disco (design §6.2).
+  - **M7 E12:** ver a nota do R4 na própria etapa.
+  - **Menores estacionados:** a checagem de "português" e de "fechamento" no `ErrorCatalogNewContractCodesTest` é frouxa (a cobertura real é o `ErrorCatalogTest`); a redação de 3 mensagens ("agente de impressão", "trabalho de impressão", `PRINT_CONTENT_TOO_LARGE` sem dizer o que fazer); a ordem de `"EndOfDay"` na lista do `SdkAttackTest`; a asserção solta `"gate"` em `tests/test_package.sh` (a versão ancorada está no arquivo de ataque); a caracterização do `printAgentToken` cobre só `identity`, não as 5 rotas.
+  - **Ambiente local:** `zeny-front` no ar em `57eb5fac5b8a`, semeado pelo `smokeTest`; `.server/57eb5fac5b8a…/` criado. As ondas paralelas não foram usadas (as 2 tasks eram dependentes).
+
+---
+
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`), com a rodada 1. As rodadas seguintes entram como etapas novas, pelo `development-roadmap` em modo atualização.
 - 2026-11-10 — E01 executada pelo `claude --agent orquestrador`: implementada, revisada e integrada na `main`. Fica `#em-andamento` aguardando a parada humana (readiness no Windows). H1, H3 e H4 confirmadas; H2 aberta.
 - 2026-11-10 — E01 `#concluida` pelo `claude --agent orquestrador`, com a evidência do usuário: readiness `UP` no Windows pelo `LEIA-ME`. H2 confirmada. Não resta etapa elegível no M0 até a próxima rodada de sincronização.
 - 2026-11-10 — `.gitattributes` acrescentado (Menor adiado da E01), com plano revisado e revisão final aprovada (`claude --agent orquestrador`).
+- 2026-11-13 — análise da rodada 2 (`claude --agent arquiteto`, `development-roadmap` em modo atualização), contra a `main` do servidor em `57eb5fac5b8a` (271 commits à frente; pré-voo aditivo, código 11). Entra a E02, a etapa mecânica, com a revisão de `tools/server-env/` diante de `docker/gate/` no escopo. As capacidades novas foram distribuídas: M2 E07, M3 E03, M4 E02, M5 E01, M6 E08, M7 E10 e M7 E12. Decisões no [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md). Nenhum `PF-NN` existia, nenhum foi aberto, e nenhuma captura "atende PF-NN" foi achada.
+- 2026-11-13 — E02 executada pelo `claude --agent orquestrador`: pin e contrato em `57eb5fac5b8a` (335 operações), SDK regenerado, 24 mensagens de erro novas no `core`, `tools/server-env/` revisto (sem mudança, com testes de regressão para `docker/gate/`), `zeny-front` no ar e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando a parada humana (roteiro do M1 no Windows).
+- 2026-11-13 — o usuário decidiu acumular a validação no Windows até voltar a ter acesso a ele (regra 7 do README). A E02 fica `#em-andamento`, aguardando o Windows, e conta como concluída para dependências; o M2 pode começar (`claude --agent orquestrador`).

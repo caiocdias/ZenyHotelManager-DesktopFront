@@ -1,6 +1,6 @@
 # Roadmap — M7 Gestão e cadastros
 
-> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-13
 
 > **Pré-requisito:** a etapa E07 ("Gate do marco M6") de `docs/roadmaps/roadmap-m6-governanca-operacao.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -24,10 +24,11 @@ O administrador e o gerente configuram o hotel inteiro pelo app, sem depender do
 - pontos de caixa, códigos de lançamento e roteamento;
 - modelos e rotinas de checklist;
 - pessoal e escala;
-- configuração da FNRH;
+- configuração da FNRH e fila de envio;
+- impressoras, agentes de impressão e fila de impressão;
 - trilha de auditoria.
 
-Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobile (`sync`, push).
+Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobile (`sync`, push) e do agente de impressão (`/api/v1/print-agents/me/*`).
 
 ## Contexto confirmado
 
@@ -44,8 +45,11 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
   | Financeiro | `/api/v1/cash-points`, `/transaction-codes`, `/routing-rules` |
   | Checklists | `/api/v1/checklist-templates` (com `publish` e `versions`), `/checklist-routines` |
   | Pessoal | `/api/v1/departments`, `/employees`, `/shifts`, `/schedule-patterns`, `/schedule/entries`, `/schedule/generate` |
-  | FNRH | `/api/v1/fnrh/settings`, `/fnrh/requesters`, `/fnrh/domains` (com `refresh`), `/fnrh/status` |
+  | FNRH | `/api/v1/fnrh/settings` (com `clear-credentials`), `/fnrh/requesters`, `/fnrh/domains` (com `refresh`), `/fnrh/status`, `/fnrh/submissions` (com `retry` e `dismiss`) |
+  | Impressão | `/api/v1/print-agents` (com `deactivate` e `rotate-token`), `/printers` (com `deactivate`), `/print-jobs`, e os `POST …/print` de `/reservations/{id}/registration-card`, `/reservations/{id}/confirmation` e `/folios/{id}/statement` |
   | Auditoria | `/api/v1/audit-entries` |
+
+  As linhas de FNRH (submissões e `clear-credentials`) e de Impressão existem desde o pin `57eb5fac5b8a` (M0 E02).
 
 - **Regras do servidor:**
   - **Delegação (RF-ACS-09, ARCHITECTURE §8.2):**
@@ -55,6 +59,8 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
     - usuários e roles nunca são apagados, só desativados.
   - **Tarifas:** tarifa publicada alterada com aprovação sem mudar o preço congelado das reservas.
   - **Credenciais:** credenciais da FNRH cifradas e nunca devolvidas em claro.
+  - **Envio à FNRH** (M5 E08 e E16 do servidor): uma submissão por evento, com ordem causal por reserva. São 8 tentativas, de 1 min a 1 h. `FAILED` e `INVALID` seguram a fila da reserva até `retry` ou `dismiss`. Sem credencial, tudo fica `PENDING` sem gastar tentativa, e ao ligar a integração sai todo o acumulado. `clear-credentials` apaga usuário, senha e CPF padrão e desliga a integração. A homologação com o Serpro (M5 E09 do servidor) está `#bloqueada`.
+  - **Impressão** (M5 E10 do servidor): o agente de impressão é um cliente na LAN, em repositório próprio, e fica fora do desktop (design §2). O token do agente aparece uma única vez, na criação e na troca. Cadastrar agentes e impressoras exige `printing.agents.manage`, que só o Administrador tem. Listar impressoras e jobs exige `printing.jobs.read`.
   - **Logotipo e cabeçalho:** o logotipo do hotel fica em `files`.
 
   Detalhes nas notas do brain:
@@ -70,16 +76,17 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
 
 ## Escopo
 
-**Incluído:** os dez grupos de cadastro e gestão listados no Objetivo e o roteiro do M7.
+**Incluído:** os onze grupos de cadastro e gestão listados no Objetivo e o roteiro do M7.
 
 **Fora de escopo:**
 
 - sincronização offline e push (mobile);
+- o agente de impressão e as rotas dele (`/api/v1/print-agents/me/*`, esquema `printAgentToken`): outro repositório (ADR 0009);
+- fechamento do dia (M6 E08 do front);
 - funcionalidades que o servidor ainda não tem, que entram por rodadas do M0:
-  - fechamento do dia, tarefas de governança e manutenção (M6 do servidor);
+  - tarefas de governança e manutenção (M6 do servidor);
   - pagamentos integrados e fiscal (M7 do servidor);
-  - PDV e distribuição (M8 do servidor);
-  - impressão (M5 E10 e E11 do servidor).
+  - PDV e distribuição (M8 do servidor).
 
 ## Restrições e invariantes
 
@@ -90,7 +97,7 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
   - `ETag` e `If-Match` com `412` tratado;
   - permissões efetivas, com o servidor decidindo.
 - **Autorização:** o front nunca decide regras de delegação nem de escopo. Mostra só o que o usuário pode conceder, a partir das próprias permissões efetivas, e trata o `403` do servidor.
-- **Segredos e credenciais:** senhas, PINs e credenciais da FNRH vão só no corpo da requisição. Nunca ficam em log, preferências nem campo pré-preenchido. A credencial gravada aparece como "configurada", nunca em claro.
+- **Segredos e credenciais:** senhas, PINs, credenciais da FNRH e o token do agente de impressão vão só no corpo da requisição ou da resposta. Nunca ficam em log, preferências nem campo pré-preenchido. A credencial gravada aparece como "configurada", nunca em claro. O token do agente aparece uma vez, com cópia explícita, e some ao fechar o diálogo.
 - **Exclusão:** cadastros são desativados, não apagados, conforme o contrato.
 - **Aprovação:** ação recusada com `APPROVAL_REQUIRED` passa pelo diálogo do M1.
 - **Servidor:** é só leitura, e o commit fixado não muda no marco.
@@ -102,13 +109,14 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
 |---|---|---|---|
 | H1 | O catálogo `GET /api/v1/permissions` traz descrição, escopos suportados e chaves de limite suficientes para montar o editor de roles sem tabela fixa no front | O editor precisa de rótulos em pt-BR mantidos no front, com risco de defasagem no M0 | E05 |
 | H2 | A configuração da FNRH pode ser editada e testada sem credencial real do Serpro, mostrando o status "não configurada" (Q-12 do servidor em aberto) | A tela fica só com a leitura do status até a credencial existir | E10 |
+| H3 | Sem um agente de impressão real, a fila se demonstra com um agente e uma impressora cadastrados pelo app: o job fica pendente e aparece na lista de jobs | O roteiro mostra só o cadastro, e o envio fica para quando houver agente | E12 |
 
 ## Definição global de pronto
 
 - [ ] Comandos oficiais de build, teste e lint verdes.
 - [ ] O `smokeTest` passa contra o ambiente recriado.
 - [ ] Roteiro `docs/demo/roteiro-m7.md`, acumulando os anteriores, executado pelo usuário no Windows. Inclui configurar uma UH, uma tarifa e um usuário só pelo app.
-- [ ] Toda operação do contrato fixado tem tela no app ou está listada como fora do desktop (mobile) no handoff do gate.
+- [ ] Toda operação do contrato fixado tem tela no app ou está listada como fora do desktop (mobile ou agente de impressão) no handoff do gate.
 
 ## Protocolo de execução
 
@@ -217,8 +225,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E08 | Modelos e rotinas de checklist | #pendente | — | Editor de modelos com rascunho, publicação e versões, e rotinas |
 | E09 | Pessoal e montagem da escala | #pendente | — | Departamentos, funcionários, turnos, padrões e geração da escala |
-| E10 | FNRH e trilha de auditoria | #pendente | E05 | Configuração da FNRH, CPF solicitante, domínios e status, e consulta da auditoria |
-| E11 | Gate do marco M7 | #pendente | E03, E04, E06, E07, E08, E09, E10 | Roteiro do M7, cobertura do contrato e definição de pronto verificada |
+| E10 | FNRH e trilha de auditoria | #pendente | E05 | Configuração da FNRH, limpeza da credencial, CPF solicitante, domínios, status, fila de envio e consulta da auditoria |
+| E12 | Impressoras, agentes e fila de impressão | #pendente | E05 | Cadastro de agentes (token exibido uma vez) e impressoras, fila de jobs e "Enviar à impressora do hotel" nas telas de documento |
+| E11 | Gate do marco M7 | #pendente | E03, E04, E06, E07, E08, E09, E10, E12 | Roteiro do M7, cobertura do contrato e definição de pronto verificada |
 
 ---
 
@@ -641,8 +650,10 @@ Todo usuário vê e revoga as próprias sessões.
 **Objetivo:** o administrador cuida da FNRH e consulta a trilha de auditoria:
 
 - edita a configuração da FNRH, e a credencial aparece só como "configurada";
+- limpa a credencial, o que desliga a integração;
 - define e desativa o CPF solicitante de cada usuário;
 - atualiza os domínios oficiais e vê o status da integração;
+- acompanha a fila de envio: submissões por situação, com os erros por campo das `INVALID`, e reenvia ou encerra as `FAILED` e `INVALID`;
 - consulta a trilha com filtros por período, ator e recurso.
 
 **Por que agora:** fecha a conformidade, que é argumento de venda.
@@ -652,22 +663,26 @@ Todo usuário vê e revoga as próprias sessões.
 **Escopo:**
 
 - **FNRH:**
-  - `GET`/`PUT /api/v1/fnrh/settings`;
+  - `GET`/`PUT /api/v1/fnrh/settings` e `POST /api/v1/fnrh/settings/clear-credentials` (`If-Match`, confirmação explícita);
   - `GET /api/v1/fnrh/requesters`, `PUT /api/v1/fnrh/requesters/{userId}` e `POST /api/v1/fnrh/requesters/{userId}/deactivate`;
   - `GET /api/v1/fnrh/domains/{domain}` e `POST /api/v1/fnrh/domains/refresh`;
-  - `GET /api/v1/fnrh/status`.
+  - `GET /api/v1/fnrh/status`;
+  - fila de envio: `GET /api/v1/fnrh/submissions?status=…` (cursor, `fnrh.submissions.read`) e `POST /api/v1/fnrh/submissions/{id}/retry` e `/dismiss` (`fnrh.submissions.manage`), com o código da reserva levando ao detalhe dela (M2 E01).
 - **Auditoria:** `GET /api/v1/audit-entries`.
 
 **Fora de escopo:**
 
-- envio à FNRH, que o servidor ainda não faz (M5 E08 dele);
-- limpeza da credencial, que vem quando o servidor fizer a M5 E16 dele, por rodada do M0.
+- homologação e envio real ao Serpro (M5 E09 do servidor, `#bloqueada`);
+- o WireMock da FNRH no `zeny-front` (`docker/gate/fnrh-mock` do servidor). Ruling da análise da rodada 2 do M0: não adotar por ora. Esta etapa reavalia, por rodada do M0, se a demo deve mostrar submissões `SENT`.
 
 **Critérios de aceite:**
 
 - [ ] Gravar a configuração sem credencial real mostra o status que o servidor devolver, em pt-BR (H2).
 - [ ] A credencial gravada nunca reaparece em claro na tela (teste do *state holder*).
 - [ ] A trilha mostra a revelação de documento feita no M5, com os valores mascarados como o servidor manda.
+- [ ] Contra o seed, sem credencial, as submissões dos check-ins aparecem `PENDING`, com operação e situação em pt-BR, e um valor desconhecido aparece como "Outro (VALOR)".
+- [ ] `retry` e `dismiss` numa submissão que não está `FAILED` nem `INVALID` mostram em pt-BR a recusa do servidor (`FNRH_SUBMISSION_NOT_RETRYABLE` ou `FNRH_SUBMISSION_NOT_DISMISSABLE`). Teste do *state holder* com repositório falso para os casos `FAILED` e `INVALID`.
+- [ ] "Limpar credencial" pede confirmação, envia `If-Match` e trata o `412` com recarga e aviso. Depois dela, o status mostra a integração desligada.
 
 **Validação obrigatória:**
 
@@ -676,7 +691,7 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** não
 
-**Notas para o plano:** a nota `ZenyHotelManager - Módulo fnrh` traz o saneamento, os domínios e a semântica da desativação do CPF solicitante.
+**Notas para o plano:** a nota `ZenyHotelManager - Módulo fnrh` traz o saneamento, os domínios e a semântica da desativação do CPF solicitante. As submissões não trazem dado de hóspede além de ids e do código da reserva, e os erros dos dados sensíveis vêm neutros (`person.sensitiveData`, decisão E08 (e) do servidor). A tela orienta a abrir o perfil (M5 E01) e não tenta adivinhar o campo. Ao ligar a integração, sai todo o acumulado (nota da M5 E08 do servidor): a tela de configuração avisa isso antes de gravar a credencial.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -695,13 +710,71 @@ Todo usuário vê e revoga as próprias sessões.
 
 ---
 
+## E12 — Impressoras, agentes e fila de impressão — #pendente
+
+**Objetivo:** o administrador cadastra os agentes de impressão e as impressoras do hotel e acompanha a fila de jobs:
+
+- ao criar um agente, ou ao trocar o token dele, o token aparece uma única vez, para ser copiado para o agente;
+- as telas de documento (ficha da M2 E07, confirmação da M3 E03 e extrato da M4 E02) ganham "Enviar à impressora do hotel", ao lado da impressão local (ADR 0009).
+
+**Por que agora:** completa a impressão pelo modelo central do servidor, que o mobile também usa, e cobre as rotas de impressão do contrato.
+
+**Dependências:** E05, para os papéis e as permissões de impressão.
+
+**Escopo:**
+
+- **Agentes:** `GET`/`POST /api/v1/print-agents`, `GET /api/v1/print-agents/{id}`, `POST …/{id}/deactivate` e `POST …/{id}/rotate-token`.
+- **Impressoras:** `GET`/`POST /api/v1/printers`, `GET`/`PUT /api/v1/printers/{id}` e `POST …/{id}/deactivate`, com o tipo (`x-extensible-enum`: `THERMAL_ESCPOS`, `A4_PDF`) em pt-BR.
+- **Fila:** `GET /api/v1/print-jobs` (cursor, filtros por situação e impressora) e o `POST /api/v1/print-jobs` manual, se fizer sentido na tela (decidir no plano e registrar no handoff).
+- **Envio de documento:** `POST /api/v1/reservations/{id}/registration-card/print`, `/confirmation/print` e `POST /api/v1/folios/{id}/statement/print`. Cada um leva `Idempotency-Key` e uma impressora ativa escolhida de `GET /api/v1/printers`. A ação só aparece com a permissão efetiva e com pelo menos uma impressora ativa.
+
+**Fora de escopo:**
+
+- o agente de impressão e as rotas `/api/v1/print-agents/me/*` (ADR 0009, design §2);
+- a impressão local, que já existe desde a M2 E07.
+
+**Critérios de aceite:**
+
+- [ ] Criar um agente mostra o token uma vez, com "copiar". Fechar o diálogo o apaga da tela, e ele não aparece em log, preferências nem disco (teste do *state holder*).
+- [ ] Uma impressora cadastrada para o agente aparece ativa. Desativá-la a tira da escolha das telas de documento.
+- [ ] "Enviar à impressora do hotel" na ficha de um hospedado cria um job que aparece na fila (H3), e repetir após erro de rede reaproveita a mesma `Idempotency-Key` (teste).
+- [ ] `UNKNOWN_PRINTER` e `PRINTER_INACTIVE` aparecem em pt-BR, sem `code` cru.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** sem agente, um job fica `PENDING` para sempre, e a tela deixa isso claro. O README do servidor, seção "Impressão", e a nota `ZenyHotelManager - Módulo printing`, se já existir no brain, trazem os detalhes do agente (long-poll, SSE, confirmação e reenvio). O front não implementa nada disso.
+
+*Nota da M0 E02 (2026-11-13, ruling R4):* o `core` não serve às 5 operações `/api/v1/print-agents/me/*`, que usam o esquema `printAgentToken`. O `AuthPlugin` (`core/.../session/AuthPlugin.kt:34-37`) põe o `Bearer` do usuário em qualquer requisição com `ogenAuthAttr` não vazio, e o `ApiExecutor` (`core/.../http/ApiExecutor.kt:81-87`) transforma o `401` dela em `SessionEnded`: chamar uma dessas rotas pelo `core` encerraria a sessão do usuário. Esta etapa não as chama (as rotas do agente ficam fora do desktop, ADR 0009). Se o plano precisar delas, a correção recomendada é o `AuthPlugin` e o `ApiExecutor` só tratarem como sessão de usuário as requisições cujo requisito se chame `bearerAuth`, falhando fechado. O teste `SdkAttackTest.printAgentOperationsDeclarePrintAgentTokenScheme` caracteriza o atributo.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- O token copiado vai parar na área de transferência, fora do controle do app. Copiar só por ação explícita e avisar na tela.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E11 — Gate do marco M7 — #pendente
 
-**Objetivo:** o M7 entregue como build testável. O roteiro do M7 mostra a configuração feita só pelo app. Há uma tabela de cobertura do contrato fixado, com cada operação ligada a uma tela ou marcada como do mobile. A definição de pronto é verificada num clone limpo e no Windows.
+**Objetivo:** o M7 entregue como build testável. O roteiro do M7 mostra a configuração feita só pelo app. Há uma tabela de cobertura do contrato fixado, com cada operação ligada a uma tela ou marcada como do mobile ou do agente de impressão. A definição de pronto é verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha a cobertura do servidor fixado.
 
-**Dependências:** E03, E04, E06, E07, E08, E09, E10.
+**Dependências:** E03, E04, E06, E07, E08, E09, E10, E12.
 
 **Escopo:**
 
@@ -716,7 +789,7 @@ Todo usuário vê e revoga as próprias sessões.
 
 - [ ] Clone limpo: build, teste e lint verdes.
 - [ ] O `smokeTest` passa, e o seed roda em menos de 2 minutos.
-- [ ] A tabela de cobertura liga cada operação do contrato fixado a uma tela ou a "mobile" (`sync`, `push-devices`).
+- [ ] A tabela de cobertura liga cada operação do contrato fixado a uma tela, a "mobile" (`sync`, `push-devices`) ou a "agente de impressão" (`/print-agents/me/*`).
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 
 **Validação obrigatória:**
@@ -747,3 +820,4 @@ Todo usuário vê e revoga as próprias sessões.
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
+- 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E10 ganha a fila de envio à FNRH (lista, `retry` e `dismiss`) e a limpeza da credencial. Ficou registrada a ruling de não adotar o WireMock da FNRH no `zeny-front` por ora. Entra a E12 (impressoras, agentes e fila de impressão, com "Enviar à impressora do hotel" nas telas de documento; [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E11 passa a depender dela e a separar na cobertura as rotas do agente de impressão. O fechamento do dia saiu de "Fora de escopo" e foi para a M6 E08. O marco tem 12 etapas, no limite de referência. Nenhuma tag mudou.
