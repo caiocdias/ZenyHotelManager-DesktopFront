@@ -36,9 +36,14 @@ data class Column<T>(
  *   Um `reload` cancelado antes de começar ainda reinicia a listagem, sem pedir página.
  * - Linha cuja `key` já foi carregada é ignorada; página sem nenhuma linha nova encerra a listagem.
  * - `ApiError` do `fetch` fica em `error` e as linhas ficam; tentar de novo pede o mesmo cursor.
+ * - `refresh` é um `reload` que não esvazia: as linhas, `hasMore` e `error` ficam até a primeira página do
+ *   pager novo chegar, e aí tudo troca de uma vez. Se ela não chega (`ApiError`, ou quem chamou foi cancelado)
+ *   e nenhum `reload`/`refresh` mais novo foi pedido, a atualização fica pendente: as linhas antigas ficam e o
+ *   próximo `loadMore` repete a atualização, mesmo com `hasMore` falso, em vez de acrescentar página.
  * - `key` é pública para a `DataTable` identificar as linhas (tags e chaves da lista).
  * - `sort` e `filter` valem sobre as linhas já carregadas e nunca pedem página.
  */
+@Suppress("TooManyFunctions") // um passo privado por regra do protocolo de geração (carga, reload, refresh)
 class TableState<T>(
     private val pagerFactory: () -> CursorPager<T>,
     val key: (T) -> Any,
@@ -53,6 +58,9 @@ class TableState<T>(
     private var pager = pagerFactory()
     private var pagerGeneration = 0L
     private val keys = HashSet<Any>()
+
+    /** Geração do `refresh` que não terminou; enquanto for atual, `loadMore` repete a atualização. */
+    private var pendingRefresh: Long? = null
 
     @Volatile
     private var inFlight: Job? = null
@@ -95,13 +103,35 @@ class TableState<T>(
         if (!mutex.tryLock()) return
         try {
             // A geração vem do pager, não do contador: um reload pedido depois do `tryLock` já a torna velha.
-            if (isCurrent(pagerGeneration) && hasMore) load(pagerGeneration)
+            val pending = pendingRefresh
+            if (pending != null) {
+                if (isCurrent(pending)) replaceWithFirstPage(pending)
+            } else if (isCurrent(pagerGeneration) && hasMore) {
+                load(pagerGeneration)
+            }
         } finally {
             mutex.unlock()
         }
     }
 
-    suspend fun reload() {
+    suspend fun reload() =
+        latest(abandoned = ::restartIdle) { gen ->
+            restart(gen)
+            load(gen)
+        }
+
+    /** Uma listagem nova sem esvaziar a tabela; veja a regra da atualização pendente na classe. */
+    suspend fun refresh() = latest(abandoned = ::refreshIdle, block = ::replaceWithFirstPage)
+
+    /**
+     * Pede uma carga nova, que vence qualquer outra: sobe a geração, cancela o fetch em voo e roda [block] com o
+     * `mutex` se ainda for a mais nova. Cancelada na fila do lock, a carga que ela descartou não volta, então
+     * roda [abandoned], a menos que uma carga mais nova já cuide da tabela (aí nem espera o lock).
+     */
+    private suspend inline fun latest(
+        crossinline abandoned: (Long) -> Unit,
+        crossinline block: suspend (Long) -> Unit,
+    ) {
         // Antes do lock, nada de estado observável: só o pedido e o cancelamento do fetch em voo.
         val gen = generation.incrementAndGet()
         inFlight?.cancel()
@@ -109,15 +139,11 @@ class TableState<T>(
         try {
             mutex.withLock {
                 started = true
-                if (!isCurrent(gen)) return
-                restart(gen)
-                load(gen)
+                if (isCurrent(gen)) block(gen)
             }
         } catch (e: CancellationException) {
-            // Cancelado na fila do lock: a carga que este pedido descartou não volta, então a listagem
-            // recomeça sem página, a menos que um reload mais novo já cuide dela (aí nem espera o lock).
             if (!started && isCurrent(gen)) {
-                withContext(NonCancellable) { mutex.withLock { if (isCurrent(gen)) restartIdle(gen) } }
+                withContext(NonCancellable) { mutex.withLock { if (isCurrent(gen)) abandoned(gen) } }
             }
             throw e
         }
@@ -132,11 +158,48 @@ class TableState<T>(
         rows = emptyList()
         error = null
         hasMore = true
+        pendingRefresh = null
     }
 
     private fun restartIdle(gen: Long) {
         restart(gen)
         loading = false
+    }
+
+    private fun refreshIdle(gen: Long) {
+        pendingRefresh = gen
+        loading = false
+    }
+
+    /**
+     * Chamada com o `mutex` travado: carrega a primeira página de um pager novo e só então troca linhas, chaves,
+     * pager e `hasMore` de uma vez. Sem a página, e com [gen] ainda atual, deixa a atualização pendente.
+     */
+    private suspend fun replaceWithFirstPage(gen: Long) {
+        loading = true
+        val fresh = pagerFactory()
+        var replaced = false
+        try {
+            val items = fetchPage(gen, fresh) ?: return
+            if (!isCurrent(gen)) return
+            pager = fresh
+            pagerGeneration = gen
+            keys.clear()
+            // Uma só escrita em `rows`: a tabela nunca passa por vazia.
+            val firstPage = items.filter { keys.add(key(it)) }
+            rows = firstPage
+            hasMore = fresh.hasMore && firstPage.isNotEmpty()
+            error = null
+            pendingRefresh = null
+            replaced = true
+        } catch (e: ApiError) {
+            if (isCurrent(gen)) error = e
+        } finally {
+            if (isCurrent(gen)) {
+                if (!replaced) pendingRefresh = gen
+                loading = false
+            }
+        }
     }
 
     /** Chamada com o `mutex` travado; `loading`, `error` e `rows` só mudam enquanto [gen] é atual. */
@@ -154,10 +217,13 @@ class TableState<T>(
     }
 
     /** A próxima página, ou `null` quando um reload a descartou. */
-    private suspend fun fetchPage(gen: Long): List<T>? =
+    private suspend fun fetchPage(
+        gen: Long,
+        from: CursorPager<T> = pager,
+    ): List<T>? =
         try {
             coroutineScope {
-                val fetch = async(start = CoroutineStart.LAZY) { pager.next() }
+                val fetch = async(start = CoroutineStart.LAZY) { from.next() }
                 // Registra antes de conferir: ou o reload acha este fetch e o cancela, ou o pedido dele já
                 // aparece aqui e o fetch nem começa.
                 inFlight = fetch
