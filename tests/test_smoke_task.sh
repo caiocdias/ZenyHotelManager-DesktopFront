@@ -36,10 +36,11 @@ if grep -Eiw 'application' <<<"$kts" >/dev/null; then
 fi
 
 # Nenhum arquivo versionado (nem o novo) atribui valor literal a variável de senha ou PIN do seed.
-# Valores gerados em tempo de execução ($..., $(...)) e placeholders <...> são aceitos.
+# Valores gerados em tempo de execução ($..., $(...)) e placeholders <...> são aceitos. O ataque do testador
+# guarda iscas de propósito, por isso fica fora da varredura.
 cd "$ROOT" || exit 1
-achados="$(git ls-files --cached --others --exclude-standard -z | xargs -0 grep -nHE \
-  'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[A-Z_]*=["'\'']?[^$<"'\''[:space:]]' 2>/dev/null | cut -d: -f1,2)"
+achados="$(git ls-files --cached --others --exclude-standard -z ':!tests/test_smoke_task_ataque.sh' | xargs -0 grep -nHE \
+  'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[A-Z_]*[[:space:]]*[=:][[:space:]]*["'\'']?[^$<"'\''[:space:]]' 2>/dev/null | cut -d: -f1,2)"
 assert_eq "" "$achados" "nenhum arquivo atribui valor literal a ZENY_SEED_*(PASSWORD|PIN)"
 
 finish
