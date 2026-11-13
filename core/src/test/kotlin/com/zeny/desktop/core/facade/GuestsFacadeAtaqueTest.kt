@@ -5,6 +5,7 @@ import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.ErrorCatalog
 import com.zeny.desktop.core.json
 import com.zeny.desktop.core.problem
 import com.zeny.desktop.core.session.SessionState
@@ -232,17 +233,22 @@ class GuestsFacadeAtaqueTest {
         }
 
     @Test
-    fun serverDetailWithGuestDataIsNotShownWhenTheCodeIsUnmapped() =
+    fun unmappedCodeShowsTheServerDetailAndNeverRawJsonOrCode() =
         runTest(timeout = 10.seconds) {
-            // Um código novo do servidor, sem mensagem no catálogo, cai no `detail`; ele pode trazer dado do hóspede.
-            core {
-                json(
-                    """{"code":"GUEST_NEW_RULE","detail":"O hóspede $NAME ($MAIL) tem o documento $FULL_DOC"}""",
-                    HttpStatusCode.Conflict,
+            // Design 6.2: um `code` desconhecido mostra o `detail` do servidor; JSON cru e código cru não aparecem.
+            val cases =
+                mapOf(
+                    """{"code":"GUEST_NEW_RULE","detail":"Perfil em revisão manual."}""" to "Perfil em revisão manual.",
+                    """{"code":"GUEST_NEW_RULE","detail":"GUEST_NEW_RULE"}""" to ErrorCatalog.GENERIC_MESSAGE,
+                    """{"code":"GUEST_NEW_RULE","detail":"{\"x\":1}"}""" to ErrorCatalog.GENERIC_MESSAGE,
                 )
-            }.use { core ->
-                val error = assertFailsWith<ApiError.Problem> { core.guests.guest(G_ID) }
-                assertNoPersonalData(error, "detail do servidor")
+            for ((body, expected) in cases) {
+                core { json(body, HttpStatusCode.Conflict) }.use { core ->
+                    val error = assertFailsWith<ApiError.Problem>(body) { core.guests.guest(G_ID) }
+                    assertEquals(expected, error.userMessage, body)
+                    assertEquals(expected, error.message)
+                    assertFalse("GUEST_NEW_RULE" in error.userMessage)
+                }
             }
         }
 
