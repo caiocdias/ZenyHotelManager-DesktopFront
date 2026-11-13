@@ -2,11 +2,12 @@ package com.zeny.desktop.core.realtime
 
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.sdk.client.StreamApi
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ClosedSendChannelException
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * As assinaturas do stream de uma sessão, servidas por **uma** conexão com a união dos tópicos.
@@ -38,6 +40,9 @@ class RealtimeClient internal constructor(
     private val lock = Any()
     private val subscribers = mutableListOf<Subscriber>()
     private var connection: Connection? = null
+
+    /** O job da última conexão aberta, mesmo depois de parada: a seguinte só começa quando ele terminou. */
+    private var lastConnectionJob: Job? = null
     private var position: Position? = null
     private var sessionWait: Job? = null
     private var closed = false
@@ -46,9 +51,14 @@ class RealtimeClient internal constructor(
         scope.coroutineContext[Job]?.invokeOnCompletion { close() }
     }
 
-    /** Os eventos dos [topics]: `Ready`/`Reset` da conexão e as `Message` desses tópicos. */
+    /**
+     * Os eventos dos [topics]: `Ready`/`Reset` da conexão e as `Message` desses tópicos. Cada tópico é não vazio
+     * e sem vírgula. Quem coleta não pode travar por tempo indefinido: a entrega suspende para todos os assinantes
+     * da sessão, e o [status] segue `Live` enquanto isso.
+     */
     fun subscribe(topics: Set<String>): Flow<RealtimeEvent> {
         require(topics.isNotEmpty()) { "assinatura sem tópicos" }
+        require(topics.all { it.isNotEmpty() && ',' !in it }) { "tópico vazio ou com vírgula" }
         val wanted = topics.toSet()
         return flow {
             val subscriber = Subscriber(wanted)
@@ -123,14 +133,17 @@ class RealtimeClient internal constructor(
     /** A sessão corrente não avisa quando muda: sem sessão, consulta de tempos em tempos. Chamada com o [lock]. */
     private fun awaitSession() {
         if (sessionWait?.isActive == true) return
-        sessionWait =
-            scope.launch {
+        // Preguiçoso: um dispatcher que roda na hora não vê o `sessionWait` antigo.
+        val wait =
+            scope.launch(start = CoroutineStart.LAZY) {
                 while (currentSessionId() == null) delay(SESSION_POLL_MILLIS)
                 synchronized(lock) {
                     sessionWait = null
                     reconcile()
                 }
             }
+        sessionWait = wait
+        wait.start()
     }
 
     private fun stopWaiting() {
@@ -146,17 +159,20 @@ class RealtimeClient internal constructor(
         mutableStatus.value = RealtimeStatus.Idle
     }
 
-    /** Reabre sob [sessionId]; a nova conexão só começa quando a anterior terminou. Chamada com o [lock]. */
+    /**
+     * Reabre sob [sessionId]; a nova conexão só começa quando a anterior terminou, inclusive a já parada e a que
+     * foi trocada enquanto esperava a dela. Chamada com o [lock].
+     */
     private fun open(
         sessionId: String,
         topics: Set<String>,
     ) {
-        val previous = connection?.job
-        previous?.cancel()
+        connection?.job?.cancel()
         if (position?.sessionId != sessionId) position = null
         val next = Connection(sessionId, topics)
         connection = next
-        next.start(previous)
+        next.start(lastConnectionJob)
+        lastConnectionJob = next.job
     }
 
     /** Chamada com o [lock]. */
@@ -190,16 +206,7 @@ class RealtimeClient internal constructor(
 
         fun wants(event: RealtimeEvent): Boolean = event !is RealtimeEvent.Message || event.topic in topics
 
-        suspend fun offer(event: RealtimeEvent) {
-            try {
-                events.send(event)
-            } catch (ignored: ClosedSendChannelException) {
-                // A assinatura já terminou.
-            } catch (ignored: CancellationException) {
-                // O assinante saiu e cancelou a fila; só o cancelamento do leitor propaga.
-                currentCoroutineContext().ensureActive()
-            }
-        }
+        suspend fun offer(event: RealtimeEvent) = events.sendUnlessClosed(event)
     }
 
     /** Uma conexão aberta sob [sessionId]; o que ela lê só vale enquanto for a [connection] corrente. */
@@ -215,9 +222,12 @@ class RealtimeClient internal constructor(
 
         /** Chamada com o [lock]. */
         fun start(previous: Job?) {
-            job =
-                scope.launch {
-                    previous?.join()
+            // Preguiçoso: um dispatcher que roda na hora acharia o `job` ainda sem valor.
+            val launched =
+                scope.launch(start = CoroutineStart.LAZY) {
+                    // Cancelada enquanto espera, a conexão ainda espera: a seguinte espera por ela.
+                    withContext(NonCancellable) { previous?.join() }
+                    ensureActive()
                     val startAfter = synchronized(lock) { position?.takeIf { it.sessionId == sessionId }?.value }
                     StreamConnection(stream, topics, startAfter).run().collect { item ->
                         when (item) {
@@ -227,6 +237,8 @@ class RealtimeClient internal constructor(
                     }
                     finish()
                 }
+            job = launched
+            launched.start()
         }
 
         private fun onStatus(status: RealtimeStatus) {
@@ -274,5 +286,20 @@ class RealtimeClient internal constructor(
 
     private companion object {
         const val SESSION_POLL_MILLIS = 500L
+    }
+}
+
+/**
+ * Entrega à fila de um assinante. Fila que já terminou (fechada, fechada com erro ou cancelada pelo assinante) é
+ * assinatura encerrada; só o cancelamento de quem envia propaga.
+ */
+internal suspend fun <E> SendChannel<E>.sendUnlessClosed(element: E) {
+    try {
+        send(element)
+    } catch (
+        @Suppress("TooGenericExceptionCaught") e: Exception,
+    ) {
+        currentCoroutineContext().ensureActive()
+        if (!isClosedForSend) throw e
     }
 }
