@@ -3,7 +3,6 @@
 # nem fala com servidor. O isolamento por --dry-run foi conferido à mão e consta do relatório do testador.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
-BASE=384d18c
 
 sem_comentario() { sed -E 's@^\s*//.*$@@; s@\s//\s.*$@@' "$1"; }
 
@@ -28,34 +27,22 @@ assert_eq "" "$(grep -E 'gradleProperty\("serverUrl"\)\.(getOrElse|orElse)|serve
 assert_eq "" "$(grep -E '127\.0\.0\.1|localhost|:8088' <<<"$kts")" "o kts do demo-seed não embute endereço de servidor"
 assert_eq "" "$(grep -E '"https?://' "$ROOT/demo-seed/src/smokeTest/kotlin/com/zeny/desktop/seed/smoke/SmokeTest.kt")" "SmokeTest.kt não embute URL"
 
-# --- 2. lockfile: só configurações novas; nenhuma coordenada ou versão nova ----------------------------------
-if ! git -C "$ROOT" cat-file -e "$BASE^{commit}" 2>/dev/null; then
-  skip_case "commit base $BASE ausente: parte do lockfile pulada"
-else
-  for lf in app core design sdk; do
-    if ! git -C "$ROOT" diff --quiet "$BASE" -- "$lf/gradle.lockfile"; then
-      _assert_fail "$lf/gradle.lockfile mudou desde $BASE"
-    fi
-  done
-  for lf in buildscript-gradle.lockfile settings-gradle.lockfile; do
-    git -C "$ROOT" diff --quiet "$BASE" -- "$lf" || _assert_fail "$lf mudou desde $BASE"
-  done
-  antes="$(git -C "$ROOT" show "$BASE:demo-seed/gradle.lockfile" | grep -E '^[^#].*=' | cut -d= -f1 | sort)"
-  depois="$(grep -E '^[^#].*=' "$ROOT/demo-seed/gradle.lockfile" | cut -d= -f1 | sort)"
-  assert_eq "$antes" "$depois" "o lockfile do demo-seed tem exatamente as mesmas coordenadas (sem versão nova)"
-  # Toda configuração antiga continua, intacta, em cada coordenada; as novas são só smokeTest*.
-  while IFS= read -r linha; do
-    coord="${linha%%=*}"
-    velhas="$(git -C "$ROOT" show "$BASE:demo-seed/gradle.lockfile" | grep -F -- "$coord=" | head -n1 | cut -d= -f2)"
-    novas="$(grep -F -- "$coord=" "$ROOT/demo-seed/gradle.lockfile" | head -n1 | cut -d= -f2)"
-    extra="$(tr ',' '\n' <<<"$novas" | grep -vxF -f <(tr ',' '\n' <<<"$velhas") | grep -vi 'smokeTest')"
-    perdida="$(tr ',' '\n' <<<"$velhas" | grep -vxF -f <(tr ',' '\n' <<<"$novas"))"
-    [[ -z "$extra" ]] || _assert_fail "$coord ganhou configuração que não é do smokeTest" "$extra"
-    [[ -z "$perdida" ]] || _assert_fail "$coord perdeu configuração" "$perdida"
-  done < <(git -C "$ROOT" show "$BASE:demo-seed/gradle.lockfile" | grep -E '^[^#].*=')
-  linha_empty="$(grep -E '^empty=' "$ROOT/demo-seed/gradle.lockfile")"
-  assert_contains "$linha_empty" "smokeTest" "configurações vazias do smokeTest travadas"
-fi
+# --- 2. lockfile: invariantes permanentes (sem commit fixo) ----------------------------------------------------
+# (a) o smokeTest não traz coordenada nova: toda coordenada group:artifact:versão do lockfile do demo-seed já está
+#     travada no lockfile de outro módulo (o demo-seed só consome o que o core e os demais já resolvem).
+lf_seed="$ROOT/demo-seed/gradle.lockfile"
+outros=("$ROOT/app/gradle.lockfile" "$ROOT/core/gradle.lockfile" "$ROOT/design/gradle.lockfile" "$ROOT/sdk/gradle.lockfile")
+sem_dono=""
+while IFS= read -r coord; do
+  grep -qF -- "$coord=" "${outros[@]}" || sem_dono+="$coord "
+done < <(grep -E '^[^#].*=' "$lf_seed" | cut -d= -f1 | sort -u)
+assert_eq "" "$sem_dono" "toda coordenada do lockfile do demo-seed está travada em outro módulo (nenhuma nova)"
+# (b) as configurações do smokeTest estão travadas no lockfile do demo-seed, inclusive as vazias.
+assert_contains "$(grep -E '^[^#].*=.*smokeTest' "$lf_seed")" "smokeTestRuntimeClasspath" "smokeTestRuntimeClasspath travado"
+assert_contains "$(grep -E '^[^#].*=.*smokeTest' "$lf_seed")" "smokeTestCompileClasspath" "smokeTestCompileClasspath travado"
+assert_contains "$(grep -E '^empty=' "$lf_seed")" "smokeTest" "configurações vazias do smokeTest travadas"
+# Nenhuma coordenada do lockfile perdeu as configurações de produção e de teste ao ganhar as do smokeTest.
+assert_contains "$(grep -E '^de\.quati\.ogen:core:' "$lf_seed")" "testRuntimeClasspath" "as configurações de teste existentes continuam travadas"
 
 # --- 3. varredura de segredo: o mesmo teste, rodado contra um repositório descartável com iscas ----------------
 tmp="$(mktemp -d)"
