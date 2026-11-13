@@ -290,6 +290,30 @@ class RoomMapStateTest {
         }
 
     @Test
+    fun hasRoomsCountsActiveRoomsIgnoringFilters() =
+        runTest {
+            val empty = loaded(FakeRoomsSource())
+            assertFalse(empty.hasRooms)
+
+            val onlyInactive = FakeRoomsSource().apply { put(roomStatus(a, "101", active = false)) }
+            assertFalse(loaded(onlyInactive).hasRooms)
+
+            val source = FakeRoomsSource().withTwoRooms()
+            val state = loaded(source)
+            assertTrue(state.hasRooms)
+
+            state.toggleType(typeId(2))
+            state.toggleStatus(RoomDisplayStatus.DIRTY)
+            assertEquals(emptyList(), state.floors)
+            assertTrue(state.hasRooms)
+
+            source.server.clear()
+            source.emit(RealtimeEvent.Reset)
+            runCurrent()
+            assertFalse(state.hasRooms)
+        }
+
+    @Test
     fun outOfOrderMessagesCoalesce() =
         runTest {
             val source = FakeRoomsSource().withTwoRooms()

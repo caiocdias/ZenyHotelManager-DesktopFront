@@ -61,6 +61,10 @@ class RoomMapState(
     var floors by mutableStateOf<List<Pair<String, List<RoomTile>>>>(emptyList())
         private set
 
+    /** Há ao menos uma UH ativa, sem olhar os filtros (a tela distingue "nenhuma UH" de "filtros escondem tudo"). */
+    var hasRooms by mutableStateOf(false)
+        private set
+
     /** Nome de cada tipo, com os do filtro vigente; o tipo sem nome lido aparece pelo próprio id. */
     var roomTypeNames by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -282,6 +286,7 @@ class RoomMapState(
     /** Recalcula o que a tela lê a partir das UHs e dos filtros. */
     private fun publish() {
         val active = rooms.values.filter { it.active }
+        hasRooms = active.isNotEmpty()
         val ofType = active.filter { typeFilter.isEmpty() || it.roomTypeId.toString() in typeFilter }
         counters = RoomDisplayStatus.entries.associateWith { s -> ofType.count { displayStatus(it) == s } }
         val visible =

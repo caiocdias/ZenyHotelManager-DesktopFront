@@ -130,7 +130,7 @@ private fun MapBody(state: RoomMapState) {
         state.floors.isNotEmpty() -> Floors(state.floors, state::select)
         state.loading -> LoadingState()
         error != null -> ErrorState(error, onRetry = state::retry)
-        state.typeFilter.isNotEmpty() || state.statusFilter.isNotEmpty() -> EmptyState(NO_ROOMS_FILTERED)
+        state.hasRooms -> EmptyState(NO_ROOMS_FILTERED)
         else -> EmptyState(NO_ROOMS)
     }
 }
