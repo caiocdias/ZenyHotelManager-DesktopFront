@@ -26,6 +26,9 @@ tasks.test {
     systemProperty("java.io.tmpdir", isolatedTmp.absolutePath)
     // O opt-in das verificações ao vivo é estado da tarefa: mudá-lo faz os testes rodarem de novo.
     inputs.property("zenyLiveRealtime", providers.environmentVariable("ZENY_LIVE_REALTIME").orElse(""))
+    // Com o opt-in, a verificação fala com o servidor, que muda entre rodadas: nunca sai UP-TO-DATE.
+    val liveRealtime = providers.environmentVariable("ZENY_LIVE_REALTIME")
+    outputs.upToDateWhen { liveRealtime.orNull != "1" }
     doFirst {
         isolatedPrefs.mkdirs()
         isolatedTmp.mkdirs()

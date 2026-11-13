@@ -31,7 +31,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -191,12 +190,24 @@ class LiveRoomMapCheck {
         val remaining = { (OUTAGE_TIMEOUT_MILLIS - started.elapsedNow().inWholeMilliseconds).coerceAtLeast(1) }
         println("PRONTO: derrube o api")
         System.out.flush()
-        awaitOn(ui, remaining()) { state.live is RealtimeStatus.Reconnecting }
-        println("LiveRoomMapCheck: Reconnecting em ${started.elapsedNow().inWholeMilliseconds} ms")
+        // A última tentativa de reconexão vista, anotada na thread do estado a cada sondagem.
+        var attempt = 0
+        val seesReconnecting = {
+            val reconnecting = state.live as? RealtimeStatus.Reconnecting
+            if (reconnecting != null) attempt = reconnecting.attempt
+            reconnecting != null
+        }
+        awaitOn(ui, remaining()) { seesReconnecting() }
+        println("LiveRoomMapCheck: Reconnecting em ${started.elapsedNow().inWholeMilliseconds} ms (tentativa $attempt)")
         // O `api` de volta e o mapa ainda fora do ar: a escrita cai na janela que a reconexão precisa recuperar.
         // Fora da thread do estado: o `curl` bloqueia.
         while (!housekeeper.answers(tile.roomId)) {
-            check(runBlocking(ui) { state.live } != RealtimeStatus.Live) {
+            val live =
+                runBlocking(ui) {
+                    seesReconnecting()
+                    state.live
+                }
+            check(live != RealtimeStatus.Live) {
                 "o mapa voltou ao vivo antes de o api responder à Governanta: a queda não provou nada, repita"
             }
             check(remaining() > 1) { "o api não voltou em $OUTAGE_TIMEOUT_MILLIS ms" }
@@ -211,8 +222,15 @@ class LiveRoomMapCheck {
         check(afterWrite != RealtimeStatus.Live) {
             "o mapa voltou ao vivo antes de a escrita terminar: a queda não provou nada, repita"
         }
-        awaitOn(ui, remaining()) { state.live == RealtimeStatus.Live }
-        println("LiveRoomMapCheck: Live de novo em ${started.elapsedNow().inWholeMilliseconds} ms")
+        awaitOn(ui, remaining()) {
+            seesReconnecting()
+            state.live == RealtimeStatus.Live
+        }
+        val liveAt = started.elapsedNow().inWholeMilliseconds
+        println(
+            "LiveRoomMapCheck: Live de novo em $liveAt ms, ${liveAt - writtenAt} ms depois da escrita " +
+                "(última tentativa de reconexão vista: $attempt)",
+        )
         awaitOn(ui, remaining()) { (state.tile(tile.roomId)?.version ?: -1) >= written.version }
         println("LiveRoomMapCheck: ladrilho da UH mudada em ${started.elapsedNow().inWholeMilliseconds} ms")
         assertNull(runBlocking(ui) { state.error }, "o mapa ficou com erro depois da queda")
@@ -564,13 +582,19 @@ private class HousekeeperCurl(
     }
 }
 
-private class CurlResponse(
+internal class CurlResponse(
     val code: Int,
     val headers: Map<String, String>,
     val body: String,
     val receivedAt: TimeSource.Monotonic.ValueTimeMark,
 ) {
-    fun json(): JsonObject = Json.parseToJsonElement(body).jsonObject
+    /**
+     * O corpo como objeto JSON. Corpo malformado falha com mensagem própria e sem causa: a do `kotlinx` cita o corpo,
+     * e o do login traz o `accessToken`.
+     */
+    fun json(): JsonObject =
+        runCatching { Json.parseToJsonElement(body) }.getOrNull() as? JsonObject
+            ?: error("resposta do servidor não é um objeto JSON")
 
     companion object {
         /** Cabeçalhos (`include`; o último bloco vale), corpo e, na última linha, o código (`write-out`). */
