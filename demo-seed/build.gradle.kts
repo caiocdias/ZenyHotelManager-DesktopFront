@@ -21,6 +21,35 @@ tasks.test {
     useJUnitPlatform()
 }
 
+// Teste de fumaça contra um servidor de verdade (`./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`, com os
+// segredos nas variáveis ZENY_SEED_*). Fica fora de `check` e de `build`; só o detekt do source set entra no `check`.
+val smokeTestSourceSet =
+    sourceSets.create("smokeTest") {
+        compileClasspath += sourceSets.main.get().output
+        runtimeClasspath += output + compileClasspath
+    }
+
+configurations["smokeTestImplementation"].extendsFrom(configurations.implementation.get())
+configurations["smokeTestRuntimeOnly"].extendsFrom(configurations.runtimeOnly.get())
+
+dependencies {
+    "smokeTestImplementation"(libs.kotlin.test.junit5)
+}
+
+tasks.register<Test>("smokeTest") {
+    group = "verification"
+    description = "Semeia e confere um servidor real (-PserverUrl=...); segredos pelas variáveis ZENY_SEED_*."
+    testClassesDirs = smokeTestSourceSet.output.classesDirs
+    classpath = smokeTestSourceSet.runtimeClasspath
+    useJUnitPlatform()
+    outputs.upToDateWhen { false }
+    val serverUrl = providers.gradleProperty("serverUrl")
+    doFirst {
+        val url = serverUrl.orNull ?: throw GradleException("Informe -PserverUrl=http://endereço:porta")
+        systemProperty("zeny.smoke.serverUrl", url)
+    }
+}
+
 val seedMainClass = "com.zeny.desktop.seed.MainKt"
 
 // `./gradlew :demo-seed:run --args="--help"`; sem o plugin de execução, que fica só no app (`./gradlew :app:run`).

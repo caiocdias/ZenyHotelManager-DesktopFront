@@ -60,9 +60,9 @@ subprojects {
     }
 
     // O plugin do detekt liga ao `check` só a análise sem resolução de tipos; detektMain/detektTest
-    // (com resolução de tipos) também entram, como no servidor.
+    // (com resolução de tipos) também entram, como no servidor; o detektSmokeTest do demo-seed idem.
     tasks.matching { it.name == "check" }.configureEach {
-        dependsOn(tasks.matching { it.name == "detektMain" || it.name == "detektTest" })
+        dependsOn(tasks.matching { it.name == "detektMain" || it.name == "detektTest" || it.name == "detektSmokeTest" })
     }
 }
 

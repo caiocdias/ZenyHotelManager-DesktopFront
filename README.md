@@ -21,6 +21,7 @@ Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O re
 | JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |
 | seed | `./gradlew :demo-seed:run --args="--server http://localhost:8088 --admin-login <login>"`, com os segredos por variáveis de ambiente (veja `--help` e `tools/server-env/LEIA-ME.md`) |
 | JAR do seed | `./gradlew :demo-seed:seedJar` → `demo-seed/build/libs/demo-seed.jar` |
+| smokeTest | `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`, com os segredos pelas variáveis de ambiente do seed (veja `--help`); fora de `check` e de `build` |
 | travas | `./gradlew resolveAndLockAll --write-locks` |
 | gate do projeto | `./gradlew build` + `bash tests/run.sh` |
 

@@ -17,6 +17,7 @@ Kotlin, Compose Multiplatform e Gradle 9.8.1 (wrapper). Versões só em `gradle/
 | JAR | `./gradlew :app:desktopJar` → `app/build/libs/zeny-desktop.jar` |
 | seed | `./gradlew :demo-seed:run --args="--server http://localhost:8088 --admin-login <login>"`, com os segredos por variáveis de ambiente (veja `--help` e `tools/server-env/LEIA-ME.md`) |
 | JAR do seed | `./gradlew :demo-seed:seedJar` → `demo-seed/build/libs/demo-seed.jar` |
+| smokeTest | `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`, com os segredos pelas variáveis `ZENY_SEED_*` (fora de `check` e de `build`) |
 | travas | `./gradlew resolveAndLockAll --write-locks` |
 | gate do projeto | `./gradlew build` + `bash tests/run.sh` |
 
