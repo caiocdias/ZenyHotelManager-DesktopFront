@@ -69,20 +69,6 @@ for src in LEIA-ME.md .env.example gen-env.sh compose.override.yaml; do
     die 1 "arquivo de origem ausente, symlink ou ilegível: $_SERVER_ENV_DIR/$src; restaure o arquivo versionado no front"
 done
 
-# JAR mais antigo que o último commit no código dos JARs: avisa (o pacote sai mesmo assim).
-# Testes (*/src/test/) não entram nos JARs: um commit só neles não torna um JAR velho.
-code_ct="$(git -C "$root" log -1 --format=%ct -- app core design sdk demo-seed gradle '*.kts' \
-  ':(exclude,glob)**/src/test/**')"
-# warn_if_stale JAR COMANDO
-warn_if_stale() {
-  [[ -n "$code_ct" ]] || return 0
-  (($(stat -c %Y -- "$1") < code_ct)) &&
-    printf 'aviso: %s é mais antigo que o último commit do código dos JARs; regere com %s\n' "${1##*/}" "$2" >&2
-  return 0
-}
-warn_if_stale "$app_jar" "./gradlew :app:desktopJar"
-warn_if_stale "$seed_jar" "./gradlew :demo-seed:seedJar"
-
 rm -rf -- "$pkg"
 mkdir -p "$pkg/app" "$pkg/images" "$pkg/server" || die 1 "não foi possível criar $pkg"
 

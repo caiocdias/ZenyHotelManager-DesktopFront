@@ -229,56 +229,18 @@ for padrao in /app/build/ /demo-seed/build/ /docs/demo/; do
 done
 assert_eq "" "$(git -C "$fx" status --porcelain --untracked-files=all)" "make_fake_jars: git status vazio"
 
-# --- JAR velho: aviso, sem falhar ---
+# --- JAR com mtime antigo: sem aviso (o frescor é do Gradle e do sha256 do VERSAO.txt) ---
 fo="$tmp/front-velho"
 jar_front "$fo"
-mkdir -p "$fo/app/src"
-echo 'fun main() {}' >"$fo/app/src/Main.kt"
-_fgit "$fo" add app/src >/dev/null
+mkdir -p "$fo/app/src/main/kotlin"
+echo 'fun main() {}' >"$fo/app/src/main/kotlin/Main.kt"
+_fgit "$fo" add app/src/main >/dev/null
 GIT_COMMITTER_DATE=@1767225600 GIT_AUTHOR_DATE=@1767225600 _fgit "$fo" commit -q -m "código do app" # 2026-01-01
-touch -d @1764547200 "$fo/app/build/libs/zeny-desktop.jar"                                          # 2025-12-01
-touch -d @1769904000 "$fo/demo-seed/build/libs/demo-seed.jar"                                       # 2026-02-01
-assert_exit 0 "JAR velho: package.sh sai com 0" -- bash "$fo/tools/server-env/package.sh"
-assert_contains "$ASSERT_OUT" "aviso:" "JAR velho: aviso no stderr"
-assert_contains "$(grep 'aviso:' <<<"$ASSERT_OUT")" "zeny-desktop.jar" "JAR velho: aviso cita zeny-desktop.jar"
-assert_not_contains "$(grep 'aviso:' <<<"$ASSERT_OUT")" "demo-seed.jar" "JAR novo: sem aviso para demo-seed.jar"
-assert_file "$fo/build/demo-package/app/zeny-desktop.jar" "JAR velho: copiado mesmo assim"
-
-touch -d @1769904000 "$fo/app/build/libs/zeny-desktop.jar" # 2026-02-01
-mkdir -p "$fo/docs"
-echo doc >"$fo/docs/notas.md"
-_fgit "$fo" add docs/notas.md >/dev/null
-GIT_COMMITTER_DATE=@1772323200 GIT_AUTHOR_DATE=@1772323200 _fgit "$fo" commit -q -m "só docs" # 2026-03-01
-err="$(bash "$fo/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_not_contains "$err" "aviso:" "JAR mais novo que o código (commit posterior só em docs/): sem aviso"
-
-mkdir -p "$fo/core"
-echo x >"$fo/core/build.gradle.kts"
-_fgit "$fo" add core >/dev/null
-GIT_COMMITTER_DATE=@1772323200 GIT_AUTHOR_DATE=@1772323200 _fgit "$fo" commit -q -m "core" # 2026-03-01
-err="$(bash "$fo/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_contains "$err" "zeny-desktop.jar" "commit em core/ depois do JAR: aviso cita zeny-desktop.jar"
-assert_contains "$err" "demo-seed.jar" "commit em core/ depois do JAR: aviso cita demo-seed.jar"
-
-# commits só em testes (*/src/test/) não entram nos JARs: JAR mais antigo que eles não gera aviso
-ft="$tmp/front-testes"
-jar_front "$ft"
-for f in app/src/test/kotlin/AppTest.kt core/src/test/kotlin/CoreTest.kt demo-seed/src/test/kotlin/SeedTest.kt; do
-  mkdir -p "$ft/${f%/*}"
-  echo "// $f" >"$ft/$f"
-  _fgit "$ft" add -- "$f" >/dev/null
-  GIT_COMMITTER_DATE=@1772323200 GIT_AUTHOR_DATE=@1772323200 _fgit "$ft" commit -q -m "teste $f" # 2026-03-01
-done
-touch -d @1769904000 "$ft/app/build/libs/zeny-desktop.jar" "$ft/demo-seed/build/libs/demo-seed.jar" # 2026-02-01
-err="$(bash "$ft/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_eq "" "$err" "commit só em */src/test/ depois dos JARs: sem aviso"
-mkdir -p "$ft/app/src/main/kotlin"
-echo 'fun main() {}' >"$ft/app/src/main/kotlin/Main.kt"
-_fgit "$ft" add app/src/main >/dev/null
-GIT_COMMITTER_DATE=@1775001600 GIT_AUTHOR_DATE=@1775001600 _fgit "$ft" commit -q -m "código do app" # 2026-04-01
-err="$(bash "$ft/tools/server-env/package.sh" 2>&1 >/dev/null)"
-assert_contains "$err" "aviso: zeny-desktop.jar" "commit em app/src/main/ depois dos JARs: aviso para zeny-desktop.jar"
-assert_contains "$err" "aviso: demo-seed.jar" "commit em app/src/main/ depois dos JARs: aviso para demo-seed.jar"
+touch -d @1764547200 "$fo/app/build/libs/zeny-desktop.jar" "$fo/demo-seed/build/libs/demo-seed.jar" # 2025-12-01
+assert_exit 0 "JAR com mtime antigo depois de commit em app/src/main/: package.sh sai com 0" -- \
+  bash "$fo/tools/server-env/package.sh"
+assert_not_contains "$ASSERT_OUT" "aviso:" "JAR com mtime antigo depois de commit em app/src/main/: sem aviso"
+assert_eq "1" "$(same_file "$fo/app/build/libs/zeny-desktop.jar" "$fo/build/demo-package/app/zeny-desktop.jar")" "JAR com mtime antigo: copiado"
 
 # --- de um worktree: JARs e commit do worktree, pacote no checkout principal ---
 fw="$tmp/front-wt"
