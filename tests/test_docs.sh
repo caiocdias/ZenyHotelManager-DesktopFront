@@ -97,6 +97,16 @@ rerun="$(grep -F 'Rodar o seed de novo' "$roteiro" 2>/dev/null)"
 assert_contains "$rerun" '`alocações: 0 criados, 2 já existiam`' "roteiro: no seed repetido, alocações ficam em 2"
 assert_contains "$rerun" 'a linha `check-ins` não aparece' "roteiro: no seed repetido, a linha check-ins some"
 
+# O seed repetido só não cria nada se a UH 106 voltou a suja no 7.4 (senão o status dela é recriado).
+assert_contains "$rerun" "7.4" "roteiro: \"nada é criado de novo\" condicionado à volta da UH 106 no 7.4"
+assert_contains "$rerun" '`status de UH: 1 criados, 19 já existiam`' "roteiro: sem o 7.4, a linha de status mostra 1 criado"
+# Bloco com Get-Credential ou Read-Host: o parágrafo logo antes manda rodar uma linha por vez.
+while IFS=: read -r start; do
+  prev="$(awk -v s="$start" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
+  assert_contains "$prev" "rode uma linha por vez (cole, Enter, responda a janela)" \
+    "roteiro: o bloco da linha $start (com credencial) vem depois de \"uma linha por vez\""
+done < <(awk '/^```powershell/ { s = NR; next } /^```/ { s = 0; next } s && /Get-Credential|Read-Host/ { print s; s = 0 }' "$roteiro")
+
 # Seções do LEIA-ME pelo título, nunca pelo número; cada título citado existe no LEIA-ME.
 assert_eq "" "$(grep -nE '[Ss]eção [0-9]' "$roteiro" 2>/dev/null)" "roteiro não cita seção do LEIA-ME pelo número"
 cited="$(grep -oE 'seção "[^"]+"' "$roteiro" 2>/dev/null | sed -E 's/^seção "//; s/"$//' | sort -u)"

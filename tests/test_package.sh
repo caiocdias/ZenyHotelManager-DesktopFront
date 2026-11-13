@@ -166,10 +166,29 @@ for tipo in ausente symlink vazio nao-zip diretorio truncado crc; do
   troca "$seed_jar" "$tipo" "$tmp/valido.jar"
   falha_preserva "demo-seed.jar $tipo" "./gradlew :demo-seed:seedJar"
 done
-for tipo in ausente symlink vazio diretorio ilegivel; do
+tipos_roteiro=(ausente symlink vazio diretorio)
+# Como root, chmod 000 não impede a leitura: o caso ilegivel não provaria nada.
+if (($(id -u) == 0)); then
+  skip_case "roteiro ilegível (rodando como root)"
+else
+  tipos_roteiro+=(ilegivel)
+fi
+for tipo in "${tipos_roteiro[@]}"; do
   troca "$roteiro" "$tipo" "$tmp/outro-roteiro.md"
   falha_preserva "roteiro $tipo" "docs/demo/roteiro-m1.md"
 done
+# Arquivos de origem do pacote (LEIA-ME, .env.example, gen-env.sh) ilegíveis: falha antes do rm -rf.
+if (($(id -u) == 0)); then
+  skip_case "arquivo de origem ilegível (rodando como root)"
+else
+  for origem in LEIA-ME.md .env.example gen-env.sh; do
+    arq="$fa/tools/server-env/$origem"
+    modo="$(stat -c %a -- "$arq")"
+    chmod 000 -- "$arq"
+    falha_preserva "$origem ilegível" "$origem"
+    chmod "$modo" -- "$arq"
+  done
+fi
 assert_exit 0 "artefatos restaurados: package.sh volta a sair com 0" -- bash "$fa/tools/server-env/package.sh"
 
 # sem python3 no PATH: falha clara antes de apagar o pacote anterior (a validação do ZIP usa python3)

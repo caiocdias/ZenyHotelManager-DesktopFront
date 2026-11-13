@@ -61,6 +61,11 @@ sys.exit(0 if ok else 1)
 require_artifact "$app_jar" "gere com ./gradlew :app:desktopJar" zip
 require_artifact "$seed_jar" "gere com ./gradlew :demo-seed:seedJar" zip
 require_artifact "$roteiro" "o roteiro docs/demo/roteiro-m1.md é versionado no front"
+# Os arquivos de origem que o pacote copia de tools/server-env também precisam ser legíveis antes do rm -rf.
+for src in LEIA-ME.md .env.example gen-env.sh; do
+  [[ -f "$_SERVER_ENV_DIR/$src" && -r "$_SERVER_ENV_DIR/$src" ]] ||
+    die 1 "arquivo de origem ausente ou ilegível: $_SERVER_ENV_DIR/$src; confira as permissões (é versionado no front)"
+done
 
 # JAR mais antigo que o último commit no código dos JARs: avisa (o pacote sai mesmo assim).
 code_ct="$(git -C "$root" log -1 --format=%ct -- app core design sdk demo-seed gradle '*.kts')"
@@ -83,7 +88,7 @@ cp "$_SERVER_ENV_DIR/.env.example" "$_SERVER_ENV_DIR/gen-env.sh" "$pkg/" || die 
 chmod +x "$pkg/gen-env.sh"
 cp "$(pin_file)" "$pkg/server-pin.properties" || die 1 "falha ao copiar o pin"
 
-leia="$(<"$_SERVER_ENV_DIR/LEIA-ME.md")"
+leia="$(<"$_SERVER_ENV_DIR/LEIA-ME.md")" || die 1 "falha ao ler $_SERVER_ENV_DIR/LEIA-ME.md"
 leia="$(_replace_all "$leia" @SERVER_COMMIT@ "$commit")"
 leia="$(_replace_all "$leia" @SERVER_TAG@ "$tag")"
 printf '%s\n' "$leia" >"$pkg/LEIA-ME.md"

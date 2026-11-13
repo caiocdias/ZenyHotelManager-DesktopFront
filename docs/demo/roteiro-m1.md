@@ -56,7 +56,7 @@ $LASTEXITCODE
   ```
 
 - Avisos que começam com `SLF4J` antes dessas linhas não são erro.
-- Rodar o seed de novo é seguro: nada é criado de novo e as linhas passam a dizer `0 criados, N já existiam`, com duas diferenças. As reservas que já fizeram check-in não contam mais nas alocações, que ficam em `alocações: 0 criados, 2 já existiam`, e a linha `check-ins` não aparece.
+- Rodar o seed de novo é seguro. Se a UH 106 voltou a suja no bloco 7.4 do passo 7 (ou se o passo 7 ainda não foi feito), nada é criado de novo e as linhas passam a dizer `0 criados, N já existiam`, com duas diferenças: as reservas que já fizeram check-in não contam mais nas alocações, que ficam em `alocações: 0 criados, 2 já existiam`, e a linha `check-ins` não aparece. Se você rodou o 7.3 sem o 7.4, o seed devolve a UH 106 a suja e a linha de status mostra `status de UH: 1 criados, 19 já existiam`.
 
 Feche esta janela do PowerShell, ou apague as variáveis com `Remove-Item Env:ZENY_SEED_*`, para as senhas não ficarem no ambiente.
 
@@ -145,7 +145,7 @@ Com o mapa aberto, a Governanta marca a UH 106 (vaga e suja) como limpa a partir
 
 Abra uma segunda janela do PowerShell (pode ser em qualquer pasta) e rode os blocos abaixo em ordem, na mesma janela. Nos blocos, `curl` não é usado: no Windows PowerShell 5.1, `curl` é outro nome do `Invoke-WebRequest`. Os comandos usam `Invoke-RestMethod` e `Invoke-WebRequest -UseBasicParsing`.
 
-**7.1. Login da Governanta.** O `Get-Credential` abre uma janela de credencial com o usuário `governanta` já preenchido; digite ali a senha da Governança que você escolheu no seed. Se você cancelar a janela, aparecem erros em vermelho e o login não acontece: rode o bloco 7.1 inteiro de novo.
+**7.1. Login da Governanta.** O `Get-Credential` abre uma janela de credencial com o usuário `governanta` já preenchido; digite ali a senha da Governança que você escolheu no seed. Neste bloco, rode uma linha por vez (cole, Enter, responda a janela): colado inteiro, o `Get-Credential` lê a linha seguinte do bloco como resposta. Se você cancelar a janela, aparecem erros em vermelho e o login não acontece: rode o bloco 7.1 de novo desde a primeira linha, também uma linha por vez.
 
 ```powershell
 $base = "http://localhost:8088"
