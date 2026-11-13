@@ -76,5 +76,6 @@ class ReservationsFacade internal constructor(
     private fun uuidOf(id: String): Uuid =
         Uuid.parseOrNull(id) ?: throw IllegalArgumentException("id de reserva inválido")
 
-    private fun Option<String?>.valueOrNull(): String? = (this as? Option.Some)?.value
+    /** Cursor ausente, nulo ou em branco é o fim da lista. */
+    private fun Option<String?>.valueOrNull(): String? = (this as? Option.Some)?.value?.takeIf { it.isNotBlank() }
 }
