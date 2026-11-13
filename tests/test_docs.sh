@@ -147,6 +147,18 @@ else
     "LEIA-ME: o PIN é lido por Read-Host -AsSecureString"
 fi
 assert_contains "$leia" "ConsoleHost_history.txt" "LEIA-ME explica por que não digitar o valor"
+# Uma linha por vez: colado inteiro, o Read-Host e o Get-Credential leriam a linha seguinte do bloco.
+one_ln="$(grep -niF 'uma linha por vez (cole, Enter, responda a janela)' "$leia_file" 2>/dev/null | head -1 | cut -d: -f1)"
+first_set_ln="$(grep -nF '[Environment]::SetEnvironmentVariable("ZENY_SEED_' "$leia_file" 2>/dev/null | head -1 | cut -d: -f1)"
+if [[ -z "$one_ln" || -z "$first_set_ln" ]] || ((one_ln > first_set_ln)); then
+  _assert_fail "LEIA-ME manda rodar o bloco do seed uma linha por vez, antes do bloco" "linha da frase: $one_ln; bloco: $first_set_ln"
+fi
+assert_contains "$leia" "aquela variável não é definida (ou fica com o valor da rodada anterior, na mesma janela)" \
+  "LEIA-ME: janela cancelada deixa o valor da rodada anterior"
+assert_not_contains "$leia" "não a deixe vazia" "LEIA-ME: valor vazio não é proibido (apaga a variável)"
+new_pw_note="$(grep -F '**omita** `ZENY_SEED_ADMIN_NEW_PASSWORD`' "$leia_file" 2>/dev/null)"
+assert_contains "$new_pw_note" "valor vazio" "LEIA-ME: a nota da senha nova fala do valor vazio"
+assert_contains "$new_pw_note" "apaga a variável" "LEIA-ME: valor vazio no SetEnvironmentVariable apaga a variável"
 
 # README: link do roteiro e os JARs gerados antes do package.sh.
 assert_contains "$readme_text" "(docs/demo/roteiro-m1.md)" "README liga o roteiro do M1"
@@ -154,5 +166,6 @@ pkg_row="$(grep -F '`tools/server-env/package.sh`' "$readme" | head -1)"
 assert_contains "$pkg_row" ":demo-seed:seedJar" "linha do package.sh manda gerar os JARs"
 pre="${pkg_row%%\`tools/server-env/package.sh\`*}"
 assert_contains "$pre" './gradlew :app:desktopJar :demo-seed:seedJar' "JARs gerados antes do package.sh"
+assert_contains "$pkg_row" "python3" "linha do package.sh diz que ele precisa do python3 para validar os JARs"
 
 finish

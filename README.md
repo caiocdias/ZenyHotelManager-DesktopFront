@@ -58,7 +58,7 @@ O ambiente usa sempre o projeto compose `zeny-front`, a imagem `zeny-hotel-manag
 | Gerar o `.env` do ambiente a partir do `.env.example` | `tools/server-env/gen-env.sh [--force] [--address ADDR] [--public-endpoint URL] DEST` |
 | Subir o servidor fixado (`zeny-front`) e esperar o readiness; `--build` força a imagem | `tools/server-env/up.sh [--build]` |
 | Derrubar o `zeny-front`; `-v` remove também os volumes dele | `tools/server-env/down.sh [-v\|--volumes]` |
-| Montar o pacote do Windows em `build/demo-package/`, com os JARs e o roteiro (gere antes os JARs com `./gradlew :app:desktopJar :demo-seed:seedJar`; o script não chama o Gradle) | `tools/server-env/package.sh` |
+| Montar o pacote do Windows em `build/demo-package/`, com os JARs e o roteiro (gere antes os JARs com `./gradlew :app:desktopJar :demo-seed:seedJar`; o script não chama o Gradle e precisa do `python3` para validar os JARs) | `tools/server-env/package.sh` |
 | Gravar as imagens do servidor num `.tar` (padrão: `build/demo-package/images/zeny-server-images.tar`) | `tools/server-env/save-images.sh [OUT]` |
 | Rodar os testes (`bash -n`, `shellcheck` se existir, e `tests/test_*.sh`) | `bash tests/run.sh [ARQUIVO...]` |
 

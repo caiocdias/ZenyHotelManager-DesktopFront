@@ -34,12 +34,12 @@ app_jar="$root/app/build/libs/zeny-desktop.jar"
 seed_jar="$root/demo-seed/build/libs/demo-seed.jar"
 roteiro="$root/docs/demo/roteiro-m1.md"
 
-# require_artifact FILE HINT [zip] : arquivo regular (não symlink), não vazio e, com zip, assinatura PK\x03\x04
+# require_artifact FILE HINT [zip] : arquivo regular (não symlink), legível, não vazio e, com zip, assinatura PK\x03\x04
 # e ZIP íntegro (diretório central e CRC de cada entrada, pelo zipfile do python3; um build interrompido falha).
 require_artifact() {
   local file="$1" hint="$2" magic
-  [[ -f "$file" && ! -L "$file" && -s "$file" ]] ||
-    die 1 "artefato ausente ou inválido (precisa ser arquivo regular, não vazio): $file; $hint"
+  [[ -f "$file" && ! -L "$file" && -r "$file" && -s "$file" ]] ||
+    die 1 "artefato ausente ou inválido (precisa ser arquivo regular, legível e não vazio): $file; $hint"
   if [[ "${3:-}" == zip ]]; then
     magic="$(head -c 4 -- "$file" | od -An -tx1 | tr -d ' \n')"
     [[ "$magic" == 504b0304 ]] || die 1 "artefato não é um JAR (ZIP) válido: $file; $hint"

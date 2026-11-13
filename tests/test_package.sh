@@ -142,7 +142,8 @@ falha_preserva() {
   rm -rf -- "$app_jar" "$seed_jar" "$roteiro"
   make_fake_jars "$fa"
 }
-# troca ARQUIVO TIPO : substitui ARQUIVO por ausente, symlink (para um ZIP válido), vazio, não-ZIP ou diretório.
+# troca ARQUIVO TIPO : substitui ARQUIVO por ausente, symlink (para um ZIP válido), vazio, não-ZIP, diretório
+# ou arquivo sem permissão de leitura.
 cp "$app_jar" "$tmp/valido.jar"
 echo 'roteiro de fora' >"$tmp/outro-roteiro.md"
 troca() {
@@ -152,6 +153,7 @@ troca() {
     vazio) : >"$1" ;;
     nao-zip) printf 'PK\x05\x06 nao sou um zip local\n' >"$1" ;;
     diretorio) mkdir "$1" ;;
+    ilegivel) printf 'roteiro sem leitura\n' >"$1" && chmod 000 "$1" ;;
     truncado) head -c 30 -- "$3" >"$1" ;; # começa com PK\x03\x04, mas o ZIP está cortado
     crc) # ZIP com diretório central íntegro e um byte de conteúdo trocado (CRC não confere)
       python3 -I -c 'import sys; d = open(sys.argv[1], "rb").read(); open(sys.argv[2], "wb").write(d.replace(b"Manifest-Version", b"Manifest-Versiom", 1))' "$3" "$1" ;;
@@ -164,7 +166,7 @@ for tipo in ausente symlink vazio nao-zip diretorio truncado crc; do
   troca "$seed_jar" "$tipo" "$tmp/valido.jar"
   falha_preserva "demo-seed.jar $tipo" "./gradlew :demo-seed:seedJar"
 done
-for tipo in ausente symlink vazio diretorio; do
+for tipo in ausente symlink vazio diretorio ilegivel; do
   troca "$roteiro" "$tipo" "$tmp/outro-roteiro.md"
   falha_preserva "roteiro $tipo" "docs/demo/roteiro-m1.md"
 done
