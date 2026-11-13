@@ -11,6 +11,7 @@ import com.zeny.desktop.app.login.PasswordChangeState
 import com.zeny.desktop.app.session.CoreConnection
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.app.shell.Area
+import com.zeny.desktop.app.shell.IMPLEMENTED_AREAS
 import com.zeny.desktop.app.shell.ShellScreen
 import com.zeny.desktop.app.shell.ShellState
 import com.zeny.desktop.core.ZenyCore
@@ -326,7 +327,8 @@ class LiveServerAtaqueCheck {
                 assertEquals(DateInput.format(date), state.businessDate)
                 onNodeWithText(expectedHotel).assertExists()
                 onNodeWithText("Data operacional: ${DateInput.format(date)}").assertExists()
-                Area.entries.forEach { onNodeWithText("${it.label} (em breve)").assertExists() }
+                (Area.entries - IMPLEMENTED_AREAS).forEach { onNodeWithText("${it.label} (em breve)").assertExists() }
+                onNodeWithText("Governança").assertExists()
             }
         }
 

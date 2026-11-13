@@ -87,9 +87,9 @@ class ShellScreenUiTest {
             shell(FakeConnection(), devMode = true)
 
             onNodeWithText("Hóspedes (em breve)").assertExists()
-            onNodeWithText("Governança (em breve)").assertExists()
+            onNodeWithText("Governança").assertExists()
             onNodeWithText("Recepção (em breve)").assertDoesNotExist()
-            onNodeWithText("As telas do seu perfil chegam nas próximas versões.").assertExists()
+            onNodeWithText("Selecione uma área no menu.").assertExists()
         }
 
     @Test
@@ -97,8 +97,9 @@ class ShellScreenUiTest {
         runComposeUiTest {
             shell(FakeConnection(), devMode = false)
 
-            onNodeWithText("Governança", substring = true).assertDoesNotExist()
-            onNodeWithText("As telas do seu perfil chegam nas próximas versões.").assertExists()
+            onNodeWithText("Hóspedes", substring = true).assertDoesNotExist()
+            onNodeWithText("Governança").assertExists()
+            onNodeWithText("Selecione uma área no menu.").assertExists()
         }
 
     @Test
