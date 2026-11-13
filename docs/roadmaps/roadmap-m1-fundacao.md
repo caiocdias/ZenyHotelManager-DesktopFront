@@ -84,14 +84,15 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 | D3 | **Decidido pelo usuário em 2026-11-11:** gerador do SDK confirmado, ogen 0.16.1 (ADR 0007) | Plano B na ADR 0007 se uma versão nova quebrar | todas |
 | H5 | O `demo-seed` cria toda a configuração do M1 pela API com o administrador inicial, inclusive usuários e PIN (`POST /api/v1/users/{id}/reset-pin`), sem SQL direto — **confirmada na E05** (nenhum `PF-NN`) | Lacuna vira pedido `PF-NN`; o roteiro se adapta ao que a API permite | E05 |
 | D4 | **Decidido pelo usuário em 2026-11-12 (entrevista do plano da E06, I7):** valor desconhecido num enum fechado do contrato (por exemplo, `housekeepingStatus`) torna a resposta inteira "versão incompatível", com a mensagem de versão em pt-BR — substitui o "Outro (VALOR)" do critério da E06; o "Outro (VALOR)" segue valendo para os enums extensíveis (`x-extensible-enum`) | Um status novo do servidor derruba o mapa até o M0 sincronizar o contrato | E06 em diante |
+| D5 | **Em aberto (E07):** verificação de checksums das dependências (`gradle/verification-metadata.xml`). Os lockfiles travam versão, não hash | Uma dependência trocada no repositório de origem passaria despercebida; recomendado decidir antes de distribuir a build fora desta máquina | M2 em diante |
 
 ## Definição global de pronto
 
-- [ ] `./gradlew build` verde, com os comandos oficiais registrados no README e na tabela de comandos do `CLAUDE.md`.
-- [ ] O JAR do app abre no Linux e no Windows (no Windows, conferido pelo usuário no gate).
-- [ ] O `smokeTest` passa contra o ambiente `zeny-front`.
+- [x] `./gradlew build` verde, com os comandos oficiais registrados no README e na tabela de comandos do `CLAUDE.md`.
+- [ ] O JAR do app abre no Linux e no Windows (no Windows, conferido pelo usuário no gate). Linux conferido na E07 (`xwininfo`); falta o Windows.
+- [x] O `smokeTest` passa contra o ambiente `zeny-front`.
 - [ ] O roteiro `docs/demo/roteiro-m1.md` foi executado pelo usuário, do jeito que está escrito, contra a demo recriada.
-- [ ] Nenhuma etapa depende de pedido ao servidor.
+- [x] Nenhuma etapa depende de pedido ao servidor.
 
 ## Protocolo de execução
 
@@ -718,9 +719,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Clone limpo: build, teste e lint verdes, e o JAR gerado.
-- [ ] O `smokeTest` passa contra o ambiente recriado.
-- [ ] O pacote contém os JARs, o `LEIA-ME` e o roteiro.
+- [x] Clone limpo: build, teste e lint verdes, e o JAR gerado.
+- [x] O `smokeTest` passa contra o ambiente recriado.
+- [x] O pacote contém os JARs, o `LEIA-ME` e o roteiro.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 
 **Validação obrigatória:**
@@ -741,12 +742,32 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-13):** `#em-andamento`, na parada humana. Tudo o que não depende do Windows está feito e revisado; falta o usuário executar o `roteiro-m1.md` no Windows, do jeito que está escrito, e aprovar.
+- **Plano:** [`docs/superpowers/plans/2026-11-13-m1-fundacao-e07.md`](../superpowers/plans/2026-11-13-m1-fundacao-e07.md), 4 tarefas de risco alto. A revisão de arquitetura bloqueou nas rodadas 0 (3 Importantes: fixture dos JARs × testes de pacote, ordem da evidência do gate, JAR do app abrindo no Linux) e 1 (1 Importante: casos de falha que passariam por JAR ausente) e aprovou na rodada 2. Depois da revisão, o aviso de JAR velho por data saiu do plano (ruling registrada no próprio plano).
+- **Commits:** `f7a5f07..6f08855` na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`), mais o commit deste handoff. Onda 1 (Tasks 1 e 2) em worktrees próprios, com o Gradle em série por falta de memória; Tasks 3 e 4 em série na branch da etapa.
+- **Revisão final:** "Ready to merge: Yes" (0 Críticos, 0 Importantes, 3 Menores adiados).
+  - Scanner `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+  - Verificação mecânica `--base f7a5f07`: 2 `ASSERCAO_REMOVIDA` (o `app/LEIA-ME.txt` provisório do pacote, que o plano manda trocar pelos JARs), justificados.
+  - Gate em `6f08855`: `./gradlew build` BUILD SUCCESSFUL; `bash tests/run.sh` 34 arquivos, 0 falhas.
+- **Critérios verificados:**
+  - **Clone limpo** de `6f08855`: `./gradlew build` (2015 testes, 0 falhas, 19 pulados — as verificações ao vivo), `ktlintCheck detekt`, `:app:desktopJar :demo-seed:seedJar` e `tests/run.sh` (34 arquivos, 0 falhas; 4 casos pulados por não haver o repositório do servidor ao lado do clone) → verdes, sem rede nem servidor.
+  - **Ambiente recriado:** `down.sh -v`, `up.sh` e o seed em 13,7 s, com as 16 linhas do roteiro; `smokeTest` 1/1; verificações ao vivo da E06 verdes ([40, 22, 19] ms no `core`, 220 ms no ladrilho).
+  - **Pacote** (`tools/server-env/package.sh`, em `build/demo-package/` do checkout principal): `app/zeny-desktop.jar` (60 317 939 bytes, sha256 `384d021d…`), `app/demo-seed.jar` (14 764 287 bytes, `afe7e11e…`), `roteiro-m1.md`, `LEIA-ME.md`, `VERSAO.txt` (commit do front e do servidor, árvore limpa e sha256 dos JARs, iguais aos do clone limpo); `demo-seed.jar --help` → 0.
+  - **JAR do app abre no Linux:** janela "Zeny Hotel Manager" (800x563) com e sem `-Dzeny.devShell=true`, stderr vazio (`xwininfo`).
+  - **Roteiro conferido ao vivo:** áreas por perfil por `auth/me` (Recepcionista: Recepção, Reservas, Contas e caixa e Hóspedes "(em breve)" e Governança; Gerente: as mesmas e Gestão "(em breve)"; na build normal, só Governança), hotel, data, legenda, filtros, UH 106; passo 7 com `curl`: login 200, `ETag` com aspas, `MARK_CLEAN` 200, `MARK_DIRTY` 200, logout 204, e os erros 428, 422, 403 e 412.
+  - **Nenhum segredo:** os valores gerados (senhas do seed e do admin, PIN, chaves de cifragem e JWT, chaves do storage) aparecem 0 vezes no pacote, nos JARs extraídos, no `git log -p` da etapa e nos relatórios. Só aparecem padrões já publicados no `.env.example` versionado.
+  - **Pendente (usuário, Windows):** executar o roteiro e aprovar; abrir o JAR no Windows (definição global de pronto).
+- **O que só o Windows confirma** (o PowerShell 5.1 nunca rodou aqui; a sequência HTTP foi conferida com `curl`): o `>>` ao colar o login do 7.1 (com o PSReadLine o bloco roda ao fechar o `}`); o `Get-Credential` cancelado ou com senha em branco; a variável de processo vista pelo `java`; o endereço salvo e o login preenchido depois de Sair; a acentuação da saída do seed no console; `localhost` no Docker Desktop.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Menus por permissão na demo:** o roteiro abre o app com `java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar`, porque na build normal só a Governança tem tela e Recepcionista e Gerente veriam o mesmo menu. Diverge da letra do design §6.2 e da ADR 0006 ("build apresentável"): vai como entrevista na parada.
+  - **Segredos do seed no Windows:** lidos por `Get-Credential`/`Read-Host -AsSecureString` e gravados com `SetEnvironmentVariable(..., "Process")`, nunca digitados no prompt (o PSReadLine 2.0.0 do 5.1 grava o histórico em texto puro). Rodar o bloco uma linha por vez.
+  - **Aviso de JAR velho retirado:** o frescor dos JARs fica com o Gradle; fora do gate, um `package.sh` rodado sobre JARs não regerados grava o `front_commit` novo ao lado de JARs antigos. Recomendação para o M2: gravar o commit no manifesto do JAR pelo Gradle.
+  - **`gen-env.sh` (anterior à etapa):** copia do `.env.example` a senha do banco e a chave de acesso do storage em vez de gerá-las; o `zeny-front` usa valores publicados no repositório.
+  - **Checksums das dependências** (`gradle/verification-metadata.xml`): sem decisão; recomendado antes de distribuir fora desta máquina (linha D5 em "Hipóteses e decisões em aberto").
+  - **Python 3** passou a ser exigido pelo `package.sh` (validação do ZIP dos JARs).
+- **Notas para a próxima etapa:**
+  - **Parada humana:** copie `build/demo-package/` do checkout principal para o Windows, siga o `roteiro-m1.md` como está escrito e aprove; então a E07 fica `#concluida`, o M1 fecha e a definição global de pronto é marcada.
+  - **Menores estacionados:** TOCTOU entre a validação e a cópia dos JARs; diretório pai em symlink aceito para os JARs; `server/.github` e `server/.gitignore` no pacote; `unzip` sem guarda em `test_package_jars_ataque.sh`; o BSTR do PIN sem `ZeroFreeBSTR`; sessões que sobram ao refazer o login no 401/403 do roteiro; 4 sessões abertas no `zeny-front` local pela conferência (somem no próximo `down -v`).
 
 ---
 
@@ -760,3 +781,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-12 — E04 `#concluida` (`claude --agent orquestrador`): login, troca de senha, casca com menu por permissão e diálogo de aprovação, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. Lote de 4 etapas encerrado.
 - 2026-11-12 — E05 `#concluida` (`claude --agent orquestrador`): `demo-seed` idempotente (10 s num ambiente recriado), JAR executável e `smokeTest`, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. H5 confirmada.
 - 2026-11-13 — E06 `#concluida` (`claude --agent orquestrador`): cliente SSE com reconexão no `core` e mapa de UHs ao vivo na área Governança; propagação medida de 17 a 52 ms no `core` e de 58 a 264 ms no ladrilho, e recuperação da queda do `api` verificada contra o `zeny-front`; revisão final limpa após a onda de correção. H4 não ocorreu. Critério "Outro (VALOR)" substituído por decisão do usuário (I7).
+- 2026-11-13 — E07 executada (`claude --agent orquestrador`): pacote com os JARs, o roteiro e o `VERSAO.txt`, roteiro do M1, demo recriada com `smokeTest`, clone limpo e JAR abrindo no Linux; revisão final limpa. Fica `#em-andamento` na parada humana (roteiro no Windows). Lote E05–E07 encerrado.
