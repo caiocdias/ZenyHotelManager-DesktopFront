@@ -363,8 +363,53 @@ for f in "$rot" "$leia_f"; do
   bad="$(grep -nE 'ZENY_SEED_[A-Z_]*[[:space:]]*=' "$f" | grep -vE 'ZENY_SEED_[A-Z_]*[[:space:]]*=[[:space:]]*"<[^>"]+>"[[:space:]]*$')"
   assert_eq "" "$bad" "${f#"$ROOT"/}: ZENY_SEED_* só com \"<...>\""
 done
-n_seed_vars="$(grep -cE '^\$env:ZENY_SEED_[A-Z_]+[[:space:]]*=' "$leia_f")"
-((n_seed_vars >= 6)) || _assert_fail "LEIA-ME define as 6 variáveis do seed (achadas: $n_seed_vars)"
+# 3.1b Os 6 segredos do seed: definidos no LEIA-ME por SetEnvironmentVariable(..., "Process"), num bloco
+#      PowerShell, antes do java -jar; o valor vem da janela do Get-Credential (senhas) ou de um
+#      Read-Host -AsSecureString (PIN), nunca de texto digitado na linha (o 5.1 grava cada linha no histórico).
+seed_secrets="ZENY_SEED_ADMIN_PASSWORD ZENY_SEED_ADMIN_NEW_PASSWORD ZENY_SEED_MANAGER_PASSWORD
+ZENY_SEED_RECEPTIONIST_PASSWORD ZENY_SEED_HOUSEKEEPER_PASSWORD ZENY_SEED_MANAGER_PIN"
+# A lista acima é a dos segredos que o seed lê (senhas e PIN do SeedArgs.kt): nenhum a mais, nenhum a menos.
+assert_eq "$(tr ' ' '\n' <<<"$seed_secrets" | grep . | sort)" \
+  "$(grep -oE 'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)' "$seedargs_kt" | sort -u)" "os 6 segredos são os que o seed lê"
+leia_ps_text="$(cut -f2- <<<"$leia_ps")"
+seed_java_ln="$(grep -nF 'java -jar app\demo-seed.jar --server' <<<"$leia_ps_text" | head -1 | cut -d: -f1)"
+[[ -n "$seed_java_ln" ]] || _assert_fail "LEIA-ME: bloco PowerShell roda o demo-seed.jar"
+gc_value='^\(Get-Credential( -UserName [A-Za-z0-9_.-]+)?( -Message "[^"$`]*")?\)\.GetNetworkCredential\(\)\.Password$'
+pin_value='^\[Runtime\.InteropServices\.Marshal\]::PtrToStringBSTR\(\[Runtime\.InteropServices\.Marshal\]::SecureStringToBSTR\(\$[A-Za-z_][A-Za-z0-9_]*\)\)$'
+for v in $seed_secrets; do
+  lines="$(grep -nE "^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\"," <<<"$leia_ps_text")"
+  if [[ "$(grep -c . <<<"$lines")" != 1 ]]; then
+    _assert_fail "LEIA-ME define $v uma vez por [Environment]::SetEnvironmentVariable num bloco PowerShell" "linhas: $lines"
+    continue
+  fi
+  ln="${lines%%:*}"
+  line="${lines#*:}"
+  value="$(sed -nE "s/^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\", (.*), \"Process\"\\)$/\\1/p" <<<"$line")"
+  if [[ -z "$value" ]]; then
+    _assert_fail "$v definida no escopo \"Process\"" "linha: $line"
+    continue
+  fi
+  [[ -n "$seed_java_ln" ]] && ((ln < seed_java_ln)) || _assert_fail "$v definida antes do java -jar do seed"
+  if [[ "$v" == *_PIN ]]; then
+    if ! grep -qE "$pin_value" <<<"$value"; then
+      _assert_fail "$v vem de um SecureString convertido pelo Marshal" "valor: $value"
+      continue
+    fi
+    sv="$(grep -oE '\$[A-Za-z_][A-Za-z0-9_]*\)\)$' <<<"$value" | tr -d ')$')"
+    sv_ln="$(grep -nE "^\\\$${sv}[[:space:]]*=[[:space:]]*Read-Host[[:space:]]+-AsSecureString([[:space:]]|$)" <<<"$leia_ps_text" | tail -1 | cut -d: -f1)"
+    [[ -n "$sv_ln" ]] && ((sv_ln < ln)) || _assert_fail "\$$sv do $v vem de Read-Host -AsSecureString antes do uso"
+    rm_ln="$(grep -nE "^Remove-Variable[[:space:]]+(-Name[[:space:]]+)?${sv}([[:space:]]|$)" <<<"$leia_ps_text" | head -1 | cut -d: -f1)"
+    [[ -n "$rm_ln" ]] && ((rm_ln > ln)) || _assert_fail "Remove-Variable $sv depois de definir $v"
+  else
+    grep -qE "$gc_value" <<<"$value" ||
+      _assert_fail "$v vem de (Get-Credential ...).GetNetworkCredential().Password, sem valor literal" "valor: $value"
+  fi
+done
+# 3.1c A volta do padrão antigo: segredo do seed atribuído na linha, com qualquer valor (até "<...>"), nos blocos.
+assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE '\$env:ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[[:space:]]*=')" \
+  "blocos PowerShell sem \$env:ZENY_SEED_*PASSWORD/PIN = (o 5.1 grava a linha no histórico)"
+assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE 'SetEnvironmentVariable\("ZENY_SEED_[A-Z_]*(PASSWORD|PIN)",[[:space:]]*["'"'"']')" \
+  "SetEnvironmentVariable dos segredos sem valor literal"
 
 # 3.2 Nenhum comando com senha ou PIN em argumento (o seed aceita --*-password e --manager-pin).
 assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE -- '--[a-z-]*(password|pin)([=[:space:]]|$)')" \
@@ -414,7 +459,8 @@ in_list "$step2_cmd" "$leia_app" || _assert_fail "comando do passo 2 igual ao do
 
 # 4.5 As variáveis de senha citadas pelo roteiro são as do LEIA-ME e as que o seed lê.
 for v in $(grep -oE 'ZENY_SEED_[A-Z_]+' "$rot" | sort -u); do
-  grep -qE "\\\$env:${v}[[:space:]]*=" "$leia_f" || _assert_fail "$v citada pelo roteiro é definida no LEIA-ME"
+  grep -qE "^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\", .*, \"Process\"\\)$" <<<"$leia_ps_text" ||
+    _assert_fail "$v citada pelo roteiro é definida no LEIA-ME por SetEnvironmentVariable(..., \"Process\")"
   grep -qF -- "$v" "$seedargs_kt" || _assert_fail "$v citada pelo roteiro é lida pelo seed"
 done
 for v in ZENY_SEED_RECEPTIONIST_PASSWORD ZENY_SEED_MANAGER_PASSWORD ZENY_SEED_HOUSEKEEPER_PASSWORD; do
