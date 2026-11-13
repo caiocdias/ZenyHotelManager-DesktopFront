@@ -155,3 +155,13 @@ Não é tarefa de implementação: são comandos do projeto que o orquestrador r
 4. Ambiente: com `MemAvailable` ≥ 6 GiB (esperar e tentar de novo se faltar), `tools/server-env/down.sh -v`, `tools/server-env/up.sh` (constrói `zeny-hotel-manager:57eb5fac5b8a`), readiness `UP`, administrador inicial e `smokeTest` com os segredos de `.server/seed-secrets.env` e do `.env` (`./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`); depois, o seed da demo como no roteiro. **Sem memória no notebook:** registrar; a subida vai ao Windows na parada, e o `smokeTest` roda do notebook contra `http://<IP do Windows>:8088` (como a M1 E05 previu), com os segredos `ZENY_SEED_*` daquele ambiente.
 5. Pacote: JARs (`./gradlew :app:desktopJar :demo-seed:seedJar`) e `tools/server-env/package.sh`, com o `VERSAO.txt` citando o servidor `57eb5fac5b8a`. `tools/server-env/save-images.sh` só se a imagem `zeny-hotel-manager:57eb5fac5b8a` existir no notebook; senão, registrar que as imagens são salvas depois do build no Windows.
 6. Parada humana: o usuário executa `roteiro-m1.md` no Windows com o pacote novo e aprova.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas (2026-11-13).
+- **Rodadas:** 1 (rodada 0 bloqueada com 4 Importantes — `Option` em `genderDescription`, `printAgentToken` × `AuthPlugin`/`ApiExecutor`, segredos no `compose config`, `smokeTest` sem caminho no fallback de memória — e 6 Menores; todos resolvidos na rodada 1).
+- **Modelo:** `revisor-arquitetura` no opus.
+- **Notas Menores:**
+  - M7: o repositório não tem `ARCHITECTURE.md`; o plano foi julgado contra o design e os ADRs.
+  - A correção da frase do ADR 0007 sobre o `ogenAuthAttr` ("diz se a operação exige `bearerAuth`") fica com o arquiteto (ruling R4).
+  - Como ler o `ogenAuthAttr` no teste de caracterização fica com quem implementa (caminho natural: executar pelo `MockEngine` e ler o atributo da requisição capturada).
