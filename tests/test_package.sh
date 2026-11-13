@@ -152,10 +152,13 @@ troca() {
     vazio) : >"$1" ;;
     nao-zip) printf 'PK\x05\x06 nao sou um zip local\n' >"$1" ;;
     diretorio) mkdir "$1" ;;
+    truncado) head -c 30 -- "$3" >"$1" ;; # começa com PK\x03\x04, mas o ZIP está cortado
+    crc) # ZIP com diretório central íntegro e um byte de conteúdo trocado (CRC não confere)
+      python3 -I -c 'import sys; d = open(sys.argv[1], "rb").read(); open(sys.argv[2], "wb").write(d.replace(b"Manifest-Version", b"Manifest-Versiom", 1))' "$3" "$1" ;;
   esac
 }
 
-for tipo in ausente symlink vazio nao-zip diretorio; do
+for tipo in ausente symlink vazio nao-zip diretorio truncado crc; do
   troca "$app_jar" "$tipo" "$tmp/valido.jar"
   falha_preserva "zeny-desktop.jar $tipo" "./gradlew :app:desktopJar"
   troca "$seed_jar" "$tipo" "$tmp/valido.jar"
@@ -166,6 +169,33 @@ for tipo in ausente symlink vazio diretorio; do
   falha_preserva "roteiro $tipo" "docs/demo/roteiro-m1.md"
 done
 assert_exit 0 "artefatos restaurados: package.sh volta a sair com 0" -- bash "$fa/tools/server-env/package.sh"
+
+# sem python3 no PATH: falha clara antes de apagar o pacote anterior (a validação do ZIP usa python3)
+sempy="$tmp/sem-python3"
+mkdir -p "$sempy"
+IFS=: read -ra path_dirs <<<"$PATH"
+for d in "${path_dirs[@]}"; do
+  for exe in "$d"/*; do
+    nome="${exe##*/}"
+    [[ -x "$exe" && ! -d "$exe" && "$nome" != python3* && ! -e "$sempy/$nome" ]] && ln -s "$exe" "$sempy/$nome"
+  done
+done
+echo marcador >"$fa/build/demo-package/marcador.txt"
+assert_exit 1 "sem python3: package.sh sai com 1" -- env PATH="$sempy" bash "$fa/tools/server-env/package.sh"
+assert_contains "$ASSERT_OUT" "python3" "sem python3: mensagem cita python3"
+assert_file "$fa/build/demo-package/marcador.txt" "sem python3: pacote anterior intacto"
+
+# --- make_fake_jars: info/exclude sem quebra de linha final não cola o padrão na última linha ---
+fx="$tmp/front-exclude"
+git init -q -b main "$fx"
+mkdir -p "$fx/.git/info"
+printf '/ja-existia' >"$fx/.git/info/exclude"
+make_fake_jars "$fx"
+assert_eq "1" "$(grep -cx '/ja-existia' "$fx/.git/info/exclude")" "make_fake_jars: linha anterior preservada inteira"
+for padrao in /app/build/ /demo-seed/build/ /docs/demo/; do
+  assert_eq "1" "$(grep -cxF -- "$padrao" "$fx/.git/info/exclude")" "make_fake_jars: $padrao numa linha própria"
+done
+assert_eq "" "$(git -C "$fx" status --porcelain --untracked-files=all)" "make_fake_jars: git status vazio"
 
 # --- JAR velho: aviso, sem falhar ---
 fo="$tmp/front-velho"

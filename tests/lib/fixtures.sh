@@ -134,6 +134,10 @@ for path in sys.argv[1:]:
   printf '# Roteiro falso da M1\n\nTexto de teste.\n' >"$dir/docs/demo/roteiro-m1.md"
   common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir)" || return 1
   mkdir -p "$common/info"
+  # Um exclude sem quebra de linha final colaria o primeiro padrão na última linha.
+  if [[ -s "$common/info/exclude" && -n "$(tail -c 1 -- "$common/info/exclude")" ]]; then
+    printf '\n' >>"$common/info/exclude"
+  fi
   for pattern in /app/build/ /demo-seed/build/ /docs/demo/; do
     grep -qxF -- "$pattern" "$common/info/exclude" 2>/dev/null || printf '%s\n' "$pattern" >>"$common/info/exclude"
   done
