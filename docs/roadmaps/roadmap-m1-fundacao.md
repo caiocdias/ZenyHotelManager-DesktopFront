@@ -90,9 +90,9 @@ Ter um app desktop Compose que abre e faz login num servidor escolhido na tela. 
 ## Definição global de pronto
 
 - [x] `./gradlew build` verde, com os comandos oficiais registrados no README e na tabela de comandos do `CLAUDE.md`.
-- [ ] O JAR do app abre no Linux e no Windows (no Windows, conferido pelo usuário no gate). Linux conferido na E07 (`xwininfo`); falta o Windows.
+- [x] O JAR do app abre no Linux e no Windows (no Windows, conferido pelo usuário no gate). Linux conferido na E07 (`xwininfo`); Windows conferido pelo usuário no gate (2026-11-13).
 - [x] O `smokeTest` passa contra o ambiente `zeny-front`.
-- [ ] O roteiro `docs/demo/roteiro-m1.md` foi executado pelo usuário, do jeito que está escrito, contra a demo recriada.
+- [x] O roteiro `docs/demo/roteiro-m1.md` foi executado pelo usuário, do jeito que está escrito, contra a demo recriada.
 - [x] Nenhuma etapa depende de pedido ao servidor.
 
 ## Protocolo de execução
@@ -187,7 +187,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #concluida | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #concluida | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
-| E07 | Gate do marco M1 | #em-andamento | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
+| E07 | Gate do marco M1 | #concluida | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
 ---
 
@@ -702,7 +702,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E07 — Gate do marco M1 — #em-andamento
+## E07 — Gate do marco M1 — #concluida
 
 **Objetivo:** o M1 entregue como build testável. O pacote da demo leva os JARs do app e do seed, o roteiro do M1 existe, e a definição global de pronto está verificada num clone limpo e no Windows.
 
@@ -723,7 +723,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [x] Clone limpo: build, teste e lint verdes, e o JAR gerado.
 - [x] O `smokeTest` passa contra o ambiente recriado.
 - [x] O pacote contém os JARs, o `LEIA-ME` e o roteiro.
-- [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
+- [x] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 
 **Validação obrigatória:**
 
@@ -743,7 +743,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-13):** `#em-andamento`, na parada humana.
+- **Estado (2026-11-13):** `#concluida`. O usuário executou no Windows o `roteiro-m1.md` (versão única, do zero), do jeito que está escrito, e aprovou: "deu tudo certo nos testes do Windows". M1 fechado.
 - **Pedido do usuário na parada humana (2026-11-13):** na primeira execução no Windows ele achou a sequência confusa (o roteiro remetia ao `LEIA-ME.md` e nada mandava anotar as senhas; não achou a senha da Recepção). O plano ganhou as Tasks 5a, 5c, 5b e 6 (revisão de arquitetura: bloqueado na rodada 0, aprovado com notas na rodada 1): o `roteiro-m1.md` virou um passo a passo único, do zero, numa pasta nova (`C:\zeny-demo`), com folha de senhas no passo 0, conferência e limpeza de volumes só pelo projeto, `.env`, servidor, admin, seed, app, demo e o passo 12 (parar, recomeçar do zero, esqueci uma senha); o `LEIA-ME.md` virou referência, com as linhas comuns idênticas por teste. A 5b executou o roteiro do zero no Linux com o pacote real (servidor em `127.0.0.1`, sem o build): 48 checagens, nenhuma divergência de comportamento, 4 textos de "Resultado esperado" ajustados às saídas reais; a demo local foi apagada e restaurada. A Task 6 repetiu o gate no HEAD `c76e156`: clone limpo (build 2015 testes, 0 falhas; lint; JARs; `tests/run.sh` 35 arquivos, 0 falhas), pacote com o roteiro idêntico ao do repositório, `sha256` dos JARs iguais aos de antes (o código não mudou), `xwininfo` nas duas variantes e 0 segredos. Revisão final do acréscimo: "Ready to merge: Yes" (0 Críticos, 0 Importantes); integridade com as mesmas 27 asserções reescritas já justificadas. Tudo o que não depende do Windows está feito e revisado; falta o usuário executar o `roteiro-m1.md` no Windows, do jeito que está escrito, e aprovar.
 - **Plano:** [`docs/superpowers/plans/2026-11-13-m1-fundacao-e07.md`](../superpowers/plans/2026-11-13-m1-fundacao-e07.md), 4 tarefas de risco alto. A revisão de arquitetura bloqueou nas rodadas 0 (3 Importantes: fixture dos JARs × testes de pacote, ordem da evidência do gate, JAR do app abrindo no Linux) e 1 (1 Importante: casos de falha que passariam por JAR ausente) e aprovou na rodada 2. Depois da revisão, o aviso de JAR velho por data saiu do plano (ruling registrada no próprio plano).
 - **Commits:** `f7a5f07..6f08855` na branch `roadmap/m1-fundacao` (cada um com o trailer `Soul:`), mais o commit deste handoff. Onda 1 (Tasks 1 e 2) em worktrees próprios, com o Gradle em série por falta de memória; Tasks 3 e 4 em série na branch da etapa.
@@ -767,8 +767,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **`gen-env.sh` (anterior à etapa):** copia do `.env.example` a senha do banco e a chave de acesso do storage em vez de gerá-las; o `zeny-front` usa valores publicados no repositório.
   - **Checksums das dependências** (`gradle/verification-metadata.xml`): sem decisão; recomendado antes de distribuir fora desta máquina (linha D5 em "Hipóteses e decisões em aberto").
   - **Python 3** passou a ser exigido pelo `package.sh` (validação do ZIP dos JARs).
-- **Notas para a próxima etapa:**
-  - **Parada humana:** copie `build/demo-package/` do checkout principal para o Windows, siga o `roteiro-m1.md` como está escrito e aprove; então a E07 fica `#concluida`, o M1 fecha e os dois itens restantes da definição global de pronto (JAR no Windows e roteiro executado) são marcados.
+- **Notas para a próxima etapa (M2 em diante):**
+  - **Gate do M1 aprovado:** o pacote entregue foi o de `build/demo-package/` com `VERSAO.txt` em `bf52fe9` (JARs `384d021d…` e `afe7e11e…`). A build de demo, até o M2 fechar, é essa.
+  - **Próximo passo: a rodada do M0 antes do M2** (`docs/roadmaps/README.md`, regra 3). O pré-voo de 2026-11-13 deu **aditivo (código 11)**: base `ca9f9e2f9808` × alvo `57eb5fac5b8a` (`main` do servidor), sem breaking change no contrato, com mudanças no ambiente do servidor (`docker/gate/…`; o script pede "Revise tools/server-env/ na próxima rodada"). Fluxo: `claude --agent arquiteto` com `development-roadmap` em modo atualização (análise, etapas e `docs/pedidos-servidor.md`) e depois a execução da rodada do M0; só então o `roadmap-m2-recepcao-do-dia.md` (pré-requisito: E07 `#concluida`, cumprido).
+  - **Decisões em aberto que o M2 herda:** D5 (checksums das dependências, antes de distribuir fora desta máquina); registro da exceção do `-Dzeny.devShell=true` na ADR 0006 (D6) e da semântica do `RealtimeClient` no design §6.2 ou numa ADR (arquiteto); endurecimentos do M2 listados acima (assinatura de tempo real amarrada ao `sessionId`, `sessionId` no refresh, commit no manifesto dos JARs, `gen-env.sh` gerando a senha do banco e a chave do storage).
+  - **Ambiente local:** `zeny-front` no ar com a demo da E05 restaurada (senhas em `.server/seed-secrets.env`, 600). Ledgers e rulings do lote em `.server/lote-e0*-*.md` (fora do Git).
   - **Menores estacionados:** TOCTOU entre a validação e a cópia dos JARs; diretório pai em symlink aceito para os JARs; `server/.github` e `server/.gitignore` no pacote; `unzip` sem guarda em `test_package_jars_ataque.sh`; o BSTR do PIN sem `ZeroFreeBSTR`; sessões que sobram ao refazer o login no 401/403 do roteiro; 4 sessões abertas no `zeny-front` local pela conferência (somem no próximo `down -v`); o `LEIA-ME.md` de referência ainda diz só "gasta as tentativas" (o roteiro diz "até duas tentativas") e recria a demo com `down -v` com `-f`/`--env-file` (o roteiro usa só `-p zeny-front`; os dois funcionam); a senha inicial do admin passa pela área de transferência no passo 4 (limpar o histórico do Win+V depois do 5.1).
 
 ---
@@ -784,3 +787,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-12 — E05 `#concluida` (`claude --agent orquestrador`): `demo-seed` idempotente (10 s num ambiente recriado), JAR executável e `smokeTest`, verificados contra o `zeny-front`; revisão final limpa após a onda de correção. H5 confirmada.
 - 2026-11-13 — E06 `#concluida` (`claude --agent orquestrador`): cliente SSE com reconexão no `core` e mapa de UHs ao vivo na área Governança; propagação medida de 17 a 52 ms no `core` e de 58 a 264 ms no ladrilho, e recuperação da queda do `api` verificada contra o `zeny-front`; revisão final limpa após a onda de correção. H4 não ocorreu. Critério "Outro (VALOR)" substituído por decisão do usuário (I7).
 - 2026-11-13 — E07 executada (`claude --agent orquestrador`): pacote com os JARs, o roteiro e o `VERSAO.txt`, roteiro do M1, demo recriada com `smokeTest`, clone limpo e JAR abrindo no Linux; revisão final limpa. Fica `#em-andamento` na parada humana (roteiro no Windows). Lote E05–E07 encerrado.
+- 2026-11-13 — E07 `#concluida` (`claude --agent orquestrador`): a pedido do usuário na parada, o roteiro virou um passo a passo único do zero (Tasks 5a–6, executado do zero no Linux); o usuário executou-o no Windows e aprovou. H3 reconfirmada no Windows. **M1 concluído.** Pré-voo para o próximo marco: aditivo (código 11, alvo `57eb5fac5b8a`) — rodada do M0 antes do M2.
