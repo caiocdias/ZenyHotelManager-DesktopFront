@@ -25,6 +25,7 @@ import io.ktor.utils.io.close
 import io.ktor.utils.io.writeFully
 import io.ktor.utils.io.writeStringUtf8
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
@@ -96,6 +97,7 @@ internal class StreamAtaqueFixture(
         problemCode: String,
     ) = status(code, """{"code":"$problemCode","detail":"detalhe"}""")
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun connection(
         topics: Set<String> = setOf("rooms"),
         startAfter: String? = null,
@@ -174,6 +176,7 @@ internal class StreamAtaqueFixture(
 }
 
 /** Ataque à reconexão, à espera, ao *watchdog*, ao cancelamento, ao coletor e ao enquadramento no stream. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class StreamConnectionAtaqueTest {
     private val mib = 1024 * 1024
 
