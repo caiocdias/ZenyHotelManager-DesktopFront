@@ -2,6 +2,8 @@
 
 Este pacote sobe o servidor do Zeny (commit `@SERVER_COMMIT@`, imagem `zeny-hotel-manager:@SERVER_TAG@`) no Docker Desktop, como o projeto compose `zeny-front`. Todos os comandos são PowerShell, a partir da pasta deste pacote.
 
+Para a demo do M1, siga `roteiro-m1.md` do início ao fim; este arquivo é a referência de operação.
+
 Atenção: o servidor fala HTTP puro. Use apenas em rede confiável. Nunca use `-p zeny` nos comandos (esse é o projeto de desenvolvimento do servidor); use sempre `-p zeny-front`.
 
 ## 0. Pré-requisitos
@@ -11,11 +13,26 @@ Atenção: o servidor fala HTTP puro. Use apenas em rede confiável. Nunca use `
 
 ## 1. Primeira vez (com internet)
 
-Gere o `.env` sem precisar de bash no Windows (substitua `<IP do Windows>` pelo IP desta máquina na rede). O endereço de escuta `0.0.0.0` já é o padrão do `compose.override.yaml` deste pacote:
+Comece numa pasta nova, com o conteúdo deste pacote, e confira que o Docker não tem nada do projeto `zeny-front`: nenhuma linha `zeny-front` no primeiro comando e nenhum volume no segundo.
 
 ```powershell
-docker run --rm -v "${PWD}:/w" -w /w alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f sh -c "apk add --no-cache bash openssl >/dev/null && bash gen-env.sh --public-endpoint http://<IP do Windows>:8088 .env"
+docker compose ls -a
+docker volume ls --filter label=com.docker.compose.project=zeny-front
 ```
+
+Se sobrou algo de uma tentativa anterior (inclusive só volumes), limpe só pelo nome do projeto. O comando funciona sem o `.env` e sem os arquivos do compose, e apaga os dados da demo anterior. Depois, confira de novo:
+
+```powershell
+docker compose -p zeny-front down -v
+```
+
+Gere o `.env` sem precisar de bash no Windows. O endereço de escuta `0.0.0.0` já é o padrão do `compose.override.yaml` deste pacote:
+
+```powershell
+docker run --rm -v "${PWD}:/w" -w /w alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f sh -c "apk add --no-cache bash openssl >/dev/null && bash gen-env.sh --public-endpoint http://localhost:8088 .env"
+```
+
+O endereço `http://localhost:8088` serve para o app nesta máquina. Para acessar de outra máquina da rede, edite só a linha `ZENY_STORAGE_PUBLIC_ENDPOINT` do `.env` (`http://<IP do Windows>:8088`) e rode o `up -d` de novo. Nunca gere o `.env` de novo com `--force` com os volumes existentes: as chaves novas não abrem os dados antigos.
 
 Guarde uma cópia do `.env` fora da pasta do pacote: a chave de cifragem e a senha root do MinIO valem enquanto o volume existir, e perdê-las inutiliza os dados.
 
@@ -81,10 +98,10 @@ Rode uma linha por vez (cole, Enter, responda a janela). Se você colar o bloco 
 $pin = Read-Host -AsSecureString "PIN do Gerente"
 [Environment]::SetEnvironmentVariable("ZENY_SEED_MANAGER_PIN", [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pin)), "Process")
 Remove-Variable pin
-java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login <login>
+java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin
 ```
 
-- Troque `<login>` pelo `ZENY_ADMIN_LOGIN` do `.env`.
+- O `admin` do fim da linha é o `ZENY_ADMIN_LOGIN` do `.env`; se lá estiver outro, troque.
 - Se você cancelar uma janela de credencial, aparece um erro em vermelho e aquela variável não é definida (ou fica com o valor da rodada anterior, na mesma janela): rode de novo só a linha dela antes do `java -jar`.
 - Ao terminar, feche este PowerShell ou apague as variáveis com `Remove-Item Env:ZENY_SEED_*`.
 - A primeira execução troca a senha inicial do administrador (que o servidor marca como provisória) para `ZENY_SEED_ADMIN_NEW_PASSWORD`. Nas seguintes, o programa entra direto com a senha nova.

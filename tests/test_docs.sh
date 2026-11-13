@@ -63,19 +63,30 @@ assert_contains "$readme_text" "0007" "README cita a ADR 0007"
 assert_contains "$readme_text" "0008" "README cita a ADR 0008"
 assert_not_contains "$readme_text" "Ainda não há código do app" "README não diz mais que não há código"
 
-# Roteiro da demo do M1 (E07): passos em ordem, comandos do PowerShell 5.1 e nenhum segredo.
+# Roteiro da demo do M1 (E07, Task 5a): um passo a passo só, do zero, numa pasta nova. Passos em ordem,
+# comandos do PowerShell 5.1, nenhum segredo e as linhas comuns com o LEIA-ME idênticas.
 roteiro="$ROOT/docs/demo/roteiro-m1.md"
+leia_file="$ROOT/tools/server-env/LEIA-ME.md"
 assert_file "$roteiro" "docs/demo/roteiro-m1.md existe"
 rot_text="$(cat "$roteiro" 2>/dev/null)"
+# rot_section PREFIXO : do título "## N. ..." até antes do próximo "## " (o prefixo inclui o ponto).
+rot_section() { awk -v h="$1" 'index($0, h) == 1 {on = 1; print; next} on && /^## / {exit} on' "$roteiro"; }
+# ps_code ARQUIVO : só as linhas dentro de blocos ```powershell.
+ps_code() { awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' "$1" 2>/dev/null; }
 steps=(
-  "## 1. Recriar a demo"
-  "## 2. Abrir o app"
-  "## 3. Configurar o servidor"
-  "## 4. Entrar como Recepcionista"
-  "## 5. Entrar como Gerente"
-  "## 6. Mapa de UHs"
-  "## 7. Mudança de status ao vivo"
-  "## 8. Sair"
+  "## 0. Antes de começar"
+  "## 1. Pasta nova e nada do projeto no Docker"
+  "## 2. Gerar o \`.env\`"
+  "## 3. Construir e subir o servidor"
+  "## 4. Login e senha inicial do administrador"
+  "## 5. Popular a demo"
+  "## 6. Abrir o app"
+  "## 7. Entrar como Recepcionista"
+  "## 8. Entrar como Gerente"
+  "## 9. Mapa de UHs"
+  "## 10. Mudança de status ao vivo"
+  "## 11. Sair"
+  "## 12. No fim"
 )
 prev=0
 for step in "${steps[@]}"; do
@@ -88,20 +99,147 @@ for step in "${steps[@]}"; do
     prev="$line"
   fi
 done
+assert_eq "${#steps[@]}" "$(grep -cE '^## ' "$roteiro" 2>/dev/null)" "roteiro: só os passos 0 a 12 são títulos ##"
+for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  assert_contains "$(rot_section "## $n. ")" "**Resultado esperado" "roteiro: passo $n tem resultado esperado"
+done
+# Todo bloco PowerShell tem o resultado esperado (ou a tabela de códigos) antes do próximo bloco ou passo.
+missing_res="$(awk '
+  /^##/ { if (pending) print pending_ln; pending = 0 }
+  /^```powershell/ { if (pending) print pending_ln; pending = 1; pending_ln = NR; inb = 1; next }
+  /^```/ { inb = 0; next }
+  inb { next }
+  pending && (/\*\*Resultado esperado/ || /^\| Código \|/) { pending = 0 }
+  END { if (pending) print pending_ln }' "$roteiro" 2>/dev/null)"
+assert_eq "" "$missing_res" "roteiro: todo bloco PowerShell tem resultado esperado (blocos sem: $missing_res)"
+
+# Passo 0: pré-requisitos e a folha de senhas, antes de qualquer linha que peça segredo.
+step0="$(rot_section "## 0. ")"
+for word in "docker compose version" "java -version" "JDK 25" "Folha de senhas" "senha nova do administrador" \
+  '`gerente`' '`recepcao`' '`governanta`' "PIN do Gerente" "12 a 128" "4 a 8 dígitos" "anote"; do
+  assert_contains "$step0" "$word" "roteiro, passo 0: cita $word"
+done
+folha_ln="$(grep -nF 'Folha de senhas' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+secret_ln="$(grep -nE 'Get-Credential|Read-Host|SetEnvironmentVariable' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+if [[ -z "$folha_ln" || -z "$secret_ln" ]] || ((folha_ln > secret_ln)); then
+  _assert_fail "roteiro: a folha de senhas vem antes da primeira linha que pede segredo" \
+    "folha: ${folha_ln:-ausente}; segredo: ${secret_ln:-ausente}"
+fi
+
+# Passo 1: pasta nova; conferir projeto e volumes; limpar só pelo projeto (sem compose nem .env).
+step1="$(rot_section "## 1. ")"
+step1_ps="$(awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' <<<"$step1")"
+assert_contains "$step1" "pasta nova" "roteiro, passo 1: pasta nova"
+for cmd in "docker compose ls -a" "docker volume ls --filter label=com.docker.compose.project=zeny-front" \
+  "docker compose -p zeny-front down -v"; do
+  grep -qxF -- "$cmd" <<<"$step1_ps" || _assert_fail "roteiro, passo 1: bloco com a linha: $cmd"
+done
+assert_contains "$step1" "apaga os dados" "roteiro, passo 1: avisa que o down -v apaga os dados"
+
+# Passo 2: a nota do endereço troca só o ZENY_STORAGE_PUBLIC_ENDPOINT, sem regerar o .env com --force.
+step2="$(rot_section "## 2. ")"
+for word in "ZENY_STORAGE_PUBLIC_ENDPOINT" "--force" "fora da pasta"; do
+  assert_contains "$step2" "$word" "roteiro, passo 2: cita $word"
+done
+# Passo 4: só as duas linhas do administrador.
+assert_contains "$(rot_section "## 4. ")" "Select-String" "roteiro, passo 4: mostra o login e a senha por Select-String"
+assert_contains "$(rot_section "## 5. ")" "Remove-Item Env:ZENY_SEED_*" "roteiro, passo 5: apaga as variáveis do seed"
+
+# Nenhum passo manda abrir o LEIA-ME: nada de "seção" do LEIA-ME; ele só pode ser citado como dispensável.
+assert_eq "" "$(grep -nE '[Ss]e[cç](ão|ões)' "$roteiro" 2>/dev/null)" "roteiro não remete a seção de outro arquivo"
+# Onde o LEIA-ME aparece (na lista do pacote, ou como dispensável), nada manda abri-lo nem segui-lo.
+assert_contains "$rot_text" 'não precisa abrir o `LEIA-ME.md`' "roteiro diz que o LEIA-ME não é preciso"
+assert_eq "" "$(grep -F 'LEIA-ME' "$roteiro" 2>/dev/null | sed 's/não precisa abrir o `LEIA-ME.md`//' |
+  grep -iE 'abr[aei]|sig[ao]|siga|vej[ao]|consult|conforme|instru|passo a passo')" \
+  "roteiro: nenhuma linha manda abrir ou seguir o LEIA-ME"
+
+# Passo 12: parar, recomeçar do zero e esqueci uma senha (com a ressalva do administrador).
+step12="$(rot_section "## 12. ")"
+for sub in "### Parar sem apagar" "### Recomeçar do zero" "### Esqueci uma senha" "### Erros comuns"; do
+  grep -qxF -- "$sub" <<<"$step12" || _assert_fail "roteiro, passo 12: tem $sub"
+done
+recomecar="$(awk '/^### Recomeçar do zero$/{on=1; next} on && /^###? /{exit} on' <<<"$step12")"
+grep -qxF -- "docker compose -p zeny-front down -v" <<<"$recomecar" ||
+  _assert_fail "roteiro, Recomeçar do zero: down -v só pelo projeto"
+assert_contains "$recomecar" "passo 3" "roteiro, Recomeçar do zero: volta ao passo 3"
+assert_contains "$recomecar" "ZENY_ADMIN_PASSWORD" "roteiro, Recomeçar do zero: senha inicial volta à do .env"
+esqueci="$(awk '/^### Esqueci uma senha$/{on=1; next} on && /^###? /{exit} on' <<<"$step12")"
+for word in "passo 5" "senha atual" "senha nova" "redefine" "não recupera" "Recomeçar do zero" "bloqueia"; do
+  assert_contains "$esqueci" "$word" "roteiro, Esqueci uma senha: cita $word"
+done
+parar="$(awk '/^### Parar sem apagar$/{on=1; next} on && /^###? /{exit} on' <<<"$step12")"
+assert_contains "$parar" "--env-file .env down"$'\n' "roteiro, Parar sem apagar: down sem -v"
+
+# Linhas PowerShell comuns ao roteiro e ao LEIA-ME: idênticas nos dois (as asserções de segurança do LEIA-ME
+# valem para o roteiro por igualdade).
+compose='docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env'
+shared_lines=(
+  'docker run --rm -v "${PWD}:/w" -w /w alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f sh -c "apk add --no-cache bash openssl >/dev/null && bash gen-env.sh --public-endpoint http://localhost:8088 .env"'
+  "$compose build"
+  "$compose up -d"
+  "$compose down"
+  'docker compose -p zeny-front down -v'
+  'docker compose ls -a'
+  'docker volume ls --filter label=com.docker.compose.project=zeny-front'
+  'curl.exe -fsS http://localhost:8088/actuator/health/readiness'
+  '[Environment]::SetEnvironmentVariable("ZENY_SEED_ADMIN_PASSWORD", (Get-Credential -UserName administrador -Message "Senha atual do administrador").GetNetworkCredential().Password, "Process")'
+  '[Environment]::SetEnvironmentVariable("ZENY_SEED_ADMIN_NEW_PASSWORD", (Get-Credential -UserName administrador -Message "Senha nova do administrador").GetNetworkCredential().Password, "Process")'
+  '[Environment]::SetEnvironmentVariable("ZENY_SEED_MANAGER_PASSWORD", (Get-Credential -UserName gerente -Message "Senha do Gerente").GetNetworkCredential().Password, "Process")'
+  '[Environment]::SetEnvironmentVariable("ZENY_SEED_RECEPTIONIST_PASSWORD", (Get-Credential -UserName recepcao -Message "Senha da Recepção").GetNetworkCredential().Password, "Process")'
+  '[Environment]::SetEnvironmentVariable("ZENY_SEED_HOUSEKEEPER_PASSWORD", (Get-Credential -UserName governanta -Message "Senha da Governança").GetNetworkCredential().Password, "Process")'
+  '$pin = Read-Host -AsSecureString "PIN do Gerente"'
+  '[Environment]::SetEnvironmentVariable("ZENY_SEED_MANAGER_PIN", [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($pin)), "Process")'
+  'Remove-Variable pin'
+  'java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin'
+)
+rot_ps_code="$(ps_code "$roteiro")"
+leia_ps_code="$(ps_code "$leia_file")"
+for l in "${shared_lines[@]}"; do
+  grep -qxF -- "$l" <<<"$rot_ps_code" || _assert_fail "roteiro: bloco PowerShell com a linha comum" "$l"
+  grep -qxF -- "$l" <<<"$leia_ps_code" || _assert_fail "LEIA-ME: bloco PowerShell com a linha comum" "$l"
+done
+# Toda linha de roteiro com docker, curl.exe, SetEnvironmentVariable, $pin ou o java do seed é uma das comuns.
+while IFS= read -r l; do
+  [[ -n "$l" ]] || continue
+  found=0
+  for s in "${shared_lines[@]}"; do [[ "$l" == "$s" ]] && found=1 && break; done
+  ((found)) || _assert_fail "roteiro: linha de servidor ou seed fora da lista comum com o LEIA-ME" "$l"
+done < <(grep -E '^(docker (run|compose -p|compose ls|volume) |curl\.exe |\[Environment\]::SetEnvironmentVariable|\$pin |Remove-Variable pin|java -jar app\\demo-seed)' <<<"$rot_ps_code")
+# No roteiro, o seed roda depois dos 6 segredos e o $pin sai da sessão depois de usado.
+seed_ln="$(grep -nF 'java -jar app\demo-seed.jar' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+last_set_ln="$(grep -nF '[Environment]::SetEnvironmentVariable("ZENY_SEED_' "$roteiro" 2>/dev/null | tail -1 | cut -d: -f1)"
+assert_eq "6" "$(grep -cF '[Environment]::SetEnvironmentVariable("ZENY_SEED_' "$roteiro" 2>/dev/null)" "roteiro: 6 segredos do seed"
+if [[ -z "$seed_ln" || -z "$last_set_ln" ]] || ((seed_ln < last_set_ln)); then
+  _assert_fail "roteiro: o java -jar do seed vem depois dos 6 SetEnvironmentVariable"
+fi
+pin_set_ln="$(grep -nF 'SetEnvironmentVariable("ZENY_SEED_MANAGER_PIN"' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+pin_rm_ln="$(grep -nxF 'Remove-Variable pin' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
+if [[ -z "$pin_set_ln" || -z "$pin_rm_ln" ]] || ((pin_rm_ln < pin_set_ln)); then
+  _assert_fail "roteiro: Remove-Variable pin depois do SetEnvironmentVariable do PIN"
+fi
+
 for word in recepcao gerente governanta '"-Dzeny.devShell=true"' "http://localhost:8088" MARK_CLEAN MARK_DIRTY \
-  If-Match Get-Credential "[guid]::NewGuid().ToString()" "charset=utf-8" "-UseBasicParsing"; do
+  If-Match Get-Credential "[guid]::NewGuid().ToString()" "charset=utf-8" "-UseBasicParsing" \
+  '$etag = [string]$status.Headers["ETag"]'; do
   assert_contains "$rot_text" "$word" "roteiro cita $word"
 done
+assert_contains "$rot_ps_code" 'java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar' "roteiro abre o app no modo da demo"
+assert_eq "" "$(grep -nE '(^|[^"])-Dzeny\.' <<<"$rot_ps_code")" "roteiro: -Dzeny.* sempre entre aspas"
+assert_eq "" "$(grep -E 'Invoke-WebRequest' <<<"$rot_ps_code" | grep -vF -- '-UseBasicParsing')" \
+  "roteiro: todo Invoke-WebRequest com -UseBasicParsing"
+assert_eq "" "$(grep -E -- '-Body ' <<<"$rot_ps_code" | grep -vF 'charset=utf-8')" "roteiro: todo -Body com charset=utf-8"
+assert_eq "" "$(grep -E 'Headers\["ETag"\]' <<<"$rot_ps_code" | grep -vF '[string]$status.Headers["ETag"]')" \
+  "roteiro: o ETag sempre com [string], intacto"
 # Seed repetido (conferido ao vivo na E07): as reservas com check-in saem das alocações e a linha check-ins some.
 rerun="$(grep -F 'Rodar o seed de novo' "$roteiro" 2>/dev/null)"
 assert_contains "$rerun" '`alocações: 0 criados, 2 já existiam`' "roteiro: no seed repetido, alocações ficam em 2"
 assert_contains "$rerun" 'a linha `check-ins` não aparece' "roteiro: no seed repetido, a linha check-ins some"
-
-# O seed repetido só não cria nada se a UH 106 voltou a suja no 7.4 (senão o status dela é recriado).
-assert_contains "$rerun" "7.4" "roteiro: \"nada é criado de novo\" condicionado à volta da UH 106 no 7.4"
-assert_contains "$rerun" '`status de UH: 1 criados, 19 já existiam`' "roteiro: sem o 7.4, a linha de status mostra 1 criado"
+# O seed repetido só não cria nada se a UH 106 voltou a suja no 10.4 (senão o status dela é recriado).
+assert_contains "$rerun" "10.4" "roteiro: \"nada é criado de novo\" condicionado à volta da UH 106 no 10.4"
+assert_contains "$rerun" '`status de UH: 1 criados, 19 já existiam`' "roteiro: sem o 10.4, a linha de status mostra 1 criado"
 # Bloco com Get-Credential ou Read-Host: a linha que pede a credencial é a única do bloco (colada junto com
-# outras, ela leria a linha seguinte como resposta), e o parágrafo logo antes diz como rodá-la.
+# outras, ela leria a linha seguinte como resposta), e o parágrafo logo antes diz como rodá-la. No passo 5,
+# o parágrafo liga a janela a um item da folha (ou à senha inicial do passo 4).
 n_prompt_blocks=0
 while IFS=: read -r start end prompt_ln; do
   n_prompt_blocks=$((n_prompt_blocks + 1))
@@ -109,28 +247,21 @@ while IFS=: read -r start end prompt_ln; do
   prev="$(awk -v s="$start" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
   assert_contains "$prev" "(cole, Enter, responda a janela)" \
     "roteiro: o bloco da linha $start (com credencial) diz como rodá-lo"
+  if sed -n "${prompt_ln}p" "$roteiro" | grep -qE 'SetEnvironmentVariable|Read-Host'; then
+    [[ "$prev" == *folha* || "$prev" == *"passo 4"* ]] ||
+      _assert_fail "roteiro: o bloco da linha $start diz de onde vem o valor (folha ou passo 4)" "parágrafo: ${prev:0:200}"
+  fi
 done < <(awk '
   /^```powershell/ { s = NR; p = ""; next }
   /^```/ && s { if (p != "") print s ":" NR ":" p; s = 0; next }
   s && /Get-Credential|Read-Host/ && p == "" { p = NR }
 ' "$roteiro")
-assert_eq "1" "$n_prompt_blocks" "roteiro: um bloco com credencial (7.1)"
+assert_eq "7" "$n_prompt_blocks" "roteiro: 7 blocos com credencial (5 senhas e o PIN no passo 5; a Governanta no 10.1)"
 # O bloco do corpo do login (hashtable em várias linhas) avisa que o >> do PowerShell é esperado.
 body_start="$(awk '/^```powershell/ { s = NR; next } /^```/ { s = 0; next } s && /\$loginBody = @\{/ { print s; exit }' "$roteiro")"
 body_prev="$(awk -v s="${body_start:-1}" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
 assert_contains "$body_prev" '`>>`' "roteiro: o parágrafo antes do corpo do login explica o >>"
 
-# Seções do LEIA-ME pelo título, nunca pelo número; cada título citado existe no LEIA-ME.
-assert_eq "" "$(grep -nE '[Ss]eção [0-9]' "$roteiro" 2>/dev/null)" "roteiro não cita seção do LEIA-ME pelo número"
-cited="$(grep -oE 'seção "[^"]+"' "$roteiro" 2>/dev/null | sed -E 's/^seção "//; s/"$//' | sort -u)"
-for t in "Parar e recriar a demo" "Primeira vez (com internet)" "Abrir o app"; do
-  assert_contains "$cited" "$t" "roteiro remete à seção \"$t\" do LEIA-ME"
-done
-while IFS= read -r t; do
-  [[ -n "$t" ]] || continue
-  grep -qE "^## ([0-9]+\. )?$(sed 's/[][\.*^$()+?{}|]/\\&/g' <<<"$t")\$" "$ROOT/tools/server-env/LEIA-ME.md" ||
-    _assert_fail "seção citada pelo roteiro existe no LEIA-ME: $t"
-done <<<"$cited"
 # Sem segredo nem comando perigoso.
 assert_eq "" "$(grep -nE -e '-Password\b' "$roteiro" 2>/dev/null)" "roteiro sem -Password"
 assert_eq "" "$(grep -niE 'password[[:space:]]*=[[:space:]]*["'"'"']?[^$<"'"'"'[:space:]]' "$roteiro" 2>/dev/null)" \
@@ -139,10 +270,25 @@ assert_eq "" "$(grep -niE '"password"[[:space:]]*:[[:space:]]*"[^<$]' "$roteiro"
   "roteiro sem \"password\":\"valor\""
 assert_eq "" "$(grep -nE 'ZENY_SEED_[A-Z_]*[[:space:]]*=[[:space:]]*"?[^<"[:space:]]' "$roteiro" 2>/dev/null)" \
   "roteiro sem valor atribuído a ZENY_SEED_*"
+assert_eq "" "$(grep -nE -e '--[a-z-]*(password|pin)([=[:space:]]|$)' "$roteiro" 2>/dev/null)" \
+  "roteiro sem senha ou PIN em argumento"
 assert_eq "" "$(grep -nE -e '-p zeny( |$|`)' "$roteiro" 2>/dev/null)" "roteiro sem -p zeny"
-ps_blocks="$(awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' "$roteiro" 2>/dev/null)"
-assert_contains "$ps_blocks" "Invoke-RestMethod" "roteiro tem blocos PowerShell com os comandos HTTP"
-assert_eq "" "$(grep -nE '(^|[^.A-Za-z0-9_-])curl([[:space:]]|$)' <<<"$ps_blocks")" "bloco PowerShell sem curl (alias), só curl.exe"
+assert_contains "$rot_ps_code" "Invoke-RestMethod" "roteiro tem blocos PowerShell com os comandos HTTP"
+assert_eq "" "$(grep -nE '(^|[^.A-Za-z0-9_-])curl([[:space:]]|$)' <<<"$rot_ps_code")" "bloco PowerShell sem curl (alias), só curl.exe"
+
+# LEIA-ME: remete ao roteiro para a demo; a seção 1 confere e limpa pelo projeto; a nota do endereço.
+leia_head="$(awk '/^## /{exit} {print}' "$leia_file" 2>/dev/null)"
+assert_contains "$leia_head" 'siga `roteiro-m1.md` do início ao fim' "LEIA-ME: no topo, manda seguir o roteiro na demo"
+assert_contains "$leia_head" "referência de operação" "LEIA-ME: no topo, diz que é a referência de operação"
+leia_s1="$(awk '/^## 1\. /{on=1; print; next} on && /^## /{exit} on' "$leia_file" 2>/dev/null)"
+leia_s1_ps="$(awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' <<<"$leia_s1")"
+for cmd in "docker compose ls -a" "docker volume ls --filter label=com.docker.compose.project=zeny-front" \
+  "docker compose -p zeny-front down -v"; do
+  grep -qxF -- "$cmd" <<<"$leia_s1_ps" || _assert_fail "LEIA-ME, seção 1: bloco com a linha: $cmd"
+done
+for word in "ZENY_STORAGE_PUBLIC_ENDPOINT" "--force" "up -d"; do
+  assert_contains "$leia_s1" "$word" "LEIA-ME, seção 1: a nota do endereço cita $word"
+done
 
 # LEIA-ME do pacote: abrir o app, JDK 25 e o demo-seed.jar já em app\.
 assert_contains "$leia" 'java -jar app\zeny-desktop.jar' "LEIA-ME: abrir o app"
