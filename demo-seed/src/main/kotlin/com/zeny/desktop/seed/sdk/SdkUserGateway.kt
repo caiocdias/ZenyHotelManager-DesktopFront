@@ -78,7 +78,11 @@ class SdkUserGateway(
         roleIds: List<String>,
     ) {
         val id = Uuid.parse(userId)
-        val etag = seed.executor.execute { seed.apis.iam.getUser(id, it.headers) }.etag
+        val etag =
+            seed.executor
+                .execute { seed.apis.iam.getUser(id, it.headers) }
+                .etag
+                ?.takeIf { it.isNotBlank() }
         val request = SetUserRolesRequest(roleIds.map(Uuid::parse))
         if (etag == null) {
             // sem a precondição o servidor responderia 428; nem se tenta a escrita

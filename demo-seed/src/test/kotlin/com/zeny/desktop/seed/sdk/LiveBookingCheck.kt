@@ -29,7 +29,11 @@ private const val EXPECTED_DEPARTURES = 2
 private const val EXPECTED_COMPANIES = 2
 private const val EXPECTED_GUESTS = 12
 
-/** Verificação ao vivo: só roda com `ZENY_SEED_SERVER`; credenciais só do ambiente (nunca impressas). */
+/**
+ * Verificação ao vivo: só roda com `ZENY_SEED_SERVER` e `ZENY_SEED_LIVE=1` (sem elas, pula); credenciais só do
+ * ambiente (nunca impressas). Comando, só nesse subshell:
+ * `(set -a; . <arquivo de segredos>; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*' --rerun)`
+ */
 @OptIn(RawSdkAccess::class)
 class LiveBookingCheck {
     private fun config(): SeedConfig {
@@ -98,7 +102,7 @@ class LiveBookingCheck {
 
     @Test
     fun bookingsSeededAndSecondRunCreatesNothing() {
-        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null)
+        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null && System.getenv("ZENY_SEED_LIVE") == "1")
         val config = config()
         runBlocking {
             val factory = SdkSessionFactory(config.server)

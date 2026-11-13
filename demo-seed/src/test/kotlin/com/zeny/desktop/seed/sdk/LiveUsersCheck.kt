@@ -19,7 +19,11 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/** Verificação ao vivo: só roda com `ZENY_SEED_SERVER`; credenciais só do ambiente (nunca impressas). */
+/**
+ * Verificação ao vivo: só roda com `ZENY_SEED_SERVER` e `ZENY_SEED_LIVE=1` (sem elas, pula); credenciais só do
+ * ambiente (nunca impressas). Comando, só nesse subshell:
+ * `(set -a; . <arquivo de segredos>; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*' --rerun)`
+ */
 class LiveUsersCheck {
     private fun config(): SeedConfig {
         val parsed = SeedArgs.parse(emptyList(), System.getenv())
@@ -27,11 +31,21 @@ class LiveUsersCheck {
         return parsed.config
     }
 
+    /** O teste redefine senha e PIN de usuários: só roda em servidor sem hotel ou com o hotel da demo. */
+    private suspend fun assertDemoHotel(seed: SeedCore) {
+        val name = SdkConfigGateway(seed).configuredHotelName()
+        assertTrue(
+            name == null || name == DemoCatalog.HOTEL_TRADE_NAME,
+            "o servidor tem outro hotel configurado; a verificação de usuários não roda nele",
+        )
+    }
+
     private suspend fun seedUsers(config: SeedConfig): SeedReport {
         val report = SeedReport()
         val factory = SdkSessionFactory(config.server)
         val admin = AdminSignIn(factory).open(config)
         try {
+            assertDemoHotel(admin.seed)
             val passwords =
                 mapOf(
                     DemoRole.MANAGER to config.managerPassword,
@@ -71,7 +85,7 @@ class LiveUsersCheck {
 
     @Test
     fun usersSeededAndSecondRunCreatesNothing() {
-        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null)
+        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null && System.getenv("ZENY_SEED_LIVE") == "1")
         val config = config()
         runBlocking {
             seedUsers(config)

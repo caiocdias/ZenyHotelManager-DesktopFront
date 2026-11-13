@@ -18,6 +18,7 @@ import com.zeny.desktop.seed.people.SignIn
 import com.zeny.desktop.seed.sdk.SdkSession
 import com.zeny.desktop.seed.sdk.SdkSessionFactory
 import de.quati.kotlin.util.Option
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -147,6 +148,8 @@ class SmokeTest {
     private suspend fun close(session: SessionPort) {
         try {
             session.signOut()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             // sem sessão ou sem rede: nada a encerrar
         } finally {

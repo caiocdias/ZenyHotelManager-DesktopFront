@@ -18,11 +18,15 @@ import kotlin.test.assertTrue
 private const val EXPECTED_ROOMS = 20
 private const val EXPECTED_TYPES = 3
 
-/** Verificação ao vivo: só roda com `ZENY_SEED_SERVER`; credenciais só do ambiente (nunca impressas). */
+/**
+ * Verificação ao vivo: só roda com `ZENY_SEED_SERVER` e `ZENY_SEED_LIVE=1` (sem elas, pula); credenciais só do
+ * ambiente (nunca impressas). Comando, só nesse subshell:
+ * `(set -a; . <arquivo de segredos>; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*' --rerun)`
+ */
 class LiveConfigCheck {
     @Test
     fun seedingTwiceCreatesNothingTheSecondTime() {
-        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null)
+        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null && System.getenv("ZENY_SEED_LIVE") == "1")
         val parsed = SeedArgs.parse(emptyList(), System.getenv())
         assertTrue(parsed is ParseResult.Ok, "variáveis ZENY_SEED_* incompletas")
         val config = parsed.config

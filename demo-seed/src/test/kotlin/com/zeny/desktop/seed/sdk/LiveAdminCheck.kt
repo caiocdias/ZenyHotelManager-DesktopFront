@@ -10,11 +10,15 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-/** Verificação ao vivo: só roda com `ZENY_SEED_SERVER`; credenciais só do ambiente (nunca impressas). */
+/**
+ * Verificação ao vivo: só roda com `ZENY_SEED_SERVER` e `ZENY_SEED_LIVE=1` (sem elas, pula); credenciais só do
+ * ambiente (nunca impressas). Comando, só nesse subshell:
+ * `(set -a; . <arquivo de segredos>; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*' --rerun)`
+ */
 class LiveAdminCheck {
     @Test
     fun adminOpensTwiceInARow() {
-        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null)
+        assumeTrue(System.getenv("ZENY_SEED_SERVER") != null && System.getenv("ZENY_SEED_LIVE") == "1")
         val parsed = SeedArgs.parse(emptyList(), System.getenv())
         assertTrue(parsed is ParseResult.Ok, "variáveis ZENY_SEED_* incompletas")
         val config = parsed.config
