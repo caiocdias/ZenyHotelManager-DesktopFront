@@ -167,6 +167,7 @@ step3="$(rot_section "## 3. ")"
 assert_contains "$step3" "curl: (56) Recv failure: Connection reset by peer" "roteiro, passo 3: (56) é esperado enquanto sobe"
 assert_contains "$step3" "Volume zeny-front_" "roteiro, passo 3: a linha do volume como o compose a escreve"
 assert_eq "" "$(grep -nF 'Volume "' "$roteiro" 2>/dev/null)" "roteiro: nome do volume sem aspas"
+assert_contains "$step3" "\`Container zeny-front-storage-init-1  Exited\`, que não é erro" "roteiro, passo 3: o storage-init termina (Exited) e não é erro"
 # Passo 4: só as duas linhas do administrador.
 assert_contains "$(rot_section "## 4. ")" "Select-String" "roteiro, passo 4: mostra o login e a senha por Select-String"
 assert_contains "$(rot_section "## 5. ")" "Remove-Item Env:ZENY_SEED_*" "roteiro, passo 5: apaga as variáveis do seed"

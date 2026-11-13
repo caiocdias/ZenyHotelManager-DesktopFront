@@ -137,7 +137,7 @@ Suba o servidor:
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env up -d
 ```
 
-**Resultado esperado:** linhas `Network zeny-front_default  Created`, `Volume zeny-front_…  Created` e `Container zeny-front-…` com `Started` ou `Healthy`, sem `Error`. O prompt volta.
+**Resultado esperado:** linhas `Network zeny-front_default  Created`, `Volume zeny-front_…  Created` e `Container zeny-front-…` com `Started` ou `Healthy`, sem `Error`. Aparece também `Container zeny-front-storage-init-1  Exited`, que não é erro: esse container cria o espaço dos arquivos da demo e termina. O prompt volta.
 
 Espere o servidor ficar pronto. Rode o comando abaixo e repita a cada 15 segundos até aparecer `{"status":"UP"}`. É `curl.exe`, com `.exe`: no Windows PowerShell 5.1, `curl` sozinho é outro comando.
 
