@@ -185,7 +185,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E04 | Login, casca do app e aprovação de superior | #concluida | E02, E03 | Tela de login com servidor, troca de senha, menu por permissão, topo com hotel e data, diálogo de aprovação |
 | E05 | Dados de demonstração e teste de fumaça | #concluida | E02 | `demo-seed` idempotente em menos de 2 minutos, JAR do seed, `smokeTest` |
 | E06 | Tempo real e mapa de UHs ao vivo | #concluida | E04, E05 | Cliente SSE com reconexão e mapa de UHs atualizado em tempo real |
-| E07 | Gate do marco M1 | #pendente | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
+| E07 | Gate do marco M1 | #em-andamento | E06 | Pacote da demo com os JARs, roteiro do M1 e definição de pronto verificada |
 
 ---
 
@@ -700,7 +700,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E07 — Gate do marco M1 — #pendente
+## E07 — Gate do marco M1 — #em-andamento
 
 **Objetivo:** o M1 entregue como build testável. O pacote da demo leva os JARs do app e do seed, o roteiro do M1 existe, e a definição global de pronto está verificada num clone limpo e no Windows.
 
