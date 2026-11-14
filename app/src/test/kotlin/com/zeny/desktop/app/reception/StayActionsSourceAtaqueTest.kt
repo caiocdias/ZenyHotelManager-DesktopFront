@@ -320,11 +320,10 @@ class StayActionsSourceAtaqueTest {
             // a recusa por aprovação não gasta o resultado programado
             assertFailsWith<ApiError.Network> { action.run("t") }
             assertEquals(
-                "ok",
+                "102",
                 action
                     .run("t")
-                    .value.toRoom.number
-                    .let { "ok" },
+                    .value.toRoom.number,
             )
             assertEquals(listOf<String?>(null, "t", "t"), fake.moveRuns.map { it.token })
         }
