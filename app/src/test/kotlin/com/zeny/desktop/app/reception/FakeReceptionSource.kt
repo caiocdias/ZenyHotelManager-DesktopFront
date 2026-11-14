@@ -1,10 +1,18 @@
 package com.zeny.desktop.app.reception
 
+import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
+import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.http.ApiResponse
+import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.model.CheckInResponse
+import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.GuestDocumentResponse
 import com.zeny.desktop.sdk.model.GuestPreferencesDto
 import com.zeny.desktop.sdk.model.GuestResponse
@@ -12,6 +20,8 @@ import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomStatusResponse
+import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CancellationException
@@ -55,11 +65,32 @@ data class DayPageCall(
     val cursor: String?,
 )
 
+/** Uma execução de `checkIn` registrada pelo falso: a `Intent.key` em uso e o token de aprovação (se houve). */
+data class CheckInRun(
+    val key: String,
+    val token: String?,
+)
+
+/** Uma chamada de `assignRoom` registrada pelo falso. */
+data class AssignCall(
+    val id: String,
+    val roomId: String,
+    val doNotMove: Boolean?,
+)
+
+/** Uma chamada de `checkIn` (a criação da ação) registrada pelo falso; o `Intent` é o da tela. */
+data class CheckInCall(
+    val id: String,
+    val input: CheckInInput,
+    val intent: Intent,
+)
+
 /**
  * Servidor de mentira para a recepção. As respostas ficam nos mapas e variáveis abaixo; cada chamada é registrada.
  * Com `hold*` ligado, a leitura só responde quando o teste solta o portão (respostas atrasadas, fora de ordem).
  * Os eventos são postos com [emit] e a assinatura termina com [end] (com erro: falha do fluxo).
  */
+@Suppress("TooManyFunctions") // falso da porta, que espelha as operações dela
 class FakeReceptionSource : ReceptionSource {
     var permissions: Set<String> =
         setOf(
@@ -123,6 +154,58 @@ class FakeReceptionSource : ReceptionSource {
     var permissionsCalls = 0
     var businessDayCalls = 0
     var roomTypesCalls = 0
+
+    // As ações da recepção. Respostas por operação; erro por operação (`*Error`); `hold*` prende a chamada até o teste
+    // soltar o portão em `held*`. As reservas devolvidas por alocar, soltar e "não mover" saem de [reservations].
+    val suggestions = mutableMapOf<String, List<RoomSuggestionResponse>>()
+    val roomStatusList = mutableListOf<RoomStatusResponse>()
+    val quotes = mutableMapOf<String, EarlyLateQuoteResponse>()
+    val guestsByName = mutableMapOf<String, List<GuestPick>>()
+    val guestsByDocument = mutableMapOf<String, List<GuestPick>>()
+    var createdGuest: GuestPick? = null
+    var checkInResponse: CheckInResponse? = null
+
+    var suggestionsError: Exception? = null
+    var roomStatusesError: Exception? = null
+    var assignError: Exception? = null
+    var unassignError: Exception? = null
+    var doNotMoveError: Exception? = null
+    var quoteError: Exception? = null
+    var searchError: Exception? = null
+    var createGuestError: Exception? = null
+
+    /** `checkIn`: a primeira execução sem token falha com `ApprovalRequired`; a seguinte, com token, passa. */
+    var checkInRequiresApproval: ApiError.ApprovalRequired? = null
+
+    /** `checkIn`: o resultado de cada execução, na ordem (`null` = sucesso); acabando a fila, sucesso. */
+    val checkInOutcomes = ArrayDeque<Throwable?>()
+
+    var holdSuggestions = false
+    var holdAssign = false
+    var holdCheckIn = false
+    var holdSearch = false
+    var holdCreateGuest = false
+    val heldSuggestions = mutableListOf<CompletableDeferred<Unit>>()
+    val heldAssigns = mutableListOf<CompletableDeferred<Unit>>()
+    val heldCheckIns = mutableListOf<CompletableDeferred<Unit>>()
+    val heldSearches = mutableListOf<CompletableDeferred<Unit>>()
+    val heldCreateGuests = mutableListOf<CompletableDeferred<Unit>>()
+
+    val suggestionCalls = mutableListOf<String>()
+    val assignCalls = mutableListOf<AssignCall>()
+    val unassignCalls = mutableListOf<String>()
+    val doNotMoveCalls = mutableListOf<Pair<String, Boolean>>()
+    val quoteCalls = mutableListOf<String>()
+    val checkInCalls = mutableListOf<CheckInCall>()
+
+    /** Cada execução (`run`) de uma ação de `checkIn`, na ordem. */
+    val checkInRuns = mutableListOf<CheckInRun>()
+    val searchCalls = mutableListOf<String>()
+
+    /** As buscas por documento: tipo e país emissor (o número nunca fica registrado). */
+    val documentSearchCalls = mutableListOf<Pair<String, String?>>()
+    var createGuestCalls = 0
+    var roomStatusesCalls = 0
 
     var subscriptions = 0
     var activeSubscriptions = 0
@@ -218,6 +301,100 @@ class FakeReceptionSource : ReceptionSource {
         roomTypesCalls++
         roomTypesError?.let { throw it }
         return types.toList()
+    }
+
+    override suspend fun roomSuggestions(id: String): List<RoomSuggestionResponse> {
+        suggestionCalls += id
+        val snapshot = suggestions[id].orEmpty()
+        val error = suggestionsError
+        if (holdSuggestions) CompletableDeferred<Unit>().also { heldSuggestions += it }.await()
+        error?.let { throw it }
+        return snapshot
+    }
+
+    override suspend fun roomStatuses(): List<RoomStatusResponse> {
+        roomStatusesCalls++
+        roomStatusesError?.let { throw it }
+        return roomStatusList.toList()
+    }
+
+    override suspend fun assignRoom(
+        id: String,
+        roomId: String,
+        doNotMove: Boolean?,
+    ): ReservationDetailResponse {
+        assignCalls += AssignCall(id, roomId, doNotMove)
+        val error = assignError
+        if (holdAssign) CompletableDeferred<Unit>().also { heldAssigns += it }.await()
+        error?.let { throw it }
+        return checkNotNull(reservations[id]) { "Reserva $id fora do servidor de mentira" }
+    }
+
+    override suspend fun unassignRoom(id: String): ReservationDetailResponse {
+        unassignCalls += id
+        unassignError?.let { throw it }
+        return checkNotNull(reservations[id]) { "Reserva $id fora do servidor de mentira" }
+    }
+
+    override suspend fun setDoNotMove(
+        id: String,
+        doNotMove: Boolean,
+    ): ReservationDetailResponse {
+        doNotMoveCalls += id to doNotMove
+        doNotMoveError?.let { throw it }
+        return checkNotNull(reservations[id]) { "Reserva $id fora do servidor de mentira" }
+    }
+
+    override suspend fun earlyLateQuote(id: String): EarlyLateQuoteResponse {
+        quoteCalls += id
+        quoteError?.let { throw it }
+        return checkNotNull(quotes[id]) { "Cotação de $id fora do servidor de mentira" }
+    }
+
+    override fun checkIn(
+        id: String,
+        input: CheckInInput,
+        intent: Intent,
+    ): ApprovableAction<CheckInResponse> {
+        checkInCalls += CheckInCall(id, input, intent)
+        return ApprovableAction { token ->
+            checkInRuns += CheckInRun(intent.key, token)
+            val approval = checkInRequiresApproval
+            if (holdCheckIn) CompletableDeferred<Unit>().also { heldCheckIns += it }.await()
+            if (token == null && approval != null) throw approval
+            checkInOutcomes.removeFirstOrNull()?.let { throw it }
+            ApiResponse(checkNotNull(checkInResponse) { "Resposta do check-in fora do servidor de mentira" }, null, 200)
+        }
+    }
+
+    override suspend fun searchGuests(name: String): List<GuestPick> {
+        searchCalls += name
+        val snapshot = guestsByName[name].orEmpty()
+        val error = searchError
+        if (holdSearch) CompletableDeferred<Unit>().also { heldSearches += it }.await()
+        error?.let { throw it }
+        return snapshot
+    }
+
+    override suspend fun searchGuestsByDocument(
+        type: String,
+        number: String,
+        issuingCountry: String?,
+    ): List<GuestPick> {
+        documentSearchCalls += type to issuingCountry
+        val snapshot = guestsByDocument[number].orEmpty()
+        val error = searchError
+        if (holdSearch) CompletableDeferred<Unit>().also { heldSearches += it }.await()
+        error?.let { throw it }
+        return snapshot
+    }
+
+    override suspend fun createGuest(input: NewGuest): GuestPick {
+        createGuestCalls++
+        val error = createGuestError
+        if (holdCreateGuest) CompletableDeferred<Unit>().also { heldCreateGuests += it }.await()
+        error?.let { throw it }
+        return checkNotNull(createdGuest) { "Hóspede criado fora do servidor de mentira" }
     }
 
     override fun events(topics: Set<String>): Flow<RealtimeEvent> =

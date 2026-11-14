@@ -113,6 +113,10 @@ class DayPanelState(
     var day by mutableStateOf<BusinessDay?>(null)
         private set
 
+    /** As permissões efetivas do usuário, lidas uma vez no início; vazio até a leitura responder (ou se falhar). */
+    var permissions by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     /** Só da data operacional; o erro de uma lista fica na aba dela. */
     var error by mutableStateOf<ApiError?>(null)
         private set
@@ -280,7 +284,8 @@ class DayPanelState(
     private suspend fun listen() {
         val topics =
             try {
-                topicsFor(source.permissions())
+                permissions = source.permissions()
+                topicsFor(permissions)
             } catch (
                 @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
             ) {

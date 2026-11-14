@@ -1,15 +1,23 @@
 package com.zeny.desktop.app.reception
 
+import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
+import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.model.CheckInResponse
+import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.GuestResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomStatusResponse
+import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.flow.Flow
@@ -32,7 +40,22 @@ fun GuestResponse.toHolderSummary(): HolderSummary {
     )
 }
 
-/** O que a recepção usa de um servidor: as leituras do dia, da reserva e do titular, e o stream de tempo real. */
+/** Um hóspede achado na busca ou recém-cadastrado: o id e o resumo (nome e documento mascarado). */
+data class GuestPick(
+    val id: String,
+    val summary: HolderSummary,
+) {
+    // Dado pessoal: nunca em log nem em `toString` de estado.
+    override fun toString(): String = "GuestPick(***)"
+}
+
+fun GuestResponse.toGuestPick(): GuestPick = GuestPick(id.toString(), toHolderSummary())
+
+/**
+ * O que a recepção usa de um servidor: as leituras do dia, da reserva e do titular, as ações de alocação, check-in e
+ * cadastro de hóspede, e o stream de tempo real.
+ */
+@Suppress("TooManyFunctions") // porta que espelha as operações da recepção sobre o `core`
 interface ReceptionSource {
     suspend fun permissions(): Set<String>
 
@@ -56,6 +79,42 @@ interface ReceptionSource {
     suspend fun ratePlanName(id: String): String
 
     suspend fun roomTypes(): List<RoomTypeResponse>
+
+    suspend fun roomSuggestions(id: String): List<RoomSuggestionResponse>
+
+    suspend fun roomStatuses(): List<RoomStatusResponse>
+
+    suspend fun assignRoom(
+        id: String,
+        roomId: String,
+        doNotMove: Boolean?,
+    ): ReservationDetailResponse
+
+    suspend fun unassignRoom(id: String): ReservationDetailResponse
+
+    suspend fun setDoNotMove(
+        id: String,
+        doNotMove: Boolean,
+    ): ReservationDetailResponse
+
+    suspend fun earlyLateQuote(id: String): EarlyLateQuoteResponse
+
+    fun checkIn(
+        id: String,
+        input: CheckInInput,
+        intent: Intent,
+    ): ApprovableAction<CheckInResponse>
+
+    /** A busca por nome (até 20 hóspedes). */
+    suspend fun searchGuests(name: String): List<GuestPick>
+
+    suspend fun searchGuestsByDocument(
+        type: String,
+        number: String,
+        issuingCountry: String?,
+    ): List<GuestPick>
+
+    suspend fun createGuest(input: NewGuest): GuestPick
 
     fun events(topics: Set<String>): Flow<RealtimeEvent>
 }

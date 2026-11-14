@@ -1,30 +1,41 @@
 package com.zeny.desktop.app.session
 
+import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
+import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
 import com.zeny.desktop.app.rooms.RoomsSource
 import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
+import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.realtime.RealtimeStatus
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.model.CheckInResponse
+import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
+import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+
+private const val GUEST_SEARCH_LIMIT = 20
 
 /** O que o `app` usa de um servidor: a sessão e as fachadas do `core`. Os testes do `app` usam um falso. */
 interface ServerConnection : AutoCloseable {
@@ -113,6 +124,7 @@ class CoreConnection(
     /** O mapa sobre `core.rooms` e `core.realtime`. */
     override fun roomsSource(): RoomsSource = rooms
 
+    @Suppress("TooManyFunctions") // adaptador que repassa cada operação da porta ao `core`
     private val reception =
         object : ReceptionSource {
             override suspend fun permissions(): Set<String> = core.account.me().permissions
@@ -138,6 +150,45 @@ class CoreConnection(
             override suspend fun ratePlanName(id: String): String = core.rates.ratePlan(id).name
 
             override suspend fun roomTypes(): List<RoomTypeResponse> = core.rooms.roomTypes()
+
+            override suspend fun roomSuggestions(id: String): List<RoomSuggestionResponse> =
+                core.reservations.roomSuggestions(id)
+
+            override suspend fun roomStatuses(): List<RoomStatusResponse> = core.rooms.statuses()
+
+            override suspend fun assignRoom(
+                id: String,
+                roomId: String,
+                doNotMove: Boolean?,
+            ): ReservationDetailResponse = core.reservations.assignRoom(id, roomId, doNotMove)
+
+            override suspend fun unassignRoom(id: String): ReservationDetailResponse =
+                core.reservations.unassignRoom(id)
+
+            override suspend fun setDoNotMove(
+                id: String,
+                doNotMove: Boolean,
+            ): ReservationDetailResponse = core.reservations.setDoNotMove(id, doNotMove)
+
+            override suspend fun earlyLateQuote(id: String): EarlyLateQuoteResponse =
+                core.reservations.earlyLateQuote(id)
+
+            override fun checkIn(
+                id: String,
+                input: CheckInInput,
+                intent: Intent,
+            ): ApprovableAction<CheckInResponse> = core.reservations.checkIn(id, input, intent)
+
+            override suspend fun searchGuests(name: String): List<GuestPick> =
+                core.guests.searchByName(name, GUEST_SEARCH_LIMIT).map { it.toGuestPick() }
+
+            override suspend fun searchGuestsByDocument(
+                type: String,
+                number: String,
+                issuingCountry: String?,
+            ): List<GuestPick> = core.guests.searchByDocument(type, number, issuingCountry).map { it.toGuestPick() }
+
+            override suspend fun createGuest(input: NewGuest): GuestPick = core.guests.create(input).toGuestPick()
 
             override fun events(topics: Set<String>): Flow<RealtimeEvent> = core.realtime.subscribe(topics)
         }
