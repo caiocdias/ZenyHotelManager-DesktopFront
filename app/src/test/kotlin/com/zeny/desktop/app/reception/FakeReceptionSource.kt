@@ -83,6 +83,9 @@ class FakeReceptionSource : ReceptionSource {
     var permissionsError: Exception? = null
     var businessDayError: Exception? = null
     var dayPageError: Exception? = null
+
+    /** Erro de uma lista só; [dayPageError], se houver, vale para todas. */
+    val dayPageErrors = mutableMapOf<DayList, Exception>()
     var reservationError: Exception? = null
     var historyError: Exception? = null
     var assignmentsError: Exception? = null
@@ -90,14 +93,19 @@ class FakeReceptionSource : ReceptionSource {
     var ratePlanError: Exception? = null
     var roomTypesError: Exception? = null
 
+    var holdBusinessDay = false
     var holdDayPage = false
     var holdReservation = false
     var holdHolder = false
+    val heldBusinessDays = mutableListOf<CompletableDeferred<Unit>>()
     val heldDayPages = mutableListOf<CompletableDeferred<Unit>>()
     val heldReservations = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
     val heldHolders = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
 
     val dayPageCalls = mutableListOf<DayPageCall>()
+
+    /** O `limit` de cada chamada de `dayPage`, na ordem de [dayPageCalls]. */
+    val dayPageLimits = mutableListOf<Int>()
     val reservationCalls = mutableListOf<String>()
     val historyCalls = mutableListOf<String>()
     val assignmentCalls = mutableListOf<String>()
@@ -131,8 +139,11 @@ class FakeReceptionSource : ReceptionSource {
 
     override suspend fun businessDay(): BusinessDay {
         businessDayCalls++
-        businessDayError?.let { throw it }
-        return businessDay
+        val snapshot = businessDay
+        val error = businessDayError
+        if (holdBusinessDay) CompletableDeferred<Unit>().also { heldBusinessDays += it }.await()
+        error?.let { throw it }
+        return snapshot
     }
 
     override suspend fun dayPage(
@@ -142,8 +153,9 @@ class FakeReceptionSource : ReceptionSource {
         limit: Int,
     ): Page<ReservationListItemResponse> {
         dayPageCalls += DayPageCall(list, date, cursor)
+        dayPageLimits += limit
         val snapshot = pages[list to cursor] ?: Page(emptyList(), null)
-        val error = dayPageError
+        val error = dayPageError ?: dayPageErrors[list]
         if (holdDayPage) CompletableDeferred<Unit>().also { heldDayPages += it }.await()
         error?.let { throw it }
         return snapshot
