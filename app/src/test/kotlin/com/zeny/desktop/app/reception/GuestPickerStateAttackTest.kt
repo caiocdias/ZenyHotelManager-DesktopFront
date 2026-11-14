@@ -530,16 +530,32 @@ class GuestPickerStateAttackTest {
         }
 
     @Test
-    fun otherFieldsKeepValuesAfterSuccessfulCreate() =
+    fun successfulCreateClearsPersonalFieldsAndKeepsTypeAndNationality() =
         runTest {
             val state = state()
-            state.fill(birth = "10/05/1990")
+            state.fill(type = "PASSPORT", number = "AB123456", country = "AR", nationality = "AR", birth = "10/05/1990")
             state.create()
             runCurrent()
 
-            assertEquals("10/05/1990", state.field("birthDate").text)
-            assertEquals("BR", state.field("nationality").text)
-            assertEquals("CPF", state.field("documentType").text)
+            for (name in listOf("fullName", "documentNumber", "birthDate", "issuingCountry")) {
+                assertEquals("", state.field(name).text, name)
+                assertFalse(state.field(name).touched, "$name tocado")
+                assertNull(state.field(name).error, "$name erro")
+            }
+            assertEquals("PASSPORT", state.field("documentType").text)
+            assertEquals("AR", state.field("nationality").text)
+        }
+
+    @Test
+    fun closeClearsPersonalFormFields() =
+        runTest {
+            val state = state()
+            state.fill(type = "PASSPORT", number = "AB123456", country = "AR", nationality = "AR")
+            state.close()
+
+            for (name in listOf("fullName", "documentNumber", "birthDate", "issuingCountry")) {
+                assertEquals("", state.field(name).text, name)
+            }
         }
 
     @Test
