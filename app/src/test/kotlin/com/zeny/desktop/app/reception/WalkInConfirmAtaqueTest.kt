@@ -378,19 +378,33 @@ class WalkInConfirmAtaqueTest {
             }
         }
 
+    private fun attemptPickerCalls(state: WalkInState) {
+        fillNewGuest(state)
+        state.picker.create()
+        state.picker.query = "Maria"
+        state.picker.searchByName()
+        state.picker.documentNumber = "12345678909"
+        state.picker.searchByDocument()
+    }
+
+    private fun assertNoPickerCall(source: FakeReceptionSource) {
+        assertEquals(0, source.createGuestCalls)
+        assertEquals(emptyList(), source.searchCalls)
+        assertEquals(emptyList(), source.documentSearchCalls)
+    }
+
     @Test
-    fun registeringGuestDuringUnknownLockDoesNotChangePrimary() =
+    fun pickerCreateAndSearchDuringUnknownLockDoNotCallServerNorChangePrimary() =
         runTest {
             val source = source().apply { walkInOutcomes += ApiError.Network(IOException("offline")) }
             val state = ready(source)
             confirmNow(state)
             assertTrue(state.unconfirmed)
 
-            fillNewGuest(state)
-            state.picker.create()
+            attemptPickerCalls(state)
             runCurrent()
 
-            assertEquals(1, source.createGuestCalls)
+            assertNoPickerCall(source)
             assertEquals(waGuest, state.primary)
             confirmNow(state)
             assertEquals(
@@ -404,20 +418,20 @@ class WalkInConfirmAtaqueTest {
         }
 
     @Test
-    fun registeringGuestDuringBusyDoesNotChangePrimary() =
+    fun pickerCreateAndSearchDuringBusyDoNotCallServerNorChangePrimary() =
         runTest {
             val source = source().apply { holdWalkIn = true }
             val state = ready(source)
             confirmNow(state)
             assertTrue(state.busy)
 
-            fillNewGuest(state)
-            state.picker.create()
+            attemptPickerCalls(state)
             runCurrent()
-            assertEquals(1, source.createGuestCalls)
+            assertNoPickerCall(source)
 
             source.heldWalkIns.forEach { it.complete(Unit) }
             runCurrent()
+            assertNoPickerCall(source)
             assertEquals(waGuest, state.primary)
             assertNotNull(state.done)
         }
