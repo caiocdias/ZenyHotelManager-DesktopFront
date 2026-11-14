@@ -30,19 +30,29 @@
 - **Regras do design §6.2:**
   - nada de JSON ou `code` cru ao usuário;
   - enum extensível tolerado;
-  - **uma `Idempotency-Key` por intenção**: a mesma `Intent` no reenvio após erro de rede; a repetição aprovada segue a decisão D2 do `core` (`executeApproved`);
+  - **uma `Idempotency-Key` por intenção**, com a regra de renovação abaixo; a repetição aprovada segue a decisão D2 (ADR 0007, linha 177, e roadmap M1; o design §6.2 ainda diz "mesma chave" e será alinhado pelo arquiteto), feita por `executeApproved`;
+  - **renovação da chave:** o servidor guarda e repete a resposta da chave qualquer que seja o status (`IdempotencyFilter`), então:
+    - a mesma `Intent` vale enquanto o resultado é desconhecido: `ApiError.Network`, `IncompatibleResponse`, `SessionEnded` e `409 IDEMPOTENCY_KEY_IN_USE`;
+    - qualquer resposta definitiva gera outra `Intent`: sucesso, `ApiError.Problem` (fora `IDEMPOTENCY_KEY_IN_USE`), `PreconditionFailed` e `Unexpected`. Mudar UH, hóspede principal ou a cobrança do early também gera outra.
+
+    É a convenção do marco para as ações com chave (E03 e E04);
   - `errors[]` vai para o campo do formulário (`FormState.applyServerErrors`);
-  - ações por permissão efetiva, com o servidor decidindo (`403` tratado);
+  - ações por permissão efetiva, com o servidor decidindo (`403` tratado):
+    - "Fazer check-in" pede `frontdesk.stays.checkin`;
+    - sugestões, "Alocar", "Soltar UH" e "Não mover" pedem `reservations.assignments.manage`;
+    - a busca de hóspede pede `guests.profiles.read`;
+    - "Cadastrar hóspede" pede `guests.profiles.manage`;
   - dinheiro em `BigDecimal` (`Money`);
   - instantes no fuso do hotel (`HotelFacade.businessDay().zone` ou `EarlyLateQuoteResponse.timezone`), nunca no da JVM.
 - **Fronteira (ADR 0008):** `app` e `design` (main e test) não importam `com.zeny.desktop.sdk.client.*`, `com.zeny.desktop.sdk.util.*`, `io.ktor.client.*`, `de.quati.ogen.client.*` nem usam `@RawSdkAccess`; usam os modelos `com.zeny.desktop.sdk.model.*` e as fachadas do `core` (inclusive `com.zeny.desktop.core.http.Intent` e `com.zeny.desktop.core.facade.ApprovableAction`).
 - **Dados pessoais:**
   - documento sempre mascarado na tela (só o `maskedNumber` do servidor);
-  - o número digitado no cadastro ou na busca vai só no corpo da requisição (nunca na URL), não fica no estado depois da chamada e nunca aparece em log, `toString`, mensagem de exceção nem cache de disco;
+  - o número digitado no cadastro ou na busca vai só no corpo da requisição (nunca na URL) e nunca aparece em log, `toString`, mensagem de exceção nem cache de disco;
+  - na busca, o número some do estado depois da chamada; no cadastro, fica só até o sucesso ou o abandono do formulário, porque um erro de campo precisa dele para a correção;
   - do perfil, o `app` guarda só nome e primeiro documento mascarado (`HolderSummary`, `GuestPick`);
   - seed e testes usam só dados fictícios (CPF de teste gerado com dígito verificador válido).
 - **Aprovação:** ação recusada com `APPROVAL_REQUIRED` passa sempre pelo `ApprovalCoordinator` da sessão (`LocalApprovalCoordinator`). Cancelar a aprovação não é erro.
-- **Atualização:** depois de cada ação que muda a reserva (alocar, soltar, "não mover", check-in), chame `panel.refresh()` e `detail.reload()`. O mapa de UHs se atualiza pelo SSE `rooms` que já assina.
+- **Atualização:** depois de cada ação que muda a reserva (alocar, soltar, "não mover", check-in, e o `RESERVATION_TRANSITION_NOT_ALLOWED` do check-in), chame `panel.refresh()` e `detail.reload()`. O mapa de UHs se atualiza pelo SSE `rooms` que já assina.
 - **Testes:**
   - não dormem (`runTest`, tempo virtual; relógio injetado onde houver horário);
   - verificação ao vivo só com o opt-in próprio e as variáveis do arquivo 600; com o opt-in e sem credencial, falha;
@@ -54,7 +64,12 @@
 
 ## Review Focus
 
-1. **Erro de rede ao confirmar o check-in e nova confirmação:** a segunda chamada leva a mesma `Idempotency-Key` (o servidor pode ter feito o check-in e a resposta se perdeu). Mudar UH, hóspede ou cobrança de early troca a chave. Testes `retryAfterNetworkErrorReusesKey` e `changingInputsRenewsKey` (Task 8) e `checkInRetrySendsSameKey` (Task 2).
+1. **Nova confirmação depois de uma falha:**
+   - depois de um erro de rede, a segunda chamada leva a mesma `Idempotency-Key` (o servidor pode ter feito o check-in e a resposta se perdeu);
+   - depois de um erro de regra (por exemplo, `ROOM_NOT_READY`, que o recepcionista resolve com a governança), a chave é outra, senão o servidor repete o erro guardado;
+   - mudar UH, hóspede ou cobrança do early troca a chave.
+
+   Testes `retryAfterNetworkErrorReusesKey`, `ruleErrorRenewsKey`, `keyInUseKeepsKey` e `changingInputsRenewsKey` (Task 8) e `checkInRetrySendsSameKey` (Task 2).
 2. **Dois cliques em "Fazer check-in", "Alocar" ou "Cadastrar":** uma chamada só. Testes `doubleConfirmSendsOnce` (Task 8), `doubleAssignSendsOnce` (Task 6) e `doubleCreateSendsOnce` (Task 7).
 3. **A UH deixa de estar pronta entre a alocação e o check-in** (governança marca suja, ou UH ocupada por outro terminal): `ROOM_NOT_READY` aparece com o próximo passo, o diálogo continua aberto e nada muda na reserva. Testes `roomNotReadyShowsNextStep` (Task 8) e a verificação ao vivo `notReadyRoomLeavesNoEffect` (Task 11).
 4. **Aprovação cancelada ou sessão encerrada no meio do check-in:**
@@ -117,7 +132,7 @@
   - `data class CheckInInput(val guests: List<CheckInGuest>, val guestCount: Int?, val roomId: String?, val earlyCheckInFee: Money?)`;
   - `fun checkIn(id: String, input: CheckInInput, intent: Intent): ApprovableAction<CheckInResponse>`, montada como o `ZenyCore.approvable` de `Approval.kt` (sem token: `executor.execute(intent, …)`; com token: `executor.executeApproved(intent, token, …)`);
   - ids inválidos (reserva, UH, hóspede) → `IllegalArgumentException` antes da rede, sem o id na mensagem;
-  - `earlyCheckInFee` vai como o texto decimal de `Money` com 2 casas (`"50.00"`); nulo, o campo não vai;
+  - `earlyCheckInFee` vai como `Money.toApi()` do valor da cotação, sem reformatar (`"50.00"` sai `"50.00"`); nulo, o campo não vai;
   - `guestCount` e `roomId` nulos não vão.
 
 - [ ] **Step 1: Testes que falham:**
@@ -187,7 +202,7 @@
     - `GUEST_DATA_INCOMPLETE` → "Faltam dados do hóspede: nacionalidade, data de nascimento ou um documento aceito (CPF para brasileiro adulto). Cadastre o hóspede com esses dados ou complete o perfil na área Hóspedes."
     - `GUEST_BIRTH_DATE_REQUIRED`, `MINOR_AUTHORIZATION_REQUIRED` e `MINOR_AUTHORIZATION_INVALID` → "Hóspede menor de idade precisa da data de nascimento e da autorização do responsável no perfil (área Hóspedes)."
     - `CHECK_IN_BEFORE_ARRIVAL` → "O check-in não pode ser feito antes da data de chegada. Confira a data da reserva."
-    - `RESERVATION_TRANSITION_NOT_ALLOWED` → "Só uma reserva confirmada faz check-in. Confirme a pré-reserva antes."
+    - `RESERVATION_TRANSITION_NOT_ALLOWED` → "A reserva não está mais confirmada; o check-in pode já ter sido feito. Feche e confira o detalhe."
     - `EARLY_LATE_FEE_CHANGED` → "O valor do early check-in mudou. Confira a nova cotação e confirme de novo."
     - `EARLY_LATE_NOT_OFFERED` → "O early check-in não é oferecido agora. Desmarque a cobrança e confirme de novo."
     - `FOLIO_CLOSED` → "A conta da reserva está encerrada. Fale com o financeiro."
@@ -196,15 +211,14 @@
     - qualquer outro → `error.userMessage`.
 
     Para os outros tipos de `ApiError`, `error.userMessage`.
-  - `fun isReady(status: RoomStatusResponse): Boolean` (RN-05): vaga, sem OOO, e `INSPECTED` ou `CLEAN` sem `inspectionPending`.
-  - `fun readiness(status: RoomStatusResponse?): ChipModel`: "Pronta" (SUCCESS) se `isReady`; senão o rótulo e o tom de `displayStatus(status)` de `app/rooms/RoomDisplay.kt`; `null` → "Status desconhecido" (NEUTRAL).
+  - `fun readiness(status: RoomStatusResponse?): ChipModel`: "Pronta" (SUCCESS) se `status.readyForCheckIn` (o servidor aplica a RN-05; o cliente não a reimplementa); senão o rótulo e o tom de `displayStatus(status)` de `app/rooms/RoomDisplay.kt`; `null` → "Status desconhecido" (NEUTRAL).
   - `fun earlyOffer(quote: EarlyLateQuoteResponse): String?`: oferecido → "Entrada a partir de HH:mm · R$ 50,00" (`limitTime` e `ReceptionText.money(fee)`); não oferecido, ou sem horário ou valor → `null`.
 
 - [ ] **Step 1: Testes que falham:**
   - um teste por linha de `error`, com o texto exato;
   - `unknownCodeFallsBackToUserMessage` e `nonProblemUsesUserMessage`;
-  - `readyRules`: vaga e inspecionada; vaga e limpa sem inspeção pendente; limpa com inspeção pendente; suja; ocupada; com OOO;
-  - `readinessChip` e `earlyOfferText`.
+  - `readinessFollowsServerFlag`: `readyForCheckIn` verdadeiro → "Pronta"; falso com suja, ocupada e fora de ordem → o rótulo de `displayStatus`; `null` → "Status desconhecido";
+  - `earlyOfferText`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 5: Commit** (`Acrescenta os textos das ações da recepção`).
 
@@ -258,22 +272,38 @@
 
 **Interfaces:**
 - Produces:
-  - `data class RoomOption(val roomId: String, val number: String, val floor: String?, val current: Boolean, val outOfService: Boolean, val matchesFloorPreference: Boolean, val readiness: ChipModel, val ready: Boolean)`;
-  - `class RoomAllocationState(source: ReceptionSource, scope: CoroutineScope, reservationId: String, onChanged: () -> Unit)`, com mutações no escopo da UI:
-    - `var options: List<RoomOption>`, `var currentRoomId: String?`, `var currentRoomNumber: String?`, `var doNotMove: Boolean`, `var loading`, `var busy` e `var error: String?` (texto de `ActionText.error`);
-    - `fun load()`: em paralelo `roomSuggestions` e `roomStatuses`, juntados por `roomId`; `roomStatuses` com `ApiError.Problem` → `readiness` "Status desconhecido" e `ready = false`, sem erro; a UH atual vem da sugestão `current`;
-    - `fun assign(roomId: String)`, `fun unassign()` e `fun toggleDoNotMove()`: com `busy`, uma chamada por vez (cliques durante `busy` são ignorados); o sucesso atualiza `currentRoomId`, `currentRoomNumber` e `doNotMove` a partir de `ReservationDetailResponse.reservation.roomAssignment`, recarrega as opções e chama `onChanged()`; falha → `error`;
+  - `data class CheckInSeed(val reservationId: String, val holderGuestId: String, val status: String, val adults: Int, val children: Int, val roomId: String?, val roomNumber: String?, val doNotMove: Boolean)` e a função pura `fun ReservationDetailResponse.toCheckInSeed(): CheckInSeed`:
+    - `children` = `childAges.size`;
+    - a UH e o "não mover" vêm de `reservation.roomAssignment` (ausente ou nulo → sem UH, `doNotMove = false`);
+  - `data class RoomOption(val roomId: String, val number: String, val floor: String?, val current: Boolean, val outOfService: Boolean, val matchesFloorPreference: Boolean, val readiness: ChipModel, val ready: Boolean)`, com `ready` = `readyForCheckIn` do status;
+  - `class RoomAllocationState(source: ReceptionSource, scope: CoroutineScope, seed: CheckInSeed, canManage: Boolean, onChanged: () -> Unit)`, com mutações no escopo da UI:
+    - `var currentRoomId`, `var currentRoomNumber` e `var doNotMove`, começando pela semente, de modo que uma UH alocada fora das sugestões (OOO, desativada) continua à vista;
+    - `var options: List<RoomOption>`, `var loading`, `var busy` e `var error: String?` (texto de `ActionText.error`);
+    - `val canManage`;
+    - `fun load()`:
+      - sem `canManage`, não chama nada e fica com a UH da semente;
+      - com `canManage`, chama `roomSuggestions` e `roomStatuses` em paralelo e os junta por `roomId`;
+      - `roomStatuses` com `ApiError.Problem` → "Status desconhecido" e `ready = false`, sem erro;
+      - o `current` da sugestão é só um marcador;
+    - `fun assign(roomId: String)`, `fun unassign()` e `fun toggleDoNotMove()`:
+      - sem `canManage`, não fazem nada;
+      - uma chamada por vez: cliques durante `busy` são ignorados;
+      - o sucesso atualiza UH e "não mover" pelo `reservation.roomAssignment` da resposta, recarrega as opções e chama `onChanged()`;
+      - falha → `error`;
     - `fun close()`.
 
 - [ ] **Step 1: Testes que falham:**
+  - `seedFromReservation`: com e sem alocação; `doNotMove` verdadeiro;
+  - `currentOutsideSuggestionsStillShown`;
+  - `initialDoNotMoveFromReservation` (o primeiro `toggleDoNotMove` envia `false`);
   - `loadsSuggestionsWithReadiness`: pronta, suja e ocupada, com o rótulo de cada;
   - `statusesForbiddenStillLists`;
+  - `withoutPermissionNoCalls`;
   - `assignUpdatesCurrentAndNotifies`;
   - `unassignClearsCurrent`;
-  - `doNotMoveToggles`;
   - `lockedShowsNextStep`: `ROOM_ASSIGNMENT_LOCKED` → texto da Task 4;
   - `doubleAssignSendsOnce`;
-  - `notAllowedShowsMessage` (reserva hospedada);
+  - `notAllowedShowsMessage`;
   - `closeCancels`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 5: Commit** (`Acrescenta o estado da alocação de UH`).
@@ -289,7 +319,7 @@
 - Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/GuestPickerStateTest.kt`
 
 **Interfaces:**
-- Produces: `class GuestPickerState(source: ReceptionSource, scope: CoroutineScope, onPicked: (GuestPick) -> Unit)`.
+- Produces: `class GuestPickerState(source: ReceptionSource, scope: CoroutineScope, canSearch: Boolean, canCreate: Boolean, onPicked: (GuestPick) -> Unit)`. Sem `canSearch`, a busca não chama nada; sem `canCreate`, `create()` também não.
   - **Busca:**
     - `var query: String`;
     - `var documentType: String` ("CPF" por padrão; opções `CPF`, `RG`, `CNH`, `PASSPORT`, `RNM` e `FOREIGN_ID`, com os rótulos de `ReceptionText.document`);
@@ -300,15 +330,17 @@
   - **Cadastro:** `val form: FormState`, com os campos:
     - `fullName`: obrigatório;
     - `documentType`;
-    - `documentNumber`: obrigatório; CPF validado por `DocumentInput.parse`;
+    - `documentNumber`: obrigatório; CPF validado por `DocumentInput.parse`, exigindo `kind == CPF` (um CNPJ válido não serve);
     - `issuingCountry`: 2 letras, obrigatório para `PASSPORT` e `FOREIGN_ID`;
     - `nationality`: 2 letras maiúsculas, padrão "BR";
-    - `birthDate`: `DateInput.parse`, não futura.
+    - `birthDate`: `DateInput.parse`, não futura;
+    - **regra do check-in**, para não gravar um perfil que o check-in vai recusar: nacionalidade "BR" e 18 anos ou mais na data de hoje do relógio injetado (`now: () -> Instant`, um parâmetro a mais do construtor, com a data no fuso de `ZoneId.of("America/Sao_Paulo")`, que é o do seed e só serve para essa conta) exigem o tipo CPF; senão, "Para brasileiro adulto, use o CPF." no campo `documentType`.
 
     `var creating`. `fun create()`:
     - valida no cliente; inválido → nenhuma chamada;
     - `errors[]` do servidor → `form.applyServerErrors`;
     - sucesso → `onPicked(pick)` e limpa número e nome do formulário;
+    - `ApiError.Network` → "Não foi possível confirmar o cadastro. Busque pelo documento antes de cadastrar de novo." (o cadastro não tem chave de idempotência e pode ter sido gravado);
     - uma chamada por vez.
   - `toString()` sem nome nem número.
 
@@ -316,8 +348,10 @@
   - `searchByNameListsPicks` e `shortNameAsksMore`;
   - `searchByDocumentSendsTypeNumberCountry`;
   - `passportNeedsCountry`;
-  - `numberClearedAfterSearchAndCreate`;
-  - `createValidatesBeforeCalling`: CPF inválido, data futura, nacionalidade fora de 2 letras;
+  - `numberClearedAfterSearchAndCreate` (na busca, também depois da falha; no cadastro, só depois do sucesso);
+  - `createValidatesBeforeCalling`: CPF inválido, CNPJ no lugar do CPF, data futura, nacionalidade fora de 2 letras, brasileiro adulto com RG;
+  - `createNetworkErrorSuggestsSearch`;
+  - `withoutPermissionsNoCalls`;
   - `createSendsNewGuestAndPicks`;
   - `serverFieldErrorGoesToField`: `DOCUMENT_NUMBER_INVALID` em `documents[0].number` → erro no campo `documentNumber`;
   - `doubleCreateSendsOnce`;
@@ -336,43 +370,52 @@
 - Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/CheckInStateTest.kt`
 
 **Interfaces:**
-- Consumes: `RoomAllocationState`, `GuestPickerState`, `ReceptionSource`, `ActionText`, `CheckInInput`/`CheckInGuest`, `Intent`, `ApprovableAction`, `ApiResponse`.
+- Consumes: `CheckInSeed`, `RoomAllocationState`, `GuestPickerState`, `ReceptionSource`, `ActionText`, `CheckInInput`/`CheckInGuest`, `Intent`, `ApprovableAction`, `ApiResponse`.
 - Produces:
   - `data class CheckInDone(val roomNumber: String, val alerts: List<String>)`, com `toString()` sem `alerts`; os alertas no formato "Hóspede com restrição: <reason>";
-  - `class CheckInState`, com o construtor `(source: ReceptionSource, scope: CoroutineScope, reservationId: String, holderGuestId: String, adults: Int, children: Int, approve: suspend (ApprovableAction<CheckInResponse>) -> ApiResponse<CheckInResponse>?, now: () -> Instant, onChanged: () -> Unit)`:
-    - `val allocation: RoomAllocationState`, com `onChanged` repassado;
-    - `val picker: GuestPickerState`, cujo `onPicked` troca o hóspede principal;
-    - `var primary: GuestPick?`: começa pelo titular, `holder(holderGuestId)` com o id; titular 403/404 → `null`, e o recepcionista escolhe outro;
+  - `class CheckInState`, com o construtor `(source: ReceptionSource, scope: CoroutineScope, seed: CheckInSeed, permissions: Set<String>, approve: suspend (ApprovableAction<CheckInResponse>) -> ApiResponse<CheckInResponse>?, now: () -> Instant, onChanged: () -> Unit)`:
+    - `val allocation: RoomAllocationState`, com `canManage = "reservations.assignments.manage" in permissions` e `onChanged` repassado;
+    - `val picker: GuestPickerState`, com `canSearch` por `guests.profiles.read` e `canCreate` por `guests.profiles.manage`; o `onPicked` troca o hóspede principal;
+    - `var primary: GuestPick?`: começa pelo titular, `holder(seed.holderGuestId)` com o id; titular 403/404 → `null`, e o recepcionista escolhe outro;
     - `var quote: EarlyLateQuoteResponse?`;
     - `var earlyText: String?`: `ActionText.earlyOffer` só se oferecido e `now()` antes de `earlyCheckIn.until`; senão `null`;
     - `var chargeEarly: Boolean` (falso por padrão; só ligável com `earlyText != null`);
     - `var busy`, `var error: String?` e `var done: CheckInDone?`;
-    - `val canConfirm`: UH atual, `primary` e não `busy`.
+    - `val canConfirm`: UH atual, `primary`, não `busy` e `done == null`.
   - **`fun start()`:** carrega a alocação, o titular e a cotação em paralelo. Falha da cotação → sem early e sem erro.
   - **`fun confirm()`:**
-    - monta `CheckInInput(guests = [CheckInGuest(primary.id, true)], guestCount = (adults + children).coerceIn(1, 40), roomId = null, earlyCheckInFee = fee da cotação se chargeEarly)`;
-    - roda `approve(source.checkIn(reservationId, input, intent))`;
-    - `intent` é uma `Intent` mantida enquanto UH, hóspede principal e `chargeEarly` não mudam; qualquer mudança ou um sucesso cria outra;
-    - `null` (aprovação cancelada) → nada muda, sem erro;
-    - sucesso → `done`, e chama `onChanged()`;
-    - `EARLY_LATE_FEE_CHANGED` → relê a cotação, desliga `chargeEarly` e mostra o texto da Task 4;
-    - outra falha → `error = ActionText.error(e)`.
-  - **`fun close()`.**
+    - **reavaliação do early:** com `chargeEarly` e `now()` já depois de `until`, desliga `chargeEarly`, zera `earlyText` e mostra "A janela do early check-in terminou. Confira e confirme de novo.", sem chamar o servidor;
+    - **pedido:** monta `CheckInInput(guests = [CheckInGuest(primary.id, true)], guestCount = (seed.adults + seed.children).coerceIn(1, 40), roomId = null, earlyCheckInFee = fee da cotação, como veio, se chargeEarly)` e roda `approve(source.checkIn(seed.reservationId, input, intent))`;
+    - **`intent`, conforme a regra de renovação das Global Constraints:**
+      - continua a mesma depois de `Network`, `IncompatibleResponse`, `SessionEnded` e `IDEMPOTENCY_KEY_IN_USE`;
+      - vira outra depois de sucesso ou de qualquer outra resposta definitiva;
+      - vira outra quando a UH, o hóspede principal ou `chargeEarly` mudam;
+    - **`null`** (aprovação cancelada) → nada muda, sem erro, e a mesma `intent`;
+    - **sucesso** → `done`, e chama `onChanged()`;
+    - **`EARLY_LATE_FEE_CHANGED`** → relê a cotação, desliga `chargeEarly` e mostra o texto da Task 4;
+    - **`RESERVATION_TRANSITION_NOT_ALLOWED`** → o texto da Task 4, e chama `onChanged()`;
+    - **outra falha** → `error = ActionText.error(e)`.
+  - **`fun close()`:** cancela as cargas; com o check-in em voo, a tela não deixa fechar, porque "Fechar" fica desabilitado enquanto `busy`.
 
 - [ ] **Step 1: Testes que falham:**
   - `startsWithHolderAndQuote`;
   - `earlyOfferedOnlyBeforeUntil`: `now` antes e depois de `until`;
+  - `earlyWindowRecheckedOnConfirm`;
   - `confirmSendsPrimaryCountAndFee`;
   - `retryAfterNetworkErrorReusesKey`: a mesma `Intent.key` nas duas execuções registradas pelo falso;
+  - `ruleErrorRenewsKey`: `ROOM_NOT_READY` e depois sucesso, com outra chave;
+  - `keyInUseKeepsKey`;
   - `changingInputsRenewsKey`: trocar a UH, o hóspede ou `chargeEarly`;
   - `doubleConfirmSendsOnce`;
   - `roomNotReadyShowsNextStep`: o texto da Task 4, sem `done` e sem `onChanged`;
+  - `transitionNotAllowedRefreshes`;
   - `approvalCancelledLeavesDialog`;
   - `approvedRetrySucceeds`;
   - `sessionEndedShowsMessage`;
   - `feeChangedRequotes`;
   - `successNotifiesAndShowsAlerts`;
   - `holderForbiddenNeedsPick`;
+  - `permissionsReachChildren`;
   - `doneToStringHidesAlerts`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 5: Commit** (`Acrescenta o estado do check-in`).
@@ -407,9 +450,37 @@
 
 ---
 
-### Task 10: Diálogo do check-in na tela
+### Task 10: Painel de busca e cadastro de hóspede
 
-**Estimativa:** 45 min · **Depende de:** Tasks 8 e 9 · **Risco:** alto (superfície da demo; dado pessoal; aprovação)
+**Estimativa:** 35 min · **Depende de:** Task 7 · **Risco:** alto (dado pessoal na tela)
+
+**Files:**
+- Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/GuestPickerPanel.kt`
+- Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/GuestPickerPanelTest.kt`
+
+**Interfaces:**
+- Produces: `@Composable fun GuestPickerPanel(state: GuestPickerState)`:
+  - abas "Por nome" e "Por documento"; a de documento tem tipo, número e "País emissor" (este só para `PASSPORT` e `FOREIGN_ID`);
+  - resultados com nome, documento mascarado e "Escolher";
+  - "Cadastrar hóspede", com o formulário da Task 7 e os rótulos "Nome completo", "Documento", "Número", "País emissor", "Nacionalidade" e "Data de nascimento";
+  - a busca some sem `canSearch`; "Cadastrar hóspede" some sem `canCreate`;
+  - o `error` do estado em destaque.
+
+- [ ] **Step 1: Testes que falham:**
+  - `searchByNameShowsResults`;
+  - `pickGuestByDocument`;
+  - `createGuestFromPanel`: o documento digitado nunca aparece na árvore depois do cadastro, só o mascarado;
+  - `fieldErrorShownOnField`;
+  - `actionsFollowPermissions`;
+  - `noUuidInPanel`.
+- [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
+- [ ] **Step 5: Commit** (`Acrescenta o painel de busca e cadastro de hóspede`).
+
+---
+
+### Task 11: Diálogo do check-in na tela
+
+**Estimativa:** 40 min · **Depende de:** Tasks 8, 9 e 10 · **Risco:** alto (superfície da demo; aprovação)
 
 **Files:**
 - Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/CheckInDialog.kt`
@@ -419,28 +490,30 @@
 **Interfaces:**
 - Produces:
   - **`@Composable fun CheckInDialog(state: CheckInState, onClose: () -> Unit)`**, com as seções:
-    - **"UH":** UH atual ou "Sem UH", e a lista de opções com número, andar, o chip de `readiness`, "Fora de serviço" e "Andar preferido" quando valem, e "Alocar" em cada uma; "Soltar UH"; a caixa "Não mover";
+    - **"UH":** UH atual ou "Sem UH"; com `allocation.canManage`, a lista de opções (número, andar, o chip de `readiness`, "Fora de serviço" e "Andar preferido" quando valem, e "Alocar" em cada uma), "Soltar UH" e a caixa "Não mover"; sem a permissão, só a UH atual;
     - **"Early check-in":** `earlyText` e a caixa "Cobrar early check-in"; sem oferta, "Sem early check-in agora.";
-    - **"Hóspede principal":** nome e documento mascarado, ou "Escolha o hóspede"; "Trocar hóspede" abre a busca (abas "Por nome" e "Por documento", resultados com "Escolher") e "Cadastrar hóspede" (o formulário da Task 7, com os rótulos "Nome completo", "Documento", "Número", "País emissor", "Nacionalidade" e "Data de nascimento");
+    - **"Hóspede principal":** nome e documento mascarado, ou "Escolha o hóspede"; "Trocar hóspede" abre o `GuestPickerPanel` da Task 10;
     - o `error` em destaque;
-    - "Fazer check-in" (habilitado por `canConfirm`) e "Fechar";
+    - "Fazer check-in" (habilitado por `canConfirm`) e "Fechar" (desabilitado enquanto `busy`);
     - com `done`: "Check-in feito na UH <n>.", os alertas e "Fechar".
-  - **`ReceptionScreen(panel, detail, checkIn: (ReservationDetailView) -> CheckInState?)`:**
-    - o botão "Fazer check-in" aparece no detalhe só com a situação "Confirmada" e `"frontdesk.stays.checkin" in panel.permissions`;
-    - abre o diálogo com o estado que `checkIn` devolve; fechar o diálogo chama `close()` do estado;
-    - o que o estado pede vem de `ReservationDetailState.reservation` (Task 9); `ReservationDetailView` não muda e nenhum teste existente muda.
+  - **`ReceptionScreen(panel, detail, checkIn: ((CheckInSeed) -> CheckInState)? = null)`:**
+    - com o valor padrão, as chamadas existentes `ReceptionScreen(panel, detail)` não mudam;
+    - o botão "Fazer check-in" aparece no detalhe só com `checkIn != null`, `detail.reservation?.reservation?.status == "CONFIRMED"` e `"frontdesk.stays.checkin" in panel.permissions`;
+    - abre o diálogo com `checkIn(detail.reservation!!.toCheckInSeed())`;
+    - **o diálogo fica aberto** até "Fechar", mesmo que o `reload` do detalhe mude a situação para hospedada; fechar chama `close()` do estado.
   - **`ReceptionArea`:**
-    - cria o `CheckInState` com `approve = LocalApprovalCoordinator.current::run` (via uma lambda) e `now = Clock.systemUTC()::instant`;
-    - `onChanged` chama `panel.refresh()` e `detail.reload()`;
-    - `reservationId`, `adults`, `children` (= `childAges.size`) e `holderGuestId` vêm de `detail.reservation`.
+    - passa `checkIn = { seed -> CheckInState(source, scope, seed, panel.permissions, approve, now, onChanged) }`;
+    - `approve` = `LocalApprovalCoordinator.current::run` (via uma lambda) e `now` = `Clock.systemUTC()::instant`;
+    - `onChanged` chama `panel.refresh()` e `detail.reload()`.
 
 - [ ] **Step 1: Testes que falham:**
   - `checkInButtonOnlyForConfirmedWithPermission`;
+  - `existingCallsWithoutCheckInHideButton`;
   - `dialogShowsSuggestionsWithReadiness`;
   - `assignFromDialog`;
-  - `pickGuestByDocument`;
-  - `createGuestFromDialog` (o documento digitado nunca aparece na árvore depois do cadastro; só o mascarado);
-  - `confirmShowsDoneAndRefreshes`: `onChanged`, que no teste conta `panel.refresh` e `detail.reload`;
+  - `allocationHiddenWithoutPermission`;
+  - `confirmShowsDoneAndRefreshes`: `onChanged`, que no teste conta `panel.refresh` e `detail.reload`; o diálogo continua aberto depois do `reload`;
+  - `closeDisabledWhileBusy`;
   - `ruleErrorShowsNextStep`;
   - `noUuidInDialog`;
   - `noRawCodeInDialog`.
@@ -449,29 +522,29 @@
 
 ---
 
-### Task 11: Verificação ao vivo do check-in
+### Task 12: Verificação ao vivo do check-in
 
-**Estimativa:** 40 min · **Depende de:** Task 10 · **Risco:** alto (segredos; escreve no servidor; critérios de aceite)
+**Estimativa:** 40 min · **Depende de:** Task 11 · **Risco:** alto (segredos; escreve no servidor; critérios de aceite)
 
 **Files:**
 - Create: `app/src/test/kotlin/com/zeny/desktop/app/reception/LiveCheckInCheck.kt`
-- Modify: `app/build.gradle.kts` (só o opt-in `ZENY_LIVE_CHECKIN` como entrada do `test`, no molde de `ZENY_LIVE_RECEPTION`); correções pequenas com teste, no arquivo dono, se a verificação achar defeito.
+- Modify: `app/build.gradle.kts` (só o opt-in `ZENY_LIVE_CHECKIN` como entrada do `test` e no `outputs.upToDateWhen`, no molde de `ZENY_LIVE_RECEPTION`); correções pequenas com teste, no arquivo dono, se a verificação achar defeito.
 
 **Interfaces:**
 - **Variáveis:** as da E01 (`ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`/`PASSWORD` da Recepcionista), do arquivo 600 gerado pelo orquestrador. Opt-in `ZENY_LIVE_CHECKIN=1`: sem ele, pula; com ele e sem credencial, falha. A verificação **escreve** no `zeny-front` (consome uma chegada do seed), por isso tem opt-in próprio.
 - **`LiveCheckInCheck.checkInMovesArrivalAndRoom`:**
   - **preparação:** `CoreConnection` real, login da Recepcionista; `DayPanelState` e `RoomMapState` reais, este assinando `rooms`; escolhe uma chegada `CONFIRMED` sem UH;
-  - **fluxo:** cria o `CheckInState` real, aloca a primeira opção `ready` e cadastra um hóspede fictício pelo `GuestPickerState` (CPF de teste com dígito válido, gerado na hora; nacionalidade BR; nascimento em 1990) como principal; confirma;
+  - **fluxo:** cria o `CheckInState` real (com as permissões lidas de `getMe`), aloca a primeira opção `ready` (sem nenhuma, falha com a contagem de opções e de prontas, sem dados pessoais) e cadastra um hóspede fictício pelo `GuestPickerState` (CPF de teste com dígito válido, gerado na hora; nacionalidade BR; nascimento em 1990) como principal; confirma;
   - **afirma:**
     - `done`;
     - a reserva sai de "Chegadas" e entra em "Hospedados" depois de `panel.refresh()`;
     - a UH aparece ocupada no `RoomMapState`, sem recarregar a tela, pelo evento de `rooms`;
     - o detalhe mostra o hóspede criado em "Hóspedes da estadia" com o documento mascarado, sem os 11 dígitos;
-  - **captura:** `app/build/live/checkin.png`, com o detalhe depois do check-in.
+  - **capturas:** `app/build/live/checkin.png`, com o detalhe depois do check-in, e `app/build/live/checkin-map.png`, com o mapa de UHs mostrando a UH ocupada. A inspeção "em duas janelas: painel e mapa" da etapa é cumprida pelo orquestrador sobre essas duas capturas.
 - **`LiveCheckInCheck.notReadyRoomLeavesNoEffect`:**
-  - pega outra chegada `CONFIRMED` e uma UH do mesmo tipo que não esteja pronta (`ActionText.isReady` falso, vaga e sem OOO), aloca essa UH e confirma o check-in;
+  - pega outra chegada `CONFIRMED` **sem UH** e, entre as sugestões dela, uma UH com `ready = false` (`readyForCheckIn` falso); aloca essa UH e confirma o check-in;
   - afirma o texto de `ROOM_NOT_READY` da Task 4, a reserva ainda `CONFIRMED` e a UH ainda vaga;
-  - no fim, solta a UH;
+  - no fim, solta a UH, e a reserva volta a ficar sem UH;
   - sem UH não pronta desse tipo no seed, falha com a contagem do que achou (sem dados pessoais). O orquestrador decide.
 
 - [ ] **Step 1:** escreva as verificações.
@@ -480,13 +553,17 @@
 
 ## Ondas
 
-- Dependências: 2←1; 5←1,2,3; 6←4,5; 7←4,5; 8←6,7; 9←5; 10←8,9; 11←10. As Tasks 1, 3 e 4 não dependem de nenhuma.
-- Execução em série na branch da etapa, na ordem 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11. As ondas paralelas não funcionam nesta configuração (handoff da E01).
+- Dependências: 2←1; 5←1,2,3; 6←4,5; 7←4,5; 8←6,7; 9←5; 10←7; 11←8,9,10; 12←11. As Tasks 1, 3 e 4 não dependem de nenhuma.
+- Execução em série na branch da etapa, na ordem 1 a 12. As ondas paralelas não funcionam nesta configuração (handoff da E01).
 
 ## Para o handoff
 
 - H1: o cadastro mínimo tem nome, documento, nacionalidade e data de nascimento, porque o check-in exige os três últimos (`GUEST_DATA_INCOMPLETE`). Menor de idade e dados sensíveis da FNRH ficam para o M5.
-- Cada check-in registra só o hóspede principal, e `guestCount` = adultos + crianças. Os acompanhantes nominais ficam para o M5.
+- Cada check-in registra só o hóspede principal, e `guestCount` = adultos + crianças. O contrato pede a lista completa dos hóspedes da estadia (FNRH). Os acompanhantes nominais ficam para o M5: é decisão revisável do usuário ("Decisões para o usuário").
 - Sobre o early check-in: a cobrança é opcional e desligada por padrão, só antes do fim da janela.
 - `ROOM_ALREADY_ASSIGNED` tinha texto errado no catálogo; foi corrigido.
+- **Renovação da `Idempotency-Key`:** a mesma chave só vale enquanto o resultado é desconhecido; depois de qualquer resposta definitiva, a chave é outra. É a convenção da E03 e da E04.
+- O cadastro de hóspede não tem chave de idempotência: depois de um erro de rede, a tela sugere buscar pelo documento antes de cadastrar de novo.
+- A janela do early é conferida pelo relógio do desktop, que pode divergir do servidor; o servidor confere o valor (`EARLY_LATE_FEE_CHANGED`/`EARLY_LATE_NOT_OFFERED`).
+- O estado do seed para a H2 (UHs prontas por tipo; UH vaga e não pronta) fica registrado com as contagens da verificação ao vivo.
 - A verificação ao vivo consome chegadas do seed; o roteiro do gate começa pela recriação (README, regra 5).
