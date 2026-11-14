@@ -205,6 +205,9 @@ class FakeReceptionSource : ReceptionSource {
     /** As buscas por documento: tipo e país emissor (o número nunca fica registrado). */
     val documentSearchCalls = mutableListOf<Pair<String, String?>>()
     var createGuestCalls = 0
+
+    /** Os cadastros recebidos, na ordem. */
+    val createdInputs = mutableListOf<NewGuest>()
     var roomStatusesCalls = 0
 
     var subscriptions = 0
@@ -391,6 +394,7 @@ class FakeReceptionSource : ReceptionSource {
 
     override suspend fun createGuest(input: NewGuest): GuestPick {
         createGuestCalls++
+        createdInputs += input
         val error = createGuestError
         if (holdCreateGuest) CompletableDeferred<Unit>().also { heldCreateGuests += it }.await()
         error?.let { throw it }
