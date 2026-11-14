@@ -49,6 +49,8 @@ class UndoCheckInState(
         ownScope.launch {
             try {
                 val response = approve(source.undoCheckIn(reservationId))
+                // Um approve que ignora o cancelamento e devolve depois do close() não muda nada.
+                currentCoroutineContext().ensureActive()
                 if (response == null) error = previousError else finish()
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
