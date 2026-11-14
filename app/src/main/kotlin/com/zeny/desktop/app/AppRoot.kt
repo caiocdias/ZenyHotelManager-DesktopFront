@@ -1,4 +1,4 @@
-@file:Suppress("TooManyFunctions") // a raiz e uma composição por área da casca, como o plano manda
+@file:Suppress("TooManyFunctions") // detekt: a casca reúne a raiz e uma composição por área
 
 package com.zeny.desktop.app
 

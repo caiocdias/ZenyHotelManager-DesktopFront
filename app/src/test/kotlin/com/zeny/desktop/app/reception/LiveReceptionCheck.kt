@@ -78,7 +78,8 @@ class LiveReceptionCheck {
                 setContent {
                     val scope = rememberCoroutineScope()
                     panel = remember { DayPanelState(source, scope) }
-                    ZenyTheme { ReceptionScreen(panel, ReservationDetailState(source, scope)) }
+                    val detail = remember { ReservationDetailState(source, scope) }
+                    ZenyTheme { ReceptionScreen(panel, detail) }
                 }
                 try {
                     waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {

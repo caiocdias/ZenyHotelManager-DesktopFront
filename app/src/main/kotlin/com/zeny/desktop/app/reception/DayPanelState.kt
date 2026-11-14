@@ -87,8 +87,14 @@ class DayPanelState(
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val panelScope = CoroutineScope(scope.coroutineContext + jobs)
 
-    /** A data operacional da carga vigente; `null` até a primeira leitura dela. */
+    /** O portão da primeira data operacional: `null` até a primeira carga lançar as abas. */
     private val loadDate = MutableStateFlow<BusinessDate?>(null)
+
+    /**
+     * A data operacional da carga vigente, atribuída antes de as abas atualizarem: a listagem nova a lê mesmo
+     * que o `fetch` dela rode antes de a atualização terminar de lançar as abas.
+     */
+    private var currentDate: BusinessDate? = null
 
     /** O nome (ou "—") de cada titular já lido: só em memória, enquanto o painel vive. */
     private val holderNames = mutableMapOf<String, String>()
@@ -199,6 +205,7 @@ class DayPanelState(
         roomTypeNames = null
         val first = !tabsStarted
         tabsStarted = true
+        currentDate = read.date
         coroutineScope {
             // Sem despacho: cada aba descarta o `fetch` que esperava a data antes de ela chegar, e ele não sai.
             tabs.values.forEach { table -> launch(start = CoroutineStart.UNDISPATCHED) { updateTable(table, first) } }
@@ -224,7 +231,7 @@ class DayPanelState(
     private fun pagerOf(list: DayList): CursorPager<ReservationRow> {
         var date: BusinessDate? = null
         return CursorPager(PAGE_LIMIT) { cursor, limit ->
-            val pinned = date ?: loadDate.filterNotNull().first().also { date = it }
+            val pinned = date ?: (currentDate ?: loadDate.filterNotNull().first()).also { date = it }
             pageOf(list, pinned, cursor, limit)
         }
     }

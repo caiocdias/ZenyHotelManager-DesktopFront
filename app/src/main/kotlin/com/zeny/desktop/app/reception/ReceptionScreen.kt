@@ -47,7 +47,7 @@ fun ReceptionScreen(
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Header(panel, detail)
         val error = panel.error
-        if (error != null && panel.day != null) ErrorBand(error, panel::refresh)
+        if (error != null && panel.day != null) ErrorBand(error, panel::refresh, "panel-error")
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(Modifier.weight(1f).fillMaxHeight()) { Body(panel, detail) }
             if (detail.openId != null) DetailPanel(detail)
@@ -72,17 +72,19 @@ private fun Header(
     }
 }
 
+/** A falha de uma releitura com o conteúdo antigo à vista: o conteúdo fica, e a falha aparece por cima dele. */
 @Composable
 private fun ErrorBand(
     error: ApiError,
     onRetry: () -> Unit,
+    tag: String,
 ) {
     Row(
         Modifier
             .fillMaxWidth()
             .border(1.dp, ZenyColors.Danger, MaterialTheme.shapes.small)
             .padding(8.dp)
-            .testTag("panel-error"),
+            .testTag(tag),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
@@ -146,6 +148,7 @@ private fun DetailPanel(detail: ReservationDetailState) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         OutlinedButton(onClick = detail::close) { Text("Fechar") }
+        if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
         Box(Modifier.weight(1f)) {
             when {
                 view != null -> DetailBody(view, detail::reload)
