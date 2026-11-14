@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // a raiz e uma composição por área da casca, como o plano manda
+
 package com.zeny.desktop.app
 
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,11 +10,14 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.approval.ApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinator
@@ -20,6 +25,9 @@ import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
 import com.zeny.desktop.app.login.PasswordChangeState
+import com.zeny.desktop.app.reception.DayPanelState
+import com.zeny.desktop.app.reception.ReceptionScreen
+import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.rooms.RoomMapScreen
 import com.zeny.desktop.app.rooms.RoomMapState
 import com.zeny.desktop.app.session.ServerConnection
@@ -130,15 +138,57 @@ private fun ServerConnection.activeSessionIds(): Flow<String?> =
 
 private fun SessionState.activeSessionId(): String? = (this as? SessionState.Active)?.sessionId
 
-/** A tela da área aberta na casca: a Governança é o mapa de UHs; as demais ainda mostram só o nome. */
+/**
+ * A tela da área aberta na casca: a Recepção é o painel do dia; a Governança, o mapa de UHs; as demais ainda mostram
+ * só o nome.
+ */
 @Composable
 internal fun AreaContent(
     area: Area,
     connection: ServerConnection,
 ) {
     when (area) {
+        Area.RECEPTION -> ReceptionArea(connection)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
+    }
+}
+
+/**
+ * O painel do dia e o detalhe da reserva vivem enquanto a Recepção está aberta na mesma sessão, como o mapa de UHs:
+ * nascem com a chave do `sessionId` vigente (o cache de titulares é da sessão) e fecham ao sair da área, da casca ou
+ * da sessão, o que cancela a assinatura de tempo real. Sem sessão `Active` o quadro fica vazio de propósito. O ganho
+ * de foco da janela atualiza o painel e relê a reserva aberta; a perda só o registra no painel.
+ */
+@Composable
+private fun ReceptionArea(connection: ServerConnection) {
+    val source = remember(connection) { connection.receptionSource() }
+    val session by connection.state.collectAsState()
+    val sessionId = (session as? SessionState.Active)?.sessionId
+    val scope = rememberCoroutineScope()
+    when {
+        source == null -> {
+            Unavailable("Recepção indisponível nesta conexão.")
+        }
+
+        sessionId != null -> {
+            val panel = remember(source, sessionId) { DayPanelState(source, scope) }
+            val detail = remember(source, sessionId) { ReservationDetailState(source, scope) }
+            DisposableEffect(panel, detail) {
+                onDispose {
+                    panel.close()
+                    detail.close()
+                }
+            }
+            val window = LocalWindowInfo.current
+            LaunchedEffect(panel, detail, window) {
+                snapshotFlow { window.isWindowFocused }.collect { focused ->
+                    panel.onWindowFocus(focused)
+                    if (focused) detail.reload()
+                }
+            }
+            ReceptionScreen(panel, detail)
+        }
     }
 }
 
@@ -157,7 +207,7 @@ private fun HousekeepingMap(connection: ServerConnection) {
     val scope = rememberCoroutineScope()
     when {
         source == null -> {
-            MapUnavailable()
+            Unavailable("Mapa indisponível nesta conexão.")
         }
 
         sessionId != null -> {
@@ -169,9 +219,9 @@ private fun HousekeepingMap(connection: ServerConnection) {
 }
 
 @Composable
-private fun MapUnavailable() {
+private fun Unavailable(message: String) {
     Text(
-        "Mapa indisponível nesta conexão.",
+        message,
         Modifier.padding(24.dp),
         color = MaterialTheme.colorScheme.error,
     )
