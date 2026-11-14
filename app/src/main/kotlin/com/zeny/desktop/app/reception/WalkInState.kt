@@ -3,6 +3,7 @@ package com.zeny.desktop.app.reception
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.http.ApiResponse
@@ -34,6 +35,7 @@ private const val MIN_ADULTS = 1
 private const val MAX_ADULTS = 40
 private const val MAX_CHILD_AGE = 17
 private const val FORBIDDEN = 403
+private val SEGMENTS = setOf("LEISURE", "BUSINESS", "EVENT", "OTHER")
 
 private const val OVERNIGHT_TEXT = "O walk-in é de pernoite: a saída precisa ser depois de hoje."
 private const val NIGHTS_TEXT = "A estadia vai de 1 a 365 noites."
@@ -93,7 +95,12 @@ class WalkInState(
         }
 
     /** `LEISURE`, `BUSINESS`, `EVENT` ou `OTHER`; o segmento não entra na cotação. */
-    var segment by mutableStateOf("LEISURE")
+    var segment: String
+        get() = segmentValue
+        set(value) {
+            if (!closed && value in SEGMENTS) segmentValue = value
+        }
+    private var segmentValue by mutableStateOf("LEISURE")
 
     var offers by mutableStateOf<List<QuoteOfferResponse>>(emptyList())
         private set
@@ -173,7 +180,7 @@ class WalkInState(
 
     fun chooseOffer(offer: QuoteOfferResponse) {
         val from = arrival
-        val until = quotedDeparture
+        val until = quotedDeparture.takeIf { offer in offers }
         if (closed || from == null || until == null) return
         val mine = ++offerGeneration
         this.offer = offer
@@ -274,7 +281,7 @@ class WalkInState(
                         .getOrThrow()
                         .filter { it.isWalkInCandidate(offer) && it.roomId.toString() !in taken }
                         .map { WalkInRoom(it.roomId.toString(), it.number) }
-                        .sortedBy { it.number },
+                        .sortedWith(compareBy(NaturalOrder) { it.number }),
                 )
             }
         }
