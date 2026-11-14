@@ -1,11 +1,17 @@
 package com.zeny.desktop.core.facade
 
 import com.zeny.desktop.core.http.ApiExecutor
+import com.zeny.desktop.core.http.CallOptions
 import com.zeny.desktop.core.http.CursorPager
+import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.client.FrontdeskApi
 import com.zeny.desktop.sdk.client.ReservationsApi
+import com.zeny.desktop.sdk.model.CheckInGuestRequest
+import com.zeny.desktop.sdk.model.CheckInRequest
+import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.DoNotMoveRequest
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
@@ -15,6 +21,7 @@ import com.zeny.desktop.sdk.model.RoomAssignRequest
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import de.quati.kotlin.util.Option
+import de.quati.ogen.client.ktor.HttpResponseTyped
 import kotlin.uuid.Uuid
 
 /** Maior página que o contrato aceita: o histórico vem inteiro, com o mínimo de idas ao servidor. */
@@ -23,10 +30,25 @@ private const val HISTORY_PAGE_SIZE = 200
 /** As listas do dia da recepção. */
 enum class DayList { ARRIVALS, DEPARTURES, IN_HOUSE }
 
+/** Um hóspede do check-in; `primary` marca o titular da estadia. */
+data class CheckInGuest(
+    val guestId: String,
+    val primary: Boolean,
+)
+
+/** O corpo do check-in; `guestCount`, `roomId` e `earlyCheckInFee` nulos não vão. A taxa é a da cotação de early. */
+data class CheckInInput(
+    val guests: List<CheckInGuest>,
+    val guestCount: Int?,
+    val roomId: String?,
+    val earlyCheckInFee: Money?,
+)
+
 /**
  * As reservas do dia: as listas de chegadas, saídas e hospedados, o detalhe, o histórico e as alocações de UH.
  * Um `id` que não é UUID lança `IllegalArgumentException` antes de ir à rede.
  */
+@Suppress("TooManyFunctions") // uma função por operação de reservas que a recepção usa
 class ReservationsFacade internal constructor(
     private val reservations: ReservationsApi,
     private val frontdesk: FrontdeskApi,
@@ -120,6 +142,37 @@ class ReservationsFacade internal constructor(
     suspend fun earlyLateQuote(id: String): EarlyLateQuoteResponse {
         val reservationId = uuidOf(id)
         return executor.execute { frontdesk.getEarlyLateQuote(reservationId, it.headers) }.value
+    }
+
+    /**
+     * O check-in da reserva. A `intent` da tela vale na tentativa e na repetição aprovada (decisão D2): sem token,
+     * `execute`; com token, `executeApproved`, que renova a chave.
+     */
+    fun checkIn(
+        id: String,
+        input: CheckInInput,
+        intent: Intent,
+    ): ApprovableAction<CheckInResponse> {
+        val reservationId = uuidOf(id)
+        val room = input.roomId?.let { Uuid.parseOrNull(it) ?: throw IllegalArgumentException("id de UH inválido") }
+        val guests =
+            input.guests.map {
+                val guest = Uuid.parseOrNull(it.guestId) ?: throw IllegalArgumentException("id de hóspede inválido")
+                CheckInGuestRequest(guestId = guest, primary = it.primary)
+            }
+        val request =
+            CheckInRequest(
+                earlyCheckInFee = input.earlyCheckInFee?.let { Option.Some(it.toApi()) } ?: Option.Undefined,
+                guestCount = input.guestCount?.let { Option.Some(it) } ?: Option.Undefined,
+                guests = guests,
+                roomId = room?.let { Option.Some(it) } ?: Option.Undefined,
+            )
+        val call: suspend (CallOptions) -> HttpResponseTyped<CheckInResponse> = {
+            frontdesk.checkInReservation(reservationId, it.requireIdempotencyKey(), request, it.headers)
+        }
+        return ApprovableAction { token ->
+            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
+        }
     }
 
     private fun uuidOf(id: String): Uuid =
