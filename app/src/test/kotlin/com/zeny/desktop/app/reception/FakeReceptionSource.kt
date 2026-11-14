@@ -6,6 +6,7 @@ import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -16,6 +17,7 @@ import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.GuestDocumentResponse
 import com.zeny.desktop.sdk.model.GuestPreferencesDto
 import com.zeny.desktop.sdk.model.GuestResponse
+import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -23,6 +25,7 @@ import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -83,6 +86,26 @@ data class CheckInCall(
     val id: String,
     val input: CheckInInput,
     val intent: Intent,
+)
+
+/** Uma execução de `walkIn` registrada pelo falso: a `Intent.key` em uso e o token de aprovação (se houve). */
+data class WalkInRun(
+    val key: String,
+    val token: String?,
+)
+
+/** Uma chamada de `walkIn` (a criação da ação) registrada pelo falso; o `Intent` é o da tela. */
+data class WalkInCall(
+    val input: WalkInInput,
+    val intent: Intent,
+)
+
+/** Uma chamada de `quoteStay` registrada pelo falso. */
+data class QuoteStayCall(
+    val arrival: BusinessDate,
+    val departure: BusinessDate,
+    val adults: Int,
+    val childAges: List<Int>,
 )
 
 /**
@@ -193,6 +216,31 @@ class FakeReceptionSource : ReceptionSource {
 
     /** `earlyLateQuote`: com [holdQuote], a cotação (e o erro) da hora da chamada só sai quando o teste solta. */
     var holdQuote = false
+
+    // O walk-in: cotação, UHs alocadas e a ação. `hold*` prende a chamada até o teste soltar o portão em `held*`.
+    var stayQuote: QuoteResponse? = null
+    var stayQuoteError: Exception? = null
+    var assignedRooms: Set<String> = emptySet()
+    var assignedRoomsError: Exception? = null
+    var walkInResponse: WalkInResponse? = null
+
+    /** `walkIn`: a primeira execução sem token falha com `ApprovalRequired`; a seguinte, com token, passa. */
+    var walkInRequiresApproval: ApiError.ApprovalRequired? = null
+
+    /** `walkIn`: o resultado de cada execução, na ordem (`null` = sucesso); acabando a fila, sucesso. */
+    val walkInOutcomes = ArrayDeque<Throwable?>()
+    var holdQuoteStay = false
+    var holdAssignedRooms = false
+    var holdWalkIn = false
+    val heldQuoteStays = mutableListOf<CompletableDeferred<Unit>>()
+    val heldAssignedRooms = mutableListOf<CompletableDeferred<Unit>>()
+    val heldWalkIns = mutableListOf<CompletableDeferred<Unit>>()
+    val quoteStayCalls = mutableListOf<QuoteStayCall>()
+    val assignedRoomsCalls = mutableListOf<Pair<BusinessDate, BusinessDate>>()
+    val walkInCalls = mutableListOf<WalkInCall>()
+
+    /** Cada execução (`run`) de uma ação de `walkIn`, na ordem. */
+    val walkInRuns = mutableListOf<WalkInRun>()
     val heldQuotes = mutableListOf<CompletableDeferred<Unit>>()
 
     val suggestionCalls = mutableListOf<String>()
@@ -381,6 +429,47 @@ class FakeReceptionSource : ReceptionSource {
             if (token == null && approval != null) throw approval
             checkInOutcomes.removeFirstOrNull()?.let { throw it }
             ApiResponse(checkNotNull(checkInResponse) { "Resposta do check-in fora do servidor de mentira" }, null, 200)
+        }
+    }
+
+    override suspend fun quoteStay(
+        arrival: BusinessDate,
+        departure: BusinessDate,
+        adults: Int,
+        childAges: List<Int>,
+    ): QuoteResponse {
+        quoteStayCalls += QuoteStayCall(arrival, departure, adults, childAges)
+        val snapshot = stayQuote
+        val error = stayQuoteError
+        if (holdQuoteStay) CompletableDeferred<Unit>().also { heldQuoteStays += it }.await()
+        error?.let { throw it }
+        return checkNotNull(snapshot) { "Cotação da estadia fora do servidor de mentira" }
+    }
+
+    override suspend fun assignedRoomIds(
+        from: BusinessDate,
+        to: BusinessDate,
+    ): Set<String> {
+        assignedRoomsCalls += from to to
+        val snapshot = assignedRooms
+        val error = assignedRoomsError
+        if (holdAssignedRooms) CompletableDeferred<Unit>().also { heldAssignedRooms += it }.await()
+        error?.let { throw it }
+        return snapshot
+    }
+
+    override fun walkIn(
+        input: WalkInInput,
+        intent: Intent,
+    ): ApprovableAction<WalkInResponse> {
+        walkInCalls += WalkInCall(input, intent)
+        return ApprovableAction { token ->
+            walkInRuns += WalkInRun(intent.key, token)
+            val approval = walkInRequiresApproval
+            if (holdWalkIn) CompletableDeferred<Unit>().also { heldWalkIns += it }.await()
+            if (token == null && approval != null) throw approval
+            walkInOutcomes.removeFirstOrNull()?.let { throw it }
+            ApiResponse(checkNotNull(walkInResponse) { "Resposta do walk-in fora do servidor de mentira" }, null, 201)
         }
     }
 

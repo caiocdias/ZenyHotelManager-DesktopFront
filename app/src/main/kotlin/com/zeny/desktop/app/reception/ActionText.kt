@@ -6,6 +6,7 @@ import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.feedback.ChipModel
 import com.zeny.desktop.design.feedback.StatusTone
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.QuoteOfferResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import de.quati.kotlin.util.Option
 import java.time.LocalTime
@@ -17,6 +18,9 @@ object ActionText {
     private const val MINOR_TEXT =
         "Hóspede menor de idade precisa da data de nascimento e da autorização do responsável " +
             "no perfil (área Hóspedes)."
+
+    private const val STALE_OFFER = "A oferta escolhida não existe mais. Refaça a cotação."
+    private const val WALK_IN_ROOM_UNFIT = "A UH não serve para este walk-in. Escolha outra UH da lista."
 
     private val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -52,10 +56,39 @@ object ActionText {
             "GUEST_ANONYMIZED" to
                 "Os dados deste hóspede foram anonimizados. Escolha ou cadastre outro hóspede.",
             "UNKNOWN_GUEST" to "O hóspede escolhido não existe mais. Busque de novo.",
+            "ROOM_TYPE_UNAVAILABLE" to
+                "Não há UH desse tipo livre em todas as noites. Mude a saída ou escolha outra oferta.",
+            "DEPOSIT_INSUFFICIENT" to
+                "Este plano exige depósito antecipado e não serve ao walk-in. Escolha outra oferta.",
+            "STAY_INVALID" to "A estadia está inválida. Confira a saída e o número de hóspedes.",
+            "UNKNOWN_RATE_PLAN" to STALE_OFFER,
+            "UNKNOWN_ROOM_TYPE" to STALE_OFFER,
+        )
+
+    // No walk-in não há sugestões de UH: os `ROOM_*` ganham textos que mandam escolher da lista.
+    private val walkInRoomTexts =
+        mapOf(
+            "ROOM_ALREADY_ASSIGNED" to
+                "A UH já está alocada a outra reserva no período. Escolha outra UH da lista.",
+            "ROOM_NOT_READY" to
+                "A UH não está pronta. Escolha outra UH da lista ou peça a liberação à governança.",
+            "ROOM_OUT_OF_ORDER" to WALK_IN_ROOM_UNFIT,
+            "ROOM_TYPE_MISMATCH" to WALK_IN_ROOM_UNFIT,
+            "ROOM_INACTIVE" to WALK_IN_ROOM_UNFIT,
         )
 
     fun error(error: ApiError): String =
         (error as? ApiError.Problem)?.code?.let { problemTexts[it] } ?: error.userMessage
+
+    /** O erro do walk-in: como [error], mas com os textos de UH sem sugestões. */
+    fun walkInError(error: ApiError): String =
+        (error as? ApiError.Problem)?.code?.let { walkInRoomTexts[it] } ?: error(error)
+
+    fun offer(offer: QuoteOfferResponse): String =
+        "${offer.roomTypeName} · ${offer.ratePlanName} · ${ReceptionText.money(offer.total)}"
+
+    @Suppress("FunctionOnlyReturningConstant") // parte da API de textos, ao lado de `offer`
+    fun noOffers(): String = "Não há UH disponível para essa estadia. Mude a saída ou o número de hóspedes."
 
     /** A prontidão é a flag do servidor (RN-05); o cliente não a recalcula. */
     fun readiness(status: RoomStatusResponse?): ChipModel =

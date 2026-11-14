@@ -16,6 +16,7 @@ import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.realtime.RealtimeEvent
@@ -24,6 +25,7 @@ import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -32,6 +34,7 @@ import com.zeny.desktop.sdk.model.RoomResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -178,6 +181,23 @@ class CoreConnection(
                 input: CheckInInput,
                 intent: Intent,
             ): ApprovableAction<CheckInResponse> = core.reservations.checkIn(id, input, intent)
+
+            override suspend fun quoteStay(
+                arrival: BusinessDate,
+                departure: BusinessDate,
+                adults: Int,
+                childAges: List<Int>,
+            ): QuoteResponse = core.reservations.quoteStay(arrival, departure, adults, childAges)
+
+            override suspend fun assignedRoomIds(
+                from: BusinessDate,
+                to: BusinessDate,
+            ): Set<String> = core.reservations.assignedRoomIds(from, to)
+
+            override fun walkIn(
+                input: WalkInInput,
+                intent: Intent,
+            ): ApprovableAction<WalkInResponse> = core.reservations.walkIn(input, intent)
 
             override suspend fun searchGuests(name: String): List<GuestPick> =
                 core.guests.searchByName(name, GUEST_SEARCH_LIMIT).map { it.toGuestPick() }

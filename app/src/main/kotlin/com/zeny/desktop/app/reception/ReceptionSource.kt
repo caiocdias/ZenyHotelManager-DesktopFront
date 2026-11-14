@@ -5,6 +5,7 @@ import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.realtime.RealtimeEvent
@@ -12,6 +13,7 @@ import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.GuestResponse
+import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -19,6 +21,7 @@ import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.flow.Flow
 
@@ -104,6 +107,25 @@ interface ReceptionSource {
         input: CheckInInput,
         intent: Intent,
     ): ApprovableAction<CheckInResponse>
+
+    /** A cotação da estadia no canal direto, com as ofertas na ordem do servidor. */
+    suspend fun quoteStay(
+        arrival: BusinessDate,
+        departure: BusinessDate,
+        adults: Int,
+        childAges: List<Int>,
+    ): QuoteResponse
+
+    /** Os ids das UHs alocadas a reservas provisórias ou confirmadas que tocam o período (`to` inclusive). */
+    suspend fun assignedRoomIds(
+        from: BusinessDate,
+        to: BusinessDate,
+    ): Set<String>
+
+    fun walkIn(
+        input: WalkInInput,
+        intent: Intent,
+    ): ApprovableAction<WalkInResponse>
 
     /** A busca por nome (até 20 hóspedes). */
     suspend fun searchGuests(name: String): List<GuestPick>
