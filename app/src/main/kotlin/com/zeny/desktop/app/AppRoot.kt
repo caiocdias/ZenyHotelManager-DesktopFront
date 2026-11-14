@@ -200,7 +200,7 @@ private fun ReceptionArea(connection: ServerConnection) {
             val approval = LocalApprovalCoordinatorOrNull.current
             val clock = remember { Clock.systemUTC() }
             val approve: suspend (ApprovableAction<CheckInResponse>) -> ApiResponse<CheckInResponse>? =
-                { action -> approval?.run(action) ?: action.run(null) }
+                { action -> if (approval == null) action.run(null) else approval.run(action) }
             ReceptionScreen(panel, detail) { seed ->
                 CheckInState(source, scope, seed, panel.permissions, approve, clock::instant) {
                     panel.refresh()
