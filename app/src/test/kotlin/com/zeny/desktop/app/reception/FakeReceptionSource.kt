@@ -191,6 +191,10 @@ class FakeReceptionSource : ReceptionSource {
     val heldSearches = mutableListOf<CompletableDeferred<Unit>>()
     val heldCreateGuests = mutableListOf<CompletableDeferred<Unit>>()
 
+    /** `earlyLateQuote`: com [holdQuote], a cotação (e o erro) da hora da chamada só sai quando o teste solta. */
+    var holdQuote = false
+    val heldQuotes = mutableListOf<CompletableDeferred<Unit>>()
+
     val suggestionCalls = mutableListOf<String>()
     val assignCalls = mutableListOf<AssignCall>()
     val unassignCalls = mutableListOf<String>()
@@ -353,6 +357,13 @@ class FakeReceptionSource : ReceptionSource {
 
     override suspend fun earlyLateQuote(id: String): EarlyLateQuoteResponse {
         quoteCalls += id
+        if (holdQuote) {
+            val snapshot = quotes[id]
+            val error = quoteError
+            CompletableDeferred<Unit>().also { heldQuotes += it }.await()
+            error?.let { throw it }
+            return checkNotNull(snapshot) { "Cotação de $id fora do servidor de mentira" }
+        }
         quoteError?.let { throw it }
         return checkNotNull(quotes[id]) { "Cotação de $id fora do servidor de mentira" }
     }
