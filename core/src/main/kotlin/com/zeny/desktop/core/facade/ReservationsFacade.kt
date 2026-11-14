@@ -1,10 +1,12 @@
 package com.zeny.desktop.core.facade
 
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.ApiExecutor
 import com.zeny.desktop.core.http.CallOptions
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
+import com.zeny.desktop.core.http.ResponseFormatException
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.client.FrontdeskApi
@@ -21,6 +23,8 @@ import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignRequest
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomMoveRequest
+import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.WalkInRequest
 import com.zeny.desktop.sdk.model.WalkInResponse
@@ -64,6 +68,30 @@ data class WalkInInput(
     val guestCount: Int?,
 )
 
+/** A reserva com o `ETag` da leitura, que a troca de UH devolve no `If-Match`. */
+data class ReservationVersion(
+    val reservation: ReservationDetailResponse,
+    val etag: String,
+)
+
+/**
+ * O corpo da troca de UH. `reason` e `tariff` são os textos dos enums do contrato; um valor desconhecido (ou o
+ * motivo `INITIAL`, que é só do servidor) lança `IllegalArgumentException` antes da rede.
+ */
+data class RoomMoveInput(
+    val roomId: String,
+    val reason: String,
+    val tariff: String,
+)
+
+private val MOVE_REASONS =
+    setOf(
+        RoomMoveRequest.Reason.GUEST_REQUEST,
+        RoomMoveRequest.Reason.OUT_OF_ORDER,
+        RoomMoveRequest.Reason.ROOM_ISSUE,
+        RoomMoveRequest.Reason.OPERATIONAL,
+    )
+
 /**
  * As reservas do dia: as listas de chegadas, saídas e hospedados, o detalhe, o histórico e as alocações de UH.
  * Um `id` que não é UUID lança `IllegalArgumentException` antes de ir à rede.
@@ -97,6 +125,16 @@ class ReservationsFacade internal constructor(
     suspend fun reservation(id: String): ReservationDetailResponse {
         val reservationId = uuidOf(id)
         return executor.execute { reservations.getReservation(reservationId, it.headers) }.value
+    }
+
+    /** A reserva com o `ETag` da resposta; sem `ETag`, o servidor quebrou o contrato: `IncompatibleResponse`. */
+    suspend fun reservationVersion(id: String): ReservationVersion {
+        val reservationId = uuidOf(id)
+        val response = executor.execute { reservations.getReservation(reservationId, it.headers) }
+        val etag =
+            response.etag?.takeIf { it.isNotBlank() }
+                ?: throw ApiError.IncompatibleResponse(ResponseFormatException(IllegalStateException("sem ETag")))
+        return ReservationVersion(response.value, etag)
     }
 
     /** Todas as páginas, na ordem do servidor. */
@@ -196,6 +234,26 @@ class ReservationsFacade internal constructor(
     }
 
     /**
+     * A troca de UH, com o `ETag` lido em `reservationVersion` no `If-Match`. Mesma regra do `checkIn` para `intent` e
+     * token (D2); outro `etag`, UH, motivo ou tarifa pede outra `intent` (o servidor inclui o `If-Match` no hash).
+     */
+    fun moveRoom(
+        id: String,
+        input: RoomMoveInput,
+        etag: String,
+        intent: Intent,
+    ): ApprovableAction<RoomMoveResponse> {
+        val reservationId = uuidOf(id)
+        val request = roomMoveRequestOf(input)
+        val call: suspend (CallOptions) -> HttpResponseTyped<RoomMoveResponse> = {
+            frontdesk.moveReservationRoom(reservationId, etag, it.requireIdempotencyKey(), request, it.headers)
+        }
+        return ApprovableAction { token ->
+            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
+        }
+    }
+
+    /**
      * O walk-in: reserva, aloca a UH e faz o check-in numa transação. Mesma regra do `checkIn` para `intent` e token
      * (D2). O servidor responde `201`, que é sucesso.
      */
@@ -267,6 +325,16 @@ class ReservationsFacade internal constructor(
             }
         }
         return rooms
+    }
+
+    private fun roomMoveRequestOf(input: RoomMoveInput): RoomMoveRequest {
+        val room = idOf(input.roomId, "UH")
+        val reason =
+            RoomMoveRequest.Reason.fromSerialOrNull(input.reason)?.takeIf { it in MOVE_REASONS }
+                ?: throw IllegalArgumentException("motivo inválido")
+        val tariff =
+            RoomMoveRequest.Tariff.fromSerialOrNull(input.tariff) ?: throw IllegalArgumentException("tarifa inválida")
+        return RoomMoveRequest(reason = reason, roomId = room, tariff = Option.Some(tariff))
     }
 
     private fun walkInRequestOf(input: WalkInInput): WalkInRequest {
