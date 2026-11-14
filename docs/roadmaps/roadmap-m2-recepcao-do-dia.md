@@ -184,7 +184,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
-| E02 | Alocação de UH e check-in | #em-andamento | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
+| E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
@@ -280,7 +280,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Alocação de UH e check-in — #em-andamento
+## E02 — Alocação de UH e check-in — #concluida
 
 **Objetivo:** a partir de uma chegada, o recepcionista aloca a UH, conferindo as sugestões do servidor e o status da UH. Pode marcar "não mover" e cota o early check-in quando cabe. Depois confirma ou cria o hóspede e faz o check-in. O mapa de UHs e o painel refletem a mudança.
 
@@ -307,10 +307,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, uma chegada sem UH recebe a UH sugerida e faz check-in. Ela sai de "chegadas", entra em "hospedados", e a UH muda de status no mapa sem recarregar.
-- [ ] Check-in com UH não pronta mostra a mensagem do `code` correspondente em pt-BR, sem efeito parcial.
-- [ ] Teste: repetir a confirmação após erro de rede reaproveita a mesma `Idempotency-Key`, quando a operação exigir a chave.
-- [ ] O hóspede criado no diálogo aparece no detalhe da reserva com o documento mascarado.
+- [x] Contra o seed, uma chegada sem UH recebe a UH sugerida e faz check-in. Ela sai de "chegadas", entra em "hospedados", e a UH muda de status no mapa sem recarregar.
+- [x] Check-in com UH não pronta mostra a mensagem do `code` correspondente em pt-BR, sem efeito parcial.
+- [x] Teste: repetir a confirmação após erro de rede reaproveita a mesma `Idempotency-Key`, quando a operação exigir a chave.
+- [x] O hóspede criado no diálogo aparece no detalhe da reserva com o documento mascarado.
 
 **Validação obrigatória:**
 
@@ -329,12 +329,34 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-14):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e02.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e02.md), com 12 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: a `Idempotency-Key` mantida depois de um erro definitivo; 4 Importantes) e aprovou com notas na rodada 1.
+- **Commits:** `ed1749f..3274f31` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão. Os vermelhos do testador e os Importantes da revisão foram corrigidos em rodadas:
+  - Task 4: horário do early sem os segundos;
+  - Task 7: formulário do hóspede limpo e sem dado pessoal depois do cadastro e no abandono;
+  - Task 8: não confirma com alocação ou cadastro em voo;
+  - Task 11: a aprovação cancelada não refaz o check-in.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `ed1749f..f4113f8`): pronto para merge, sem Crítico nem Importante. Os Menores M1 a M4 (UH e hóspede travados durante o check-in, "Fechar" com alocação em voo, taxa ilegível, painel de hóspede) foram corrigidos em `3274f31` e aprovados na re-revisão.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base ed1749f` sem apontamentos. `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova; o `build.gradle.kts` só ganhou o opt-in `ZENY_LIVE_CHECKIN`.
+- **Critérios verificados:**
+  - Chegada sem UH: `LiveCheckInCheck.checkInMovesArrivalAndRoom`, contra o `zeny-front`, logado como Recepcionista. A R-2026-000003 recebeu a UH 208, sugerida e pronta, e fez check-in. Deixou de ser chegada confirmada e entrou em "Hospedados", que foi de 7 para 8. A UH 208 ficou "Ocupada" no mapa pelo evento `rooms`, sem recarregar. As capturas `app/build/live/checkin.png` e `checkin-map.png` foram inspecionadas pelo orquestrador; a inspeção em duas janelas foi feita pelas capturas, não clicando no app.
+  - UH não pronta: `LiveCheckInCheck.notReadyRoomLeavesNoEffect`. Com a R-2026-000004 numa UH vaga e não pronta, aparece a mensagem de `ROOM_NOT_READY` com o próximo passo. A reserva continua confirmada, a UH continua vaga e é solta no fim. Nos testes, `roomNotReadyShowsNextStep` cobre o mesmo.
+  - Idempotência: `retryAfterNetworkErrorReusesKey` e `ruleErrorRenewsKey`, em `CheckInStateTest`, e `checkInRetrySendsSameKey`, em `CheckInFacadeTest`.
+  - Hóspede criado no diálogo: na verificação ao vivo, aparece em "Hóspedes da estadia" com o CPF mascarado ("CPF ***8877").
+  - Gate em `3274f31`: `./gradlew build ktlintCheck detekt` BUILD SUCCESSFUL (core 921 testes, design 259, app 1048, demo-seed 506, sdk 40; 0 falhas; 23 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 36 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Aba Chegadas:** o servidor lista as chegadas do dia, inclusive as já hospedadas, que aparecem como "Hospedada". A reserva com check-in feito continua em "Chegadas" e entra em "Hospedados". Alternativa: a aba mostrar só as chegadas pendentes. Isso muda a contagem e o comportamento da E01.
+  - **Só o hóspede principal no check-in,** com `guestCount` = adultos + crianças. O contrato pede a lista completa da estadia, que vai para a FNRH; os acompanhantes nominais e os menores ficam para o M5.
+  - **H1 ampliada:** o cadastro mínimo tem nome, documento, nacionalidade e data de nascimento, porque o check-in os exige (`GUEST_DATA_INCOMPLETE`). Brasileiro adulto precisa do CPF.
+  - **Early check-in:** a cobrança é opcional e começa desligada. Só é oferecida antes do fim da janela, contada pelo relógio do desktop; o servidor confere o valor.
+  - **`detail` do servidor:** segue a decisão da E01 (code fora do catálogo mostra o `detail`).
+- **Notas para a próxima etapa:**
+  - **Ambiente:** a verificação ao vivo escreveu no `zeny-front`. A R-2026-000003 está hospedada na UH 208, e há um hóspede fictício a mais. Só resta uma chegada confirmada sem UH (R-2026-000004). Recrie a demo (`down -v`, `up -d`, `demo-seed`) antes de rodar `LiveCheckInCheck` de novo ou o roteiro.
+  - **Verificação ao vivo:** o arquivo 600 é o da E01 (`ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN=recepcao`, `ZENY_LIVE_VIEWER_PASSWORD`). Rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_CHECKIN=1 ./gradlew :app:test --tests '*LiveCheckInCheck*' --rerun --max-workers=2)`.
+  - **Convenção da `Idempotency-Key`** para a E03 e a E04: a mesma `Intent` só enquanto o resultado é desconhecido (`Network`, `IncompatibleResponse`, `SessionEnded`, `IDEMPOTENCY_KEY_IN_USE`). Qualquer resposta definitiva, ou mudança de entrada, cria outra. O servidor repete a resposta guardada da chave, inclusive o erro.
+  - **`FakeReceptionSource`:** não gira a chave na repetição aprovada (`rotateForApproval` é interno ao `core`). Nos testes de aprovação, compare a identidade da `Intent` ou as execuções sem token. Vale extrair um helper de `ApprovableAction` sobre o `ApiExecutor` quando a E04 trouxer outra ação aprovável.
+  - **Reaproveitamento:** o diálogo de hóspede (`GuestPickerPanel`/`GuestPickerState`) e a alocação (`RoomAllocationState`) servem ao walk-in. `DateField` e `DocumentField` do `design` ainda não foram reaproveitados no cadastro, que não tem máscara ao digitar.
+  - **Ondas paralelas:** continuam inviáveis nesta configuração; planeje em série.
 
 ---
 
@@ -607,3 +629,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`), contra a `main` do servidor em `57eb5fac5b8a`. O marco passa a exigir a M0 E02 concluída. O contexto foi corrigido: a FNRH já é enviada pelo servidor, de forma assíncrona e sem mudar o check-in, e sua fila vai para a M7 E10. Entra a E07 (ficha de registro e visualizador de PDF), por decisão do usuário em entrevista ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E06 passa a depender dela. Confirmação, extrato, impressão pela fila do servidor e fechamento do dia ficam fora de escopo, com destino. H4 e H5 novas. Nenhuma tag mudou.
 - 2026-11-13 — E01 iniciada (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). O plano foi aprovado com notas na rodada 2 da revisão de arquitetura. As Tasks 1 a 4 (fachadas do `core`, textos da recepção e `TableState.refresh()`) foram concluídas e revisadas. O lote parou a pedido do usuário, com a E01 `#em-andamento` e a retomada pelo ledger da etapa. H3: não há tópico de reservas no servidor fixado.
 - 2026-11-14 — E01 `#concluida` (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). As Tasks 5 a 10 foram retomadas pelo ledger; a revisão final pediu duas correções, feitas e aprovadas na re-revisão.
+- 2026-11-14 — E02 `#concluida` (`claude --agent orquestrador`). A revisão de arquitetura aprovou com notas na rodada 1 (rodada 0 bloqueada pela regra da `Idempotency-Key`). A verificação ao vivo fez check-in de uma chegada do seed. Recriar a demo antes do roteiro.
