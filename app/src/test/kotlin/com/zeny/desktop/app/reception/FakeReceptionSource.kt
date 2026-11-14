@@ -90,6 +90,9 @@ class FakeReceptionSource : ReceptionSource {
     var historyError: Exception? = null
     var assignmentsError: Exception? = null
     var holderError: Exception? = null
+
+    /** Erro de um titular só (pelo id); [holderError], se houver, vale para todos. */
+    val holderErrors = mutableMapOf<String, Exception>()
     var ratePlanError: Exception? = null
     var roomTypesError: Exception? = null
 
@@ -185,7 +188,7 @@ class FakeReceptionSource : ReceptionSource {
     override suspend fun holder(guestId: String): HolderSummary {
         holderCalls += guestId
         val snapshot = holders[guestId]
-        val error = holderError
+        val error = holderError ?: holderErrors[guestId]
         if (holdHolder) CompletableDeferred<Unit>().also { heldHolders += guestId to it }.await()
         error?.let { throw it }
         return checkNotNull(snapshot) { "Titular $guestId fora do servidor de mentira" }
