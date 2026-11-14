@@ -100,6 +100,8 @@ data class WalkInCall(
     val intent: Intent,
 )
 
+private val WALK_IN_SEGMENTS = setOf("LEISURE", "BUSINESS", "EVENT", "OTHER")
+
 /** Uma chamada de `quoteStay` registrada pelo falso. */
 data class QuoteStayCall(
     val arrival: BusinessDate,
@@ -450,6 +452,8 @@ class FakeReceptionSource : ReceptionSource {
         from: BusinessDate,
         to: BusinessDate,
     ): Set<String> {
+        // Como a porta real: um período invertido é recusado antes de qualquer registro.
+        require(to.value >= from.value) { "período inválido" }
         assignedRoomsCalls += from to to
         val snapshot = assignedRooms
         val error = assignedRoomsError
@@ -462,6 +466,8 @@ class FakeReceptionSource : ReceptionSource {
         input: WalkInInput,
         intent: Intent,
     ): ApprovableAction<WalkInResponse> {
+        // Como a porta real: um segmento desconhecido é recusado antes de qualquer registro.
+        require(input.segment in WALK_IN_SEGMENTS) { "segmento inválido" }
         walkInCalls += WalkInCall(input, intent)
         return ApprovableAction { token ->
             walkInRuns += WalkInRun(intent.key, token)

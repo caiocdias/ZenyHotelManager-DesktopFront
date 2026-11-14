@@ -90,6 +90,11 @@ object ActionText {
     @Suppress("FunctionOnlyReturningConstant") // parte da API de textos, ao lado de `offer`
     fun noOffers(): String = "Não há UH disponível para essa estadia. Mude a saída ou o número de hóspedes."
 
+    @Suppress("FunctionOnlyReturningConstant") // parte da API de textos, ao lado de `noOffers`
+    fun noRooms(): String =
+        "Nenhuma UH desse tipo está pronta e livre agora. " +
+            "Escolha outra oferta ou peça a liberação à governança."
+
     /** A prontidão é a flag do servidor (RN-05); o cliente não a recalcula. */
     fun readiness(status: RoomStatusResponse?): ChipModel =
         when {
