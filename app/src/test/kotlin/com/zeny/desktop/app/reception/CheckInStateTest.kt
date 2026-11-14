@@ -42,6 +42,20 @@ private val until: Instant = Instant.parse("2026-11-13T15:00:00Z")
 private val beforeUntil: Instant = Instant.parse("2026-11-13T13:00:00Z")
 private val other = GuestPick("30000000-0000-0000-0000-000000000099", HolderSummary("Outra Pessoa", "CPF ***.999-**"))
 private val holderSummary = HolderSummary("Ana Titular", "CPF ***.111.222-**")
+
+/** CPF fictício com dígitos verificadores válidos, a partir de nove dígitos-base. */
+private fun ciCpfOf(base: String): String {
+    fun digit(
+        digits: String,
+        weight: Int,
+    ): Char {
+        val rest = digits.mapIndexed { i, c -> (c - '0') * (weight - i) }.sum() % 11
+        return if (rest < 2) '0' else ('0' + (11 - rest))
+    }
+    val first = digit(base, 10)
+    return base + first + digit(base + first, 11)
+}
+
 private const val WINDOW_ENDED = "A janela do early check-in terminou. Confira e confirme de novo."
 private const val ROOM_NOT_READY_TEXT =
     "A UH ainda não está pronta. Escolha uma UH pronta ou peça a liberação à governança."
@@ -770,6 +784,80 @@ class CheckInStateTest {
             runCurrent()
 
             assertNull(state.primary)
+            assertNull(state.error)
+        }
+
+    @Test
+    fun confirmWaitsForAssignInFlight() =
+        runTest {
+            val source = source().apply { holdAssign = true }
+            val state = started(source)
+
+            state.allocation.assign(checkInRoomB.toString())
+            runCurrent()
+            assertTrue(state.allocation.busy)
+            assertFalse(state.canConfirm)
+            confirmNow(state)
+            assertEquals(emptyList(), source.checkInRuns)
+            assertEquals(0, approver.calls)
+
+            source.heldAssigns.single().complete(Unit)
+            runCurrent()
+            assertTrue(state.canConfirm)
+            confirmNow(state)
+            assertEquals(1, source.checkInRuns.size)
+        }
+
+    @Test
+    fun confirmWaitsForGuestCreationInFlight() =
+        runTest {
+            val source =
+                source().apply {
+                    holdCreateGuest = true
+                    createdGuest = other
+                }
+            val state = started(source)
+            val fields =
+                state.picker.form.fields
+                    .associateBy { it.name }
+            fields.getValue("fullName").onChange("Outra Pessoa")
+            fields.getValue("documentNumber").onChange(ciCpfOf("987654321"))
+            fields.getValue("birthDate").onChange("10/05/1990")
+
+            state.picker.create()
+            runCurrent()
+            assertTrue(state.picker.creating)
+            assertFalse(state.canConfirm)
+            confirmNow(state)
+            assertEquals(emptyList(), source.checkInRuns)
+            assertEquals(0, approver.calls)
+
+            source.heldCreateGuests.single().complete(Unit)
+            runCurrent()
+            assertEquals(other, state.primary)
+            assertTrue(state.canConfirm)
+            confirmNow(state)
+            assertEquals(
+                other.id,
+                source.checkInCalls
+                    .single()
+                    .input.guests
+                    .single()
+                    .guestId,
+            )
+        }
+
+    @Test
+    fun holderErrorClearedWhenGuestChosen() =
+        runTest {
+            val source = source().apply { holderErrors[holderId] = ciNetwork() }
+            val state = started(source)
+            assertNull(state.primary)
+            assertEquals(ciNetwork().userMessage, state.error)
+
+            state.picker.pick(other)
+
+            assertEquals(other, state.primary)
             assertNull(state.error)
         }
 

@@ -104,12 +104,20 @@ class CheckInState(
     var done by mutableStateOf<CheckInDone?>(null)
         private set
 
+    /** Com uma alocação ou um cadastro em andamento, a UH ou o hóspede ainda vão mudar: não confirma. */
     val canConfirm: Boolean
-        get() = allocation.currentRoomId != null && primary != null && !busy && done == null
+        get() =
+            allocation.currentRoomId != null &&
+                primary != null &&
+                !busy &&
+                done == null &&
+                !allocation.busy &&
+                !picker.creating
 
     private var intent: Intent? = null
     private var intentInputs: IntentInputs? = null
     private var picked = false
+    private var holderErrorShown = false
     private var closed = false
 
     fun start() {
@@ -156,6 +164,10 @@ class CheckInState(
     private fun choose(pick: GuestPick) {
         picked = true
         primary = pick
+        if (holderErrorShown) {
+            holderErrorShown = false
+            error = null
+        }
         dropIntentIfInputsChanged()
     }
 
@@ -170,7 +182,10 @@ class CheckInState(
             currentCoroutineContext().ensureActive()
             val failure = apiErrorOf(e)
             val unavailable = failure is ApiError.Problem && failure.status in HOLDER_UNAVAILABLE
-            if (!picked && !unavailable) error = ActionText.error(failure)
+            if (!picked && !unavailable) {
+                error = ActionText.error(failure)
+                holderErrorShown = true
+            }
         }
     }
 
