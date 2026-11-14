@@ -38,6 +38,16 @@ import com.zeny.desktop.design.theme.ZenyColors
 
 private const val EMPTY_LIST = "Nenhuma reserva nesta lista."
 private val DETAIL_WIDTH = 380.dp
+private val WALK_IN_PERMISSIONS =
+    listOf(
+        "frontdesk.stays.checkin",
+        "reservations.reservations.manage",
+        "reservations.assignments.manage",
+        "reservations.availability.read",
+        "reservations.reservations.read",
+        "rooms.status.read",
+        "guests.profiles.read",
+    )
 
 /**
  * Painel do dia da recepção: a data operacional, as três listas em abas e o detalhe da reserva escolhida ao lado.
@@ -48,14 +58,23 @@ fun ReceptionScreen(
     panel: DayPanelState,
     detail: ReservationDetailState,
     checkIn: ((CheckInSeed) -> CheckInState)? = null,
+    walkIn: (() -> WalkInState)? = null,
 ) {
     var checkInState by remember { mutableStateOf<CheckInState?>(null) }
+    var walkInState by remember { mutableStateOf<WalkInState?>(null) }
+    val openWalkIn: (() -> Unit)? =
+        walkIn
+            ?.takeIf {
+                WALK_IN_PERMISSIONS.all { p ->
+                    p in panel.permissions
+                }
+            }?.let { make -> { walkInState = make() } }
     val canCheckIn =
         checkIn != null &&
             detail.reservation?.reservation?.status == "CONFIRMED" &&
             "frontdesk.stays.checkin" in panel.permissions
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Header(panel, detail)
+        Header(panel, detail, onWalkIn = openWalkIn)
         val error = panel.error
         if (error != null && panel.day != null) ErrorBand(error, panel::refresh, "panel-error")
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -73,12 +92,20 @@ fun ReceptionScreen(
             detail.reload()
         }
     }
+    walkInState?.let { state ->
+        WalkInDialog(state) {
+            state.close()
+            walkInState = null
+            panel.refresh()
+        }
+    }
 }
 
 @Composable
 private fun Header(
     panel: DayPanelState,
     detail: ReservationDetailState,
+    onWalkIn: (() -> Unit)?,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("Recepção", style = MaterialTheme.typography.titleLarge)
@@ -89,6 +116,9 @@ private fun Header(
                 detail.reload()
             },
         ) { Text("Atualizar") }
+        if (onWalkIn != null) {
+            Button(onClick = onWalkIn, modifier = Modifier.testTag("open-walk-in")) { Text("Walk-in") }
+        }
     }
 }
 

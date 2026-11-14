@@ -30,6 +30,7 @@ import com.zeny.desktop.app.reception.CheckInState
 import com.zeny.desktop.app.reception.DayPanelState
 import com.zeny.desktop.app.reception.ReceptionScreen
 import com.zeny.desktop.app.reception.ReservationDetailState
+import com.zeny.desktop.app.reception.WalkInState
 import com.zeny.desktop.app.rooms.RoomMapScreen
 import com.zeny.desktop.app.rooms.RoomMapState
 import com.zeny.desktop.app.session.ServerConnection
@@ -41,7 +42,6 @@ import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.approval.ApprovalDialog
 import com.zeny.desktop.design.feedback.EmptyState
-import com.zeny.desktop.sdk.model.CheckInResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -199,17 +199,44 @@ private fun ReceptionArea(connection: ServerConnection) {
             // Fora da casca (sem coordenador) o check-in segue sem aprovação: o servidor decide se pede.
             val approval = LocalApprovalCoordinatorOrNull.current
             val clock = remember { Clock.systemUTC() }
-            val approve: suspend (ApprovableAction<CheckInResponse>) -> ApiResponse<CheckInResponse>? =
-                { action -> if (approval == null) action.run(null) else approval.run(action) }
-            ReceptionScreen(panel, detail) { seed ->
-                CheckInState(source, scope, seed, panel.permissions, approve, clock::instant) {
-                    panel.refresh()
-                    detail.reload()
-                }
-            }
+            ReceptionScreen(
+                panel,
+                detail,
+                checkIn = { seed ->
+                    CheckInState(
+                        source,
+                        scope,
+                        seed,
+                        panel.permissions,
+                        { approveAction(approval, it) },
+                        clock::instant,
+                    ) {
+                        panel.refresh()
+                        detail.reload()
+                    }
+                },
+                walkIn = {
+                    WalkInState(
+                        source,
+                        scope,
+                        panel.permissions,
+                        { approveAction(approval, it) },
+                        onChanged = { panel.refresh() },
+                    )
+                },
+            )
         }
     }
 }
+
+/**
+ * A aprovação pelo coordenador da sessão. Só sem coordenador (fora da casca) a ação corre sem aprovação; o
+ * cancelamento da aprovação devolve `null` e nunca refaz a ação.
+ */
+private suspend fun <T : Any> approveAction(
+    approval: ApprovalCoordinator?,
+    action: ApprovableAction<T>,
+): ApiResponse<T>? = if (approval == null) action.run(null) else approval.run(action)
 
 /**
  * O mapa de UHs vive enquanto a Governança está aberta na mesma sessão: nasce com a chave do `sessionId` vigente e
