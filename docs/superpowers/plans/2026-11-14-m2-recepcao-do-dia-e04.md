@@ -82,7 +82,7 @@ No contrato `api/openapi.yaml`:
 
 ## Review Focus
 
-1. **Outro terminal mexe na reserva entre a abertura e a confirmação da troca:** `412` relê o `ETag` e avisa; a chave é outra na próxima tentativa; nada muda até a nova confirmação. Testes `preconditionFailedRereadsVersionAndRenewsKey` (Task 4) e `moveSendsIfMatch` (Task 1).
+1. **Outro terminal mexe na reserva entre a abertura e a confirmação da troca:** `412` refaz a carga inteira (versão, UH atual, situação e lista) e avisa; a chave é outra na próxima tentativa; nada muda até a nova confirmação. Testes `preconditionFailedReloadsCurrentRoomAndRooms` (Task 4) e `moveSendsIfMatch` (Task 1).
 2. **Erro de rede depois de a troca ter sido gravada:** a nova tentativa leva a mesma chave e o servidor repete a resposta. Com outra chave, o `ETag` velho dá `412`, e a troca nunca acontece duas vezes. Testes `retryAfterNetworkErrorReusesKey` (Task 4) e `moveRetrySendsSameKey` (Task 1).
 3. **Desfazer com aprovação:**
    - sem `Idempotency-Key` em nenhuma execução;
@@ -180,7 +180,7 @@ No contrato `api/openapi.yaml`:
     - `ROOM_NOT_READY` → "A UH não está pronta. Escolha outra UH da lista ou peça a liberação à governança."
     - `ROOM_TYPE_MISMATCH`, `ROOM_OUT_OF_ORDER`, `ROOM_INACTIVE` e `UNKNOWN_ROOM` → "A UH não serve para esta troca. Escolha outra UH da lista."
     - `RESERVATION_TRANSITION_NOT_ALLOWED` → "A reserva não está mais hospedada. Feche e confira o detalhe."
-    - `RESERVATION_STAY_ENDED` → "A estadia termina hoje; a UH não é mais trocada."
+    - `RESERVATION_STAY_ENDED` → "A estadia desta reserva não tem mais noites; a UH não é mais trocada."
     - `ApiError.PreconditionFailed` → "Alguém alterou esta reserva. Confira e confirme de novo."
   - `fun undoError(error: ApiError): String`, com o resto caindo em `error(error)`:
     - `UNDO_CHECK_IN_EXPIRED` → "O check-in só pode ser desfeito na mesma data operacional em que foi feito."
@@ -202,7 +202,7 @@ No contrato `api/openapi.yaml`:
 
 ### Task 4: Estado da troca de UH
 
-**Estimativa:** 45 min · **Depende de:** Task 3 · **Risco:** alto (concorrência, idempotência; núcleo da etapa)
+**Estimativa:** 45 min (se estourar, separe `confirm` e o tratamento dos erros numa tarefa própria no mesmo arquivo, em série, como na E03) · **Depende de:** Task 3 · **Risco:** alto (concorrência, idempotência; núcleo da etapa)
 
 **Files:**
 - Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/RoomMoveState.kt`
@@ -214,13 +214,13 @@ No contrato `api/openapi.yaml`:
     - lê `reservationVersion` (guarda o `etag` e tira da leitura fresca a UH atual, o tipo, a saída, o day use e a situação) e `businessDay()`;
     - **depois**, com `hoje`, define o período:
       - pernoite com `hoje < saída`: `[hoje, saída − 1]`;
-      - day use: `[hoje, hoje]`;
-      - sem noite restante: sem lista, o texto "A estadia termina hoje; a UH não é mais trocada." e sem chamar `assignedRoomIds`;
+      - day use com `hoje == chegada`: `[hoje, hoje]`;
+      - sem noite restante (inclusive day use de outro dia e estadia já vencida): sem lista, o texto "A estadia desta reserva não tem mais noites; a UH não é mais trocada." e sem chamar `assignedRoomIds`;
     - lê em paralelo `roomStatuses()` e `assignedRoomIds(período)`;
     - `rooms`: as do tipo, ativas, vagas, `readyForCheckIn`, fora das alocadas e diferentes da atual, em `NaturalOrder`;
     - falha de qualquer leitura → `rooms` vazia e `error`, nunca a lista sem o filtro;
     - situação diferente de `IN_HOUSE` → `canConfirm` falso e o texto de `RESERVATION_TRANSITION_NOT_ALLOWED` da `moveError`.
-  - **Estado:** `var currentRoomNumber`, `var room`, `var reason` (padrão `GUEST_REQUEST`; só os quatro motivos), `var tariff` (padrão `KEEP`; só `KEEP`/`RECALCULATE`), `var busy`, `var error`, `var done: String?` (o texto de `ActionText.moveSummary`) e `val canConfirm` (com `etag`, `room`, situação `IN_HOUSE` e sem `busy` nem `done`).
+  - **Estado:** `var currentRoomNumber`, `var room`, `var reason` (padrão `GUEST_REQUEST`; só os quatro motivos), `var tariff` (padrão `KEEP`; só `KEEP`/`RECALCULATE`), `var loading` (carga ou recarga em voo), `var busy`, `var error`, `var done: String?` (o texto de `ActionText.moveSummary`) e `val canConfirm` (com `etag`, `room`, situação `IN_HOUSE` e sem `loading`, `busy` nem `done`). Com `loading`, as entradas também viram no-op. Depois da recarga do `412`, o texto do `412` continua na tela; se a própria recarga falhar, aparece o erro da recarga.
   - **`fun confirm()`:**
     - `approve(source.moveRoom(id, RoomMoveInput(room, reason, tariff), etag, intent))`;
     - a `Intent` segue as Global Constraints (a tupla inclui o `etag`);
@@ -248,6 +248,7 @@ No contrato `api/openapi.yaml`:
   - `doubleConfirmSendsOnce`;
   - `inputsIgnoredWhileBusyOrDone`;
   - `successNotifiesAndShowsSummary`;
+  - `confirmIgnoredWhileReloading`;
   - `closeCancels`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 5: Commit** (`Acrescenta o estado da troca de UH`).
@@ -366,3 +367,23 @@ No contrato `api/openapi.yaml`:
 - **Tarefa de limpeza da UH de origem:** é da governança (M6).
 - **Desfazer:** a caução e o early ficam na conta; liberar e estornar é do `billing` (M4). A fila da FNRH é da M7 E10.
 - **Ambiente:** a verificação ao vivo troca a UH de um hospedado e desfaz um check-in; recriar a demo antes do roteiro.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 1 (revisor-arquitetura, modelo opus).
+- **Rodada 0:** bloqueado, sem Crítico e com 4 Importantes:
+  - I1: uma mudança desnecessária no `ApiExecutor` (o SDK declara `xApprovalToken`);
+  - I2: textos do check-in reaproveitados errados na troca e no desfazer;
+  - I3: o período da lista sem noite restante e no day use;
+  - I4: o `412` relia só o `ETag`, e o `etag` não estava na tupla da chave.
+
+  Os 7 Menores foram aplicados.
+- **Rodada 1:** os achados da rodada 0 resolvidos. Os Menores novos N1 a N4 foram aplicados antes da execução:
+  - N1: Review Focus 1;
+  - N2: day use só com `hoje == chegada` e o texto neutro de sem noite;
+  - N3: `loading` no `canConfirm` e o texto do `412` depois da recarga;
+  - N4: nota de divisão da Task 4.
+- **Notas que ficam:**
+  - o repositório não tem `ARCHITECTURE.md`;
+  - não foram conferidos: o modelo do `gerente` no seed, a data do check-in das hospedadas no `zeny-front`, o mapeamento de `APPROVAL_TOKEN_*` e os enums gerados de `RoomMoveRequest`;
+  - divergência para o usuário: corrigir o texto do critério 3 para a D2, que ele já aceitou.
