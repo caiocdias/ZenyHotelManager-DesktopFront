@@ -80,28 +80,9 @@ class GuestPickerState(
     /** A data operacional lida no `create()`; `null` se a leitura falhou (o servidor decide a idade e a data). */
     private var businessDate: BusinessDate? = null
 
-    private val fullName =
-        FormField("fullName", "Nome completo", serverPaths = setOf("profile.fullName")) { requiredName(it) }
-    private val formDocumentType =
-        FormField("documentType", "Tipo de documento", CPF, setOf("documents[0].type")) { documentTypeError(it) }
-    private val formDocumentNumber =
-        FormField(
-            "documentNumber",
-            "Número do documento",
-            serverPaths = setOf("documents[0].number"),
-        ) { numberError(it) }
-    private val formCountry =
-        FormField(
-            "issuingCountry",
-            "País emissor",
-            serverPaths = setOf("documents[0].issuingCountry"),
-        ) { countryError(it) }
-    private val nationality =
-        FormField("nationality", "Nacionalidade", BRAZIL, setOf("profile.nationality")) { nationalityError(it) }
-    private val birthDate =
-        FormField("birthDate", "Data de nascimento", serverPaths = setOf("profile.birthDate")) { birthError(it) }
-
-    val form = FormState(listOf(fullName, formDocumentType, formDocumentNumber, formCountry, nationality, birthDate))
+    /** O formulário de cadastro; depois de um sucesso é trocado por um novo (sem campo tocado nem erro velho). */
+    var form by mutableStateOf(newForm())
+        private set
 
     var creating by mutableStateOf(false)
         private set
@@ -142,6 +123,7 @@ class GuestPickerState(
         if (!canCreate || creating || closed) return
         creating = true
         createError = null
+        form.clearServerErrors()
         ownScope.launch {
             try {
                 businessDate = readBusinessDate()
@@ -202,32 +184,31 @@ class GuestPickerState(
     }
 
     private suspend fun submit() {
-        val document = (DocumentInput.parse(formDocumentNumber.text) as? InputResult.Valid)?.value
+        val document = (DocumentInput.parse(text("documentNumber")) as? InputResult.Valid)?.value
         val number =
-            if (formDocumentType.text == CPF &&
+            if (text("documentType") == CPF &&
                 document != null
             ) {
                 document.value
             } else {
-                formDocumentNumber.text.trim()
+                text("documentNumber").trim()
             }
-        val birth = (DateInput.parse(birthDate.text) as InputResult.Valid).value
+        val birth = (DateInput.parse(text("birthDate")) as InputResult.Valid).value
         val input =
             NewGuest(
-                fullName = fullName.text.trim(),
-                documentType = formDocumentType.text,
+                fullName = text("fullName").trim(),
+                documentType = text("documentType"),
                 documentNumber = number,
                 issuingCountry =
-                    formCountry.text
+                    text("issuingCountry")
                         .trim()
                         .uppercase()
                         .takeIf { it.isNotEmpty() },
-                nationality = nationality.text.trim(),
+                nationality = text("nationality").trim(),
                 birthDate = birth,
             )
         val pick = source.createGuest(input)
-        formDocumentNumber.onChange("")
-        fullName.onChange("")
+        resetForm()
         onPicked(pick)
     }
 
@@ -258,15 +239,62 @@ class GuestPickerState(
             null
         }
 
+    private fun text(name: String): String = form.fields.first { it.name == name }.text
+
+    @Suppress("LongParameterList") // um parâmetro por campo do formulário
+    private fun newForm(
+        name: String = "",
+        type: String = CPF,
+        number: String = "",
+        country: String = "",
+        nationality: String = BRAZIL,
+        birth: String = "",
+    ) = FormState(
+        listOf(
+            FormField("fullName", "Nome completo", name, setOf("profile.fullName")) { requiredName(it) },
+            FormField("documentType", "Tipo de documento", type, setOf("documents[0].type")) { documentTypeError(it) },
+            FormField(
+                "documentNumber",
+                "Número do documento",
+                number,
+                setOf("documents[0].number"),
+            ) { numberError(it) },
+            FormField(
+                "issuingCountry",
+                "País emissor",
+                country,
+                setOf("documents[0].issuingCountry"),
+            ) { countryError(it) },
+            FormField(
+                "nationality",
+                "Nacionalidade",
+                nationality,
+                setOf("profile.nationality"),
+            ) { nationalityError(it) },
+            FormField("birthDate", "Data de nascimento", birth, setOf("profile.birthDate")) { birthError(it) },
+        ),
+    )
+
+    /** Um formulário limpo: só o nome e o número saem; tipo, país, nacionalidade e nascimento ficam. */
+    private fun resetForm() {
+        form =
+            newForm(
+                type = text("documentType"),
+                country = text("issuingCountry"),
+                nationality = text("nationality"),
+                birth = text("birthDate"),
+            )
+    }
+
     private fun requiredName(text: String) = if (text.isBlank()) NEED_NAME else null
 
     private fun documentTypeError(type: String): String? {
         val today = businessDate
-        val birth = (DateInput.parse(birthDate.text) as? InputResult.Valid)?.value
+        val birth = (DateInput.parse(text("birthDate")) as? InputResult.Valid)?.value
         val adultBrazilian =
             today != null &&
                 birth != null &&
-                nationality.text.trim() == BRAZIL &&
+                text("nationality").trim() == BRAZIL &&
                 Period.between(birth.value, today.value).years >= ADULT_AGE
         return when {
             type !in GUEST_DOCUMENT_TYPES -> BAD_TYPE
@@ -278,7 +306,7 @@ class GuestPickerState(
     private fun numberError(text: String): String? =
         when {
             text.isBlank() -> NEED_NUMBER
-            formDocumentType.text != CPF -> null
+            text("documentType") != CPF -> null
             else -> cpfError(DocumentInput.parse(text))
         }
 
@@ -292,7 +320,7 @@ class GuestPickerState(
     private fun countryError(text: String): String? {
         val country = text.trim()
         return when {
-            country.isEmpty() -> if (formDocumentType.text in COUNTRY_REQUIRED) NEED_COUNTRY else null
+            country.isEmpty() -> if (text("documentType") in COUNTRY_REQUIRED) NEED_COUNTRY else null
             country.length != COUNTRY_LENGTH || !COUNTRY_SHAPE.matches(country) -> BAD_COUNTRY
             else -> null
         }
