@@ -21,10 +21,12 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.approval.ApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinator
+import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
 import com.zeny.desktop.app.login.PasswordChangeState
+import com.zeny.desktop.app.reception.CheckInState
 import com.zeny.desktop.app.reception.DayPanelState
 import com.zeny.desktop.app.reception.ReceptionScreen
 import com.zeny.desktop.app.reception.ReservationDetailState
@@ -34,9 +36,12 @@ import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.app.shell.Area
 import com.zeny.desktop.app.shell.ShellScreen
 import com.zeny.desktop.app.shell.ShellState
+import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.approval.ApprovalDialog
 import com.zeny.desktop.design.feedback.EmptyState
+import com.zeny.desktop.sdk.model.CheckInResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -44,6 +49,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import java.time.Clock
 
 /** Casca de desenvolvimento (áreas "(em breve)"): só com `ZENY_DEV_SHELL=1` ou `-Dzeny.devShell=true`. */
 fun isShellDevMode(
@@ -115,7 +121,10 @@ internal fun AppRoot(
                         approvals.close()
                     }
                 }
-                CompositionLocalProvider(LocalApprovalCoordinator provides approvals) {
+                CompositionLocalProvider(
+                    LocalApprovalCoordinator provides approvals,
+                    LocalApprovalCoordinatorOrNull provides approvals,
+                ) {
                     ShellScreen(state, onLogout = { scope.launch { controller.logout() } }) { area ->
                         AreaContent(area, connection)
                     }
@@ -187,7 +196,17 @@ private fun ReceptionArea(connection: ServerConnection) {
                     if (focused) detail.reload()
                 }
             }
-            ReceptionScreen(panel, detail)
+            // Fora da casca (sem coordenador) o check-in segue sem aprovação: o servidor decide se pede.
+            val approval = LocalApprovalCoordinatorOrNull.current
+            val clock = remember { Clock.systemUTC() }
+            val approve: suspend (ApprovableAction<CheckInResponse>) -> ApiResponse<CheckInResponse>? =
+                { action -> approval?.run(action) ?: action.run(null) }
+            ReceptionScreen(panel, detail) { seed ->
+                CheckInState(source, scope, seed, panel.permissions, approve, clock::instant) {
+                    panel.refresh()
+                    detail.reload()
+                }
+            }
         }
     }
 }

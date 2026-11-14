@@ -19,6 +19,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -43,14 +47,29 @@ private val DETAIL_WIDTH = 380.dp
 fun ReceptionScreen(
     panel: DayPanelState,
     detail: ReservationDetailState,
+    checkIn: ((CheckInSeed) -> CheckInState)? = null,
 ) {
+    var checkInState by remember { mutableStateOf<CheckInState?>(null) }
+    val canCheckIn =
+        checkIn != null &&
+            detail.reservation?.reservation?.status == "CONFIRMED" &&
+            "frontdesk.stays.checkin" in panel.permissions
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Header(panel, detail)
         val error = panel.error
         if (error != null && panel.day != null) ErrorBand(error, panel::refresh, "panel-error")
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Box(Modifier.weight(1f).fillMaxHeight()) { Body(panel, detail) }
-            if (detail.openId != null) DetailPanel(detail)
+            if (detail.openId != null) {
+                val open = detail.reservation?.takeIf { canCheckIn }
+                DetailPanel(detail, open?.let { { checkInState = checkIn?.invoke(it.toCheckInSeed()) } })
+            }
+        }
+    }
+    checkInState?.let { state ->
+        CheckInDialog(state) {
+            state.close()
+            checkInState = null
         }
     }
 }
@@ -135,7 +154,10 @@ private fun Lists(
 }
 
 @Composable
-private fun DetailPanel(detail: ReservationDetailState) {
+private fun DetailPanel(
+    detail: ReservationDetailState,
+    onCheckIn: (() -> Unit)?,
+) {
     val error = detail.error
     val view = detail.view
     Column(
@@ -148,6 +170,9 @@ private fun DetailPanel(detail: ReservationDetailState) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         OutlinedButton(onClick = detail::close) { Text("Fechar") }
+        if (onCheckIn != null) {
+            Button(onClick = onCheckIn, modifier = Modifier.testTag("open-check-in")) { Text("Fazer check-in") }
+        }
         if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
         Box(Modifier.weight(1f)) {
             when {
