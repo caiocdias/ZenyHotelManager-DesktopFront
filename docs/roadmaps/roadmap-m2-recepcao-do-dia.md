@@ -186,7 +186,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
-| E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
+| E04 | Troca de UH e desfazer check-in | #em-andamento | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
@@ -433,7 +433,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E04 — Troca de UH e desfazer check-in — #pendente
+## E04 — Troca de UH e desfazer check-in — #em-andamento
 
 **Objetivo:** num hospedado, o recepcionista troca a UH, escolhendo a nova e o motivo. Também desfaz um check-in feito por engano, o que exige a aprovação do gerente no próprio balcão.
 
