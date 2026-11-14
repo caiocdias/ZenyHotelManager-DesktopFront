@@ -197,6 +197,49 @@ class LiveWalkInCheck {
             }
         }
 
+    @Test
+    fun roomListLeavesOutRoomsAssignedToArrivals() =
+        withViewer { connection ->
+            val source = connection.receptionSource()
+            withScreen(connection) { screen ->
+                // só leitura: cota e lista UHs, não cadastra nem conclui
+                val assigned =
+                    screen.panel.tabs
+                        .getValue(DayList.ARRIVALS)
+                        .rows
+                        .map { it.room }
+                        .filter { it.isNotBlank() && it != "—" && it != "-" }
+                        .toSet()
+                val state = newWalkIn(screen, source)
+                try {
+                    runOnUiThread { state.start() }
+                    waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { state.arrival != null }
+                    val arrival = checkNotNull(state.arrival)
+                    runOnUiThread {
+                        state.departureText = DateInput.format(BusinessDate(arrival.value.plusDays(NIGHTS)))
+                        state.adults = 1
+                        state.quote()
+                    }
+                    waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
+                        !state.quoting && (state.offers.isNotEmpty() || state.noOffers || state.error != null)
+                    }
+                    assertNull(state.error, "a cotação falhou: ${state.error}")
+                    assertTrue(state.offers.isNotEmpty(), "a cotação não trouxe oferta")
+                    val listed = mutableListOf<Int>()
+                    for (offer in state.offers) {
+                        runOnUiThread { state.chooseOffer(offer) }
+                        waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !state.loadingRooms }
+                        listed += state.rooms.size
+                        val leaked = state.rooms.map { it.number }.filter { it in assigned }
+                        assertTrue(leaked.isEmpty(), "UHs de chegadas na lista: $leaked (alocadas: $assigned)")
+                    }
+                    println("LiveWalkInCheck: alocadas às chegadas ${assigned.size}; UHs por oferta $listed")
+                } finally {
+                    state.close()
+                }
+            }
+        }
+
     private fun newWalkIn(
         screen: Screen,
         source: ReceptionSource,
