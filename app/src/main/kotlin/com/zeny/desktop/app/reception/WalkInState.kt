@@ -6,7 +6,10 @@ import androidx.compose.runtime.setValue
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.facade.CheckInGuest
+import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.ApiResponse
+import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.design.input.InputResult
@@ -29,13 +32,45 @@ data class WalkInRoom(
     val number: String,
 )
 
+/** O walk-in feito: o código da reserva, a UH, o período, o total e os alertas de restrição (fora do `toString`). */
+data class WalkInDone(
+    val reservationCode: String,
+    val roomNumber: String,
+    val period: String,
+    val total: String,
+    val alerts: List<String>,
+) {
+    override fun toString(): String =
+        "WalkInDone(reservationCode=$reservationCode, roomNumber=$roomNumber, period=$period, total=$total)"
+}
+
+/** O que uma `Intent` do walk-in cobre: mudou qualquer um, é outra intenção. */
+private data class WalkInIntentInputs(
+    val departure: BusinessDate?,
+    val adults: Int,
+    val childAges: List<Int>,
+    val segment: String,
+    val ratePlanId: String?,
+    val roomTypeId: String?,
+    val roomId: String?,
+    val guestId: String?,
+)
+
 private const val AVAILABILITY_READ = "reservations.availability.read"
 private const val MAX_NIGHTS = 365
 private const val MIN_ADULTS = 1
 private const val MAX_ADULTS = 40
 private const val MAX_CHILD_AGE = 17
+private const val MIN_GUESTS = 1
+private const val MAX_GUESTS = 40
 private const val FORBIDDEN = 403
+private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
 private val SEGMENTS = setOf("LEISURE", "BUSINESS", "EVENT", "OTHER")
+
+// A UH escolhida não serve mais: a lista é relida. A oferta não existe mais: a cotação é refeita.
+private val ROOM_REFUSALS =
+    setOf("ROOM_ALREADY_ASSIGNED", "ROOM_NOT_READY", "ROOM_OUT_OF_ORDER", "ROOM_TYPE_MISMATCH", "ROOM_INACTIVE")
+private val OFFER_REFUSALS = setOf("ROOM_TYPE_UNAVAILABLE", "UNKNOWN_RATE_PLAN", "UNKNOWN_ROOM_TYPE")
 
 private const val OVERNIGHT_TEXT = "O walk-in é de pernoite: a saída precisa ser depois de hoje."
 private const val NIGHTS_TEXT = "A estadia vai de 1 a 365 noites."
@@ -43,25 +78,51 @@ private const val DEPARTURE_TEXT = "Informe a saída (dd/mm/aaaa)."
 private const val ADULTS_TEXT = "Informe de 1 a 40 adultos."
 private const val CHILD_AGE_TEXT = "A idade de cada criança vai de 0 a 17 anos."
 private const val NO_STATUS_TEXT = "Sem permissão para ver o status das UHs."
+private const val UNCONFIRMED_TEXT =
+    "Não foi possível confirmar o walk-in. Conclua de novo sem mudar nada; " +
+        "se fechar, confira em Hospedados antes de refazer."
 
 /**
- * Estado do walk-in: a estadia, a cotação, a escolha da oferta e da UH. O hóspede e a confirmação vêm depois.
+ * Estado do walk-in: a estadia, a cotação, a escolha da oferta, da UH e do hóspede principal, e a conclusão.
  *
  * Como o `RoomAllocationState`: as mutações correm no escopo da UI (uma thread só) e [close] cancela só o que é
  * daqui. Cotação e escolha de oferta têm cada uma a sua geração: a mais nova vence. Mudar a estadia descarta tudo
  * o que dela depende; o segmento não entra na cotação e não descarta nada.
- * `approve` e `onChanged` são guardados na parte da confirmação do walk-in.
+ *
+ * A conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
+ * (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`) ou a aprovação foi cancelada; qualquer
+ * resposta definitiva, ou a troca de estadia, segmento, oferta, UH ou hóspede, gera outra. O walk-in cria a reserva:
+ * depois de um resultado desconhecido o estado fica [unconfirmed] e, como com [busy], as entradas viram no-op.
  */
-@Suppress("UNUSED_PARAMETER", "UnusedPrivateProperty", "TooManyFunctions")
+@Suppress("TooManyFunctions") // etapas do fluxo: estadia, oferta, UH, hóspede, conclusão e a chave
 class WalkInState(
     private val source: ReceptionSource,
     scope: CoroutineScope,
     private val permissions: Set<String>,
-    approve: suspend (ApprovableAction<WalkInResponse>) -> ApiResponse<WalkInResponse>?,
-    onChanged: () -> Unit,
+    private val approve: suspend (ApprovableAction<WalkInResponse>) -> ApiResponse<WalkInResponse>?,
+    private val onChanged: () -> Unit,
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
+
+    val picker =
+        GuestPickerState(
+            source,
+            ownScope,
+            canSearch = "guests.profiles.read" in permissions,
+            canCreate = "guests.profiles.manage" in permissions,
+        ) { choose(it) }
+
+    var primary by mutableStateOf<GuestPick?>(null)
+        private set
+    var busy by mutableStateOf(false)
+        private set
+
+    /** O último resultado é desconhecido: as entradas ficam travadas até uma resposta definitiva. */
+    var unconfirmed by mutableStateOf(false)
+        private set
+    var done by mutableStateOf<WalkInDone?>(null)
+        private set
 
     var arrival by mutableStateOf<BusinessDate?>(null)
         private set
@@ -73,7 +134,7 @@ class WalkInState(
     var departureText: String
         get() = departure
         set(value) {
-            if (closed || value == departure) return
+            if (locked || value == departure) return
             departure = value
             dropStay()
         }
@@ -81,7 +142,7 @@ class WalkInState(
     var adults: Int
         get() = adultCount
         set(value) {
-            if (closed || value == adultCount) return
+            if (locked || value == adultCount) return
             adultCount = value
             dropStay()
         }
@@ -89,7 +150,7 @@ class WalkInState(
     var childAges: List<Int>
         get() = ages
         set(value) {
-            if (closed || value == ages) return
+            if (locked || value == ages) return
             ages = value
             dropStay()
         }
@@ -98,7 +159,9 @@ class WalkInState(
     var segment: String
         get() = segmentValue
         set(value) {
-            if (!closed && value in SEGMENTS) segmentValue = value
+            if (locked || value !in SEGMENTS) return
+            segmentValue = value
+            dropIntentIfInputsChanged()
         }
     private var segmentValue by mutableStateOf("LEISURE")
 
@@ -127,12 +190,29 @@ class WalkInState(
     val canQuote: Boolean get() = arrival != null && AVAILABILITY_READ in permissions
     val stepGuestEnabled: Boolean get() = offer != null && room != null
 
+    /** Com cotação, UHs ou cadastro em andamento, a escolha ainda vai mudar: não conclui. */
+    val canConfirm: Boolean
+        get() =
+            offer != null &&
+                room != null &&
+                primary != null &&
+                !busy &&
+                !quoting &&
+                !loadingRooms &&
+                !picker.creating &&
+                done == null
+
     private var quotedDeparture: BusinessDate? = null
     private var quoteJob: Job? = null
     private var offerJob: Job? = null
     private var quoteGeneration = 0
     private var offerGeneration = 0
     private var closed = false
+    private var intent: Intent? = null
+    private var intentInputs: WalkInIntentInputs? = null
+
+    /** Com o estado ocupado ou não confirmado, as entradas viram no-op. */
+    private val locked: Boolean get() = closed || busy || unconfirmed
 
     fun start() {
         if (closed) return
@@ -149,6 +229,162 @@ class WalkInState(
     }
 
     fun quote() {
+        if (locked) return
+        requote()
+    }
+
+    fun chooseOffer(offer: QuoteOfferResponse) {
+        val from = arrival
+        val until = quotedDeparture.takeIf { offer in offers }
+        if (locked || from == null || until == null) return
+        this.offer = offer
+        error = null
+        loadRooms(offer, from, until)
+    }
+
+    fun chooseRoom(room: WalkInRoom) {
+        if (locked || offer == null || room !in rooms) return
+        this.room = room
+        dropIntentIfInputsChanged()
+    }
+
+    fun confirm() {
+        if (closed || !canConfirm) return
+        val input = walkInInput() ?: return
+        busy = true
+        val current = currentIntent()
+        ownScope.launch {
+            try {
+                approve(source.walkIn(input, current))?.let { finish(it.value) }
+            } catch (
+                @Suppress("TooGenericExceptionCaught") e: Exception,
+            ) {
+                currentCoroutineContext().ensureActive()
+                fail(apiErrorOf(e))
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun close() {
+        closed = true
+        picker.close()
+        jobs.cancel()
+    }
+
+    private fun choose(pick: GuestPick) {
+        if (locked) return
+        primary = pick
+        dropIntentIfInputsChanged()
+    }
+
+    /** A conclusão com as escolhas atuais; `null` sem oferta, UH ou hóspede (o [canConfirm] já barra). */
+    private fun walkInInput(): WalkInInput? {
+        val chosen = offer
+        val target = room
+        val guest = primary
+        if (chosen == null || target == null || guest == null) return null
+        return quotedDeparture?.let { until ->
+            WalkInInput(
+                departure = until,
+                adults = adultCount,
+                childAges = ages,
+                ratePlanId = chosen.ratePlanId.toString(),
+                roomTypeId = chosen.roomTypeId.toString(),
+                roomId = target.roomId,
+                segment = segmentValue,
+                guests = listOf(CheckInGuest(guest.id, true)),
+                guestCount = (adultCount + ages.size).coerceIn(MIN_GUESTS, MAX_GUESTS),
+            )
+        }
+    }
+
+    private fun finish(response: WalkInResponse) {
+        dropIntent()
+        unconfirmed = false
+        error = null
+        val reservation = response.reservation
+        done =
+            WalkInDone(
+                reservationCode = reservation.code,
+                roomNumber = response.room.number,
+                period = ReceptionText.period(reservation.arrival, reservation.departure, reservation.dayUse),
+                total = ReceptionText.money(response.total),
+                alerts = response.restrictionAlerts.map { RESTRICTION_PREFIX + it.reason },
+            )
+        onChanged()
+    }
+
+    private fun fail(failure: ApiError) {
+        if (resultUnknown(failure)) {
+            unconfirmed = true
+            error = UNCONFIRMED_TEXT
+            return
+        }
+        unconfirmed = false
+        dropIntent()
+        val code = (failure as? ApiError.Problem)?.code
+        when (code) {
+            in ROOM_REFUSALS -> {
+                rereadRooms()
+            }
+
+            in OFFER_REFUSALS -> {
+                clearChoices()
+                requote()
+            }
+        }
+        // Por último: a nova cotação limpa o erro.
+        error = ActionText.walkInError(failure)
+    }
+
+    /** A UH escolhida não serve mais: ela sai e a lista da oferta é relida. */
+    private fun rereadRooms() {
+        val chosen = offer
+        val from = arrival
+        val until = quotedDeparture
+        if (chosen != null && from != null && until != null) loadRooms(chosen, from, until)
+    }
+
+    /** O servidor pode ter criado o walk-in sem a resposta chegar: a repetição leva a mesma chave. */
+    private fun resultUnknown(failure: ApiError): Boolean =
+        failure is ApiError.Network ||
+            failure is ApiError.IncompatibleResponse ||
+            failure is ApiError.SessionEnded ||
+            (failure is ApiError.Problem && failure.code == KEY_IN_USE)
+
+    private fun currentInputs() =
+        WalkInIntentInputs(
+            departure = quotedDeparture,
+            adults = adultCount,
+            childAges = ages,
+            segment = segmentValue,
+            ratePlanId = offer?.ratePlanId?.toString(),
+            roomTypeId = offer?.roomTypeId?.toString(),
+            roomId = room?.roomId,
+            guestId = primary?.id,
+        )
+
+    private fun currentIntent(): Intent {
+        dropIntentIfInputsChanged()
+        return intent ?: Intent().also {
+            intent = it
+            intentInputs = currentInputs()
+        }
+    }
+
+    private fun dropIntentIfInputsChanged() {
+        if (intentInputs != currentInputs()) dropIntent()
+    }
+
+    private fun dropIntent() {
+        intent = null
+        intentInputs = null
+    }
+
+    /** A cotação sem as travas de entrada: também a refaz depois de uma oferta recusada na conclusão. */
+    private fun requote() {
         val day = arrival
         if (closed || !canQuote || day == null) return
         val until = validStay(day) ?: return
@@ -178,16 +414,17 @@ class WalkInState(
             }
     }
 
-    fun chooseOffer(offer: QuoteOfferResponse) {
-        val from = arrival
-        val until = quotedDeparture.takeIf { offer in offers }
-        if (closed || from == null || until == null) return
+    /** Lê as UHs da oferta; a UH escolhida sai. Não mexe em [error]. */
+    private fun loadRooms(
+        offer: QuoteOfferResponse,
+        from: BusinessDate,
+        until: BusinessDate,
+    ) {
         val mine = ++offerGeneration
-        this.offer = offer
         room = null
         rooms = emptyList()
         noRooms = false
-        error = null
+        dropIntentIfInputsChanged()
         loadingRooms = true
         offerJob?.cancel()
         offerJob =
@@ -199,16 +436,6 @@ class WalkInState(
                     if (mine == offerGeneration) loadingRooms = false
                 }
             }
-    }
-
-    fun chooseRoom(room: WalkInRoom) {
-        if (closed || offer == null || room !in rooms) return
-        this.room = room
-    }
-
-    fun close() {
-        closed = true
-        jobs.cancel()
     }
 
     /** A saída da estadia, ou `null` com [error] posto; sem erro, [error] sai limpo. */
@@ -256,6 +483,7 @@ class WalkInState(
         rooms = emptyList()
         noRooms = false
         room = null
+        dropIntentIfInputsChanged()
     }
 
     private suspend fun readRooms(

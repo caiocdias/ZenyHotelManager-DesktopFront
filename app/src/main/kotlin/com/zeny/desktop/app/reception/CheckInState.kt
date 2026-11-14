@@ -24,7 +24,7 @@ import java.time.Instant
 
 private const val MIN_GUESTS = 1
 private const val MAX_GUESTS = 40
-private const val RESTRICTION_PREFIX = "Hóspede com restrição: "
+internal const val RESTRICTION_PREFIX = "Hóspede com restrição: "
 private const val EARLY_WINDOW_ENDED = "A janela do early check-in terminou. Confira e confirme de novo."
 private const val FEE_CHANGED = "EARLY_LATE_FEE_CHANGED"
 private const val TRANSITION_NOT_ALLOWED = "RESERVATION_TRANSITION_NOT_ALLOWED"
