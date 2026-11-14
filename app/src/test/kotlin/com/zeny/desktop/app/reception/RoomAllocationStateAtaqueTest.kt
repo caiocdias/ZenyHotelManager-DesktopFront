@@ -671,46 +671,108 @@ class RoomAllocationStateAtaqueTest {
 
     // ---------- cancelamento ----------
 
+    // Convenção do projeto: o cancelamento do PRÓPRIO estado nunca vira erro; uma CancellationException estranha,
+    // vinda da chamada com o job do estado ativo, vira erro na tela e deixa o estado utilizável.
+
     @Test
-    fun cancellationFromAssignIsNeverAnError() =
+    fun foreignCancellationFromAssignShowsErrorAndStaysUsable() =
         runTest {
-            val source = fake().apply { assignError = CancellationException("cancelada") }
+            val source = fake(atWith(atB, "102")).apply { assignError = CancellationException("estranha") }
             val state = state(source)
             state.assign(atA.toString())
             runCurrent()
 
+            assertNotNull(state.error)
+            assertFalse(state.busy)
+
+            source.assignError = null
+            state.assign(atB.toString())
+            runCurrent()
+            assertEquals(2, source.assignCalls.size)
+            assertEquals("102", state.currentRoomNumber)
             assertNull(state.error)
             assertFalse(state.busy)
         }
 
     @Test
-    fun cancellationFromUnassignAndToggleIsNeverAnError() =
+    fun foreignCancellationFromUnassignAndToggleShowsErrorAndStaysUsable() =
         runTest {
             val source =
-                fake(atWith(atA, "101")).apply {
-                    unassignError = CancellationException("cancelada")
-                    doNotMoveError = CancellationException("cancelada")
+                fake(atWith(atA, "101", doNotMove = true)).apply {
+                    unassignError = CancellationException("estranha")
+                    doNotMoveError = CancellationException("estranha")
                 }
             val state = state(source, atWith(atA, "101").toCheckInSeed())
+
             state.unassign()
             runCurrent()
-            assertNull(state.error)
+            assertNotNull(state.error)
+            assertFalse(state.busy)
+            assertEquals("101", state.currentRoomNumber)
+
             state.toggleDoNotMove()
             runCurrent()
+            assertNotNull(state.error)
+            assertFalse(state.busy)
+            assertFalse(state.doNotMove)
+
+            source.doNotMoveError = null
+            state.toggleDoNotMove()
+            runCurrent()
+            assertEquals(2, source.doNotMoveCalls.size)
+            assertTrue(state.doNotMove)
             assertNull(state.error)
             assertFalse(state.busy)
         }
 
     @Test
-    fun cancellationFromLoadIsNeverAnError() =
+    fun foreignCancellationFromLoadShowsErrorAndStaysUsable() =
         runTest {
-            val source = fake().apply { suggestionsError = CancellationException("cancelada") }
+            val source = fake().apply { suggestionsError = CancellationException("estranha") }
             val state = state(source)
             state.load()
             runCurrent()
 
+            assertNotNull(state.error)
+            assertFalse(state.loading)
+
+            source.suggestionsError = null
+            state.load()
+            runCurrent()
+            assertEquals(2, state.options.size)
             assertNull(state.error)
             assertFalse(state.loading)
+        }
+
+    @Test
+    fun closeDuringLoadIsNotAnErrorAndReleasesLoading() =
+        runTest {
+            val source = fake().apply { holdSuggestions = true }
+            val state = state(source)
+            state.load()
+            runCurrent()
+            state.close()
+            runCurrent()
+
+            assertNull(state.error)
+            assertFalse(state.loading)
+        }
+
+    @Test
+    fun callerScopeCancellationDuringActionsIsNotAnError() =
+        runTest {
+            val parent = Job()
+            val callerScope = CoroutineScope(StandardTestDispatcher(testScheduler) + parent)
+            val source = fake(atWith(atB, "102")).apply { holdAssign = true }
+            val state = RoomAllocationState(source, callerScope, atDetail().toCheckInSeed(), true) {}
+            state.assign(atB.toString())
+            runCurrent()
+
+            parent.cancel()
+            runCurrent()
+
+            assertNull(state.error)
+            assertNull(state.currentRoomId)
         }
 
     // ---------- close ----------
