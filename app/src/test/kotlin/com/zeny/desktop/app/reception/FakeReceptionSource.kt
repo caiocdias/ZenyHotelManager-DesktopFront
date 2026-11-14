@@ -204,6 +204,9 @@ class FakeReceptionSource : ReceptionSource {
 
     /** As buscas por documento: tipo e país emissor (o número nunca fica registrado). */
     val documentSearchCalls = mutableListOf<Pair<String, String?>>()
+
+    /** Os números enviados nas buscas por documento (só para o teste conferir o que foi no corpo). */
+    val documentSearchNumbers = mutableListOf<String>()
     var createGuestCalls = 0
 
     /** Os cadastros recebidos, na ordem. */
@@ -385,6 +388,7 @@ class FakeReceptionSource : ReceptionSource {
         issuingCountry: String?,
     ): List<GuestPick> {
         documentSearchCalls += type to issuingCountry
+        documentSearchNumbers += number
         val snapshot = guestsByDocument[number].orEmpty()
         val error = searchError
         if (holdSearch) CompletableDeferred<Unit>().also { heldSearches += it }.await()
