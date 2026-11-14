@@ -184,7 +184,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
-| E02 | Alocação de UH e check-in | #pendente | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
+| E02 | Alocação de UH e check-in | #em-andamento | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
@@ -280,7 +280,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Alocação de UH e check-in — #pendente
+## E02 — Alocação de UH e check-in — #em-andamento
 
 **Objetivo:** a partir de uma chegada, o recepcionista aloca a UH, conferindo as sugestões do servidor e o status da UH. Pode marcar "não mover" e cota o early check-in quando cabe. Depois confirma ou cria o hóspede e faz o check-in. O mapa de UHs e o painel refletem a mudança.
 
