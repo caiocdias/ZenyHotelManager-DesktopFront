@@ -15,8 +15,11 @@ import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -644,6 +647,60 @@ class RoomMoveStateTest {
             state.confirm()
             runCurrent()
             assertEquals(1, source.moveCalls.size)
+        }
+
+    @Test
+    fun reloadErrorWinsOverPreconditionTextWithImmediateDispatcher() =
+        runTest {
+            val source = source()
+            val immediate = CoroutineScope(UnconfinedTestDispatcher(testScheduler) + Job())
+            val state = RoomMoveState(source, immediate, id, approver::approve) { changes++ }
+            state.start()
+            state.room = state.rooms.first { it.number == "102" }
+            val failure = mvProblem(500, "INTERNAL")
+            source.moveOutcomes += ApiError.PreconditionFailed(null)
+            source.versionError = failure
+            state.confirm()
+
+            assertEquals(ActionText.error(failure), state.error)
+            state.close()
+        }
+
+    @Test
+    fun cancelledApprovalKeepsPreviousError() =
+        runTest {
+            val source = source()
+            val state = ready(source)
+            val failure = mvProblem(422, "ROOM_BLOCK_RESERVATION_STAY_FIXED")
+            source.moveOutcomes += failure
+            confirmNow(state)
+            source.moveRequiresApproval = approvalRequired()
+            approver.cancel = true
+            confirmNow(state)
+
+            assertEquals(ActionText.moveError(failure), state.error)
+        }
+
+    @Test
+    fun failedReloadClearsCurrentRoomNumber() =
+        runTest {
+            val source = source()
+            val state = ready(source)
+            source.moveOutcomes += ApiError.PreconditionFailed(null)
+            source.versionError = mvProblem(500, "INTERNAL")
+            confirmNow(state)
+
+            assertNull(state.currentRoomNumber)
+        }
+
+    @Test
+    fun cannotConfirmAfterClose() =
+        runTest {
+            val state = ready(source())
+            assertTrue(state.canConfirm)
+            state.close()
+
+            assertFalse(state.canConfirm)
         }
 
     private fun approvalRequired() =

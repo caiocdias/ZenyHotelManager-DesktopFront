@@ -132,7 +132,7 @@ class RoomMoveState(
         }
 
     val canConfirm: Boolean
-        get() = etag != null && roomChoice != null && inHouse && !loading && !busy && done == null
+        get() = !closed && etag != null && roomChoice != null && inHouse && !loading && !busy && done == null
 
     private var loadJob: Job? = null
     private var generation = 0
@@ -153,12 +153,14 @@ class RoomMoveState(
         val tag = etag
         if (target == null || tag == null) return
         busy = true
+        val previousError = error
         error = null
         val input = RoomMoveInput(target.roomId, reasonChoice, tariffChoice)
         val current = currentIntent()
         ownScope.launch {
             try {
-                approve(source.moveRoom(reservationId, input, tag, current))?.let { finish(it.value) }
+                val response = approve(source.moveRoom(reservationId, input, tag, current))
+                if (response == null) error = previousError else finish(response.value)
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
@@ -186,6 +188,7 @@ class RoomMoveState(
         if (!resultUnknown(failure)) dropIntent()
         val text = ActionText.moveError(failure)
         val code = (failure as? ApiError.Problem)?.code
+        error = text
         when {
             failure is ApiError.PreconditionFailed -> {
                 load(text)
@@ -201,7 +204,6 @@ class RoomMoveState(
                 onChanged()
             }
         }
-        error = text
     }
 
     /** O servidor pode ter feito a troca sem a resposta chegar: a repetição leva a mesma chave. */
@@ -283,6 +285,7 @@ class RoomMoveState(
 
     private fun applyFailure(cause: Throwable) {
         etag = null
+        currentRoomNumber = null
         rooms = emptyList()
         roomChoice = null
         error = ActionText.error(apiErrorOf(cause))
