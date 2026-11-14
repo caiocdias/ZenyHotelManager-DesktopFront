@@ -16,6 +16,8 @@ import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.ReservationVersion
+import com.zeny.desktop.core.facade.RoomMoveInput
 import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -30,10 +32,12 @@ import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
@@ -181,6 +185,19 @@ class CoreConnection(
                 input: CheckInInput,
                 intent: Intent,
             ): ApprovableAction<CheckInResponse> = core.reservations.checkIn(id, input, intent)
+
+            override suspend fun reservationVersion(id: String): ReservationVersion =
+                core.reservations.reservationVersion(id)
+
+            override fun moveRoom(
+                id: String,
+                input: RoomMoveInput,
+                etag: String,
+                intent: Intent,
+            ): ApprovableAction<RoomMoveResponse> = core.reservations.moveRoom(id, input, etag, intent)
+
+            override fun undoCheckIn(id: String): ApprovableAction<UndoCheckInResponse> =
+                core.reservations.undoCheckIn(id)
 
             override suspend fun quoteStay(
                 arrival: BusinessDate,

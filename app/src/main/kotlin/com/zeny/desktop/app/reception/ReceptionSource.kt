@@ -5,6 +5,8 @@ import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.ReservationVersion
+import com.zeny.desktop.core.facade.RoomMoveInput
 import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -18,9 +20,11 @@ import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.flow.Flow
@@ -107,6 +111,19 @@ interface ReceptionSource {
         input: CheckInInput,
         intent: Intent,
     ): ApprovableAction<CheckInResponse>
+
+    /** A reserva com o `ETag` da leitura, que a troca de UH devolve no `If-Match`. */
+    suspend fun reservationVersion(id: String): ReservationVersion
+
+    fun moveRoom(
+        id: String,
+        input: RoomMoveInput,
+        etag: String,
+        intent: Intent,
+    ): ApprovableAction<RoomMoveResponse>
+
+    /** O desfazer check-in não leva `Idempotency-Key`: só o token de aprovação, na repetição. */
+    fun undoCheckIn(id: String): ApprovableAction<UndoCheckInResponse>
 
     /** A cotação da estadia no canal direto, com as ofertas na ordem do servidor. */
     suspend fun quoteStay(

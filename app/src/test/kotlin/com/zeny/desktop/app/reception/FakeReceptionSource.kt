@@ -6,6 +6,8 @@ import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.ReservationVersion
+import com.zeny.desktop.core.facade.RoomMoveInput
 import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.http.Intent
@@ -22,9 +24,11 @@ import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CancellationException
@@ -99,6 +103,29 @@ data class WalkInCall(
     val input: WalkInInput,
     val intent: Intent,
 )
+
+/** Uma execução de `moveRoom` registrada pelo falso: a `Intent.key` em uso, o `etag` e o token (se houve). */
+data class MoveRun(
+    val key: String,
+    val etag: String,
+    val token: String?,
+)
+
+/** Uma chamada de `moveRoom` (a criação da ação) registrada pelo falso; o `Intent` é o da tela. */
+data class MoveCall(
+    val id: String,
+    val input: RoomMoveInput,
+    val etag: String,
+    val intent: Intent,
+)
+
+/** Uma execução de `undoCheckIn` registrada pelo falso: só o token de aprovação (não há chave). */
+data class UndoRun(
+    val token: String?,
+)
+
+private val MOVE_REASONS = setOf("GUEST_REQUEST", "OUT_OF_ORDER", "ROOM_ISSUE", "OPERATIONAL")
+private val MOVE_TARIFFS = setOf("KEEP", "RECALCULATE")
 
 private val WALK_IN_SEGMENTS = setOf("LEISURE", "BUSINESS", "EVENT", "OTHER")
 
@@ -244,6 +271,39 @@ class FakeReceptionSource : ReceptionSource {
     /** Cada execução (`run`) de uma ação de `walkIn`, na ordem. */
     val walkInRuns = mutableListOf<WalkInRun>()
     val heldQuotes = mutableListOf<CompletableDeferred<Unit>>()
+
+    // A troca de UH e o desfazer check-in: versão da reserva, respostas, erros por execução e chamadas presas.
+    val versions = mutableMapOf<String, ReservationVersion>()
+    var versionError: Exception? = null
+    var holdVersion = false
+    val heldVersions = mutableListOf<CompletableDeferred<Unit>>()
+    val versionCalls = mutableListOf<String>()
+    var moveResponse: RoomMoveResponse? = null
+
+    /** `moveRoom`: a primeira execução sem token falha com `ApprovalRequired`; a seguinte, com token, passa. */
+    var moveRequiresApproval: ApiError.ApprovalRequired? = null
+
+    /** `moveRoom`: o resultado de cada execução, na ordem (`null` = sucesso); acabando a fila, sucesso. */
+    val moveOutcomes = ArrayDeque<Throwable?>()
+    var holdMove = false
+    val heldMoves = mutableListOf<CompletableDeferred<Unit>>()
+    val moveCalls = mutableListOf<MoveCall>()
+
+    /** Cada execução (`run`) de uma ação de `moveRoom`, na ordem. */
+    val moveRuns = mutableListOf<MoveRun>()
+    var undoResponse: UndoCheckInResponse? = null
+
+    /** `undoCheckIn`: a primeira execução sem token falha com `ApprovalRequired`; a seguinte, com token, passa. */
+    var undoRequiresApproval: ApiError.ApprovalRequired? = null
+
+    /** `undoCheckIn`: o resultado de cada execução, na ordem (`null` = sucesso); acabando a fila, sucesso. */
+    val undoOutcomes = ArrayDeque<Throwable?>()
+    var holdUndo = false
+    val heldUndos = mutableListOf<CompletableDeferred<Unit>>()
+    val undoCalls = mutableListOf<String>()
+
+    /** Cada execução (`run`) de uma ação de `undoCheckIn`, na ordem. */
+    val undoRuns = mutableListOf<UndoRun>()
 
     val suggestionCalls = mutableListOf<String>()
     val assignCalls = mutableListOf<AssignCall>()
@@ -431,6 +491,47 @@ class FakeReceptionSource : ReceptionSource {
             if (token == null && approval != null) throw approval
             checkInOutcomes.removeFirstOrNull()?.let { throw it }
             ApiResponse(checkNotNull(checkInResponse) { "Resposta do check-in fora do servidor de mentira" }, null, 200)
+        }
+    }
+
+    override suspend fun reservationVersion(id: String): ReservationVersion {
+        versionCalls += id
+        val error = versionError
+        if (holdVersion) CompletableDeferred<Unit>().also { heldVersions += it }.await()
+        error?.let { throw it }
+        return checkNotNull(versions[id]) { "Versão de $id fora do servidor de mentira" }
+    }
+
+    override fun moveRoom(
+        id: String,
+        input: RoomMoveInput,
+        etag: String,
+        intent: Intent,
+    ): ApprovableAction<RoomMoveResponse> {
+        // Como a porta real: motivo, tarifa ou etag inválidos são recusados antes de qualquer registro.
+        require(input.reason in MOVE_REASONS) { "motivo inválido" }
+        require(input.tariff in MOVE_TARIFFS) { "tarifa inválida" }
+        require(etag.isNotBlank()) { "etag inválido" }
+        moveCalls += MoveCall(id, input, etag, intent)
+        return ApprovableAction { token ->
+            moveRuns += MoveRun(intent.key, etag, token)
+            val approval = moveRequiresApproval
+            if (holdMove) CompletableDeferred<Unit>().also { heldMoves += it }.await()
+            if (token == null && approval != null) throw approval
+            moveOutcomes.removeFirstOrNull()?.let { throw it }
+            ApiResponse(checkNotNull(moveResponse) { "Resposta da troca fora do servidor de mentira" }, null, 200)
+        }
+    }
+
+    override fun undoCheckIn(id: String): ApprovableAction<UndoCheckInResponse> {
+        undoCalls += id
+        return ApprovableAction { token ->
+            undoRuns += UndoRun(token)
+            val approval = undoRequiresApproval
+            if (holdUndo) CompletableDeferred<Unit>().also { heldUndos += it }.await()
+            if (token == null && approval != null) throw approval
+            undoOutcomes.removeFirstOrNull()?.let { throw it }
+            ApiResponse(checkNotNull(undoResponse) { "Resposta do desfazer fora do servidor de mentira" }, null, 200)
         }
     }
 

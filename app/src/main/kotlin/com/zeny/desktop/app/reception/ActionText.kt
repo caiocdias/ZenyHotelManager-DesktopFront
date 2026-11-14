@@ -7,6 +7,7 @@ import com.zeny.desktop.design.feedback.ChipModel
 import com.zeny.desktop.design.feedback.StatusTone
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.QuoteOfferResponse
+import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import de.quati.kotlin.util.Option
 import java.time.LocalTime
@@ -14,6 +15,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
 /** Textos puros das ações da recepção (alocação e check-in), em pt-BR. */
+@Suppress("TooManyFunctions") // textos puros de cada ação da recepção, num só lugar
 object ActionText {
     private const val MINOR_TEXT =
         "Hóspede menor de idade precisa da data de nascimento e da autorização do responsável " +
@@ -77,12 +79,69 @@ object ActionText {
             "ROOM_INACTIVE" to WALK_IN_ROOM_UNFIT,
         )
 
+    private const val UNDO_UNKNOWN_OUTCOME =
+        "Não foi possível confirmar o desfazer. Feche e confira o detalhe antes de tentar de novo."
+    private const val MOVE_ROOM_UNFIT = "A UH não serve para esta troca. Escolha outra UH da lista."
+
+    private val moveTexts =
+        mapOf(
+            "ROOM_MOVE_SAME_ROOM" to "A UH escolhida é a mesma atual. Escolha outra UH.",
+            "ROOM_MOVE_INVALID" to "O motivo da troca é inválido. Escolha outro motivo.",
+            "ROOM_BLOCK_RESERVATION_STAY_FIXED" to
+                "A tarifa desta reserva de grupo não pode ser recalculada. Mantenha a tarifa.",
+            "ROOM_ALREADY_ASSIGNED" to walkInRoomTexts.getValue("ROOM_ALREADY_ASSIGNED"),
+            "ROOM_NOT_READY" to walkInRoomTexts.getValue("ROOM_NOT_READY"),
+            "ROOM_TYPE_MISMATCH" to MOVE_ROOM_UNFIT,
+            "ROOM_OUT_OF_ORDER" to MOVE_ROOM_UNFIT,
+            "ROOM_INACTIVE" to MOVE_ROOM_UNFIT,
+            "UNKNOWN_ROOM" to MOVE_ROOM_UNFIT,
+            "RESERVATION_TRANSITION_NOT_ALLOWED" to "A reserva não está mais hospedada. Feche e confira o detalhe.",
+            "RESERVATION_STAY_ENDED" to "A estadia desta reserva não tem mais noites; a UH não é mais trocada.",
+        )
+
+    private val undoTexts =
+        mapOf(
+            "UNDO_CHECK_IN_EXPIRED" to
+                "O check-in só pode ser desfeito na mesma data operacional em que foi feito.",
+            "RESERVATION_TRANSITION_NOT_ALLOWED" to
+                "A reserva não está mais hospedada; o check-in pode já ter sido desfeito. " +
+                "Feche e confira o detalhe.",
+        )
+
     fun error(error: ApiError): String =
         (error as? ApiError.Problem)?.code?.let { problemTexts[it] } ?: error.userMessage
 
     /** O erro do walk-in: como [error], mas com os textos de UH sem sugestões. */
     fun walkInError(error: ApiError): String =
         (error as? ApiError.Problem)?.code?.let { walkInRoomTexts[it] } ?: error(error)
+
+    /** O erro da troca de UH: como [error], mas com os textos próprios da troca. */
+    fun moveError(error: ApiError): String =
+        when (error) {
+            is ApiError.PreconditionFailed -> "Alguém alterou esta reserva. Confira e confirme de novo."
+            is ApiError.Problem -> error.code?.let { moveTexts[it] } ?: error(error)
+            else -> error(error)
+        }
+
+    /** O erro do desfazer check-in: rede e resposta incompatível deixam o resultado desconhecido. */
+    fun undoError(error: ApiError): String =
+        when (error) {
+            is ApiError.Network, is ApiError.IncompatibleResponse -> UNDO_UNKNOWN_OUTCOME
+            is ApiError.Problem -> error.code?.let { undoTexts[it] } ?: error(error)
+            else -> error(error)
+        }
+
+    fun tariff(value: String): String =
+        when (value) {
+            "KEEP" -> "Manter a tarifa"
+            "RECALCULATE" -> "Recalcular pela tarifa atual"
+            else -> "Outro ($value)"
+        }
+
+    fun moveSummary(response: RoomMoveResponse): String =
+        "Troca feita para a UH ${response.toRoom.number}. Noites restantes: " +
+            "${ReceptionText.money(response.remainingBefore)} → ${ReceptionText.money(response.remainingAfter)} " +
+            "(diferença ${ReceptionText.money(response.difference)})."
 
     fun offer(offer: QuoteOfferResponse): String =
         "${offer.roomTypeName} · ${offer.ratePlanName} · ${ReceptionText.money(offer.total)}"
