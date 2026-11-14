@@ -100,10 +100,16 @@ class FakeReceptionSource : ReceptionSource {
     var holdDayPage = false
     var holdReservation = false
     var holdHolder = false
+    var holdHistory = false
+    var holdAssignments = false
+    var holdRatePlan = false
     val heldBusinessDays = mutableListOf<CompletableDeferred<Unit>>()
     val heldDayPages = mutableListOf<CompletableDeferred<Unit>>()
     val heldReservations = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
     val heldHolders = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
+    val heldHistories = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
+    val heldAssignments = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
+    val heldRatePlans = mutableListOf<Pair<String, CompletableDeferred<Unit>>>()
 
     val dayPageCalls = mutableListOf<DayPageCall>()
 
@@ -175,14 +181,20 @@ class FakeReceptionSource : ReceptionSource {
 
     override suspend fun history(id: String): List<ReservationHistoryResponse> {
         historyCalls += id
-        historyError?.let { throw it }
-        return histories[id].orEmpty()
+        val snapshot = histories[id].orEmpty()
+        val error = historyError
+        if (holdHistory) CompletableDeferred<Unit>().also { heldHistories += id to it }.await()
+        error?.let { throw it }
+        return snapshot
     }
 
     override suspend fun roomAssignments(id: String): List<RoomAssignmentResponse> {
         assignmentCalls += id
-        assignmentsError?.let { throw it }
-        return assignments[id].orEmpty()
+        val snapshot = assignments[id].orEmpty()
+        val error = assignmentsError
+        if (holdAssignments) CompletableDeferred<Unit>().also { heldAssignments += id to it }.await()
+        error?.let { throw it }
+        return snapshot
     }
 
     override suspend fun holder(guestId: String): HolderSummary {
@@ -196,7 +208,9 @@ class FakeReceptionSource : ReceptionSource {
 
     override suspend fun ratePlanName(id: String): String {
         ratePlanCalls += id
-        ratePlanError?.let { throw it }
+        val error = ratePlanError
+        if (holdRatePlan) CompletableDeferred<Unit>().also { heldRatePlans += id to it }.await()
+        error?.let { throw it }
         return checkNotNull(ratePlans[id]) { "Plano $id fora do servidor de mentira" }
     }
 
