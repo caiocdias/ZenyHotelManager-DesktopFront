@@ -54,11 +54,14 @@ private val WALK_IN_PERMISSIONS =
  * Dado pessoal (titular, documento mascarado, alertas) só aparece no detalhe, como o estado o entrega: nenhum id.
  */
 @Composable
+@Suppress("LongParameterList") // as fábricas de diálogo são opcionais, com padrão nulo
 fun ReceptionScreen(
     panel: DayPanelState,
     detail: ReservationDetailState,
     checkIn: ((CheckInSeed) -> CheckInState)? = null,
     walkIn: (() -> WalkInState)? = null,
+    roomMove: ((String) -> RoomMoveState)? = null,
+    undoCheckIn: ((String) -> UndoCheckInState)? = null,
 ) {
     var checkInState by remember { mutableStateOf<CheckInState?>(null) }
     var walkInState by remember { mutableStateOf<WalkInState?>(null) }
@@ -69,6 +72,7 @@ fun ReceptionScreen(
                     p in panel.permissions
                 }
             }?.let { make -> { walkInState = make() } }
+    val stay = remember(roomMove, undoCheckIn) { StayDialogs(roomMove, undoCheckIn) }
     val canCheckIn =
         checkIn != null &&
             detail.reservation?.reservation?.status == "CONFIRMED" &&
@@ -81,7 +85,12 @@ fun ReceptionScreen(
             Box(Modifier.weight(1f).fillMaxHeight()) { Body(panel, detail) }
             if (detail.openId != null) {
                 val open = detail.reservation?.takeIf { canCheckIn }
-                DetailPanel(detail, open?.let { { checkInState = checkIn?.invoke(it.toCheckInSeed()) } })
+                DetailPanel(
+                    detail,
+                    open?.let { { checkInState = checkIn?.invoke(it.toCheckInSeed()) } },
+                    stay.moveAction(detail, panel.permissions),
+                    stay.undoAction(detail, panel.permissions),
+                )
             }
         }
     }
@@ -92,6 +101,7 @@ fun ReceptionScreen(
             detail.reload()
         }
     }
+    stay.Show(detail)
     walkInState?.let { state ->
         WalkInDialog(state) {
             state.close()
@@ -188,6 +198,8 @@ private fun Lists(
 private fun DetailPanel(
     detail: ReservationDetailState,
     onCheckIn: (() -> Unit)?,
+    onMove: (() -> Unit)?,
+    onUndo: (() -> Unit)?,
 ) {
     val error = detail.error
     val view = detail.view
@@ -203,6 +215,14 @@ private fun DetailPanel(
         OutlinedButton(onClick = detail::close) { Text("Fechar") }
         if (onCheckIn != null) {
             Button(onClick = onCheckIn, modifier = Modifier.testTag("open-check-in")) { Text("Fazer check-in") }
+        }
+        if (onMove != null) {
+            Button(onClick = onMove, modifier = Modifier.testTag("open-room-move")) { Text("Trocar UH") }
+        }
+        if (onUndo != null) {
+            OutlinedButton(onClick = onUndo, modifier = Modifier.testTag("open-undo-check-in")) {
+                Text("Desfazer check-in")
+            }
         }
         if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
         Box(Modifier.weight(1f)) {

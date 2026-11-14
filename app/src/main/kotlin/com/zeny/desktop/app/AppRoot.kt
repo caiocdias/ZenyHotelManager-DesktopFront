@@ -29,7 +29,10 @@ import com.zeny.desktop.app.login.PasswordChangeState
 import com.zeny.desktop.app.reception.CheckInState
 import com.zeny.desktop.app.reception.DayPanelState
 import com.zeny.desktop.app.reception.ReceptionScreen
+import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.ReservationDetailState
+import com.zeny.desktop.app.reception.RoomMoveState
+import com.zeny.desktop.app.reception.UndoCheckInState
 import com.zeny.desktop.app.reception.WalkInState
 import com.zeny.desktop.app.rooms.RoomMapScreen
 import com.zeny.desktop.app.rooms.RoomMapState
@@ -224,10 +227,42 @@ private fun ReceptionArea(connection: ServerConnection) {
                         onChanged = { panel.refresh() },
                     )
                 },
+                roomMove = roomMoveFactory(source, scope, approval, panel, detail),
+                undoCheckIn = undoCheckInFactory(source, scope, approval, panel, detail),
             )
         }
     }
 }
+
+/** A troca de UH do detalhe: a aprovação é a do coordenador; depois dela a lista e o detalhe se refazem. */
+private fun roomMoveFactory(
+    source: ReceptionSource,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    panel: DayPanelState,
+    detail: ReservationDetailState,
+): (String) -> RoomMoveState =
+    { id ->
+        RoomMoveState(source, scope, id, { approveAction(approval, it) }) {
+            panel.refresh()
+            detail.reload()
+        }
+    }
+
+/** O desfazer check-in do detalhe, com a mesma aprovação e o mesmo refresh da troca. */
+private fun undoCheckInFactory(
+    source: ReceptionSource,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    panel: DayPanelState,
+    detail: ReservationDetailState,
+): (String) -> UndoCheckInState =
+    { id ->
+        UndoCheckInState(source, scope, id, { approveAction(approval, it) }) {
+            panel.refresh()
+            detail.reload()
+        }
+    }
 
 /**
  * A aprovação pelo coordenador da sessão. Só sem coordenador (fora da casca) a ação corre sem aprovação; o
