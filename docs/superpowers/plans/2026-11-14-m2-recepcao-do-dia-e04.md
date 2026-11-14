@@ -52,11 +52,11 @@ No contrato `api/openapi.yaml`:
   - nada de JSON ou `code` cru ao usuário;
   - enum extensível tolerado;
   - dinheiro em `BigDecimal` (`Money`);
-  - **concorrência:** a tela guarda o `ETag` lido; no `412 PRECONDITION_FAILED`, relê a reserva e o `ETag` e mostra "Alguém alterou esta reserva. Confira e confirme de novo.", com outra `Intent`;
+  - **concorrência:** a tela guarda o `ETag` lido. No `412 PRECONDITION_FAILED`, refaz a carga inteira (versão, UH atual, situação e lista de UHs), mostra "Alguém alterou esta reserva. Confira e confirme de novo." e usa outra `Intent`;
   - **`Idempotency-Key` (troca), pela convenção da E02:**
     - a mesma `Intent` só enquanto o resultado é desconhecido (`Network`, `IncompatibleResponse`, `SessionEnded` e `409 IDEMPOTENCY_KEY_IN_USE`);
     - qualquer resposta definitiva gera outra;
-    - mudar a UH, o motivo ou a tarifa também gera outra;
+    - mudar a UH, o motivo, a tarifa ou o `etag` também gera outra (o servidor inclui o `If-Match` no hash da chave; reler o `ETag` sem chave nova daria `422 IDEMPOTENCY_KEY_REUSED`);
     - a repetição aprovada segue a D2;
   - **desfazer:** nunca envia `Idempotency-Key`.
 - **Permissões efetivas:**
@@ -92,7 +92,13 @@ No contrato `api/openapi.yaml`:
 
    Testes `undoNeverSendsIdempotencyKey` e `approvedUndoCarriesToken` (Task 2) e `cancelledApprovalLeavesReservation` (Task 5).
 4. **Desfazer fora da data operacional do check-in** (`UNDO_CHECK_IN_EXPIRED`): mensagem com o próximo passo, e o botão continua. Teste `expiredShowsMessage` (Task 5).
-5. **Lista de UHs da troca:** só o mesmo tipo, ativas, vagas, prontas e livres no período (de hoje à saída − 1), sem a UH atual. Uma falha de leitura nunca mostra a lista sem o filtro. Testes `roomsOfSameTypeReadyAndFree` e `assignedRoomsFailureShowsNoRooms` (Task 4).
+5. **Lista de UHs da troca:**
+   - só o mesmo tipo, ativas, vagas, prontas e livres no período, sem a UH atual;
+   - o período é de hoje à saída − 1 com noite restante; no day use, só hoje;
+   - sem noite restante, não há lista e aparece um texto próprio;
+   - uma falha de leitura nunca mostra a lista sem o filtro.
+
+   Testes `roomsOfSameTypeReadyAndFree`, `assignedRoomsFailureShowsNoRooms`, `departureTodayShowsStayEnded` e `dayUsePeriodIsToday` (Task 4).
 
 ---
 
@@ -133,13 +139,13 @@ No contrato `api/openapi.yaml`:
 **Estimativa:** 30 min · **Depende de:** Task 1 (mesmo arquivo) · **Risco:** alto (ação sensível; aprovação)
 
 **Files:**
-- Modify: `core/src/main/kotlin/com/zeny/desktop/core/facade/ReservationsFacade.kt`, e `core/src/main/kotlin/com/zeny/desktop/core/http/ApiExecutor.kt` se for preciso um caminho aprovado sem chave
+- Modify: `core/src/main/kotlin/com/zeny/desktop/core/facade/ReservationsFacade.kt` (o `ApiExecutor` **não** muda)
 - Test: `core/src/test/kotlin/com/zeny/desktop/core/facade/UndoCheckInFacadeTest.kt`
 
 **Interfaces:**
 - Produces: `fun undoCheckIn(id: String): ApprovableAction<UndoCheckInResponse>`:
   - `run(null)` sem token e `run(token)` com `X-Approval-Token`;
-  - **nenhuma execução envia `Idempotency-Key`**; se o `executeApproved` atual sempre gera uma chave, acrescente ao `ApiExecutor` um caminho aprovado sem chave (por exemplo, `executeWithApproval(token, call)`), sem mudar os outros;
+  - **nenhuma execução envia `Idempotency-Key`**: `ApprovableAction { token -> executor.execute { frontdesk.undoCheckInReservation(id, token, it.headers) } }`. O SDK declara o parâmetro `xApprovalToken`, e o ADR 0007 manda passar o header pelo parâmetro. `execute(intent = null)` não envia chave nem token;
   - id inválido → `IllegalArgumentException` antes da rede.
 
 - [ ] **Step 1: Testes que falham:**
@@ -166,21 +172,29 @@ No contrato `api/openapi.yaml`:
 **Interfaces:**
 - Produces:
   - na porta: `reservationVersion(id)`, `moveRoom(id, input, etag, intent)` e `undoCheckIn(id)`. O falso registra cada execução (a `Intent.key` em uso, o `etag` e o token) e aceita respostas, erros por execução e chamadas presas;
-  - em `ActionText.error`, os textos exatos, sem mudar os existentes:
+  - `fun moveError(error: ApiError): String`, no molde do `walkInError` da E03, com textos próprios da troca e o resto caindo em `error(error)`:
     - `ROOM_MOVE_SAME_ROOM` → "A UH escolhida é a mesma atual. Escolha outra UH."
     - `ROOM_MOVE_INVALID` → "O motivo da troca é inválido. Escolha outro motivo."
-    - `UNDO_CHECK_IN_EXPIRED` → "O check-in só pode ser desfeito na mesma data operacional em que foi feito."
     - `ROOM_BLOCK_RESERVATION_STAY_FIXED` → "A tarifa desta reserva de grupo não pode ser recalculada. Mantenha a tarifa."
+    - `ROOM_ALREADY_ASSIGNED` → "A UH já está alocada a outra reserva no período. Escolha outra UH da lista."
+    - `ROOM_NOT_READY` → "A UH não está pronta. Escolha outra UH da lista ou peça a liberação à governança."
+    - `ROOM_TYPE_MISMATCH`, `ROOM_OUT_OF_ORDER`, `ROOM_INACTIVE` e `UNKNOWN_ROOM` → "A UH não serve para esta troca. Escolha outra UH da lista."
+    - `RESERVATION_TRANSITION_NOT_ALLOWED` → "A reserva não está mais hospedada. Feche e confira o detalhe."
+    - `RESERVATION_STAY_ENDED` → "A estadia termina hoje; a UH não é mais trocada."
     - `ApiError.PreconditionFailed` → "Alguém alterou esta reserva. Confira e confirme de novo."
-  - `fun moveReason(value: String): String`: os quatro motivos com os rótulos de `ReceptionText.assignmentReason`;
+  - `fun undoError(error: ApiError): String`, com o resto caindo em `error(error)`:
+    - `UNDO_CHECK_IN_EXPIRED` → "O check-in só pode ser desfeito na mesma data operacional em que foi feito."
+    - `RESERVATION_TRANSITION_NOT_ALLOWED` → "A reserva não está mais hospedada; o check-in pode já ter sido desfeito. Feche e confira o detalhe."
+    - resultado desconhecido (`Network`, `IncompatibleResponse`) → "Não foi possível confirmar o desfazer. Feche e confira o detalhe antes de tentar de novo."
+  - os rótulos dos motivos vêm de `ReceptionText.assignmentReason`; nada novo para eles;
   - `fun tariff(value: String): String`: `KEEP` "Manter a tarifa", `RECALCULATE` "Recalcular pela tarifa atual", outro "Outro (VALOR)";
   - `fun moveSummary(response: RoomMoveResponse): String` = "Troca feita para a UH <toRoom.number>. Noites restantes: <antes> → <depois> (diferença <difference>).", com os valores por `ReceptionText.money`.
 
 - [ ] **Step 1: Testes que falham:**
   - `coreConnectionDelegatesMoveAndUndo`: loopback; `If-Match` e chave na troca; nenhuma chave no desfazer;
-  - um teste por texto novo;
-  - `existingTextsUnchanged`;
-  - `moveSummaryText`.
+  - um teste por texto novo de `moveError` e `undoError`;
+  - `existingTextsUnchanged` (os textos de `error` e `walkInError` não mudam);
+  - `moveSummaryText`, inclusive com `difference` negativa.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 5: Commit** (`Acrescenta a troca de UH e o desfazer check-in à porta`).
 
@@ -195,31 +209,40 @@ No contrato `api/openapi.yaml`:
 - Test: `app/src/test/kotlin/com/zeny/desktop/app/reception/RoomMoveStateTest.kt`
 
 **Interfaces:**
-- Produces:
-  - `data class MoveSeed(val reservationId: String, val roomTypeId: String, val currentRoomId: String?, val departure: BusinessDate)` e `fun ReservationDetailResponse.toMoveSeed(): MoveSeed`;
-  - `class RoomMoveState(source: ReceptionSource, scope: CoroutineScope, seed: MoveSeed, approve: suspend (ApprovableAction<RoomMoveResponse>) -> ApiResponse<RoomMoveResponse>?, onChanged: () -> Unit)`, com mutações no escopo da UI e a convenção de cancelamento:
-    - `fun start()`: em paralelo, `reservationVersion` (guarda o `etag`), `businessDay()`, `roomStatuses()` e `assignedRoomIds(hoje, departure − 1)`;
-    - `rooms`: as do `roomTypeId`, ativas, vagas, `readyForCheckIn`, fora das alocadas e diferentes da atual, em `NaturalOrder`; falha de leitura → `rooms` vazia e `error`, nunca a lista sem o filtro;
-    - `var room`, `var reason` (padrão `GUEST_REQUEST`; só os quatro motivos), `var tariff` (padrão `KEEP`; só `KEEP`/`RECALCULATE`), `var busy`, `var error`, `var done: String?` (o texto de `ActionText.moveSummary`) e `val canConfirm`;
-    - `fun confirm()`:
-      - `approve(source.moveRoom(id, RoomMoveInput(room, reason, tariff), etag, intent))`;
-      - a `Intent` segue as Global Constraints;
-      - sucesso → `done` e `onChanged()`;
-      - `PreconditionFailed` → relê a versão, outra `Intent` e o texto do `412`;
-      - `ROOM_NOT_READY`/`ROOM_ALREADY_ASSIGNED`/`ROOM_OUT_OF_ORDER` → o texto da `ActionText`, `room = null` e as UHs relidas;
-      - o resto → `ActionText.error`;
-      - aprovação cancelada → nada muda;
-    - com `busy` ou `done`, as entradas viram no-op; `fun close()`.
+- Produces: `class RoomMoveState(source: ReceptionSource, scope: CoroutineScope, reservationId: String, approve: suspend (ApprovableAction<RoomMoveResponse>) -> ApiResponse<RoomMoveResponse>?, onChanged: () -> Unit)`, com mutações no escopo da UI e a convenção de cancelamento.
+  - **`fun start()` (a carga):**
+    - lê `reservationVersion` (guarda o `etag` e tira da leitura fresca a UH atual, o tipo, a saída, o day use e a situação) e `businessDay()`;
+    - **depois**, com `hoje`, define o período:
+      - pernoite com `hoje < saída`: `[hoje, saída − 1]`;
+      - day use: `[hoje, hoje]`;
+      - sem noite restante: sem lista, o texto "A estadia termina hoje; a UH não é mais trocada." e sem chamar `assignedRoomIds`;
+    - lê em paralelo `roomStatuses()` e `assignedRoomIds(período)`;
+    - `rooms`: as do tipo, ativas, vagas, `readyForCheckIn`, fora das alocadas e diferentes da atual, em `NaturalOrder`;
+    - falha de qualquer leitura → `rooms` vazia e `error`, nunca a lista sem o filtro;
+    - situação diferente de `IN_HOUSE` → `canConfirm` falso e o texto de `RESERVATION_TRANSITION_NOT_ALLOWED` da `moveError`.
+  - **Estado:** `var currentRoomNumber`, `var room`, `var reason` (padrão `GUEST_REQUEST`; só os quatro motivos), `var tariff` (padrão `KEEP`; só `KEEP`/`RECALCULATE`), `var busy`, `var error`, `var done: String?` (o texto de `ActionText.moveSummary`) e `val canConfirm` (com `etag`, `room`, situação `IN_HOUSE` e sem `busy` nem `done`).
+  - **`fun confirm()`:**
+    - `approve(source.moveRoom(id, RoomMoveInput(room, reason, tariff), etag, intent))`;
+    - a `Intent` segue as Global Constraints (a tupla inclui o `etag`);
+    - sucesso → `done` e `onChanged()`;
+    - `PreconditionFailed` → refaz a carga inteira, limpa `room` se ela saiu da lista, usa outra `Intent` e mostra o texto do `412`;
+    - `ROOM_NOT_READY`, `ROOM_ALREADY_ASSIGNED`, `ROOM_OUT_OF_ORDER`, `ROOM_TYPE_MISMATCH`, `ROOM_MOVE_SAME_ROOM`, `ROOM_INACTIVE` ou `UNKNOWN_ROOM` → o texto da `moveError`, `room = null` e as UHs relidas;
+    - `RESERVATION_TRANSITION_NOT_ALLOWED` → o texto, e chama `onChanged()`;
+    - o resto → `ActionText.moveError`;
+    - aprovação cancelada → nada muda.
+  - Com `busy` ou `done`, as entradas viram no-op; `fun close()`.
 
 - [ ] **Step 1: Testes que falham:**
-  - `startReadsVersionAndRooms`;
+  - `startReadsVersionThenRooms`: o `businessDay` antes do `assignedRoomIds`; UH atual tirada da leitura fresca;
   - `roomsOfSameTypeReadyAndFree`: sem a atual, sem as alocadas, sem as de outro tipo;
+  - `departureTodayShowsStayEnded` e `dayUsePeriodIsToday`;
   - `assignedRoomsFailureShowsNoRooms`;
+  - `notInHouseCannotConfirm`;
   - `confirmSendsMoveWithEtag`;
   - `retryAfterNetworkErrorReusesKey`;
   - `ruleErrorRenewsKey`;
   - `changingInputsRenewsKey`;
-  - `preconditionFailedRereadsVersionAndRenewsKey`;
+  - `preconditionFailedReloadsCurrentRoomAndRooms`: a UH atual e a lista vêm da nova leitura; a `room` sai se não está mais na lista; outra chave;
   - `roomTakenRereadsRooms`;
   - `approvalCancelledLeavesState`;
   - `doubleConfirmSendsOnce`;
@@ -246,7 +269,8 @@ No contrato `api/openapi.yaml`:
     - `approve(source.undoCheckIn(id))`;
     - sucesso → `done` e `onChanged()`;
     - `null` → nada muda;
-    - erro → `ActionText.error`, inclusive `UNDO_CHECK_IN_EXPIRED` e `RESERVATION_TRANSITION_NOT_ALLOWED` (este último também chama `onChanged()`, como no check-in);
+    - erro → `ActionText.undoError`;
+    - `RESERVATION_TRANSITION_NOT_ALLOWED` e um resultado desconhecido (`Network`, `IncompatibleResponse`) também chamam `onChanged()`, para o detalhe mostrar o estado real, porque o desfazer não tem chave;
     - uma chamada por vez;
   - `fun close()`.
 
@@ -254,7 +278,7 @@ No contrato `api/openapi.yaml`:
   - `confirmUndoesAndNotifies`;
   - `cancelledApprovalLeavesReservation`;
   - `expiredShowsMessage`;
-  - `transitionNotAllowedRefreshes`;
+  - `transitionNotAllowedRefreshes` e `unknownResultRefreshes`;
   - `doubleConfirmSendsOnce`;
   - `cancellationNeverAnError`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
@@ -264,7 +288,7 @@ No contrato `api/openapi.yaml`:
 
 ### Task 6: Diálogos e botões no detalhe
 
-**Estimativa:** 45 min · **Depende de:** Tasks 4 e 5 · **Risco:** alto (superfície da demo; aprovação)
+**Estimativa:** 45 min (se estourar, separe o `UndoCheckInDialog` e a ligação numa tarefa própria, em série) · **Depende de:** Tasks 4 e 5 · **Risco:** alto (superfície da demo; aprovação)
 
 **Files:**
 - Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/StayActionDialogs.kt` (`RoomMoveDialog` e `UndoCheckInDialog`)
@@ -281,10 +305,11 @@ No contrato `api/openapi.yaml`:
     - entradas desabilitadas com `busy`.
   - **`UndoCheckInDialog(state, onClose)`:**
     - "Desfazer o check-in da reserva <código>? A reserva volta a confirmada e a UH fica vaga.";
+    - "A caução e o early lançados ficam na conta: libere e estorne pela conta da reserva.";
     - "Desfazer" e "Fechar" (desabilitado com `busy`);
     - o `error` em destaque;
     - com `done`: "Check-in desfeito." e "Fechar".
-  - **`ReceptionScreen`** ganha `roomMove: ((MoveSeed) -> RoomMoveState)? = null` e `undoCheckIn: ((String) -> UndoCheckInState)? = null`, com padrão nulo, para as chamadas existentes não mudarem. Os botões "Trocar UH" e "Desfazer check-in" ficam no detalhe, só com `detail.reservation` em `IN_HOUSE` e as permissões das Global Constraints. Fechar um diálogo chama `close()`.
+  - **`ReceptionScreen`** ganha `roomMove: ((String) -> RoomMoveState)? = null` e `undoCheckIn: ((String) -> UndoCheckInState)? = null`, com padrão nulo, para as chamadas existentes não mudarem. Os botões "Trocar UH" e "Desfazer check-in" ficam no detalhe, só com `detail.reservation` em `IN_HOUSE` e as permissões das Global Constraints. Fechar um diálogo chama `close()`.
   - **`ReceptionArea`** liga as duas fábricas com a mesma função genérica de aprovação da E03 e `onChanged = { panel.refresh(); detail.reload() }`.
 
 - [ ] **Step 1: Testes que falham:**
@@ -312,16 +337,16 @@ No contrato `api/openapi.yaml`:
 **Interfaces:**
 - **Variáveis:** as da E01/E02, mais `ZENY_LIVE_APPROVER_LOGIN` (`gerente`) e `ZENY_LIVE_APPROVER_PIN`, no arquivo 600 do orquestrador. Opt-in `ZENY_LIVE_STAY=1`; sem ele, pula; com ele e sem credencial, falha. A verificação **escreve** no `zeny-front`.
 - **`LiveStayActionsCheck.roomMoveChangesBothRoomsAndHistory`:**
-  - **fluxo:** como Recepcionista, com o `RoomMoveState` real, escolhe uma hospedada que tenha UH pronta do mesmo tipo. Sem nenhuma, falha com as contagens. Troca com motivo `GUEST_REQUEST` e `KEEP`.
+  - **fluxo:** como Recepcionista, com o `RoomMoveState` real, escolhe uma hospedada **com noite restante** que tenha UH pronta do mesmo tipo. Sem nenhuma, falha com as contagens. Troca com motivo `GUEST_REQUEST` e `KEEP`.
   - **afirma:**
     - no `RoomMapState`, pelo evento `rooms`, a origem fica vaga e suja e o destino, ocupado;
     - o histórico do detalhe tem "Troca de UH" depois de `detail.reload()`;
   - **captura:** `app/build/live/room-move.png`.
 - **`LiveStayActionsCheck.undoCheckInNeedsManagerApproval`:**
-  - **fluxo:** como Recepcionista, numa reserva hospedada com check-in na data operacional, com o `UndoCheckInState` real e um `approve` de teste sobre o `ApprovalCoordinator` real.
-  - **PIN errado:** a mensagem pt-BR do coordenador aparece e a reserva continua `IN_HOUSE`.
+  - **fluxo:** como Recepcionista, numa reserva hospedada cuja data do check-in (do detalhe) é igual à `businessDay()`; a escolha é determinística, e sem candidata falha com as contagens. Usa o `UndoCheckInState` real e um `approve` de teste sobre o `ApprovalCoordinator` real.
+  - **PIN errado:** **uma** tentativa errada só (cada PIN errado conta para o bloqueio do aprovador), e nunca imprimir o PIN. A mensagem pt-BR do coordenador aparece e a reserva continua `IN_HOUSE`.
   - **PIN certo:** `done`; a reserva volta a `CONFIRMED`; a UH fica vaga no mapa.
-  - **afirma:** a repetição aprovada levou o `X-Approval-Token` e nenhuma `Idempotency-Key`, pelos registros do coordenador ou pelo resultado.
+  - **afirma:** o resultado. Que a repetição aprovada leva o `X-Approval-Token` e nenhuma `Idempotency-Key` é provado pelas Tasks 2 e 3, sem ganchos novos no `core`.
   - **captura:** `app/build/live/undo-check-in.png`.
 
 - [ ] **Step 1:** escreva as verificações.
@@ -334,7 +359,8 @@ No contrato `api/openapi.yaml`:
 
 ## Para o handoff
 
-- O critério 3 é verificado pela D2 (ADR 0007): a repetição aprovada leva o `X-Approval-Token` e outra chave. No desfazer não há chave, porque o contrato não a declara.
+- O critério 3 é verificado pela D2 (ADR 0007): a repetição aprovada leva o `X-Approval-Token` e outra chave. No desfazer não há chave, porque o contrato não a declara. Vai para "Decisões para o usuário", com a proposta de corrigir o texto do critério. A troca não é sensível, então o caminho aprovado dela só é exercido no teste de unidade.
+- **Desfazer depois de uma falha de rede na repetição aprovada:** a nova tentativa pede aprovação de novo, porque o token não é guardado.
 - **Extensão e redução da estadia:** sem operação própria no contrato (é a alteração da reserva). Fica como candidata a etapa do M3.
 - **Troca só no mesmo tipo:** a troca para outro tipo ainda não é aceita pelo servidor (`ROOM_TYPE_MISMATCH`).
 - **Tarefa de limpeza da UH de origem:** é da governança (M6).
