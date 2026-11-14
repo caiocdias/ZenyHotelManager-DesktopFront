@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,7 +73,10 @@ fun ReceptionScreen(
                     p in panel.permissions
                 }
             }?.let { make -> { walkInState = make() } }
-    val stay = remember(roomMove, undoCheckIn) { StayDialogs(roomMove, undoCheckIn) }
+    // As fábricas são lambdas novas a cada recomposição da área: o holder dos diálogos abertos não pode depender delas.
+    val currentMove by rememberUpdatedState(roomMove)
+    val currentUndo by rememberUpdatedState(undoCheckIn)
+    val stay = remember { StayDialogs({ currentMove }, { currentUndo }) }
     val canCheckIn =
         checkIn != null &&
             detail.reservation?.reservation?.status == "CONFIRMED" &&

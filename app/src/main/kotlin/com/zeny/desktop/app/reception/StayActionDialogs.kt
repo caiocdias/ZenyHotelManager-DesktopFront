@@ -184,8 +184,8 @@ private const val IN_HOUSE_STATUS = "IN_HOUSE"
  * reserva em casa, a fábrica ligada e as permissões da ação; o servidor continua decidindo.
  */
 internal class StayDialogs(
-    private val roomMove: ((String) -> RoomMoveState)?,
-    private val undoCheckIn: ((String) -> UndoCheckInState)?,
+    private val roomMoveFactory: () -> ((String) -> RoomMoveState)?,
+    private val undoCheckInFactory: () -> ((String) -> UndoCheckInState)?,
 ) {
     private var move by mutableStateOf<RoomMoveState?>(null)
     private var undo by mutableStateOf<Pair<UndoCheckInState, String>?>(null)
@@ -195,6 +195,7 @@ internal class StayDialogs(
         permissions: Set<String>,
     ): (() -> Unit)? {
         val stay = detail.reservation?.reservation?.takeIf { it.status == IN_HOUSE_STATUS }
+        val roomMove = roomMoveFactory()
         return if (stay != null && roomMove != null && permissions.containsAll(MOVE_PERMISSIONS)) {
             { move = roomMove.invoke(stay.id.toString()) }
         } else {
@@ -207,6 +208,7 @@ internal class StayDialogs(
         permissions: Set<String>,
     ): (() -> Unit)? {
         val stay = detail.reservation?.reservation?.takeIf { it.status == IN_HOUSE_STATUS }
+        val undoCheckIn = undoCheckInFactory()
         return if (stay != null && undoCheckIn != null && "frontdesk.stays.checkin" in permissions) {
             { undo = undoCheckIn.invoke(stay.id.toString()) to stay.code }
         } else {
