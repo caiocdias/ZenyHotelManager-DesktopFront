@@ -185,7 +185,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
-| E03 | Walk-in | #em-andamento | E02 | Reserva, alocação e check-in no mesmo fluxo |
+| E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
@@ -360,7 +360,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Walk-in — #em-andamento
+## E03 — Walk-in — #concluida
 
 **Objetivo:** um hóspede sem reserva chega ao balcão. O recepcionista informa as datas e o tipo de UH, vê o preço, escolhe a UH, informa ou cria o hóspede e conclui. A reserva nasce já hospedada.
 
@@ -378,9 +378,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, um walk-in de 2 noites numa UH livre termina com a reserva em "hospedados" e a UH ocupada no mapa.
-- [ ] Sem disponibilidade, mostra mensagem em pt-BR antes de pedir os dados do hóspede.
-- [ ] Desconto acima do limite do Recepcionista abre o diálogo de aprovação, se o walk-in aceitar desconto no contrato.
+- [x] Contra o seed, um walk-in de 2 noites numa UH livre termina com a reserva em "hospedados" e a UH ocupada no mapa.
+- [x] Sem disponibilidade, mostra mensagem em pt-BR antes de pedir os dados do hóspede.
+- [x] *(Não se aplica: o walk-in do servidor não aceita desconto, H24.)* Desconto acima do limite do Recepcionista abre o diálogo de aprovação, se o walk-in aceitar desconto no contrato.
 
 **Validação obrigatória:**
 
@@ -397,12 +397,39 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-14):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e03.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e03.md), com 7 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura bloqueou na rodada 0 e aprovou com notas na rodada 1. Os 4 Importantes da rodada 0 foram:
+  - as UHs já alocadas às chegadas do dia entravam na lista;
+  - o código mostrado era o da reserva agrupadora;
+  - a cotação não aceita day use;
+  - havia risco de walk-in duplicado depois de um resultado desconhecido.
+- **Commits:** `b4591ac..3f29888` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão; rodadas de correção:
+  - Task 4: UHs na ordem natural do mapa; segmento e oferta fechados;
+  - Task 5: um 5xx trava o walk-in como resultado desconhecido.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `b4591ac..1ad965a`): pronto para merge, sem Crítico nem Importante. Três Menores foram corrigidos em `3f29888` e aprovados na re-revisão:
+  - texto próprio para o 500 guardado pelo servidor;
+  - cadastro e busca de hóspede barrados pela trava no estado;
+  - asserção de lista não vazia na verificação ao vivo.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base b4591ac`: o único apontamento é a asserção que o orquestrador mandou acrescentar num teste do testador, justificada na re-revisão. `osv-scanner`: 6 lockfiles, "No issues found". Nenhuma dependência nova; o build só ganhou o opt-in `ZENY_LIVE_WALKIN`.
+- **Critérios verificados:**
+  - Walk-in de 2 noites: `LiveWalkInCheck.twoNightWalkInGoesInHouse`, contra o `zeny-front`, logado como Recepcionista. Gerou R-2026-000013 na UH 202, de 13/11 a 15/11, por R$ 560,00. Aparece em "Hospedados" como "Hospedada" (9 → 10), e a UH ficou ocupada no mapa pelo evento `rooms`. A captura `app/build/live/walkin.png` foi inspecionada pelo orquestrador; a inspeção manual foi feita pela captura.
+  - Sem disponibilidade: `noOfferShowsMessage`, com 40 adultos (sem oferta por ocupação). A mensagem aparece antes do passo do hóspede. Os testes de estado e de tela cobrem o mesmo caminho.
+  - Desconto: não se aplica. O `WalkInRequest` não tem desconto nem diária editada (H24 da M5 E03 do servidor). O diálogo de aprovação continua ligado, e os testes da casca provam que a aprovação aprovada conclui e que a cancelada não refaz a ação.
+  - Gate em `3f29888`: `./gradlew build ktlintCheck detekt` BUILD SUCCESSFUL (core 968 testes, design 259, app 1231, demo-seed 506, sdk 40; 0 falhas; 26 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 36 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **5xx no walk-in:** conta como resultado desconhecido, com a mesma chave e as entradas travadas, porque o walk-in cria reserva e o servidor guarda o 500 "porque o efeito pode ter acontecido". Um 500 guardado deixa o diálogo travado até fechar e conferir "Hospedados".
+  - **Fechar com "não confirmado":** descarta a chave. Reabrir cria outra, e um segundo "Concluir" pode duplicar se o primeiro passou; a tela orienta a conferir "Hospedados" antes de refazer. Alternativa: guardar o estado não confirmado ao fechar.
+  - **Day use fora do walk-in no M2:** a cotação só aceita pernoite.
+  - **UH alocada a uma chegada pendente:** fica fora da lista do walk-in. Ceder essa UH é fluxo do M3 ou da troca de UH.
+  - **Sessão encerrada no walk-in:** mostra o texto da trava. Se a sessão trocar com o POST em voo, o diálogo some sem aviso.
+  - **Recusas de venda (`refusals`):** não são lidas; aparece o `detail` do servidor (design §6.2).
+  - **Fora do walk-in:** early, caução e pedidos especiais (M4) e acompanhantes nominais (M5).
+- **Notas para a próxima etapa:**
+  - **Ambiente:** o `zeny-front` está alterado. Há R-2026-000012 (UH 201) e R-2026-000013 (UH 202) de walk-in, R-2026-000003 hospedada na 208 (E02) e três hóspedes fictícios. Recrie a demo antes do roteiro ou de outra verificação que escreve.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_WALKIN=1 ./gradlew :app:test --tests '*LiveWalkInCheck*' --rerun --max-workers=2)`. Cada execução de `twoNightWalkInGoesInHouse` cria um walk-in.
+  - **Aprovação na casca:** a `ReceptionArea` tem uma função genérica de aprovação, com fallback só sem coordenador; a E04 (desfazer check-in) a reaproveita. O falso não gira a chave na repetição aprovada.
+  - **`GuestPickerState`:** ganhou `isLocked`, com padrão falso.
+  - **`NaturalOrder` do mapa:** ficou `internal` e serve a outras listas de UH.
 
 ---
 
@@ -630,3 +657,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-13 — E01 iniciada (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). O plano foi aprovado com notas na rodada 2 da revisão de arquitetura. As Tasks 1 a 4 (fachadas do `core`, textos da recepção e `TableState.refresh()`) foram concluídas e revisadas. O lote parou a pedido do usuário, com a E01 `#em-andamento` e a retomada pelo ledger da etapa. H3: não há tópico de reservas no servidor fixado.
 - 2026-11-14 — E01 `#concluida` (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). As Tasks 5 a 10 foram retomadas pelo ledger; a revisão final pediu duas correções, feitas e aprovadas na re-revisão.
 - 2026-11-14 — E02 `#concluida` (`claude --agent orquestrador`). A revisão de arquitetura aprovou com notas na rodada 1 (rodada 0 bloqueada pela regra da `Idempotency-Key`). A verificação ao vivo fez check-in de uma chegada do seed. Recriar a demo antes do roteiro.
+- 2026-11-14 — E03 `#concluida` (`claude --agent orquestrador`). O critério de desconto não se aplica (H24 do servidor). A verificação ao vivo criou dois walk-ins; recriar a demo antes do roteiro.
