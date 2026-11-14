@@ -7,12 +7,17 @@ import com.zeny.desktop.design.feedback.StatusTone
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import de.quati.kotlin.util.Option
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 /** Textos puros das ações da recepção (alocação e check-in), em pt-BR. */
 object ActionText {
     private const val MINOR_TEXT =
         "Hóspede menor de idade precisa da data de nascimento e da autorização do responsável " +
             "no perfil (área Hóspedes)."
+
+    private val timeFormat = DateTimeFormatter.ofPattern("HH:mm")
 
     private val problemTexts =
         mapOf(
@@ -69,7 +74,7 @@ object ActionText {
 
     fun earlyOffer(quote: EarlyLateQuoteResponse): String? {
         val offer = quote.earlyCheckIn
-        val time = (offer.limitTime as? Option.Some)?.value
+        val time = (offer.limitTime as? Option.Some)?.value?.let(::hourAndMinute)
         val fee = (offer.fee as? Option.Some)?.value
         return if (offer.offered && time != null && fee != null) {
             "Entrada a partir de $time · ${ReceptionText.money(fee)}"
@@ -77,4 +82,11 @@ object ActionText {
             null
         }
     }
+
+    private fun hourAndMinute(value: String): String? =
+        try {
+            LocalTime.parse(value).format(timeFormat)
+        } catch (_: DateTimeParseException) {
+            null
+        }
 }
