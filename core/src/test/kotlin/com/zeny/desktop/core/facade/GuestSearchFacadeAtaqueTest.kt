@@ -263,17 +263,27 @@ class GuestSearchFacadeAtaqueTest {
         }
 
     @Test
-    fun errorResponseThatEchoesNumberAndNameDoesNotLeakIntoMessage() =
+    fun knownCodeWithEchoingFieldErrorDoesNotLeakIntoMessage() =
         runTest {
             val echo = "Documento $CPF_NUMBER de $PERSON"
             val body =
-                """{"code":"CODIGO_NOVO_DO_SERVIDOR","detail":"$echo","errors":[{"field":"documents[0].number",
+                """{"code":"DOCUMENT_NUMBER_INVALID","detail":"$echo","errors":[{"field":"documents[0].number",
                 "code":"DOCUMENT_NUMBER_INVALID","message":"$echo"}]}"""
             core { json(body, HttpStatusCode.BadRequest) }.use { core ->
                 val error = assertFailsWith<ApiError.Problem> { core.guests.create(newGuest()) }
                 assertFalse(leaks(error.userMessage), "userMessage: ${error.userMessage}")
                 assertFalse(leaks(error.message.orEmpty()))
                 assertFalse(leaks(error.toString()), "toString: $error")
+            }
+        }
+
+    @Test
+    fun unknownCodeShowsServerDetailPerDesignSpec() =
+        runTest {
+            val body = """{"code":"CODIGO_NOVO_DO_SERVIDOR","detail":"Regra nova do servidor."}"""
+            core { json(body, HttpStatusCode.BadRequest) }.use { core ->
+                val error = assertFailsWith<ApiError.Problem> { core.guests.create(newGuest()) }
+                assertEquals("Regra nova do servidor.", error.userMessage)
             }
         }
 
