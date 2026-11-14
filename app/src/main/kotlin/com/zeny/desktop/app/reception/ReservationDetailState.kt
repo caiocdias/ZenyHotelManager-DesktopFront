@@ -263,7 +263,7 @@ class ReservationDetailState(
             plan = plan,
             total = ReceptionText.money(reservation.total),
             alerts = detail.restrictionAlerts.map { "Hóspede com restrição: ${it.reason}" },
-            assignments = assignments.map(::assignmentLine),
+            assignments = assignments.map { assignmentLine(it, reservation.dayUse) },
             assignmentsError = first.assignments.exceptionOrNull()?.let(::apiErrorOf),
             history = historyLines(reservation.createdAt, first.history.getOrDefault(emptyList()), first.zone),
             historyError = first.history.exceptionOrNull()?.let(::apiErrorOf),
@@ -286,12 +286,15 @@ private suspend fun <T> attempt(block: suspend () -> T): Result<T> =
 
 private fun apiErrorOf(e: Throwable): ApiError = e as? ApiError ?: ApiError.Network(e)
 
-private fun assignmentLine(a: RoomAssignmentResponse): AssignmentLine {
+private fun assignmentLine(
+    a: RoomAssignmentResponse,
+    reservationDayUse: Boolean,
+): AssignmentLine {
     val number = (a.roomNumber as? Option.Some)?.value?.takeIf { it.isNotBlank() }
     val release = (a.releaseReason as? Option.Some)?.value
     return AssignmentLine(
         room = "UH ${number ?: UNKNOWN}",
-        period = ReceptionText.period(a.startsOn, a.endsOn, a.dayUse),
+        period = ReceptionText.period(a.startsOn, a.endsOn, a.dayUse && reservationDayUse),
         reason = ReceptionText.assignmentReason(a.reason),
         state =
             when {

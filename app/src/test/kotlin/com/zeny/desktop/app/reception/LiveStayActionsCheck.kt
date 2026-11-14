@@ -179,6 +179,7 @@ class LiveStayActionsCheck {
             val source = connection.receptionSource()
             val approverLogin = env("ZENY_LIVE_APPROVER_LOGIN")
             val approverPin = env("ZENY_LIVE_APPROVER_PIN")
+            require(approverPin.all(Char::isDigit)) { "ZENY_LIVE_APPROVER_PIN deve ser numérico" }
             val wrongPin = approverPin.map { ((it - '0' + 1) % DIGITS).digitToChar() }.joinToString("")
             assertTrue(wrongPin != approverPin && wrongPin.length == approverPin.length, "PIN errado inválido")
             withScreen(connection) { screen ->

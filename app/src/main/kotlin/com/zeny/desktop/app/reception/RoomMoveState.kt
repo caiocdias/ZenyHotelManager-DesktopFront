@@ -42,8 +42,6 @@ private val ROOM_REFUSALS =
         "UNKNOWN_ROOM",
     )
 
-private const val STAY_ENDED_TEXT = "A estadia desta reserva não tem mais noites; a UH não é mais trocada."
-
 /** O que uma `Intent` da troca cobre: mudou a UH, o motivo, a tarifa ou o `ETag`, é outra intenção. */
 private data class MoveIntentInputs(
     val roomId: String?,
@@ -240,7 +238,7 @@ class RoomMoveState(
         val notice =
             when {
                 reservation.status != IN_HOUSE -> ActionText.moveError(problem(TRANSITION_NOT_ALLOWED))
-                period == null -> STAY_ENDED_TEXT
+                period == null -> ActionText.moveError(problem("RESERVATION_STAY_ENDED"))
                 else -> null
             }
         val candidates =
