@@ -71,7 +71,7 @@
 
    Testes `retryAfterNetworkErrorReusesKey`, `ruleErrorRenewsKey`, `keyInUseKeepsKey` e `changingInputsRenewsKey` (Task 8) e `checkInRetrySendsSameKey` (Task 2).
 2. **Dois cliques em "Fazer check-in", "Alocar" ou "Cadastrar":** uma chamada só. Testes `doubleConfirmSendsOnce` (Task 8), `doubleAssignSendsOnce` (Task 6) e `doubleCreateSendsOnce` (Task 7).
-3. **A UH deixa de estar pronta entre a alocação e o check-in** (governança marca suja, ou UH ocupada por outro terminal): `ROOM_NOT_READY` aparece com o próximo passo, o diálogo continua aberto e nada muda na reserva. Testes `roomNotReadyShowsNextStep` (Task 8) e a verificação ao vivo `notReadyRoomLeavesNoEffect` (Task 11).
+3. **A UH deixa de estar pronta entre a alocação e o check-in** (governança marca suja, ou UH ocupada por outro terminal): `ROOM_NOT_READY` aparece com o próximo passo, o diálogo continua aberto e nada muda na reserva. Testes `roomNotReadyShowsNextStep` (Task 8) e a verificação ao vivo `notReadyRoomLeavesNoEffect` (Task 12).
 4. **Aprovação cancelada ou sessão encerrada no meio do check-in:**
    - cancelar não mostra erro e deixa o diálogo como estava;
    - `SessionEnded` mostra a mensagem de sessão.
@@ -334,13 +334,13 @@
     - `issuingCountry`: 2 letras, obrigatório para `PASSPORT` e `FOREIGN_ID`;
     - `nationality`: 2 letras maiúsculas, padrão "BR";
     - `birthDate`: `DateInput.parse`, não futura;
-    - **regra do check-in**, para não gravar um perfil que o check-in vai recusar: nacionalidade "BR" e 18 anos ou mais na data de hoje do relógio injetado (`now: () -> Instant`, um parâmetro a mais do construtor, com a data no fuso de `ZoneId.of("America/Sao_Paulo")`, que é o do seed e só serve para essa conta) exigem o tipo CPF; senão, "Para brasileiro adulto, use o CPF." no campo `documentType`.
+    - **regra do check-in**, para não gravar um perfil que o check-in vai recusar: nacionalidade "BR" e 18 anos ou mais na data operacional (`source.businessDay().date`, lida no `create()`; se a leitura falhar, a regra não se aplica e o servidor decide) exigem o tipo CPF; senão, "Para brasileiro adulto, use o CPF." no campo `documentType`.
 
     `var creating`. `fun create()`:
     - valida no cliente; inválido → nenhuma chamada;
     - `errors[]` do servidor → `form.applyServerErrors`;
     - sucesso → `onPicked(pick)` e limpa número e nome do formulário;
-    - `ApiError.Network` → "Não foi possível confirmar o cadastro. Busque pelo documento antes de cadastrar de novo." (o cadastro não tem chave de idempotência e pode ter sido gravado);
+    - `ApiError.Network` ou `IncompatibleResponse` → "Não foi possível confirmar o cadastro. Busque pelo documento antes de cadastrar de novo." (o cadastro não tem chave de idempotência e pode ter sido gravado);
     - uma chamada por vez.
   - `toString()` sem nome nem número.
 
@@ -435,7 +435,7 @@
   - `data class GuestLine(val name: String, val document: String?, val primary: Boolean)`, com `toString()` sem nome nem documento;
   - `ReservationDetailView.stayGuests: List<GuestLine>`: de `reservation.guests`, na ordem do servidor, cada um por `holder(guestId)`, lido em paralelo depois da reserva; 403/404 → "—"/`null`; outro `ApiError` → `stayGuestsError` e lista vazia, sem derrubar o detalhe. Também `ReservationDetailView.stayGuestsError: ApiError?`. O `toString` da view continua sem dados pessoais;
   - na tela, a seção "Hóspedes da estadia", só com a lista não vazia ou com erro: "<nome> · <documento>", com " (principal)" no principal.
-  - `ReservationDetailState.reservation: ReservationDetailResponse?`: a última resposta de `reservation(id)` do aberto (nula fechado ou com outro id carregando), para as ações da Task 10; fora da view e do `toString`.
+  - `ReservationDetailState.reservation: ReservationDetailResponse?`: a última resposta de `reservation(id)` do aberto (nula fechado ou com outro id carregando), para as ações da Task 11; fora da view e do `toString`.
 
 - [ ] **Step 1: Testes que falham:**
   - `stayGuestsListedWithMaskedDocument`;
@@ -542,7 +542,7 @@
     - o detalhe mostra o hóspede criado em "Hóspedes da estadia" com o documento mascarado, sem os 11 dígitos;
   - **capturas:** `app/build/live/checkin.png`, com o detalhe depois do check-in, e `app/build/live/checkin-map.png`, com o mapa de UHs mostrando a UH ocupada. A inspeção "em duas janelas: painel e mapa" da etapa é cumprida pelo orquestrador sobre essas duas capturas.
 - **`LiveCheckInCheck.notReadyRoomLeavesNoEffect`:**
-  - pega outra chegada `CONFIRMED` **sem UH** e, entre as sugestões dela, uma UH com `ready = false` (`readyForCheckIn` falso); aloca essa UH e confirma o check-in;
+  - pega outra chegada `CONFIRMED` **sem UH** e, entre as sugestões dela, uma UH vaga (`occupancy == VACANT`) com `readyForCheckIn` falso; aloca essa UH e confirma o check-in;
   - afirma o texto de `ROOM_NOT_READY` da Task 4, a reserva ainda `CONFIRMED` e a UH ainda vaga;
   - no fim, solta a UH, e a reserva volta a ficar sem UH;
   - sem UH não pronta desse tipo no seed, falha com a contagem do que achou (sem dados pessoais). O orquestrador decide.
@@ -567,3 +567,27 @@
 - A janela do early é conferida pelo relógio do desktop, que pode divergir do servidor; o servidor confere o valor (`EARLY_LATE_FEE_CHANGED`/`EARLY_LATE_NOT_OFFERED`).
 - O estado do seed para a H2 (UHs prontas por tipo; UH vaga e não pronta) fica registrado com as contagens da verificação ao vivo.
 - A verificação ao vivo consome chegadas do seed; o roteiro do gate começa pela recriação (README, regra 5).
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 1 (revisor-arquitetura, modelo opus).
+- **Rodada 0:** bloqueado.
+  - **Crítico C1:** a `Intent` era mantida depois de erro definitivo, e o `IdempotencyFilter` do servidor repete a resposta guardada, inclusive o erro.
+  - **Importantes:**
+    - I1: o cliente reimplementava a RN-05 em vez de usar `readyForCheckIn`;
+    - I2: a UH atual e o "não mover" não tinham fonte (agora vêm de `CheckInSeed`);
+    - I3: as ações internas do diálogo não seguiam a permissão efetiva;
+    - I4: o texto de `RESERVATION_TRANSITION_NOT_ALLOWED` sugeria o passo errado.
+  - **Menores:** 12, aplicados. A Task 10 foi separada em painel de hóspede e diálogo, e o plano passou a ter 12 tarefas.
+- **Rodada 1:** os 17 achados resolvidos. Os Menores novos N1 a N5 foram aplicados antes da execução:
+  - N1: a idade passou a ser contada pela data operacional;
+  - N2: o construtor do `GuestPickerState` não ganha relógio;
+  - N3: a UH não pronta da verificação ao vivo tem de estar vaga;
+  - N4: referências de tarefa corrigidas;
+  - N5: `IncompatibleResponse` no cadastro ganhou a mesma mensagem da falha de rede.
+- **Notas que ficam:**
+  - o repositório não tem `ARCHITECTURE.md`; o julgamento foi contra a spec, o design, os ADRs, o contrato e o código;
+  - os nomes do `sdk` gerado, o conteúdo do seed (H2) e a exigência legal da FNRH sobre os acompanhantes não foram conferidos pelo revisor;
+  - divergências para o usuário: só o hóspede principal no check-in (recomendado manter no M2) e a H1 ampliada;
+  - o design §6.2 e §6.5 desatualizado quanto à D2 fica para o arquiteto.
+
