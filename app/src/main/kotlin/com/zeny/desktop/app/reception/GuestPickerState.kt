@@ -142,6 +142,8 @@ class GuestPickerState(
     fun close() {
         closed = true
         jobs.cancel()
+        resetForm()
+        documentNumber = ""
     }
 
     override fun toString(): String = "GuestPickerState(***)"
@@ -275,15 +277,9 @@ class GuestPickerState(
         ),
     )
 
-    /** Um formulário limpo: só o nome e o número saem; tipo, país, nacionalidade e nascimento ficam. */
+    /** Um formulário limpo: só o tipo do documento e a nacionalidade ficam; os dados pessoais saem. */
     private fun resetForm() {
-        form =
-            newForm(
-                type = text("documentType"),
-                country = text("issuingCountry"),
-                nationality = text("nationality"),
-                birth = text("birthDate"),
-            )
+        form = newForm(type = text("documentType"), nationality = text("nationality"))
     }
 
     private fun requiredName(text: String) = if (text.isBlank()) NEED_NAME else null
