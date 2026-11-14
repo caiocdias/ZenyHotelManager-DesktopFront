@@ -201,4 +201,12 @@ class ActionTextTest {
         assertNull(ActionText.earlyOffer(quote(offered.copy(fee = Option.Undefined))))
         assertNull(ActionText.earlyOffer(quote(offered.copy(fee = Option.Some(null)))))
     }
+
+    @Test
+    fun earlyOfferWithUnreadableFeeIsNotOffered() {
+        val offered =
+            EarlyLateOfferResponse(offered = true, fee = Option.Some("—"), limitTime = Option.Some("10:30"))
+        assertNull(ActionText.earlyOffer(quote(offered)))
+        assertNull(ActionText.earlyOffer(quote(offered.copy(fee = Option.Some("")))))
+    }
 }

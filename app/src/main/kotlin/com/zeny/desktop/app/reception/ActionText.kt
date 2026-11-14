@@ -2,6 +2,7 @@ package com.zeny.desktop.app.reception
 
 import com.zeny.desktop.app.rooms.displayStatus
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.feedback.ChipModel
 import com.zeny.desktop.design.feedback.StatusTone
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
@@ -75,13 +76,21 @@ object ActionText {
     fun earlyOffer(quote: EarlyLateQuoteResponse): String? {
         val offer = quote.earlyCheckIn
         val time = (offer.limitTime as? Option.Some)?.value?.let(::hourAndMinute)
-        val fee = (offer.fee as? Option.Some)?.value
+        val fee = (offer.fee as? Option.Some)?.value?.takeIf(::isMoney)
         return if (offer.offered && time != null && fee != null) {
             "Entrada a partir de $time · ${ReceptionText.money(fee)}"
         } else {
             null
         }
     }
+
+    private fun isMoney(value: String): Boolean =
+        try {
+            Money.parse(value)
+            true
+        } catch (_: IllegalArgumentException) {
+            false
+        }
 
     private fun hourAndMinute(value: String): String? =
         try {

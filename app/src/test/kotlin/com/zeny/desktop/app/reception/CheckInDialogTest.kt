@@ -456,6 +456,80 @@ class CheckInDialogTest {
         }
 
     @Test
+    fun allocationAndGuestChangesDisabledWhileCheckInInFlight() =
+        runComposeUiTest {
+            val source = source().apply { holdCheckIn = true }
+            screen(source)
+            openDialog()
+            onNodeWithTag("swap-guest").performScrollTo().performClick()
+            waitForIdle()
+            onNodeWithTag("assign-1").assertIsEnabled()
+            onNodeWithTag("unassign").assertIsEnabled()
+            onNodeWithTag("do-not-move").assertIsEnabled()
+            onNodeWithTag("guest-query").assertExists()
+
+            onNodeWithTag("check-in-confirm").performClick()
+            waitForIdle()
+
+            assertTrue(created.single().busy)
+            onNodeWithTag("assign-1").assertIsNotEnabled()
+            onNodeWithTag("unassign").assertIsNotEnabled()
+            onNodeWithTag("do-not-move").assertIsNotEnabled()
+            onNodeWithTag("guest-query").assertDoesNotExist()
+            source.heldCheckIns.forEach { it.complete(Unit) }
+            waitForIdle()
+        }
+
+    @Test
+    fun closeDisabledWhileAllocationInFlight() =
+        runComposeUiTest {
+            val source = source().apply { holdAssign = true }
+            screen(source)
+            openDialog()
+
+            onNodeWithTag("assign-1").performClick()
+            waitForIdle()
+
+            assertTrue(created.single().allocation.busy)
+            onNodeWithTag("check-in-close").assertIsNotEnabled()
+            source.heldAssigns.forEach { it.complete(Unit) }
+            waitForIdle()
+            onNodeWithTag("check-in-close").assertIsEnabled()
+        }
+
+    @Test
+    fun closingDialogReloadsDetail() =
+        runComposeUiTest {
+            val source = source()
+            screen(source)
+            openDialog()
+            val before = source.reservationCalls.size
+
+            onNodeWithTag("check-in-close").performClick()
+            waitForIdle()
+
+            assertTrue(source.reservationCalls.size > before)
+        }
+
+    @Test
+    fun guestPanelStaysOpenWhenHolderArrivesLate() =
+        runComposeUiTest {
+            val source = source()
+            screen(source)
+            source.holdHolder = true
+            openDialog()
+            onNodeWithTag("swap-guest").performScrollTo().performClick()
+            waitForIdle()
+            onNodeWithTag("guest-query").assertExists()
+
+            source.heldHolders.forEach { it.second.complete(Unit) }
+            waitForIdle()
+
+            assertTrue("Ana Titular" in allTexts())
+            onNodeWithTag("guest-query").assertExists()
+        }
+
+    @Test
     fun ruleErrorShowsNextStep() =
         runComposeUiTest {
             val source = source()

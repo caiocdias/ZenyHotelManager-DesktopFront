@@ -70,6 +70,7 @@ fun ReceptionScreen(
         CheckInDialog(state) {
             state.close()
             checkInState = null
+            detail.reload()
         }
     }
 }

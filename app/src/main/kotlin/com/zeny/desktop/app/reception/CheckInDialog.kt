@@ -58,7 +58,7 @@ fun CheckInDialog(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = onClose,
-                    enabled = !state.busy,
+                    enabled = !state.busy && !state.allocation.busy && !state.picker.creating,
                     modifier = Modifier.testTag("check-in-close"),
                 ) { Text("Fechar") }
                 if (done == null) {
@@ -81,7 +81,7 @@ private fun Done(done: CheckInDone) {
 
 @Composable
 private fun Form(state: CheckInState) {
-    RoomSection(state.allocation)
+    RoomSection(state.allocation, state.busy)
     EarlySection(state)
     GuestSection(state)
     state.error?.let {
@@ -95,7 +95,11 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun RoomSection(allocation: RoomAllocationState) {
+private fun RoomSection(
+    allocation: RoomAllocationState,
+    checkInBusy: Boolean,
+) {
+    val locked = allocation.busy || checkInBusy
     SectionTitle("UH")
     Text(allocation.currentRoomNumber?.let { "UH atual: $it" } ?: "Sem UH")
     if (!allocation.canManage) return
@@ -118,7 +122,7 @@ private fun RoomSection(allocation: RoomAllocationState) {
             }
             OutlinedButton(
                 onClick = { allocation.assign(option.roomId) },
-                enabled = !allocation.busy && !option.current,
+                enabled = !locked && !option.current,
                 modifier = Modifier.testTag("assign-$index"),
             ) { Text("Alocar") }
         }
@@ -130,10 +134,10 @@ private fun RoomSection(allocation: RoomAllocationState) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(
             onClick = allocation::unassign,
-            enabled = hasRoom && !allocation.busy,
+            enabled = hasRoom && !locked,
             modifier = Modifier.testTag("unassign"),
         ) { Text("Soltar UH") }
-        LabeledCheckbox("Não mover", allocation.doNotMove, hasRoom && !allocation.busy, "do-not-move") {
+        LabeledCheckbox("Não mover", allocation.doNotMove, hasRoom && !locked, "do-not-move") {
             allocation.toggleDoNotMove()
         }
     }
@@ -158,8 +162,8 @@ private fun GuestSection(state: CheckInState) {
     SectionTitle("Hóspede principal")
     var picking by remember { mutableStateOf(false) }
     val primary = state.primary
-    // O hóspede escolhido (ou cadastrado) fecha o painel: o diálogo mostra o novo principal.
-    LaunchedEffect(primary) { picking = false }
+    // Só a escolha do recepcionista fecha o painel; o titular que chega depois não o fecha.
+    LaunchedEffect(state.pickCount) { if (state.pickCount > 0) picking = false }
     if (primary == null) {
         Text("Escolha o hóspede")
     } else {
@@ -171,7 +175,7 @@ private fun GuestSection(state: CheckInState) {
         enabled = !state.busy,
         modifier = Modifier.testTag("swap-guest"),
     ) { Text("Trocar hóspede") }
-    if (picking) GuestPickerPanel(state.picker)
+    if (picking && !state.busy) GuestPickerPanel(state.picker)
 }
 
 @Composable

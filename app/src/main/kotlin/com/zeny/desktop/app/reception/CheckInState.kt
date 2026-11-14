@@ -99,6 +99,10 @@ class CheckInState(
         }
     var busy by mutableStateOf(false)
         private set
+
+    /** Quantas vezes o recepcionista escolheu (ou cadastrou) um hóspede principal. */
+    var pickCount by mutableStateOf(0)
+        private set
     var error by mutableStateOf<String?>(null)
         private set
     var done by mutableStateOf<CheckInDone?>(null)
@@ -163,6 +167,7 @@ class CheckInState(
 
     private fun choose(pick: GuestPick) {
         picked = true
+        pickCount++
         primary = pick
         if (holderErrorShown) {
             holderErrorShown = false
