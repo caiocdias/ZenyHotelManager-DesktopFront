@@ -26,6 +26,7 @@ import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomMoveRequest
 import com.zeny.desktop.sdk.model.RoomMoveResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
+import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInRequest
 import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
@@ -245,11 +246,23 @@ class ReservationsFacade internal constructor(
     ): ApprovableAction<RoomMoveResponse> {
         val reservationId = uuidOf(id)
         val request = roomMoveRequestOf(input)
+        require(etag.isNotBlank()) { "etag inválido" }
         val call: suspend (CallOptions) -> HttpResponseTyped<RoomMoveResponse> = {
             frontdesk.moveReservationRoom(reservationId, etag, it.requireIdempotencyKey(), request, it.headers)
         }
         return ApprovableAction { token ->
             if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
+        }
+    }
+
+    /**
+     * Desfaz o check-in (ação sensível). Nenhuma execução envia `Idempotency-Key`; o token de aprovação vai só na
+     * repetição aprovada, pelo parâmetro do `sdk`.
+     */
+    fun undoCheckIn(id: String): ApprovableAction<UndoCheckInResponse> {
+        val reservationId = uuidOf(id)
+        return ApprovableAction { token ->
+            executor.execute { frontdesk.undoCheckInReservation(reservationId, token, it.headers) }
         }
     }
 

@@ -232,4 +232,19 @@ class RoomMoveFacadeTest {
                 assertTrue(requests.isEmpty())
             }
         }
+
+    @Test
+    fun blankEtagFailsBeforeNetwork() =
+        runTest {
+            core { json(moved()) }.use { core ->
+                listOf("", "   ").forEach { blank ->
+                    val error =
+                        assertFailsWith<IllegalArgumentException> {
+                            core.reservations.moveRoom(RES, input(), blank, Intent())
+                        }
+                    assertEquals("etag inválido", error.message)
+                }
+                assertTrue(requests.isEmpty())
+            }
+        }
 }
