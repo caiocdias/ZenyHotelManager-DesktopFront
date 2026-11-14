@@ -190,7 +190,7 @@
 
 ### Task 4: Estado do walk-in: estadia, oferta e UH
 
-**Estimativa:** 40 min · **Depende de:** Task 3 · **Risco:** alto (concorrência; núcleo da etapa)
+**Estimativa:** 45 min · **Depende de:** Task 3 · **Risco:** alto (concorrência; núcleo da etapa)
 
 **Files:**
 - Create: `app/src/main/kotlin/com/zeny/desktop/app/reception/WalkInState.kt`
@@ -213,6 +213,7 @@
       - as `rooms` são as do `roomTypeId` da oferta, ativas, vagas, com `readyForCheckIn` e **fora** dos alocados, por número;
       - a escolha mais nova vence (mesma geração);
       - `roomStatuses()` com `403` → "Sem permissão para ver o status das UHs.";
+      - falha de `assignedRoomIds` (`403`, rede…) → `rooms` vazia e `error` com o texto da `ActionText`; nunca a lista sem o filtro;
     - `var offer`, `var rooms: List<WalkInRoom>`, `var room: WalkInRoom?` e `fun chooseRoom(room: WalkInRoom)`;
     - mudar a saída, os adultos ou as crianças depois de cotar descarta `offers`, `offer`, `rooms` e `room`. Mudar o segmento não descarta nada, porque o segmento não entra na cotação;
     - `val stepGuestEnabled` = há oferta e UH. O passo do hóspede (Task 5) só aparece com ele;
@@ -230,6 +231,7 @@
   - `changingStayDropsOfferAndRoom` e `changingSegmentKeepsOffers`;
   - `newestQuoteWins` e `newestOfferWins`;
   - `quoteErrorShowsText`;
+  - `assignedRoomsFailureShowsNoRooms`;
   - `closeCancels`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 5: Commit** (`Acrescenta a estadia, a oferta e a UH do walk-in`).
@@ -238,7 +240,7 @@
 
 ### Task 5: Estado do walk-in: hóspede e conclusão
 
-**Estimativa:** 40 min · **Depende de:** Task 4 (mesmo arquivo) · **Risco:** alto (idempotência, aprovação)
+**Estimativa:** 45 min · **Depende de:** Task 4 (mesmo arquivo) · **Risco:** alto (idempotência, aprovação)
 
 **Files:**
 - Modify: `app/src/main/kotlin/com/zeny/desktop/app/reception/WalkInState.kt`
@@ -248,7 +250,8 @@
 - Produces, em `WalkInState`:
   - `val picker: GuestPickerState`, com `canSearch`/`canCreate` pelas permissões e `onPicked` que define `primary`;
   - `var primary: GuestPick?`, `var busy`, `var unconfirmed: Boolean`, `var done: WalkInDone?` e `val canConfirm` (oferta, UH e principal escolhidos, sem `busy`, sem cotação ou `chooseOffer` em voo, sem `picker.creating` e sem `done`);
-  - `data class WalkInDone(val reservationCode: String, val roomNumber: String, val total: String, val alerts: List<String>)`:
+  - `data class WalkInDone(val reservationCode: String, val roomNumber: String, val period: String, val total: String, val alerts: List<String>)`:
+    - `period` = `ReceptionText.period(reservation.arrival, reservation.departure, reservation.dayUse)`, da resposta;
     - `reservationCode` = `reservation.code` (`R-…`, o que o painel mostra), não o `bookingCode`;
     - total por `ReceptionText.money`; alertas como na E02;
     - `toString` sem `alerts`;
@@ -305,8 +308,8 @@
     - **"UH":** as UHs prontas do tipo, cada uma com "Escolher";
     - **"Hóspede principal":** só com oferta e UH; nome e documento mascarado, ou "Escolha o hóspede"; o `GuestPickerPanel` da E02;
     - o `error` em destaque;
-    - "Concluir walk-in" (por `canConfirm`) e "Fechar" (desabilitado com `busy`, cotação ou escolha de oferta em voo e `picker.creating`);
-    - com `done`: "Walk-in concluído: reserva <reservationCode>, UH <n>, total <valor>.", os alertas e "Fechar";
+    - "Concluir walk-in" (por `canConfirm`) e "Fechar" (desabilitado só com `busy` e `picker.creating`, que são escritas; leituras em voo são canceladas pelo `close()`);
+    - com `done`: "Walk-in concluído: reserva <reservationCode>, UH <n>, <period>, total <valor>.", os alertas e "Fechar";
     - com `busy`, os controles da estadia, das ofertas, da UH e do hóspede ficam desabilitados.
   - **`ReceptionScreen(panel, detail, checkIn = null, walkIn: (() -> WalkInState)? = null)`:**
     - com o valor padrão, as chamadas existentes não mudam;
@@ -362,7 +365,7 @@
 
 - **Critério do desconto:** não se aplica. O walk-in do servidor não aceita desconto nem diária editada (H24 da M5 E03 do servidor). O diálogo de aprovação continua ligado, para o caso de o servidor pedir aprovação.
 - **Calendário de disponibilidade:** `GET /api/v1/availability` não entrou, porque a cotação só devolve ofertas com UH em todas as noites. A disponibilidade por data fica para a tela geral do M3.
-- **UH do walk-in:** sai do status das UHs do tipo (vagas, ativas e prontas); não há sugestão sem reserva. Uma UH com reserva futura no período devolve `ROOM_ALREADY_ASSIGNED`.
+- **UH do walk-in:** sai do status das UHs do tipo (vagas, ativas e prontas); não há sugestão sem reserva. As UHs com alocação no período saem da lista pelo `searchReservations`; `ROOM_ALREADY_ASSIGNED` só aparece numa corrida com outro terminal.
 - **Fora do walk-in:** early, caução e pedidos especiais (M4) e acompanhantes nominais (M5). O check-in registra só o principal, como na E02.
 - **Ambiente:** a verificação ao vivo consome UHs prontas e cria um hóspede; recriar a demo antes do gate.
 - **Day use:** fica fora do walk-in no M2, porque a cotação só aceita pernoite. Vai para "Decisões para o usuário"; a alternativa (day use sem oferta, preço pelo calendário) cresce o escopo.
@@ -371,4 +374,25 @@
 - **Contrato:** declara `200`, e o servidor responde `201`.
 - **Sem disponibilidade, ao vivo:** a verificação usa 40 adultos (sem oferta por ocupação) no lugar de um tipo esgotado. O caminho no cliente é o mesmo.
 - **`STAY_INVALID`:** o `errors[]` vira um texto geral, não vai para o campo (o diálogo tem poucos campos).
-- **Fechamento do dia com o diálogo aberto:** a chegada da cotação é a data lida no `start()`. Se o servidor avançar a data, a conclusão falha com uma recusa de regra, e é preciso reabrir.
+- **Fechamento do dia com o diálogo aberto:** a chegada da cotação é a data lida no `start()`, mas o servidor usa a data operacional dele. Se ela avançar, o walk-in pode sair uma noite mais curto e com outro total. O "concluído" mostra o período e o total da resposta, para o recepcionista conferir.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 1 (revisor-arquitetura, modelo opus).
+- **Rodada 0:** bloqueado, sem Crítico e com 4 Importantes:
+  - I1: as UHs alocadas às chegadas do dia (101 e 102 no seed) entravam na lista;
+  - I2: o `bookingCode` (`B-…`) não é o código do painel (`R-…`);
+  - I3: o day use é recusado pela cotação;
+  - I4: um resultado desconhecido podia levar a um walk-in duplicado.
+
+  Os 13 Menores foram aplicados.
+- **Rodada 1:** os 17 achados resolvidos. Os Menores novos N1 a N5 foram aplicados antes da execução:
+  - N1: frase do handoff;
+  - N2: a falha de `assignedRoomIds` não mostra a lista sem o filtro;
+  - N3: o "concluído" mostra o período da resposta;
+  - N4: "Fechar" travado só por escritas;
+  - N5: as Tasks 4 e 5 foram reestimadas em 45 min.
+- **Notas que ficam:**
+  - o repositório não tem `ARCHITECTURE.md`; o julgamento foi contra a spec, o design, os ADRs, o contrato, o código e o handoff da M5 E03 do servidor;
+  - não foram conferidos: o status das UHs 101 e 102 no seed, a ordem das ofertas, o enum gerado de `segment`, se `statuses()` lê todas as páginas e o comportamento do servidor depois do fechamento do dia;
+  - divergências de escopo para "Decisões para o usuário": o day use fica fora e a UH de uma chegada pendente fica fora da lista.
