@@ -1,0 +1,80 @@
+package com.zeny.desktop.app.reception
+
+import com.zeny.desktop.app.rooms.displayStatus
+import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.design.feedback.ChipModel
+import com.zeny.desktop.design.feedback.StatusTone
+import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.RoomStatusResponse
+import de.quati.kotlin.util.Option
+
+/** Textos puros das ações da recepção (alocação e check-in), em pt-BR. */
+object ActionText {
+    private const val MINOR_TEXT =
+        "Hóspede menor de idade precisa da data de nascimento e da autorização do responsável " +
+            "no perfil (área Hóspedes)."
+
+    private val problemTexts =
+        mapOf(
+            "ROOM_NOT_READY" to
+                "A UH ainda não está pronta. Escolha uma UH pronta ou peça a liberação à governança.",
+            "ROOM_NOT_ASSIGNED" to "A reserva ainda não tem UH. Aloque uma UH antes do check-in.",
+            "ROOM_ALREADY_ASSIGNED" to
+                "A UH já está alocada a outra reserva em parte do período. Escolha outra UH das sugestões.",
+            "ROOM_ASSIGNMENT_LOCKED" to
+                "A UH desta reserva está marcada como \"não mover\". Desmarque antes de trocar ou soltar.",
+            "ROOM_OUT_OF_ORDER" to "A UH está fora de ordem em alguma noite da estadia. Escolha outra UH.",
+            "ROOM_TYPE_MISMATCH" to "A UH não é do tipo da reserva. Escolha uma UH das sugestões.",
+            "ROOM_INACTIVE" to "A UH está inativa. Escolha outra UH.",
+            "GUEST_DATA_INCOMPLETE" to
+                "Faltam dados do hóspede: nacionalidade, data de nascimento ou um documento aceito " +
+                "(CPF para brasileiro adulto). Cadastre o hóspede com esses dados ou complete o perfil " +
+                "na área Hóspedes.",
+            "GUEST_BIRTH_DATE_REQUIRED" to MINOR_TEXT,
+            "MINOR_AUTHORIZATION_REQUIRED" to MINOR_TEXT,
+            "MINOR_AUTHORIZATION_INVALID" to MINOR_TEXT,
+            "CHECK_IN_BEFORE_ARRIVAL" to
+                "O check-in não pode ser feito antes da data de chegada. Confira a data da reserva.",
+            "RESERVATION_TRANSITION_NOT_ALLOWED" to
+                "A reserva não está mais confirmada; o check-in pode já ter sido feito. " +
+                "Feche e confira o detalhe.",
+            "EARLY_LATE_FEE_CHANGED" to
+                "O valor do early check-in mudou. Confira a nova cotação e confirme de novo.",
+            "EARLY_LATE_NOT_OFFERED" to
+                "O early check-in não é oferecido agora. Desmarque a cobrança e confirme de novo.",
+            "FOLIO_CLOSED" to "A conta da reserva está encerrada. Fale com o financeiro.",
+            "GUEST_ANONYMIZED" to
+                "Os dados deste hóspede foram anonimizados. Escolha ou cadastre outro hóspede.",
+            "UNKNOWN_GUEST" to "O hóspede escolhido não existe mais. Busque de novo.",
+        )
+
+    fun error(error: ApiError): String =
+        (error as? ApiError.Problem)?.code?.let { problemTexts[it] } ?: error.userMessage
+
+    /** A prontidão é a flag do servidor (RN-05); o cliente não a recalcula. */
+    fun readiness(status: RoomStatusResponse?): ChipModel =
+        when {
+            status == null -> {
+                ChipModel("Status desconhecido", StatusTone.NEUTRAL)
+            }
+
+            status.readyForCheckIn -> {
+                ChipModel("Pronta", StatusTone.SUCCESS)
+            }
+
+            else -> {
+                displayStatus(status).let { ChipModel(it.label, it.tone) }
+            }
+        }
+
+    fun earlyOffer(quote: EarlyLateQuoteResponse): String? {
+        val offer = quote.earlyCheckIn
+        val time = (offer.limitTime as? Option.Some)?.value
+        val fee = (offer.fee as? Option.Some)?.value
+        return if (offer.offered && time != null && fee != null) {
+            "Entrada a partir de $time · ${ReceptionText.money(fee)}"
+        } else {
+            null
+        }
+    }
+}
