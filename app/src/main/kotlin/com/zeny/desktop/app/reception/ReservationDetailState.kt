@@ -41,6 +41,16 @@ data class AssignmentLine(
     val doNotMove: Boolean,
 )
 
+/** Um hóspede da estadia, já em texto; o documento é só o mascarado pelo servidor. */
+data class GuestLine(
+    val name: String,
+    val document: String?,
+    val primary: Boolean,
+) {
+    // Dado pessoal: nunca em log nem em `toString`.
+    override fun toString(): String = "GuestLine(primary=$primary)"
+}
+
 /** O detalhe da reserva, todo em texto pronto para a tela. */
 @Suppress("LongParameterList") // o detalhe é um quadro de campos da tela; cada um é um texto
 data class ReservationDetailView(
@@ -59,14 +69,23 @@ data class ReservationDetailView(
     val assignmentsError: ApiError?,
     val history: List<HistoryLine>,
     val historyError: ApiError?,
+    val stayGuests: List<GuestLine> = emptyList(),
+    val stayGuestsError: ApiError? = null,
 ) {
     // Titular, documento e alertas são dados pessoais: nunca em log nem em `toString`.
     override fun toString(): String =
         "ReservationDetailView(code=$code, status=$status, period=$period, roomType=$roomType, room=$room, " +
             "guests=$guests, plan=$plan, total=$total, assignments=${assignments.size}, " +
             "assignmentsError=${assignmentsError != null}, history=${history.size}, " +
-            "historyError=${historyError != null})"
+            "historyError=${historyError != null}, stayGuests=${stayGuests.size}, " +
+            "stayGuestsError=${stayGuestsError != null})"
 }
+
+/** O que uma carga completa entrega: a reserva crua (para as ações) e o detalhe em texto. */
+private class Loaded(
+    val reservation: ReservationDetailResponse,
+    val view: ReservationDetailView,
+)
 
 /** O que a montagem do detalhe lê de uma vez, antes do titular e do plano. */
 private class FirstReads(
@@ -99,12 +118,17 @@ class ReservationDetailState(
     var view by mutableStateOf<ReservationDetailView?>(null)
         private set
 
+    /** A última resposta de `reservation(id)` da aberta (nula fechado ou com outro id carregando); fora da [view]. */
+    var reservation by mutableStateOf<ReservationDetailResponse?>(null)
+        private set
+
     private var job: Job? = null
     private var generation = 0
 
     fun open(id: String) {
         openId = id
         view = null
+        reservation = null
         start(id)
     }
 
@@ -119,6 +143,7 @@ class ReservationDetailState(
         job = null
         openId = null
         view = null
+        reservation = null
         error = null
         loading = false
     }
@@ -133,7 +158,8 @@ class ReservationDetailState(
                 try {
                     val result = load(id)
                     if (mine == generation) {
-                        view = result.first ?: view
+                        view = result.first?.view ?: view
+                        reservation = result.first?.reservation ?: reservation
                         error = result.second
                     }
                 } finally {
@@ -142,7 +168,7 @@ class ReservationDetailState(
             }
     }
 
-    private suspend fun load(id: String): Pair<ReservationDetailView?, ApiError?> =
+    private suspend fun load(id: String): Pair<Loaded?, ApiError?> =
         coroutineScope {
             val first =
                 try {
@@ -156,12 +182,26 @@ class ReservationDetailState(
             try {
                 val holder = async { holderOf(first.reservation.holderGuestId.toString()) }
                 val plan = async { planName(first.reservation) }
-                assemble(first, holder.await(), plan.await()) to null
+                val stay = async { stayGuestLines(first.reservation) }
+                Loaded(first.reservation, assemble(first, holder.await(), plan.await(), stay.await())) to null
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
                 currentCoroutineContext().ensureActive()
                 null to apiErrorOf(e)
+            }
+        }
+
+    /** Os hóspedes da estadia, na ordem do servidor; outro erro da API falha só a seção. */
+    private suspend fun stayGuestLines(detail: ReservationDetailResponse): Result<List<GuestLine>> =
+        attempt {
+            coroutineScope {
+                detail.reservation.guests
+                    .map { guest -> guest to async { holderOf(guest.guestId.toString()) } }
+                    .map { (guest, summary) ->
+                        val holder = summary.await()
+                        GuestLine(holder?.name ?: UNKNOWN, holder?.document, guest.primary)
+                    }
             }
         }
 
@@ -202,6 +242,7 @@ class ReservationDetailState(
         first: FirstReads,
         holder: HolderSummary?,
         plan: String,
+        stay: Result<List<GuestLine>>,
     ): ReservationDetailView {
         val detail = first.reservation
         val reservation = detail.reservation
@@ -226,6 +267,8 @@ class ReservationDetailState(
             assignmentsError = first.assignments.exceptionOrNull()?.let(::apiErrorOf),
             history = historyLines(reservation.createdAt, first.history.getOrDefault(emptyList()), first.zone),
             historyError = first.history.exceptionOrNull()?.let(::apiErrorOf),
+            stayGuests = stay.getOrDefault(emptyList()),
+            stayGuestsError = stay.exceptionOrNull()?.let(::apiErrorOf),
         )
     }
 }

@@ -176,6 +176,14 @@ private fun DetailBody(
         Field("Plano", view.plan)
         Field("Total", view.total)
         view.alerts.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (view.stayGuests.isNotEmpty() || view.stayGuestsError != null) {
+            Section("Hóspedes da estadia", view.stayGuestsError, onRetry) {
+                view.stayGuests.forEach {
+                    val primary = if (it.primary) " (principal)" else ""
+                    Text(listOfNotNull(it.name, it.document).joinToString(" · ") + primary)
+                }
+            }
+        }
         Section("Alocações", view.assignmentsError, onRetry) {
             view.assignments.forEach {
                 val moved = if (it.doNotMove) " · Não mover" else ""
