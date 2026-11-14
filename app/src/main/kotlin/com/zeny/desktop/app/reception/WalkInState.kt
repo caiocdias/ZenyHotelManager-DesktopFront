@@ -83,6 +83,9 @@ private const val UNCONFIRMED_TEXT =
     "Não foi possível confirmar o walk-in. Conclua de novo sem mudar nada; " +
         "se fechar, confira em Hospedados antes de refazer."
 
+private const val SERVER_UNCONFIRMED_TEXT =
+    "O servidor não confirmou o walk-in. Feche e confira em Hospedados antes de refazer."
+
 /**
  * Estado do walk-in: a estadia, a cotação, a escolha da oferta, da UH e do hóspede principal, e a conclusão.
  *
@@ -113,6 +116,7 @@ class WalkInState(
             ownScope,
             canSearch = "guests.profiles.read" in permissions,
             canCreate = "guests.profiles.manage" in permissions,
+            isLocked = { locked },
         ) { choose(it) }
 
     var primary by mutableStateOf<GuestPick?>(null)
@@ -321,7 +325,9 @@ class WalkInState(
     private fun fail(failure: ApiError) {
         if (resultUnknown(failure)) {
             unconfirmed = true
-            error = UNCONFIRMED_TEXT
+            // O servidor guarda o 5xx sob a chave e o repete: refazer não adianta; 502/504 de proxy não são guardados.
+            val stored = failure is ApiError.Problem && failure.status >= SERVER_ERROR
+            error = if (stored) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
             return
         }
         unconfirmed = false

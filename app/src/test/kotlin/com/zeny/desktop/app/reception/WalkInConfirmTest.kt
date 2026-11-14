@@ -40,6 +40,9 @@ private const val UNCONFIRMED_TEXT =
     "Não foi possível confirmar o walk-in. Conclua de novo sem mudar nada; " +
         "se fechar, confira em Hospedados antes de refazer."
 
+private const val SERVER_UNCONFIRMED_TEXT =
+    "O servidor não confirmou o walk-in. Feche e confira em Hospedados antes de refazer."
+
 private val wcGuest = GuestPick(wcGuestUuid.toString(), HolderSummary("Ana Teste", "CPF ***.***.***-01"))
 private val wcOtherGuest = GuestPick("70000000-0000-0000-0000-000000000002", HolderSummary("Bia Teste", null))
 
@@ -717,7 +720,8 @@ class WalkInConfirmTest {
                 confirmNow(state)
 
                 assertTrue(state.unconfirmed, label)
-                assertEquals(UNCONFIRMED_TEXT, state.error, label)
+                val expected = if (outcome is ApiError.Problem) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
+                assertEquals(expected, state.error, label)
                 assertNull(state.done, label)
                 state.picker.pick(wcOtherGuest)
                 state.segment = "EVENT"

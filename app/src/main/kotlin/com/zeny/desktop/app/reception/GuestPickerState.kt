@@ -61,6 +61,7 @@ class GuestPickerState(
     scope: CoroutineScope,
     val canSearch: Boolean,
     val canCreate: Boolean,
+    private val isLocked: () -> Boolean = { false },
     private val onPicked: (GuestPick) -> Unit,
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
@@ -96,7 +97,7 @@ class GuestPickerState(
     private var closed = false
 
     fun searchByName() {
-        if (!canSearch || closed) return
+        if (!canSearch || blocked()) return
         val name = query.trim()
         if (name.length < MIN_NAME_LETTERS) {
             fail(SHORT_NAME)
@@ -106,7 +107,7 @@ class GuestPickerState(
     }
 
     fun searchByDocument() {
-        if (!canSearch || closed) return
+        if (!canSearch || blocked()) return
         val number = documentNumber.trim()
         val country = issuingCountry.trim().uppercase().takeIf { it.isNotEmpty() }
         val type = documentType
@@ -120,7 +121,7 @@ class GuestPickerState(
     fun pick(pick: GuestPick) = onPicked(pick)
 
     fun create() {
-        if (!canCreate || creating || closed) return
+        if (!canCreate || creating || blocked()) return
         creating = true
         createError = null
         form.clearServerErrors()
@@ -138,6 +139,8 @@ class GuestPickerState(
             }
         }
     }
+
+    private fun blocked() = closed || isLocked()
 
     fun close() {
         closed = true

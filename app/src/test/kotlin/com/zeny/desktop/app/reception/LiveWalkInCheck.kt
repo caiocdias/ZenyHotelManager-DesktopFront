@@ -210,6 +210,7 @@ class LiveWalkInCheck {
                         .map { it.room }
                         .filter { it.isNotBlank() && it != "—" && it != "-" }
                         .toSet()
+                assertTrue(assigned.isNotEmpty(), "nenhuma chegada com UH alocada: a verificação ficaria vazia")
                 val state = newWalkIn(screen, source)
                 try {
                     runOnUiThread { state.start() }
