@@ -1,15 +1,25 @@
 package com.zeny.desktop.app.session
 
+import com.zeny.desktop.app.reception.HolderSummary
+import com.zeny.desktop.app.reception.ReceptionSource
+import com.zeny.desktop.app.reception.toHolderSummary
 import com.zeny.desktop.app.rooms.RoomsSource
 import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
+import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
+import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.realtime.RealtimeStatus
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.model.ReservationDetailResponse
+import com.zeny.desktop.sdk.model.ReservationHistoryResponse
+import com.zeny.desktop.sdk.model.ReservationListItemResponse
+import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
@@ -47,6 +57,9 @@ interface ServerConnection : AutoCloseable {
 
     /** As leituras e o stream do mapa de UHs; `null` quando a conexão não os oferece. */
     fun roomsSource(): RoomsSource? = null
+
+    /** As leituras da recepção do dia; `null` quando a conexão não as oferece. */
+    fun receptionSource(): ReceptionSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -99,6 +112,38 @@ class CoreConnection(
 
     /** O mapa sobre `core.rooms` e `core.realtime`. */
     override fun roomsSource(): RoomsSource = rooms
+
+    private val reception =
+        object : ReceptionSource {
+            override suspend fun permissions(): Set<String> = core.account.me().permissions
+
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun dayPage(
+                list: DayList,
+                date: BusinessDate,
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.reservations.dayPage(list, date, cursor, limit)
+
+            override suspend fun reservation(id: String): ReservationDetailResponse = core.reservations.reservation(id)
+
+            override suspend fun history(id: String): List<ReservationHistoryResponse> = core.reservations.history(id)
+
+            override suspend fun roomAssignments(id: String): List<RoomAssignmentResponse> =
+                core.reservations.roomAssignments(id)
+
+            override suspend fun holder(guestId: String): HolderSummary = core.guests.guest(guestId).toHolderSummary()
+
+            override suspend fun ratePlanName(id: String): String = core.rates.ratePlan(id).name
+
+            override suspend fun roomTypes(): List<RoomTypeResponse> = core.rooms.roomTypes()
+
+            override fun events(topics: Set<String>): Flow<RealtimeEvent> = core.realtime.subscribe(topics)
+        }
+
+    /** A recepção do dia sobre `core.reservations`, `core.guests`, `core.rates` e `core.realtime`. */
+    override fun receptionSource(): ReceptionSource = reception
 
     override fun close() = core.close()
 }
