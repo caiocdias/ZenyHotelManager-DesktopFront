@@ -22,6 +22,8 @@ import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignRequest
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
+import com.zeny.desktop.sdk.model.WalkInRequest
+import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import kotlin.uuid.Uuid
@@ -44,6 +46,22 @@ data class CheckInInput(
     val guestCount: Int?,
     val roomId: String?,
     val earlyCheckInFee: Money?,
+)
+
+/**
+ * O corpo do walk-in; `roomTypeId` e `guestCount` nulos não vão. `segment` é o texto do enum do contrato; um valor
+ * desconhecido lança `IllegalArgumentException` antes da rede.
+ */
+data class WalkInInput(
+    val departure: BusinessDate,
+    val adults: Int,
+    val childAges: List<Int>,
+    val ratePlanId: String,
+    val roomTypeId: String?,
+    val roomId: String,
+    val segment: String,
+    val guests: List<CheckInGuest>,
+    val guestCount: Int?,
 )
 
 /**
@@ -178,6 +196,23 @@ class ReservationsFacade internal constructor(
     }
 
     /**
+     * O walk-in: reserva, aloca a UH e faz o check-in numa transação. Mesma regra do `checkIn` para `intent` e token
+     * (D2). O servidor responde `201`, que é sucesso.
+     */
+    fun walkIn(
+        input: WalkInInput,
+        intent: Intent,
+    ): ApprovableAction<WalkInResponse> {
+        val request = walkInRequestOf(input)
+        val call: suspend (CallOptions) -> HttpResponseTyped<WalkInResponse> = {
+            frontdesk.createWalkIn(it.requireIdempotencyKey(), request, it.headers)
+        }
+        return ApprovableAction { token ->
+            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
+        }
+    }
+
+    /**
      * A cotação da estadia no canal `DIRECT`, a resposta como veio (ofertas na ordem do servidor, vazia não é erro).
      * Sem crianças, `childAges` não vai; sem filtro de tipo, de tarifa nem de indisponíveis.
      */
@@ -233,6 +268,33 @@ class ReservationsFacade internal constructor(
         }
         return rooms
     }
+
+    private fun walkInRequestOf(input: WalkInInput): WalkInRequest {
+        val segment =
+            WalkInRequest.Segment.fromSerialOrNull(input.segment) ?: throw IllegalArgumentException("segmento inválido")
+        return WalkInRequest(
+            adults = input.adults,
+            childAges = input.childAges,
+            departure = input.departure.toApi(),
+            guestCount = input.guestCount?.let { Option.Some(it) } ?: Option.Undefined,
+            guests =
+                input.guests.map {
+                    CheckInGuestRequest(
+                        guestId = idOf(it.guestId, "hóspede"),
+                        primary = it.primary,
+                    )
+                },
+            ratePlanId = idOf(input.ratePlanId, "tarifa"),
+            roomId = idOf(input.roomId, "UH"),
+            roomTypeId = input.roomTypeId?.let { Option.Some(idOf(it, "tipo")) } ?: Option.Undefined,
+            segment = segment,
+        )
+    }
+
+    private fun idOf(
+        id: String,
+        what: String,
+    ): Uuid = Uuid.parseOrNull(id) ?: throw IllegalArgumentException("id de $what inválido")
 
     private fun uuidOf(id: String): Uuid =
         Uuid.parseOrNull(id) ?: throw IllegalArgumentException("id de reserva inválido")
