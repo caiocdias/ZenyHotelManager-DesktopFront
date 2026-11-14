@@ -185,7 +185,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
-| E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
+| E03 | Walk-in | #em-andamento | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
@@ -360,7 +360,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Walk-in — #pendente
+## E03 — Walk-in — #em-andamento
 
 **Objetivo:** um hóspede sem reserva chega ao balcão. O recepcionista informa as datas e o tipo de UH, vê o preço, escolhe a UH, informa ou cria o hóspede e conclui. A reserva nasce já hospedada.
 
