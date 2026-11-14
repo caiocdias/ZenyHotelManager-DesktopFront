@@ -14,6 +14,8 @@ import com.zeny.desktop.sdk.model.CheckInRequest
 import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.DoNotMoveRequest
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.QuoteResponse
+import com.zeny.desktop.sdk.model.QuoteStayParamChannel
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -173,6 +175,63 @@ class ReservationsFacade internal constructor(
         return ApprovableAction { token ->
             if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
         }
+    }
+
+    /**
+     * A cotação da estadia no canal `DIRECT`, a resposta como veio (ofertas na ordem do servidor, vazia não é erro).
+     * Sem crianças, `childAges` não vai; sem filtro de tipo, de tarifa nem de indisponíveis.
+     */
+    suspend fun quoteStay(
+        arrival: BusinessDate,
+        departure: BusinessDate,
+        adults: Int,
+        childAges: List<Int>,
+    ): QuoteResponse =
+        executor
+            .execute { call ->
+                reservations.quoteStay(
+                    arrival = arrival.toApi(),
+                    departure = departure.toApi(),
+                    adults = adults,
+                    childAges = childAges.takeIf { it.isNotEmpty() }?.joinToString(","),
+                    channel = QuoteStayParamChannel.DIRECT,
+                    block = call.headers,
+                )
+            }.value
+
+    /**
+     * Os ids das UHs com alocação em reservas `PROVISIONAL` ou `CONFIRMED` que tocam de `from` a `to` (inclusive),
+     * todas as páginas. Reserva sem alocação não conta. `to` antes de `from` lança `IllegalArgumentException`.
+     */
+    suspend fun assignedRoomIds(
+        from: BusinessDate,
+        to: BusinessDate,
+    ): Set<String> {
+        require(!to.value.isBefore(from.value)) { "período inválido" }
+        val pager =
+            CursorPager(HISTORY_PAGE_SIZE) { cursor, limit ->
+                val page =
+                    executor
+                        .execute {
+                            reservations.searchReservations(
+                                from = from.toApi(),
+                                to = to.toApi(),
+                                status = "PROVISIONAL,CONFIRMED",
+                                cursor = cursor,
+                                limit = limit,
+                                block = it.headers,
+                            )
+                        }.value
+                Page(page.items, page.nextCursor.valueOrNull())
+            }
+        val rooms = linkedSetOf<String>()
+        while (pager.hasMore) {
+            for (item in pager.next()) {
+                val assignment = (item.roomAssignment as? Option.Some)?.value ?: continue
+                rooms += assignment.roomId.toString()
+            }
+        }
+        return rooms
     }
 
     private fun uuidOf(id: String): Uuid =
