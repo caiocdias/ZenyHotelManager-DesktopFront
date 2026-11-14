@@ -4,11 +4,16 @@ import com.zeny.desktop.core.http.ApiExecutor
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.client.FrontdeskApi
 import com.zeny.desktop.sdk.client.ReservationsApi
+import com.zeny.desktop.sdk.model.DoNotMoveRequest
+import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
+import com.zeny.desktop.sdk.model.RoomAssignRequest
 import com.zeny.desktop.sdk.model.RoomAssignmentResponse
+import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import de.quati.kotlin.util.Option
 import kotlin.uuid.Uuid
 
@@ -24,6 +29,7 @@ enum class DayList { ARRIVALS, DEPARTURES, IN_HOUSE }
  */
 class ReservationsFacade internal constructor(
     private val reservations: ReservationsApi,
+    private val frontdesk: FrontdeskApi,
     private val executor: ApiExecutor,
 ) {
     /** Uma página da lista do dia; a data de negócio vai sempre, sem conversão de fuso. */
@@ -71,6 +77,49 @@ class ReservationsFacade internal constructor(
     suspend fun roomAssignments(id: String): List<RoomAssignmentResponse> {
         val reservationId = uuidOf(id)
         return executor.execute { reservations.listReservationRoomAssignments(reservationId, it.headers) }.value.items
+    }
+
+    /** As UHs sugeridas, na ordem do servidor (as fora de serviço por último), sem filtro de características. */
+    suspend fun roomSuggestions(id: String): List<RoomSuggestionResponse> {
+        val reservationId = uuidOf(id)
+        return executor
+            .execute { reservations.listReservationRoomSuggestions(reservationId, null, it.headers) }
+            .value.items
+    }
+
+    /** Aloca a UH; o motivo não vai (o servidor decide entre `INITIAL` e `OPERATIONAL`). */
+    suspend fun assignRoom(
+        id: String,
+        roomId: String,
+        doNotMove: Boolean?,
+    ): ReservationDetailResponse {
+        val reservationId = uuidOf(id)
+        val room = Uuid.parseOrNull(roomId) ?: throw IllegalArgumentException("id de UH inválido")
+        val request =
+            RoomAssignRequest(
+                doNotMove = doNotMove?.let { Option.Some(it) } ?: Option.Undefined,
+                roomId = room,
+            )
+        return executor.execute { reservations.assignReservationRoom(reservationId, request, it.headers) }.value
+    }
+
+    suspend fun unassignRoom(id: String): ReservationDetailResponse {
+        val reservationId = uuidOf(id)
+        return executor.execute { reservations.unassignReservationRoom(reservationId, it.headers) }.value
+    }
+
+    suspend fun setDoNotMove(
+        id: String,
+        doNotMove: Boolean,
+    ): ReservationDetailResponse {
+        val reservationId = uuidOf(id)
+        val request = DoNotMoveRequest(doNotMove)
+        return executor.execute { reservations.setReservationRoomDoNotMove(reservationId, request, it.headers) }.value
+    }
+
+    suspend fun earlyLateQuote(id: String): EarlyLateQuoteResponse {
+        val reservationId = uuidOf(id)
+        return executor.execute { frontdesk.getEarlyLateQuote(reservationId, it.headers) }.value
     }
 
     private fun uuidOf(id: String): Uuid =
