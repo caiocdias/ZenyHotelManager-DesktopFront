@@ -699,4 +699,90 @@ class WalkInConfirmTest {
             assertEquals("", state.picker.documentNumber)
             assertTrue(source.searchCalls.isEmpty())
         }
+
+    @Test
+    fun serverErrorLocksAndKeepsKey() =
+        runTest {
+            val outcomes: List<ApiError> =
+                listOf(
+                    wcProblem(500, "INTERNAL_ERROR"),
+                    ApiError.Unexpected(502),
+                    ApiError.Unexpected(504),
+                )
+            for (outcome in outcomes) {
+                val label = outcome::class.simpleName + (outcome as? ApiError.Problem)?.status
+                val source = source().apply { walkInOutcomes += outcome }
+                val state = ready(source)
+
+                confirmNow(state)
+
+                assertTrue(state.unconfirmed, label)
+                assertEquals(UNCONFIRMED_TEXT, state.error, label)
+                assertNull(state.done, label)
+                state.picker.pick(wcOtherGuest)
+                state.segment = "EVENT"
+                assertEquals(wcGuest, state.primary, label)
+                assertEquals("LEISURE", state.segment, label)
+                assertEquals(1, source.roomStatusesCalls, label)
+                assertEquals(1, source.quoteStayCalls.size, label)
+
+                confirmNow(state)
+
+                val keys = tokenlessKeys(source)
+                assertEquals(2, keys.size, label)
+                assertEquals(keys[0], keys[1], label)
+                assertSame(source.walkInCalls[0].intent, source.walkInCalls[1].intent, label)
+                assertNotNull(state.done, label)
+                assertFalse(state.unconfirmed, label)
+            }
+        }
+
+    @Test
+    fun inputsIgnoredAfterDone() =
+        runTest {
+            val source = source()
+            val state = ready(source)
+            val other = state.rooms.first { it.number == "103" }
+            confirmNow(state)
+            assertNotNull(state.done)
+
+            state.chooseRoom(other)
+            state.picker.pick(wcOtherGuest)
+            state.chooseOffer(luxury)
+            state.departureText = "16/11/2026"
+            state.adults = 3
+            state.childAges = listOf(1)
+            state.segment = "EVENT"
+            state.quote()
+            state.picker.pick(wcOtherGuest)
+            runCurrent()
+
+            assertEquals("15/11/2026", state.departureText)
+            assertEquals(1, state.adults)
+            assertEquals(emptyList(), state.childAges)
+            assertEquals("LEISURE", state.segment)
+            assertEquals(standard, state.offer)
+            assertEquals("101", state.room?.number)
+            assertEquals(wcGuest, state.primary)
+            assertEquals(1, source.quoteStayCalls.size)
+            assertEquals(1, source.roomStatusesCalls)
+        }
+
+    @Test
+    fun roomRereadFailureKeepsRefusalText() =
+        runTest {
+            val refusal = wcProblem(409, "ROOM_ALREADY_ASSIGNED")
+            val readFailure = ApiError.Network(IOException("offline"))
+            val source = source().apply { walkInOutcomes += refusal }
+            val state = ready(source)
+            source.assignedRoomsError = readFailure
+
+            confirmNow(state)
+
+            val text = assertNotNull(state.error)
+            assertTrue(text.startsWith(ActionText.walkInError(refusal)), text)
+            assertTrue(ActionText.error(readFailure) in text, text)
+            assertNull(state.room)
+            assertFalse(state.loadingRooms)
+        }
 }

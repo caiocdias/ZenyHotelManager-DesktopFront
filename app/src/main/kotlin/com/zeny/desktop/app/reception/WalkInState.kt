@@ -65,6 +65,7 @@ private const val MIN_GUESTS = 1
 private const val MAX_GUESTS = 40
 private const val FORBIDDEN = 403
 private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
+private const val SERVER_ERROR = 500
 private val SEGMENTS = setOf("LEISURE", "BUSINESS", "EVENT", "OTHER")
 
 // A UH escolhida não serve mais: a lista é relida. A oferta não existe mais: a cotação é refeita.
@@ -90,9 +91,10 @@ private const val UNCONFIRMED_TEXT =
  * o que dela depende; o segmento não entra na cotação e não descarta nada.
  *
  * A conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
- * (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`) ou a aprovação foi cancelada; qualquer
- * resposta definitiva, ou a troca de estadia, segmento, oferta, UH ou hóspede, gera outra. O walk-in cria a reserva:
- * depois de um resultado desconhecido o estado fica [unconfirmed] e, como com [busy], as entradas viram no-op.
+ * (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`, erro 5xx do servidor ou do proxy) ou a
+ * aprovação foi cancelada; qualquer resposta definitiva, ou a troca de estadia, segmento, oferta, UH ou hóspede, gera
+ * outra. O walk-in cria a reserva: depois de um resultado desconhecido o estado fica [unconfirmed] e, como com [busy]
+ * ou depois de [done], as entradas viram no-op.
  */
 @Suppress("TooManyFunctions") // etapas do fluxo: estadia, oferta, UH, hóspede, conclusão e a chave
 class WalkInState(
@@ -211,8 +213,8 @@ class WalkInState(
     private var intent: Intent? = null
     private var intentInputs: WalkInIntentInputs? = null
 
-    /** Com o estado ocupado ou não confirmado, as entradas viram no-op. */
-    private val locked: Boolean get() = closed || busy || unconfirmed
+    /** Com o estado ocupado, não confirmado ou concluído, as entradas viram no-op. */
+    private val locked: Boolean get() = closed || busy || unconfirmed || done != null
 
     fun start() {
         if (closed) return
@@ -324,10 +326,11 @@ class WalkInState(
         }
         unconfirmed = false
         dropIntent()
+        val text = ActionText.walkInError(failure)
         val code = (failure as? ApiError.Problem)?.code
         when (code) {
             in ROOM_REFUSALS -> {
-                rereadRooms()
+                rereadRooms(text)
             }
 
             in OFFER_REFUSALS -> {
@@ -336,15 +339,15 @@ class WalkInState(
             }
         }
         // Por último: a nova cotação limpa o erro.
-        error = ActionText.walkInError(failure)
+        error = text
     }
 
-    /** A UH escolhida não serve mais: ela sai e a lista da oferta é relida. */
-    private fun rereadRooms() {
+    /** A UH escolhida não serve mais: ela sai e a lista é relida; a falha da releitura não apaga [refusal]. */
+    private fun rereadRooms(refusal: String) {
         val chosen = offer
         val from = arrival
         val until = quotedDeparture
-        if (chosen != null && from != null && until != null) loadRooms(chosen, from, until)
+        if (chosen != null && from != null && until != null) loadRooms(chosen, from, until, refusal)
     }
 
     /** O servidor pode ter criado o walk-in sem a resposta chegar: a repetição leva a mesma chave. */
@@ -352,7 +355,8 @@ class WalkInState(
         failure is ApiError.Network ||
             failure is ApiError.IncompatibleResponse ||
             failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && failure.code == KEY_IN_USE)
+            (failure is ApiError.Problem && (failure.code == KEY_IN_USE || failure.status >= SERVER_ERROR)) ||
+            (failure is ApiError.Unexpected && failure.status >= SERVER_ERROR)
 
     private fun currentInputs() =
         WalkInIntentInputs(
@@ -419,6 +423,7 @@ class WalkInState(
         offer: QuoteOfferResponse,
         from: BusinessDate,
         until: BusinessDate,
+        refusal: String? = null,
     ) {
         val mine = ++offerGeneration
         room = null
@@ -431,7 +436,7 @@ class WalkInState(
             ownScope.launch {
                 try {
                     val outcome = readRooms(offer, from, BusinessDate(until.value.minusDays(1)))
-                    if (mine == offerGeneration) applyRooms(outcome)
+                    if (mine == offerGeneration) applyRooms(outcome, refusal)
                 } finally {
                     if (mine == offerGeneration) loadingRooms = false
                 }
@@ -514,7 +519,11 @@ class WalkInState(
             }
         }
 
-    private fun applyRooms(outcome: RoomsOutcome) {
+    /** Uma falha da leitura vem depois de [refusal], o texto da recusa que mandou reler, quando houver. */
+    private fun applyRooms(
+        outcome: RoomsOutcome,
+        refusal: String?,
+    ) {
         when (outcome) {
             is RoomsOutcome.Listed -> {
                 rooms = outcome.rooms
@@ -523,12 +532,13 @@ class WalkInState(
 
             is RoomsOutcome.Failed -> {
                 val problem = outcome.cause as? ApiError.Problem
-                error =
+                val readError =
                     if (outcome.statuses && problem?.status == FORBIDDEN) {
                         NO_STATUS_TEXT
                     } else {
                         ActionText.error(apiErrorOf(outcome.cause))
                     }
+                error = listOfNotNull(refusal, readError).joinToString(" ")
             }
         }
     }
