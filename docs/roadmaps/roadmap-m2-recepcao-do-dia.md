@@ -183,7 +183,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Painel do dia e detalhe da reserva | #pendente | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
+| E01 | Painel do dia e detalhe da reserva | #em-andamento | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
 | E02 | Alocação de UH e check-in | #pendente | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
@@ -193,7 +193,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Painel do dia e detalhe da reserva — #pendente
+## E01 — Painel do dia e detalhe da reserva — #em-andamento
 
 **Objetivo:** a área Recepção abre num painel com três abas: chegadas, saídas e hospedados da data operacional. Cada aba mostra contagem, busca local e status. Clicar numa reserva abre o detalhe: hóspede titular (documento mascarado), período, tipo e UH alocada, plano, situação, alocações e histórico.
 
@@ -237,12 +237,40 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-13):** `#em-andamento`. O usuário mandou parar o lote no meio da etapa. Das 10 tarefas, as Tasks 1 a 4 estão concluídas, revisadas e integradas; as Tasks 5 a 10 faltam. A área Recepção ainda **não** está ligada na casca (`IMPLEMENTED_AREAS` sem mudança), então a `main` segue com o comportamento do M1. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-13-m2-recepcao-do-dia-e01.md`](../superpowers/plans/2026-11-13-m2-recepcao-do-dia-e01.md), com 10 tarefas, todas de risco alto. A revisão de arquitetura bloqueou na rodada 0 (8 Importantes) e na rodada 1 (1 Importante) e aprovou com notas na rodada 2.
+- **Commits:** `030788b..4c973c3` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. As tarefas rodaram em série na branch da etapa. As ondas paralelas não funcionam nesta configuração: a sessão isolada no worktree da etapa não deixa os subagentes escreverem nos worktrees de tarefa.
+  - **Task 1**, fachada das reservas e `HotelFacade.businessDay()` (fuso de `getBusinessDate`): `030788b..75ad47f`. O testador achou o cursor em branco; corrigido. Revisão: aprovada.
+  - **Task 3**, `ReceptionText`: `75ad47f..2e63179`. O testador achou noites negativas; corrigido. Revisão: aprovada.
+  - **Task 2**, `GuestsFacade` e `RatesFacade`: `2e63179..488955f`. Revisão: aprovada.
+  - **Task 4**, `TableState.refresh()` com atualização pendente: `488955f..4c973c3`. Revisão: aprovada.
+  - Verificação mecânica `check_test_integrity.py`: "OK: nenhum apontamento" nas quatro tarefas.
+- **Revisão final:** — (a etapa não terminou).
+- **Critérios verificados:** nenhum ainda. Os critérios dependem das Tasks 6 a 10.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Área Recepção:** continua aparecendo por `frontdesk.stays.checkin`/`checkout`, como na M1 E04, e não por `reservations.reservations.read`, como diz a etapa. A leitura de reservas também está com Comercial/Eventos e Financeiro, que veriam uma Recepção sem nenhuma ação. As listas exigem `reservations.reservations.read`, com `403` tratado.
+  - **H3:** o servidor fixado não tem tópico de reservas (só `rooms`, `notifications` e `end-of-day`). O painel vai se atualizar por:
+    - `rooms`, agrupado em janelas de 2 s;
+    - `end-of-day`;
+    - foco da janela;
+    - "Atualizar";
+    - `refresh()`.
+
+    Sem `PF-NN` por ora. Se a demo mostrar listas defasadas, avaliar pedir um tópico `reservations`.
+  - **Titular:** lido por `GET /api/v1/guests/{id}` (a lista só traz o id; não há leitura em lote). Fica em memória só o nome e o primeiro documento mascarado.
+  - **Fuso:** o fuso do hotel vem de `getBusinessDate`, que não exige permissão. `timezone` ausente no corpo vira resposta incompatível, porque o campo é obrigatório no contrato.
+  - **`detail` do servidor:** um `code` fora do catálogo mostra o `detail` do servidor (design §6.2), e o `ApiError.Problem` leva esse texto como mensagem. Se um `detail` vier com dado pessoal, ele vai para a tela e para o `toString`. Recomendado: manter a spec. Alternativa: mostrar o `detail` só na tela.
+- **Notas para a próxima execução (retomar esta etapa):**
+  - **Retomada:**
+    - Worktree: `.claude/worktrees/roadmap-m2-recepcao-do-dia` (fica no disco).
+    - Ledger do SDD: `.superpowers/sdd/2026-11-13-m2-recepcao-do-dia-e01/progress.md` dentro desse worktree. É ignorado pelo Git; traz os rulings, os minors adiados e a varredura de conflitos.
+    - Seguir pelo ledger e pelo `git log`, sem refazer as Tasks 1 a 4.
+  - **Próximo passo:** a Task 5 (porta da recepção e adaptador), do zero, com BASE no HEAD da branch.
+    - Um rascunho interrompido, sem commit nem revisão, está em `task-5-rascunho-interrompido/` no workspace. É só referência.
+    - Depois vêm as Tasks 6 a 10, em série.
+    - Ao retomar, recrie o `global-constraints.md` do workspace a partir do plano, se o workspace tiver sido apagado.
+  - **Task 6:** `TableState.refresh()` propaga exceção que não é `ApiError`. O painel deve chamá-lo num escopo que não derrube a tela.
+  - **Ambiente:** `zeny-front` no ar em `57eb5fac5b8a`, com a demo da data 2026-11-13. A Task 10 precisa das credenciais de `.server/seed-secrets.env`.
 
 ---
 
@@ -571,3 +599,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`), contra a `main` do servidor em `57eb5fac5b8a`. O marco passa a exigir a M0 E02 concluída. O contexto foi corrigido: a FNRH já é enviada pelo servidor, de forma assíncrona e sem mudar o check-in, e sua fila vai para a M7 E10. Entra a E07 (ficha de registro e visualizador de PDF), por decisão do usuário em entrevista ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E06 passa a depender dela. Confirmação, extrato, impressão pela fila do servidor e fechamento do dia ficam fora de escopo, com destino. H4 e H5 novas. Nenhuma tag mudou.
+- 2026-11-13 — E01 iniciada (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). O plano foi aprovado com notas na rodada 2 da revisão de arquitetura. As Tasks 1 a 4 (fachadas do `core`, textos da recepção e `TableState.refresh()`) foram concluídas e revisadas. O lote parou a pedido do usuário, com a E01 `#em-andamento` e a retomada pelo ledger da etapa. H3: não há tópico de reservas no servidor fixado.
