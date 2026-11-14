@@ -476,7 +476,7 @@ class WalkInStateAttackTest {
         }
 
     @Test
-    fun roomsAreSortedAsTextSoTenTenComesBeforeOneOhTwo() =
+    fun roomsAreSortedInNaturalOrderLikeTheMap() =
         runTest {
             val source =
                 source().apply {
@@ -493,8 +493,8 @@ class WalkInStateAttackTest {
             state.chooseOffer(standard)
             runCurrent()
 
-            // Comportamento atual: ordem por texto. "1010" aparece entre "101" e "102" e "99" por último.
-            assertEquals(listOf("101", "1010", "102", "99"), state.rooms.map { it.number })
+            // Mesma ordem natural do mapa de UHs: trechos numéricos comparam pelo valor.
+            assertEquals(listOf("99", "101", "102", "1010"), state.rooms.map { it.number })
         }
 
     @Test
@@ -695,5 +695,73 @@ class WalkInStateAttackTest {
             state.quote()
             runCurrent()
             assertEquals(2, source.quoteStayCalls.size)
+        }
+
+    @Test
+    fun segmentIgnoresValuesOutsideTheFourOptions() =
+        runTest {
+            val state = started(source())
+            for (valid in listOf("BUSINESS", "EVENT", "OTHER", "LEISURE")) {
+                state.segment = valid
+                assertEquals(valid, state.segment)
+            }
+            state.segment = "BUSINESS"
+            state.segment = "XYZ"
+            state.segment = ""
+            state.segment = "business"
+            assertEquals("BUSINESS", state.segment)
+        }
+
+    @Test
+    fun segmentIsNoOpAfterClose() =
+        runTest {
+            val state = started(source())
+            state.close()
+            state.segment = "BUSINESS"
+
+            assertEquals("LEISURE", state.segment)
+        }
+
+    @Test
+    fun chooseOfferWithOfferNotInOffersDoesNothing() =
+        runTest {
+            val source = source()
+            val state = quoted(source)
+            state.chooseOffer(atkOffer(atkStd, "Fora da cotação"))
+            runCurrent()
+
+            assertNull(state.offer)
+            assertEquals(0, source.roomStatusesCalls)
+            assertTrue(source.assignedRoomsCalls.isEmpty())
+        }
+
+    @Test
+    fun chooseOfferWhileQuoteInFlightDoesNothing() =
+        runTest {
+            val source = source().apply { holdQuoteStay = true }
+            val state = started(source)
+            state.departureText = "15/11/2026"
+            state.quote()
+            runCurrent()
+            state.chooseOffer(standard)
+            runCurrent()
+            source.heldQuoteStays.forEach { it.complete(Unit) }
+            runCurrent()
+
+            assertNull(state.offer)
+            assertEquals(0, source.roomStatusesCalls)
+            assertFalse(state.stepGuestEnabled)
+        }
+
+    @Test
+    fun chooseOfferAfterFailedQuoteDoesNothing() =
+        runTest {
+            val source = source().apply { stayQuoteError = atkProblem(500, null) }
+            val state = quoted(source)
+            state.chooseOffer(standard)
+            runCurrent()
+
+            assertNull(state.offer)
+            assertEquals(0, source.roomStatusesCalls)
         }
 }
