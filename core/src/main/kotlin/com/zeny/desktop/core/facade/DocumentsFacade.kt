@@ -53,6 +53,7 @@ class DocumentsFacade internal constructor(
             }
         val typeOk =
             response.contentType
+                ?.takeIf(::wellFormedParameters)
                 ?.let { runCatching { ContentType.parse(it) }.getOrNull() }
                 ?.match(ContentType.Application.Pdf) == true
         val magicOk =
@@ -63,6 +64,10 @@ class DocumentsFacade internal constructor(
         return PdfDocument(response.bytes, fileNameOf(response.contentDisposition))
     }
 }
+
+/** Cada parâmetro depois do `;` precisa de nome e de `=`: o parser do Ktor deixa passar `; =`. */
+private fun wellFormedParameters(header: String): Boolean =
+    header.split(';').drop(1).all { it.isBlank() || it.substringBefore('=', "").isNotBlank() }
 
 /** O nome do `Content-Disposition` (`filename*` primeiro), saneado; `null` se ausente ou inválido. */
 private fun fileNameOf(header: String?): String? {
@@ -106,7 +111,9 @@ private fun percentDecode(
 /** Só o último segmento, sem `..` nem caractere de controle, terminando em `.pdf`. */
 private fun sanitize(raw: String): String? {
     val last = raw.substringAfterLast('/').substringAfterLast('\\').trim()
-    val invalid = last.isEmpty() || last.contains("..") || last.any { it.isISOControl() }
+    val invalid =
+        last.isEmpty() || last.contains("..") ||
+            last.any { it.isISOControl() || Character.getType(it) == Character.FORMAT.toInt() }
     return when {
         invalid -> null
         last.endsWith(PDF_EXTENSION, ignoreCase = true) -> last

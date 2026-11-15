@@ -8,6 +8,7 @@ import io.ktor.client.call.NoTransformationFoundException
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.HttpStatement
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.BadContentTypeFormatException
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.ContentConvertException
 import io.ktor.utils.io.readBuffer
@@ -79,6 +80,8 @@ class ApiExecutor {
             throw e
         } catch (e: ApiError) {
             throw e
+        } catch (e: BadContentTypeFormatException) {
+            throw incompatible(e)
         } catch (e: IOException) {
             throw ApiError.Network(e)
         } catch (e: UnresolvedAddressException) {
