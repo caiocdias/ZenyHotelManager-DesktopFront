@@ -42,6 +42,7 @@ A resposta do servidor é a captura de fechamento da etapa dele, que cita **"ate
 | PF-NN | título | estado | captura | etapa do front | commit de entrega |
 |---|---|---|---|---|---|
 | PF-01 | Setores dos recados legíveis com `frontdesk.traces.manage` | aberto | `ZenyHotelManager - pedido do front PF-01 Setores dos recados legíveis com frontdesk.traces.manage` (2026-11-15) | M2 E05 (não depende; tira a role extra do seed quando entregue) | — |
+| PF-02 | Histórico do desfazer check-in com a aprovação do superior | aberto | `ZenyHotelManager - pedido do front PF-02 Histórico do desfazer check-in com a aprovação do superior` (2026-11-15) | M2 E06 (não depende; o roteiro do M2 deixa de prometer "Com aprovação de superior" nessa linha do histórico até a entrega) | — |
 
 ## Rodadas de análise do M0
 
