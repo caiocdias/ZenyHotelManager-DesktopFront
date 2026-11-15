@@ -90,6 +90,9 @@ class FakeTracesSource : TracesSource {
     /** Quando não nulo, `reservationCode` espera por ele antes de responder. */
     var reservationCodeGate: CompletableDeferred<Unit>? = null
 
+    /** Quando não nulo, `resolve` espera por ele antes de agir. */
+    var resolveGate: CompletableDeferred<Unit>? = null
+
     private val inFlight = AtomicInteger(0)
     private val maxInFlight = AtomicInteger(0)
     val reservationCodeInFlight: Int get() = inFlight.get()
@@ -208,6 +211,7 @@ class FakeTracesSource : TracesSource {
 
     override suspend fun resolve(id: String): TraceResponse {
         calls += TraceCall.Resolve(id)
+        resolveGate?.await()
         fail(TraceOp.RESOLVE)
         val old = traces[id] ?: throw traceNotFound()
         if (old.status == "RESOLVED") throw alreadyResolved()
