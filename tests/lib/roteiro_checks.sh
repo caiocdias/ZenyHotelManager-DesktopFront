@@ -648,10 +648,15 @@ roteiro_check_no_secret_text() {
 }
 
 # roteiro_check_seed_secret_values ARQUIVO : nenhum valor de segredo do seed digitado numa linha (o PSReadLine do
-# 5.1 grava o histórico em texto puro). Vale para o roteiro e para o LEIA-ME.
+# 5.1 grava o histórico em texto puro). Vale para o roteiro e para o LEIA-ME. As asserções são só negativas:
+# sem o arquivo (caminho errado, vazio ou ""), elas passariam no vazio, então o arquivo tem de existir com texto.
 roteiro_check_seed_secret_values() {
   local f="$1" n
   n="${f#"$ROOT"/}"
+  if [[ ! -s "$f" ]]; then
+    _assert_fail "${n:-<vazio>}: arquivo existe e não está vazio (sem ele, as travas de segredo passariam no vazio)"
+    return
+  fi
   assert_eq "" "$(grep -nE 'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[A-Z_]*["'"'"']?[[:space:]]*=' "$f" 2>/dev/null)" \
     "$n: nenhuma atribuição a ZENY_SEED_*PASSWORD ou *_PIN"
   assert_eq "" "$(grep -nE 'SetEnvironmentVariable\([^,]*ZENY_SEED_[^,]*,[[:space:]]*["'"'"']' "$f" 2>/dev/null)" \
