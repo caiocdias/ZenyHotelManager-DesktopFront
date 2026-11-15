@@ -4,10 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -30,17 +33,23 @@ import kotlinx.coroutines.launch
 /** Quantas linhas antes do fim da lista já contam como "perto do fim". */
 private const val NEAR_END_ROWS = 5
 
+/** Largura reservada ao cabeçalho da coluna de ações da linha, quando há `rowActions`. */
+private val ACTIONS_WIDTH = 190.dp
+
 /**
  * Tabela de uma listagem por cursor: cabeçalho que ordena, filtro, linhas e carga da próxima página.
  * Sem filtro, a próxima página vem sozinha perto do fim da rolagem; com filtro, pelo botão "Carregar mais".
+ * `rowActions`, se dado, desenha uma coluna de ações (botões) no fim de cada linha, com o índice da linha visível.
  */
 @Composable
+@Suppress("LongParameterList") // `rowActions` é opcional e fica no fim, sem quebrar quem já chama
 fun <T> DataTable(
     state: TableState<T>,
     columns: List<Column<T>>,
     onRowClick: (T) -> Unit = {},
     modifier: Modifier = Modifier,
     emptyMessage: String = "Nenhum registro encontrado.",
+    rowActions: (@Composable (index: Int, row: T) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -78,10 +87,16 @@ fun <T> DataTable(
             label = { Text("Filtrar") },
             modifier = Modifier.fillMaxWidth().testTag("table-filter"),
         )
-        HeaderRow(state, columns)
+        HeaderRow(state, columns, rowActions != null)
         LazyColumn(Modifier.weight(1f).testTag("table-list"), listState) {
-            items(visibleRows, key = state.key) { row ->
-                DataRow(row, columns, onRowClick, Modifier.testTag("row-${state.key(row)}"))
+            itemsIndexed(visibleRows, key = { _, row -> state.key(row) }) { index, row ->
+                DataRow(
+                    row,
+                    columns,
+                    onRowClick,
+                    Modifier.testTag("row-${state.key(row)}"),
+                    rowActions?.let { actions -> { actions(index, row) } },
+                )
             }
             item {
                 Footer(
@@ -103,6 +118,7 @@ private suspend fun <T> loadOrRetry(state: TableState<T>) {
 private fun <T> HeaderRow(
     state: TableState<T>,
     columns: List<Column<T>>,
+    withActions: Boolean,
 ) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         columns.forEach { column ->
@@ -130,6 +146,7 @@ private fun <T> HeaderRow(
                         ),
             )
         }
+        if (withActions) Spacer(Modifier.width(ACTIONS_WIDTH))
     }
 }
 
@@ -139,13 +156,22 @@ private fun <T> DataRow(
     columns: List<Column<T>>,
     onRowClick: (T) -> Unit,
     modifier: Modifier,
+    actions: (@Composable () -> Unit)?,
 ) {
     Row(
         modifier.fillMaxWidth().clickable { onRowClick(row) }.padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         columns.forEach { column ->
             Text(column.cell(row), Modifier.weight(column.weight))
+        }
+        if (actions != null) {
+            Row(
+                Modifier.width(ACTIONS_WIDTH),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) { actions() }
         }
     }
 }

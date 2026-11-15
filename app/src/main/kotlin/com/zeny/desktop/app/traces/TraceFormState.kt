@@ -69,7 +69,7 @@ private data class LoadedTrace(
 class TraceFormState(
     private val source: TracesSource,
     scope: CoroutineScope,
-    private val target: TraceTarget,
+    val target: TraceTarget,
     private val departments: List<Department>,
     private val departmentsDenied: Boolean,
     private val onSaved: () -> Unit,
