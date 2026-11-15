@@ -43,7 +43,7 @@
 ## Review Focus
 
 1. **Seed rodado duas vezes** não duplica recados. Testes `secondRunCreatesNothing` (Task 2) e o seed rodado de novo contra o servidor real, antes e depois da demo (Task 6).
-2. **Setor, reserva ou UH ausente:** `SeedFailure` em pt-BR antes de qualquer criação. Testes `missingDepartmentFails` e `missingReservationFails` (Task 2).
+2. **Setor, reserva ou UH ausente:** `SeedFailure` em pt-BR antes de qualquer criação. Testes `missingDepartmentFails`, `missingReservationFails` e `missingRoomFails` (Task 2).
 3. **Roteiro divergente da build:** os "Resultado esperado" conferidos executando o roteiro do zero no Linux com o pacote real (Task 6); as linhas do seed e os rótulos conferidos por teste (Task 5).
 4. **Segredos no roteiro novo:** as mesmas travas do `roteiro-m1.md`, extraídas na Task 4 e aplicadas na Task 5.
 
@@ -93,7 +93,7 @@
 **Estimativa:** 35 min · **Depende de:** Task 2 · **Risco:** alto (o pacote é o que vai ao Windows)
 
 **Files:**
-- Modify: `tools/server-env/package.sh` (exige e copia `docs/demo/roteiro-m2.md`); nesta tarefa nasce um `docs/demo/roteiro-m2.md` provisório com só o título, que a Task 4 escreve
+- Modify: `tools/server-env/package.sh` (exige e copia `docs/demo/roteiro-m2.md`); nesta tarefa nasce um `docs/demo/roteiro-m2.md` provisório com só o título, que a Task 5 escreve
 - Modify (testes e fixtures, mudança mandada): `tests/lib/fixtures.sh` (`make_fake_jars` e os fronts falsos criam também o `roteiro-m2.md`); os casos de `test_package*.sh` e `test_gate_m1_ataque.sh` que montam o front falso; `tests/test_roteiro_m1_zero_ataque.sh` (a lista do pacote aceita o `roteiro-m2.md`)
 - Modify (docs): a lista do conteúdo do pacote nos passos 0 e 1 do `docs/demo/roteiro-m1.md`; `tools/server-env/LEIA-ME.md` (aponta o `roteiro-m2.md` como o roteiro do gate atual, e a asserção correspondente de `tests/test_docs.sh`); `README.md` (liga os dois roteiros)
 - Test: os casos novos nos testes do pacote (`roteiro-m2.md` presente e igual ao do repositório)
@@ -154,3 +154,12 @@
 3. "Nenhuma etapa depende de pedido ao servidor": conferir `docs/pedidos-servidor.md` (PF-01 aberto, nenhuma etapa dependente) e as dependências do roadmap.
 4. Pacote regenerado (`tools/server-env/package.sh`) com os JARs do HEAD, os dois roteiros e o `VERSAO.txt`; nenhum segredo no pacote.
 5. A etapa fica `#em-andamento` com "Aguardando o Windows" e entra na lista "Validações acumuladas no Windows" (regra 7), registrando que o `roteiro-m2.md` fecha também a M0 E02: a entrada 1 da lista em `docs/roadmaps/README.md` passa a pedir o `roteiro-m2.md`, e a ruling vai às "Decisões para o usuário" do handoff.
+
+---
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2 (rodada 0 bloqueada por 6 Importantes; rodada 1 bloqueada por 2 Importantes remanescentes; rodada 2 aprovada com notas).
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores** (incorporadas): a remissão da Task 3 ao roteiro passou para a Task 5; o `missingRoomFails` entrou na Review Focus 2. Não verificado pelo revisor (fica com as Tasks 4 e 6): a contagem de asserções na separação das travas; o seed rodado depois da demo; a edição concorrente com duas janelas.
