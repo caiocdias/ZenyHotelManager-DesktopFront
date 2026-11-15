@@ -131,7 +131,8 @@ Alternativas descartadas:
 **Interfaces:**
 - Consumes: Task 1.
 - Produces (pacote `com.zeny.desktop.app.traces`):
-  - `interface TracesSource` com `permissions(): Set<String>`, `businessDay(): BusinessDay`, `page(filter, cursor, limit)`, `trace(id)`, `create(input)`, `update(id, change, etag)`, `resolve(id)`, `departments()`, `reservationCode(id: String): String` (o `code` de `core.reservations.reservation(id)`) e `rooms(): List<WalkInRoom>` (reaproveita `com.zeny.desktop.app.reception.WalkInRoom(roomId, number)`; as UHs ativas de `core.rooms.statuses()`, em ordem de número);
+  - `interface TracesSource` com `permissions(): Set<String>`, `businessDay(): BusinessDay`, `page(filter, cursor, limit)`, `trace(id)`, `create(input)`, `update(id, change, etag)`, `resolve(id)`, `departments()`, `reservationCode(id: String): String` (o `code` de `core.reservations.reservation(id)`) e `rooms(): List<RoomOption>` (as UHs **ativas** de `core.rooms.statuses()`, em ordem de número; não é o `WalkInRoom`, que quer dizer "pronta, vaga e livre", e assim `app.traces` não depende de `app.reception`);
+  - `data class RoomOption(val id: String, val number: String)`;
   - `object TraceText`:
     - `status(value: String): ChipModel` pelo `chipModel` (`OPEN` → "Aberto", `RESOLVED` → "Resolvido", outro → "Outro (VALOR)");
     - `message(error: ApiError): String`, com os textos de recado e, fora deles, o `errorMessage` comum da recepção:
@@ -147,7 +148,7 @@ Alternativas descartadas:
     - `link(trace, reservationCode: String?): String` ("Reserva R-…", "Reserva" sem o código, "UH 203");
     - `DEPARTMENTS_DENIED = "Sem permissão para ver os setores. Peça ao administrador a permissão \"Consultar setores, colaboradores e turnos\"."`;
     - `UNKNOWN_CREATE_RESULT = "Não foi possível confirmar se o recado foi criado. Confira a lista antes de tentar de novo."`.
-  - `FakeTracesSource` (teste): em memória, com versões e `ETag` por recado (o `ETag` muda a cada alteração), `412` quando o `etag` não confere, `409 TRACE_ALREADY_RESOLVED` ao resolver/alterar resolvido, falhas injetáveis por operação, o registro das chamadas e um portão opcional (`CompletableDeferred`) em `reservationCode` que segura as leituras e conta quantas estão em voo. Os testes das Tasks 3 a 6 o usam e podem estendê-lo.
+  - `FakeTracesSource` (teste): em memória, com versões e `ETag` por recado (o `ETag` muda a cada alteração), `412` quando o `etag` não confere, `409 TRACE_ALREADY_RESOLVED` ao resolver/alterar resolvido, falhas injetáveis por operação, o registro das chamadas e um portão opcional (`CompletableDeferred`) em `reservationCode` que segura as leituras e conta quantas estão em voo. Os testes das Tasks 3 a 6 o usam. O fake nasce nesta etapa e é helper de teste: as Tasks 3 a 6 podem estendê-lo (sem mudar o comportamento que outra tarefa já prova), fora da regra "testes existentes só mudam onde a tarefa manda".
 
 - [ ] **Step 1: Testes que falham:** `TraceTextTest` — `statusLabels` (incluindo valor desconhecido), `problemTexts` (cada código acima e um código fora do catálogo nunca aparece cru), `linkTexts`.
 - [ ] **Step 2:** `./gradlew :app:test --tests '*TraceTextTest*' --max-workers=2` → FAIL.
@@ -211,7 +212,7 @@ Alternativas descartadas:
   - `sealed interface TraceTarget { data class ForReservation(val reservationId: String, val code: String) : TraceTarget; data object ForRoom : TraceTarget; data class Existing(val traceId: String) : TraceTarget }`;
   - `class TraceFormState(source: TracesSource, scope: CoroutineScope, target: TraceTarget, departments: List<Department>, departmentsDenied: Boolean, onSaved: () -> Unit)`:
     - campos `text`, `dueText` (`dd/MM/aaaa`, inicial = data operacional na criação), `departmentId`, `roomId` (só `ForRoom`), com setters;
-    - `rooms: List<WalkInRoom>` (carregadas só em `ForRoom`), `assigneeName: String?` (só leitura, na edição);
+    - `rooms: List<RoomOption>` (carregadas só em `ForRoom`), `assigneeName: String?` (só leitura, na edição);
     - `start()` (na edição, lê `trace(id)` e guarda `ETag`, `assigneeUserId` e os campos), `save()`, `close()`;
     - `fieldErrors: Map<String, String>` (validação local da Global Constraints), `error: String?`, `notice: String?`, `busy: Boolean`, `saved: Boolean`;
     - na edição sem setores legíveis, o seletor de setor mostra só o setor atual (`departmentName`) e o mantém.
@@ -319,10 +320,10 @@ Alternativas descartadas:
   - existe inativa → `reactivateRole`;
   - existe com concessões diferentes → `getRole` (com `ETag`) e `updateRole` com `If-Match` (mesmo nome e descrição);
   - existe igual e ativa → nada;
-  - `403`/`422` (por exemplo `GRANT_EXCEEDS_OWN_PERMISSIONS`) → `SeedFailure` em pt-BR, sem dado sensível, como as outras operações do gateway;
+  - falhas do servidor (`403`, `422 GRANT_EXCEEDS_OWN_PERMISSIONS`, `412`, `428`, …) sobem como `ApiError`, como nas outras operações do gateway (que não traduzem nada; `SdkUserGatewayAtaqueTest.failuresOfEveryKindCarryNoSecret` o exige); a tradução para `SeedFailure` em pt-BR fica no `UserSeeder` (Task 8);
   - o `FakeIam` guarda roles em memória com versão; o `StrictIam` segue o comportamento que já tem para as outras operações.
 
-- [ ] **Step 1: Testes que falham** (`MockEngine`, no molde de `SdkUserGatewayTest`): `ensureRoleCreatesWhenAbsent`, `ensureRoleFindsByNameIgnoringCase` (na segunda página), `ensureRoleReactivatesInactive`, `ensureRoleRewritesDifferentGrantsWithIfMatch`, `ensureRoleKeepsEqual` (nenhuma escrita), `ensureRoleRejectionIsSeedFailure`; `everyOperation` inclui `ensureRole`.
+- [ ] **Step 1: Testes que falham** (`MockEngine`, no molde de `SdkUserGatewayTest`): `ensureRoleCreatesWhenAbsent`, `ensureRoleFindsByNameIgnoringCase` (na segunda página), `ensureRoleReactivatesInactive`, `ensureRoleRewritesDifferentGrantsWithIfMatch`, `ensureRoleKeepsEqual` (nenhuma escrita), `ensureRoleRejectionIsApiError` (`422 GRANT_EXCEEDS_OWN_PERMISSIONS` → `ApiError.Problem` com o código); `everyOperation` inclui `ensureRole` (e o `failuresOfEveryKindCarryNoSecret` existente passa a cobri-la sem mudança).
 - [ ] **Step 2:** `./gradlew :demo-seed:test --tests '*SdkUserGateway*' --max-workers=2` → FAIL.
 - [ ] **Step 3:** implemente.
 - [ ] **Step 4:** PASS; gate verde.
@@ -336,17 +337,20 @@ Alternativas descartadas:
 
 **Files:**
 - Modify: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/people/UserSeeder.kt`
-- Modify: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/data/SeedReport.kt` (`SeedItem.ROLE("roles")`)
+- Modify: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/data/SeedReport.kt` (`SeedItem.ROLE("perfis")`)
 - Test: `demo-seed/src/test/kotlin/com/zeny/desktop/seed/people/UserSeederRoleTest.kt`
+- Modify (testes existentes, mudança mandada e de mesma força):
+  - `demo-seed/src/test/kotlin/com/zeny/desktop/seed/data/SeedReportAtaqueTest.kt` (`allItemsProduceExactLabelsFromBrief`): o rótulo `"perfis"` entra na lista exata esperada, na posição de `SeedItem.ROLE`;
+  - `demo-seed/src/test/kotlin/com/zeny/desktop/seed/people/UserSeederTest.kt` (linha ~113) e `UserSeederAtaqueTest.kt` (linha ~145): o conjunto exato esperado de roles do `recepcao` ganha o id da role de demo (continua `assertEquals` de conjunto exato).
 
 **Interfaces:**
 - Consumes: Task 7.
-- Produces: os usuários de `DemoRole.RECEPTIONIST` recebem, além da role do modelo, a role "Consulta de setores (demo)", descrição "Leitura de setores para os recados da recepção (pedido PF-01).", concessão `staff.employees.read` = `ALL`. A role é garantida uma vez por execução, antes dos usuários; o relatório conta `SeedItem.ROLE` como criada ou mantida. A role do modelo não muda.
+- Produces: os usuários de `DemoRole.RECEPTIONIST` recebem, além da role do modelo, a role "Consulta de setores (demo)", descrição "Leitura de setores para os recados da recepção (pedido PF-01).", concessão `staff.employees.read` = `ALL`. A role é garantida uma vez por execução, antes dos usuários; o relatório conta `SeedItem.ROLE` como criada ou mantida. A role do modelo não muda. Um `ApiError` do `ensureRole` vira `SeedFailure("Não foi possível garantir o perfil de consulta de setores da recepção.")`, sem o corpo do servidor.
 
-- [ ] **Step 1: Testes que falham** (`FakeIam`): `createsRoleAndGivesItToReceptionist`, `keepsExistingRole` (re-execução não cria outra nem regrava), `existingReceptionistGetsRole` (usuário já existente sem a role a ganha por `setRoles`, mantendo as outras), `otherUsersDoNotGetRole`, `reportCountsRole`.
+- [ ] **Step 1: Testes que falham** (`FakeIam`): `createsRoleAndGivesItToReceptionist`, `keepsExistingRole` (re-execução não cria outra nem regrava), `existingReceptionistGetsRole` (usuário já existente sem a role a ganha por `setRoles`, mantendo as outras), `otherUsersDoNotGetRole`, `reportCountsRole`, `ensureRoleFailureIsSeedFailure`.
 - [ ] **Step 2:** `./gradlew :demo-seed:test --tests '*UserSeederRoleTest*' --max-workers=2` → FAIL.
 - [ ] **Step 3:** implemente.
-- [ ] **Step 4:** PASS; gate verde (`UserSeederTest` e `UserSeederAtaqueTest` continuam verdes sem mudança).
+- [ ] **Step 4:** PASS; gate verde, com os três testes existentes ajustados só como listado em Files.
 - [ ] **Step 5: Commit** (`Concede a consulta de setores à recepção da demo`).
 
 ---
