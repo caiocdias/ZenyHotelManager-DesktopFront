@@ -196,7 +196,7 @@ class PdfDocumentState(
 }
 
 /** Carrega os bytes só em memória; nulo se o PDFBox não abre. Um `Error` segue subindo. */
-private fun loadPdf(bytes: ByteArray): PDDocument? {
+internal fun loadPdf(bytes: ByteArray): PDDocument? {
     PdfBoxSetup.install()
     return try {
         Loader.loadPDF(bytes, "", null, null, IOUtils.createMemoryOnlyStreamCache())
