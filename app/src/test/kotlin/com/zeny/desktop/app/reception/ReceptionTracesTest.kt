@@ -2,16 +2,16 @@ package com.zeny.desktop.app.reception
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.rooms.roomType
@@ -298,7 +298,8 @@ class ReceptionTracesTest {
             val pages = traces.calls.drop(before).filterIsInstance<TraceCall.Page>()
             assertTrue(pages.any { it.filter.reservationId == null }, "a aba não atualizou")
             assertTrue(pages.any { it.filter.reservationId == trResId(1).toString() }, "a seção não atualizou")
-            onNodeWithText("Recado novo", useUnmergedTree = true).assertExists()
+            onNode(hasText("Recado novo") and !hasAnyAncestor(hasTestTag("reservation-detail"))).assertExists()
+            inDetail("Recado novo").assertExists()
         }
 
     @Test
@@ -328,8 +329,7 @@ class ReceptionTracesTest {
 
             // Resolver na seção atualiza a aba.
             var before = traces.calls.size
-            // Pela ação semântica: o botão da seção compacta pode ficar fora da área clicável.
-            inDetailTag("trace-resolve-0").performSemanticsAction(SemanticsActions.OnClick)
+            inDetailTag("trace-resolve-0").performScrollTo().assertIsDisplayed().performClick()
             waitForIdle()
             var pages = traces.calls.drop(before).filterIsInstance<TraceCall.Page>()
             assertTrue(pages.any { it.filter.reservationId == null }, "a aba não atualizou")

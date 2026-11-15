@@ -170,6 +170,7 @@ class TracesPanelTest {
             onNodeWithTag("traces-status-filter").assertDoesNotExist()
             onNodeWithTag("header-link").assertDoesNotExist()
             onNodeWithText("Levar toalhas 1").assertExists()
+            onNodeWithText("14/11/2026 · Governança · Aberto").assertExists()
         }
 
     @Test

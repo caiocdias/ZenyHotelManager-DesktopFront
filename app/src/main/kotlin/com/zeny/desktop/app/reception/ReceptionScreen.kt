@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -53,7 +52,6 @@ import kotlinx.coroutines.flow.filter
 
 private const val EMPTY_LIST = "Nenhuma reserva nesta lista."
 private val DETAIL_WIDTH = 380.dp
-private val TRACES_SECTION_HEIGHT = 240.dp
 private const val TRACES_READ = "frontdesk.traces.read"
 private const val TRACES_TAB = "TRACES"
 private val WALK_IN_PERMISSIONS =
@@ -282,12 +280,11 @@ private fun DetailPanel(
         if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
         Box(Modifier.weight(1f)) {
             when {
-                view != null -> DetailBody(view, detail::reload)
+                view != null -> DetailBody(view, detail::reload) { tracesUi.Section(detail) }
                 error != null -> ErrorState(error, onRetry = detail::reload)
                 else -> LoadingState()
             }
         }
-        tracesUi.Section(detail)
     }
 }
 
@@ -295,6 +292,7 @@ private fun DetailPanel(
 private fun DetailBody(
     view: ReservationDetailView,
     onRetry: () -> Unit,
+    traces: @Composable () -> Unit,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), Arrangement.spacedBy(6.dp)) {
         Text(view.code, style = MaterialTheme.typography.titleMedium)
@@ -328,6 +326,7 @@ private fun DetailBody(
                 if (it.detail.isNotBlank()) Text(it.detail)
             }
         }
+        traces()
     }
 }
 
@@ -370,23 +369,21 @@ internal class ReceptionTracesUi(
         if (!canRead) return
         val reservation = detail.reservation?.reservation
         Text("Recados", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-        Box(Modifier.height(TRACES_SECTION_HEIGHT)) {
-            TracesPanel(
-                list = list,
-                onNew =
-                    if (reservation != null && list.canCreate) {
-                        {
-                            val target = TraceTarget.ForReservation(reservation.id.toString(), reservation.code)
-                            form = traces?.form?.invoke(target)
-                        }
-                    } else {
-                        null
-                    },
-                onEdit = ::edit,
-                onOpenReservation = null,
-                compact = true,
-            )
-        }
+        TracesPanel(
+            list = list,
+            onNew =
+                if (reservation != null && list.canCreate) {
+                    {
+                        val target = TraceTarget.ForReservation(reservation.id.toString(), reservation.code)
+                        form = traces?.form?.invoke(target)
+                    }
+                } else {
+                    null
+                },
+            onEdit = ::edit,
+            onOpenReservation = null,
+            compact = true,
+        )
     }
 
     @Composable

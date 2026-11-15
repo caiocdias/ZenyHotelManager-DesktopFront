@@ -9,11 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -23,10 +25,12 @@ import com.zeny.desktop.core.facade.TraceStatusFilter
 import com.zeny.desktop.design.feedback.errorMessage
 import com.zeny.desktop.design.table.DataTable
 import com.zeny.desktop.design.theme.ZenyColors
+import kotlinx.coroutines.launch
 import com.zeny.desktop.design.table.Column as TableColumn
 
 private const val NO_ASSIGNEE = "—"
 private const val EMPTY_TRACES = "Nenhum recado encontrado."
+private const val EMPTY_RESERVATION_TRACES = "Nenhum recado para esta reserva."
 private val STATUS_FILTERS =
     listOf<Pair<String, TraceStatusFilter?>>(
         "Abertos" to TraceStatusFilter.OPEN,
@@ -38,7 +42,8 @@ private val DUE_FILTERS = listOf("Todos" to DueFilter.ANY, "Hoje" to DueFilter.T
 /**
  * A lista de recados: filtros, tabela e as ações de cada linha. Quem a mostra cria e inicia o [list] (`start`) e o
  * fecha (`close`). [onNew] nulo esconde "Novo recado"; [onOpenReservation] nulo deixa a linha sem clique. Com [compact]
- * (seção do detalhe da reserva), sem filtros e sem a coluna de vínculo. Nenhum id nem código cru aparece.
+ * (seção do detalhe da reserva), sem filtros nem tabela: um cartão por recado, que cresce com o conteúdo. Nenhum id nem
+ * código cru aparece.
  */
 @Composable
 fun TracesPanel(
@@ -48,19 +53,91 @@ fun TracesPanel(
     onOpenReservation: ((String) -> Unit)?,
     compact: Boolean = false,
 ) {
+    if (compact) {
+        CompactTraces(list, onNew, onEdit)
+        return
+    }
     Column(Modifier.fillMaxSize().testTag("traces-panel"), Arrangement.spacedBy(8.dp)) {
         Header(list, onNew, compact)
         val error = list.error
         if (error != null && list.table.error == null) ErrorBand(error, list::refresh)
-        if (!compact) Filters(list)
+        Filters(list)
         DataTable(
             state = list.table,
-            columns = columnsOf(compact),
+            columns = columnsOf(),
             onRowClick = { row -> row.reservationId?.let { id -> onOpenReservation?.invoke(id) } },
             modifier = Modifier.weight(1f),
             emptyMessage = EMPTY_TRACES,
             rowActions = { index, row -> RowActions(list, row, index, onEdit) },
         )
+    }
+}
+
+/** A seção do detalhe da reserva: a coluna é estreita, então cada recado é um cartão com as ações embaixo. */
+@Composable
+private fun CompactTraces(
+    list: TracesListState,
+    onNew: (() -> Unit)?,
+    onEdit: (TraceRow) -> Unit,
+) {
+    val table = list.table
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxWidth().testTag("traces-panel"), Arrangement.spacedBy(8.dp)) {
+        if (onNew != null) Button(onClick = onNew, modifier = Modifier.testTag("trace-new")) { Text("Novo recado") }
+        val error = list.error
+        if (error != null && table.error == null) ErrorBand(error, list::refresh)
+        table.rows.forEachIndexed { index, row -> CompactCard(list, row, index, onEdit) }
+        val tableError = table.error
+        when {
+            table.loading -> {
+                CircularProgressIndicator(Modifier.testTag("table-loading"))
+            }
+
+            tableError != null -> {
+                Text(TraceText.message(tableError), color = MaterialTheme.colorScheme.error)
+                Button(onClick = { scope.launch { table.reload() } }, modifier = Modifier.testTag("table-retry")) {
+                    Text("Tentar de novo")
+                }
+            }
+
+            table.hasMore -> {
+                Button(onClick = { scope.launch { table.loadMore() } }, modifier = Modifier.testTag("load-more")) {
+                    Text("Carregar mais")
+                }
+            }
+
+            table.rows.isEmpty() -> {
+                Text(EMPTY_RESERVATION_TRACES, Modifier.testTag("table-empty"))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactCard(
+    list: TracesListState,
+    row: TraceRow,
+    index: Int,
+    onEdit: (TraceRow) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
+            .padding(8.dp)
+            .testTag("trace-card-$index"),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(row.text)
+        Text(
+            "${row.due} · ${row.department} · ${row.status.label}",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        row.assignee?.let { Text("Responsável: $it", style = MaterialTheme.typography.labelMedium) }
+        if (list.canResolve(row) || list.canEdit(row)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { RowActions(list, row, index, onEdit) }
+        }
     }
 }
 
@@ -144,11 +221,11 @@ private fun DepartmentFilter(list: TracesListState) {
     }
 }
 
-private fun columnsOf(compact: Boolean): List<TableColumn<TraceRow>> =
-    listOfNotNull(
+private fun columnsOf(): List<TableColumn<TraceRow>> =
+    listOf(
         TableColumn("due", "Vencimento") { it.due },
         TableColumn("department", "Setor") { it.department },
-        if (compact) null else TableColumn("link", "Vínculo") { it.link },
+        TableColumn("link", "Vínculo") { it.link },
         TableColumn("text", "Recado", weight = 3f) { it.text },
         TableColumn("assignee", "Responsável") { it.assignee ?: NO_ASSIGNEE },
         TableColumn("status", "Situação") { it.status.label },
