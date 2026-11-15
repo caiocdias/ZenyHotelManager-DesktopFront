@@ -28,7 +28,7 @@ object PdfBoxSetup {
     @Synchronized
     fun install() {
         FontMappers.set(fontMapper)
-        // O leitor e o gravador de JPEG do ImageIO usariam imageio*.tmp em java.io.tmpdir.
+        // O leitor e o gravador de JPEG do ImageIO usariam arquivos imageio*.tmp na pasta temporária.
         ImageIO.setUseCache(false)
         // Avisos de glifo citam o texto do documento. Vale quando o commons-logging cai no java.util.logging;
         // com o slf4j-api sem provedor (o classpath de hoje), o PDFBox já não registra nada.

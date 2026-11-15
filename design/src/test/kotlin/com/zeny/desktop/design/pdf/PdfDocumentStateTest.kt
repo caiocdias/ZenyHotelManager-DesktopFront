@@ -192,4 +192,18 @@ class PdfDocumentStateTest {
         state.next()
         assertEquals("PdfDocumentState(pages=${SamplePdf.PAGE_COUNT}, page=1)", state.toString())
     }
+
+    @Test
+    fun openingTwiceKeepsOneDocumentAndOneRender() {
+        val state = openedState()
+        val rendersBefore = state.renderCount
+        assertTrue(runBlocking { state.open() })
+        awaitRenders()
+        assertEquals(rendersBefore, state.renderCount)
+        assertEquals(SamplePdf.PAGE_COUNT, state.pageCount)
+        assertNotNull(state.image)
+        state.close()
+        awaitExecutor()
+        assertTrue(state.documentClosed)
+    }
 }

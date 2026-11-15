@@ -68,11 +68,14 @@ class PdfDocumentState(
     /** Abre o PDF e pede a primeira página. Falso, com [error], se o PDFBox não abre; falso se já fechou. */
     suspend fun open(): Boolean {
         val count = withContext(documentDispatcher) { attach() }
+        val firstOpen: Boolean
         synchronized(lock) {
             if (closed) return false
+            firstOpen = pageCount == 0
             if (count == 0) error = OPEN_ERROR else pageCount = count
         }
-        if (count > 0) requestRender()
+        // Uma segunda chamada com o documento já aberto não abre outro nem renderiza de novo.
+        if (count > 0 && firstOpen) requestRender()
         return count > 0
     }
 
@@ -107,18 +110,16 @@ class PdfDocumentState(
 
     /** Carrega os bytes em memória. Devolve o número de páginas, ou 0 se não abriu (ou se já fechou). */
     private fun attach(): Int {
-        PdfBoxSetup.install()
-        val document =
-            try {
-                Loader.loadPDF(bytes, "", null, null, IOUtils.createMemoryOnlyStreamCache())
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                return 0
-            }
-        val usable = document.numberOfPages > 0 && synchronized(lock) { !closed }
-        if (usable) session = Session(document) else document.close().also { documentClosed = true }
-        return if (usable) document.numberOfPages else 0
+        session?.let { return it.document.numberOfPages }
+        val document = loadPdf(bytes)
+        val usable = document != null && document.numberOfPages > 0 && synchronized(lock) { !closed }
+        if (usable) {
+            session = Session(checkNotNull(document))
+        } else if (document != null) {
+            document.close()
+            documentClosed = true
+        }
+        return if (usable) checkNotNull(document).numberOfPages else 0
     }
 
     private fun show(
@@ -126,6 +127,7 @@ class PdfDocumentState(
         targetZoom: Int,
     ) {
         val newZoom = targetZoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
+        if (synchronized(lock) { closed }) return
         if (targetPage !in 0 until pageCount || (targetPage == page && newZoom == zoom)) return
         page = targetPage
         zoom = newZoom
@@ -150,21 +152,23 @@ class PdfDocumentState(
         targetZoom: Int,
     ) {
         if (synchronized(lock) { generation != ticket }) return
-        val bitmap =
-            try {
-                session?.render(targetPage, targetZoom)
-            } catch (_: Exception) {
-                null
-            }
-        synchronized(lock) {
-            if (generation != ticket) return
-            rendering = false
-            if (bitmap == null) {
-                error = OPEN_ERROR
-            } else {
-                image = bitmap
-                renderedPage = targetPage
-                renderCount++
+        var bitmap: ImageBitmap? = null
+        try {
+            bitmap = session?.render(targetPage, targetZoom)
+        } catch (_: Exception) {
+            // O erro vira a mensagem do documento; o Error (fatal) segue subindo depois do finally.
+        } finally {
+            // Sem imagem, o erro ocupa o lugar da página; resultado de pedido velho é descartado.
+            synchronized(lock) {
+                if (generation == ticket) {
+                    rendering = false
+                    image = bitmap
+                    error = if (bitmap == null) OPEN_ERROR else null
+                    if (bitmap != null) {
+                        renderedPage = targetPage
+                        renderCount++
+                    }
+                }
             }
         }
     }
@@ -188,5 +192,17 @@ class PdfDocumentState(
         const val ZOOM_STEP = 25
         const val BASE_DPI = 96f
         const val PERCENT = 100f
+    }
+}
+
+/** Carrega os bytes só em memória; nulo se o PDFBox não abre. Um `Error` segue subindo. */
+private fun loadPdf(bytes: ByteArray): PDDocument? {
+    PdfBoxSetup.install()
+    return try {
+        Loader.loadPDF(bytes, "", null, null, IOUtils.createMemoryOnlyStreamCache())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
     }
 }

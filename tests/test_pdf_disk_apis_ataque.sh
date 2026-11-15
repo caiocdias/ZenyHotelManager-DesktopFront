@@ -16,6 +16,10 @@ proibidos=(
   'deleteOnExit'
   'pdfbox.fontcache'
   'Desktop.getDesktop'
+  'getDesktop('
+  'java.io.tmpdir'
+  'ProcessBuilder'
+  'Runtime.getRuntime'
   'browse('
   'createTempFileOnlyStreamCache'
   'setupTempFileOnly'
@@ -26,6 +30,10 @@ for nome in "${proibidos[@]}"; do
   achados="$(grep -rnF --include='*.kt' --include='*.java' -- "$nome" "${dirs[@]}" 2>/dev/null)"
   assert_eq "" "$achados" "produção sem '$nome'"
 done
+
+# `.exec(` (Runtime.exec e variações) abre programa externo.
+achados="$(grep -rnE --include='*.kt' --include='*.java' '\.exec\(' "${dirs[@]}" 2>/dev/null)"
+assert_eq "" "$achados" "produção sem .exec("
 
 # `.open(` num Desktop (`Desktop.getDesktop().open(...)`, ou uma variável do tipo Desktop).
 achados="$(grep -rnE --include='*.kt' --include='*.java' 'Desktop.*\.open\(' "${dirs[@]}" 2>/dev/null)"
