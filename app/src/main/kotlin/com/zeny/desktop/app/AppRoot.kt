@@ -261,7 +261,9 @@ private fun receptionTraces(
         ReceptionTraces(
             list = list,
             forReservation = { id -> TracesListState(source, scope, id) },
-            form = { target -> TraceFormState(source, scope, target, list.departments, list.departmentsDenied) {} },
+            form = { target, onSaved ->
+                TraceFormState(source, scope, target, list.departments, list.departmentsDenied, onSaved)
+            },
         )
     }
 }

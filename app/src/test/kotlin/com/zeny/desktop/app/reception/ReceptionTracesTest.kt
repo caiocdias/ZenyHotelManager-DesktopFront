@@ -19,8 +19,10 @@ import com.zeny.desktop.app.rooms.typeId
 import com.zeny.desktop.app.traces.FakeTracesSource
 import com.zeny.desktop.app.traces.TraceCall
 import com.zeny.desktop.app.traces.TraceFormState
+import com.zeny.desktop.app.traces.TraceOp
 import com.zeny.desktop.app.traces.TraceTarget
 import com.zeny.desktop.app.traces.TracesListState
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
@@ -34,6 +36,7 @@ import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.ReservationResponse
 import com.zeny.desktop.sdk.model.TraceResponse
 import de.quati.kotlin.util.Option
+import java.io.IOException
 import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -183,9 +186,9 @@ class ReceptionTracesTest {
                     ReceptionTraces(
                         list,
                         forReservation = { id -> TracesListState(traces, scope, id).also { sections += it } },
-                        form = { target ->
+                        form = { target, onSaved ->
                             targets += target
-                            TraceFormState(traces, scope, target, list.departments, list.departmentsDenied) {}
+                            TraceFormState(traces, scope, target, list.departments, list.departmentsDenied, onSaved)
                         },
                     )
                 }
@@ -342,5 +345,35 @@ class ReceptionTracesTest {
             waitForIdle()
             pages = traces.calls.drop(before).filterIsInstance<TraceCall.Page>()
             assertTrue(pages.any { it.filter.reservationId == section }, "a seção não atualizou")
+        }
+
+    @Test
+    fun unknownCreateResultRefreshesTabAndSection() =
+        runComposeUiTest {
+            val traces = traces()
+            screen(traces)
+            openReservation(1)
+            inDetailTag("trace-new").performClick()
+            waitForIdle()
+            onNodeWithTag("trace-text").performTextInput("Chamar o chaveiro")
+            onNodeWithTag("department-0").performClick()
+            traces.failNext(TraceOp.CREATE, ApiError.Network(IOException("offline")))
+            val before = traces.calls.size
+            onNodeWithTag("trace-save").performClick()
+            waitForIdle()
+            val pages = traces.calls.drop(before).filterIsInstance<TraceCall.Page>()
+            assertTrue(pages.any { it.filter.reservationId == null }, "a aba não atualizou")
+            assertTrue(pages.any { it.filter.reservationId == trResId(1).toString() }, "a seção não atualizou")
+        }
+
+    @Test
+    fun openingTheTabRefreshesIt() =
+        runComposeUiTest {
+            val traces = traces()
+            screen(traces)
+            traces.seed(trace(5, null, "Recado depois do início"))
+            onNodeWithTag("tab-TRACES").performClick()
+            waitForIdle()
+            onNodeWithText("Recado depois do início").assertExists()
         }
 }

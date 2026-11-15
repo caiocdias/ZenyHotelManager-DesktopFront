@@ -143,11 +143,17 @@ class TraceFormState(
             if (!locked && (value == null || isRoom(value))) roomValue = value
         }
 
-    /** Os setores do seletor; na edição sem setores legíveis, só o setor atual. */
+    /** Os setores do seletor; na edição, o setor atual sempre está entre eles (sem setores legíveis, é o único). */
     val departmentOptions: List<Department>
         get() {
             val current = currentDepartment
-            return if (editing && departmentsDenied && current != null) listOf(current) else departments
+            return when {
+                !editing || current == null -> departments
+                departmentsDenied -> listOf(current)
+                departments.any { it.id == current.id } -> departments
+                departments.isEmpty() -> listOf(current)
+                else -> listOf(current) + departments
+            }
         }
 
     private fun isRoom(id: String) = target is TraceTarget.ForRoom && rooms.any { it.id == id }

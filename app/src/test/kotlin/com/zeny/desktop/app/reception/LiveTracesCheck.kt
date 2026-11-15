@@ -285,14 +285,15 @@ class LiveTracesCheck {
                             ReceptionTraces(
                                 list = list,
                                 forReservation = { id -> TracesListState(tracesSource, screen.scope, id) },
-                                form = { target ->
+                                form = { target, onSaved ->
                                     TraceFormState(
                                         tracesSource,
                                         screen.scope,
                                         target,
                                         list.departments,
                                         list.departmentsDenied,
-                                    ) {}
+                                        onSaved,
+                                    )
                                 },
                             )
                         }

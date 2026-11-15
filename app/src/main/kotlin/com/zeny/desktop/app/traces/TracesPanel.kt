@@ -28,6 +28,7 @@ import com.zeny.desktop.design.theme.ZenyColors
 import kotlinx.coroutines.launch
 import com.zeny.desktop.design.table.Column as TableColumn
 
+private val ACTIONS_WIDTH = 230.dp
 private const val NO_ASSIGNEE = "—"
 private const val EMPTY_TRACES = "Nenhum recado encontrado."
 private const val EMPTY_RESERVATION_TRACES = "Nenhum recado para esta reserva."
@@ -69,6 +70,7 @@ fun TracesPanel(
             modifier = Modifier.weight(1f),
             emptyMessage = EMPTY_TRACES,
             rowActions = { index, row -> RowActions(list, row, index, onEdit) },
+            actionsWidth = ACTIONS_WIDTH,
         )
     }
 }

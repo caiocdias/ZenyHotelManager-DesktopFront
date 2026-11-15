@@ -25,6 +25,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -39,7 +40,8 @@ private val ACTIONS_WIDTH = 190.dp
 /**
  * Tabela de uma listagem por cursor: cabeçalho que ordena, filtro, linhas e carga da próxima página.
  * Sem filtro, a próxima página vem sozinha perto do fim da rolagem; com filtro, pelo botão "Carregar mais".
- * `rowActions`, se dado, desenha uma coluna de ações (botões) no fim de cada linha, com o índice da linha visível.
+ * `rowActions`, se dado, desenha uma coluna de ações (botões) no fim de cada linha, com o índice da linha visível;
+ * `actionsWidth` é a largura dela.
  */
 @Composable
 @Suppress("LongParameterList") // `rowActions` é opcional e fica no fim, sem quebrar quem já chama
@@ -50,6 +52,7 @@ fun <T> DataTable(
     modifier: Modifier = Modifier,
     emptyMessage: String = "Nenhum registro encontrado.",
     rowActions: (@Composable (index: Int, row: T) -> Unit)? = null,
+    actionsWidth: Dp = ACTIONS_WIDTH,
 ) {
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -87,7 +90,7 @@ fun <T> DataTable(
             label = { Text("Filtrar") },
             modifier = Modifier.fillMaxWidth().testTag("table-filter"),
         )
-        HeaderRow(state, columns, rowActions != null)
+        HeaderRow(state, columns, rowActions != null, actionsWidth)
         LazyColumn(Modifier.weight(1f).testTag("table-list"), listState) {
             itemsIndexed(visibleRows, key = { _, row -> state.key(row) }) { index, row ->
                 DataRow(
@@ -96,6 +99,7 @@ fun <T> DataTable(
                     onRowClick,
                     Modifier.testTag("row-${state.key(row)}"),
                     rowActions?.let { actions -> { actions(index, row) } },
+                    actionsWidth,
                 )
             }
             item {
@@ -119,6 +123,7 @@ private fun <T> HeaderRow(
     state: TableState<T>,
     columns: List<Column<T>>,
     withActions: Boolean,
+    actionsWidth: Dp,
 ) {
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         columns.forEach { column ->
@@ -146,17 +151,19 @@ private fun <T> HeaderRow(
                         ),
             )
         }
-        if (withActions) Spacer(Modifier.width(ACTIONS_WIDTH))
+        if (withActions) Spacer(Modifier.width(actionsWidth))
     }
 }
 
 @Composable
+@Suppress("LongParameterList") // o desenho de uma linha recebe tudo o que a tabela decide
 private fun <T> DataRow(
     row: T,
     columns: List<Column<T>>,
     onRowClick: (T) -> Unit,
     modifier: Modifier,
     actions: (@Composable () -> Unit)?,
+    actionsWidth: Dp,
 ) {
     Row(
         modifier.fillMaxWidth().clickable { onRowClick(row) }.padding(vertical = 8.dp),
@@ -168,7 +175,7 @@ private fun <T> DataRow(
         }
         if (actions != null) {
             Row(
-                Modifier.width(ACTIONS_WIDTH),
+                Modifier.width(actionsWidth),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) { actions() }

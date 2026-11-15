@@ -72,7 +72,7 @@ private val WALK_IN_PERMISSIONS =
 class ReceptionTraces(
     val list: TracesListState,
     val forReservation: (String) -> TracesListState,
-    val form: (TraceTarget) -> TraceFormState,
+    val form: (TraceTarget, () -> Unit) -> TraceFormState,
 )
 
 /**
@@ -225,7 +225,12 @@ private fun Lists(
             if (tracesUi.canRead) {
                 FilterChip(
                     selected = tracesUi.tabOpen,
-                    onClick = { tracesUi.tabOpen = true },
+                    onClick = {
+                        if (!tracesUi.tabOpen) {
+                            tracesUi.tabOpen = true
+                            tracesUi.refresh()
+                        }
+                    },
                     label = { Text("Recados") },
                     modifier = Modifier.testTag("tab-$TRACES_TAB"),
                 )
@@ -357,7 +362,7 @@ internal class ReceptionTracesUi(
         val list = traces?.list ?: return
         TracesPanel(
             list = list,
-            onNew = if (list.canCreate) ({ form = traces?.form?.invoke(TraceTarget.ForRoom) }) else null,
+            onNew = if (list.canCreate) ({ form = traces?.form?.invoke(TraceTarget.ForRoom, ::refresh) }) else null,
             onEdit = ::edit,
             onOpenReservation = detail::open,
         )
@@ -375,7 +380,7 @@ internal class ReceptionTracesUi(
                 if (reservation != null && list.canCreate) {
                     {
                         val target = TraceTarget.ForReservation(reservation.id.toString(), reservation.code)
-                        form = traces?.form?.invoke(target)
+                        form = traces?.form?.invoke(target, ::refresh)
                     }
                 } else {
                     null
@@ -390,7 +395,6 @@ internal class ReceptionTracesUi(
     fun ShowForm() {
         form?.let { state ->
             TraceFormDialog(state) {
-                if (state.saved) refresh()
                 state.close()
                 form = null
             }
@@ -398,7 +402,7 @@ internal class ReceptionTracesUi(
     }
 
     private fun edit(row: TraceRow) {
-        form = traces?.form?.invoke(TraceTarget.Existing(row.id))
+        form = traces?.form?.invoke(TraceTarget.Existing(row.id), ::refresh)
     }
 }
 

@@ -209,8 +209,8 @@ class ReceptionTracesAtaqueTest {
                     ReceptionTraces(
                         list,
                         forReservation = { id -> TracesListState(traces, scope, id).also { sections += it } },
-                        form = { target ->
-                            TraceFormState(traces, scope, target, list.departments, list.departmentsDenied) {}
+                        form = { target, onSaved ->
+                            TraceFormState(traces, scope, target, list.departments, list.departmentsDenied, onSaved)
                                 .also { forms += it }
                         },
                     )
