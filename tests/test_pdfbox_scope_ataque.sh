@@ -28,9 +28,16 @@ for cfg in compileClasspath runtimeClasspath; do
   assert_contains "$(configs_de "$design_lock" 'org\.apache\.pdfbox:pdfbox')" "$cfg" "design: pdfbox no $cfg"
 done
 
-# app: no runtimeClasspath (vem do design); fora do compileClasspath e de toda configuração que não seja de
-# runtime ou de teste, para cada artefato do PDFBox (pdfbox, fontbox, pdfbox-io).
-assert_contains "$(configs_de "$app_lock" 'org\.apache\.pdfbox:pdfbox')" "runtimeClasspath" "app: pdfbox no runtimeClasspath"
+# Conjunto de runtime do PDFBox: sem qualquer um deles, o JAR do app cai em NoClassDefFoundError na primeira ficha.
+# Cada um está no runtimeClasspath do design (de onde vem) e no do app (que o JAR empacota).
+for c in 'org\.apache\.pdfbox:pdfbox' 'org\.apache\.pdfbox:fontbox' 'org\.apache\.pdfbox:pdfbox-io' \
+  'commons-logging:commons-logging'; do
+  assert_contains "$(configs_de "$design_lock" "$c")" "runtimeClasspath" "design: ${c//\\/} no runtimeClasspath"
+  assert_contains "$(configs_de "$app_lock" "$c")" "runtimeClasspath" "app: ${c//\\/} no runtimeClasspath"
+done
+
+# app: fora do compileClasspath e de toda configuração que não seja de runtime ou de teste, para cada artefato do
+# PDFBox (pdfbox, fontbox, pdfbox-io).
 for a in pdfbox fontbox pdfbox-io; do
   cfgs="$(configs_de "$app_lock" "org\\.apache\\.pdfbox:$a")"
   assert_eq "" "$(grep -xE 'compileClasspath' <<<"$cfgs")" "app: $a fora do compileClasspath"
