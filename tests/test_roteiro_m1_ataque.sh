@@ -5,6 +5,7 @@
 # do demo-seed são a fonte da verdade. Não chama o Gradle nem containers.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
+source "$ROOT/tests/lib/roteiro_checks.sh"
 
 rot="$ROOT/docs/demo/roteiro-m1.md"
 leia_f="$ROOT/tools/server-env/LEIA-ME.md"
@@ -29,31 +30,11 @@ for f in "$rot" "$leia_f" "$readme_f" "$api" "$areas_kt" "$display_kt" "$approot
 done
 ((missing == 0)) || finish
 
-# --- utilitários --------------------------------------------------------------------------------------------
-# Linhas dos blocos ```powershell: "ROTULO:LINHA<TAB>texto"; "---" separa blocos.
-ps_lines() {
-  awk -v lbl="$2" '/^```powershell[[:space:]]*$/{inb=1; print "---"; next} /^```/{inb=0; next} inb {print lbl ":" FNR "\t" $0}' "$1"
-}
-# Junta as linhas de um comando que abre { ou ( e fecha depois: "ROTULO:LINHA<TAB>comando inteiro".
-statements() {
-  awk -F'\t' '
-    function strip(s) { gsub(/"[^"]*"/, "\"\"", s); gsub(/\047[^\047]*\047/, "", s); return s }
-    $0 == "---" { depth = 0; next }
-    {
-      t = $2; s = strip(t)
-      if (depth == 0) { start = $1; buf = t } else { buf = buf " " t }
-      n = split(s, ch, "")
-      for (i = 1; i <= n; i++) {
-        if (ch[i] == "{" || ch[i] == "(") depth++
-        else if (ch[i] == "}" || ch[i] == ")") depth--
-      }
-      if (depth <= 0) { depth = 0; print start "\t" buf }
-    }'
-}
-# Texto sem o conteúdo das strings (para procurar operadores e parâmetros fora de aspas).
-strip_strings() { sed -E "s/\"[^\"]*\"/\"\"/g; s/'[^']*'/''/g"; }
-# Seção "## N. ..." de um Markdown, do título até antes do próximo "## ".
-section() { awk -v h="$2" 'index($0, h) == 1 {on = 1; print; next} on && /^## / {exit} on' "$1"; }
+# --- utilitários (os genéricos vêm de tests/lib/roteiro_checks.sh) ---------------------------------------
+ps_lines() { rc_ps_lines "$@"; }
+statements() { rc_statements; }
+strip_strings() { rc_strip_strings; }
+section() { rc_section "$@"; }
 # Bloco de um caminho do contrato (até o próximo caminho ou chave de 2 espaços).
 api_path_block() { awk -v p="  $1:" '$0 == p {on = 1; next} on && /^  [^ ]/ {exit} on' "$api"; }
 schema_block() { awk -v s="    $1:" '$0 == s {on = 1; next} on && /^    [^ ]/ {exit} on' "$api"; }
@@ -63,27 +44,18 @@ schema_props() {
 schema_required() {
   schema_block "$1" | awk '/^      required:/ {on = 1; next} on && /^      - / {sub(/^      - /, ""); print; next} on {on = 0}'
 }
-in_list() { grep -qxF -- "$1" <<<"$2"; }
+in_list() { rc_in_list "$@"; }
 
 rot_ps="$(ps_lines "$rot" roteiro)"
-leia_ps="$(ps_lines "$leia_f" LEIA-ME)"
-all_ps="$(printf '%s\n%s\n' "$rot_ps" "$leia_ps")"
 rot_stmts="$(statements <<<"$rot_ps")"
-all_stmts="$(statements <<<"$all_ps")"
 
 # Passos do roteiro achados pelo conteúdo, não pelo número: a Task 5a da E07 reescreveu o roteiro do zero (passos
 # 0 a 12) e a numeração antiga (seed no 1, app no 2, demo do 4 ao 8) mudou de lugar. Cada passo é a ÚNICA seção
 # "## N. ..." cujo texto casa com o padrão (ERE); nenhuma ou mais de uma é falha. A ordem entre eles é afirmada
 # logo abaixo, então trocar dois passos de lugar continua vermelho.
-step_heading() {
-  PAT="$1" awk '
-    function flush() { if (h != "" && hit) { n++; out = h } }
-    /^## / { flush(); h = $0; hit = 0; next }
-    h != "" && $0 ~ ENVIRON["PAT"] { hit = 1 }
-    END { flush(); if (n == 1) print out; else if (n > 1) print "AMBIGUO" }' "$rot"
-}
-step_num() { grep -oE '^## [0-9]+\.' <<<"$1" | grep -oE '[0-9]+'; }
-step_text() { [[ "$1" == "## "* ]] && section "$rot" "$1"; }
+step_heading() { rc_step_heading "$rot" "$1"; }
+step_num() { rc_step_num "$1"; }
+step_text() { rc_step_text "$rot" "$1"; }
 h_seed="$(step_heading 'demo-seed\.jar --server')"
 h_app="$(step_heading 'app\\zeny-desktop\.jar')"
 h_recep="$(step_heading 'digite `recepcao`')"
@@ -121,158 +93,8 @@ P="passo ${n_live:-?}"
 # =============================================================================================================
 # 1. PowerShell 5.1
 # =============================================================================================================
-
-# 1.1 Invoke-WebRequest no 5.1 usa o motor do Internet Explorer sem -UseBasicParsing (falha sem o IE configurado).
-n_iwr=0
-while IFS=$'\t' read -r where st; do
-  [[ -n "$where" ]] || continue
-  if grep -qiE '(^|[^A-Za-z-])(Invoke-WebRequest|iwr)([[:space:]]|$)' <<<"$st"; then
-    n_iwr=$((n_iwr + 1))
-    grep -qi -- '-UseBasicParsing' <<<"$st" || _assert_fail "Invoke-WebRequest com -UseBasicParsing ($where)" "comando: $st"
-  fi
-done <<<"$all_stmts"
-((n_iwr >= 3)) || _assert_fail "roteiro usa Invoke-WebRequest para o ETag e o logout (achados: $n_iwr)"
-
-# 1.2 No 5.1, curl e wget são aliases do Invoke-WebRequest: também no LEIA-ME, só curl.exe.
-bad_alias="$(cut -f2- <<<"$all_ps" | grep -nE '(^|[^.A-Za-z0-9_-])(curl|wget)([[:space:]]|$)')"
-assert_eq "" "$bad_alias" "blocos PowerShell (roteiro e LEIA-ME) sem curl/wget aliases; só curl.exe"
-
-# 1.3 Nada que só exista no PowerShell 6/7: parâmetros novos dos cmdlets web e operadores && || ?? ?.
-ps7_params='-(ResponseHeadersVariable|StatusCodeVariable|SkipHttpErrorCheck|SkipHeaderValidation|SkipCertificateCheck|Authentication|Token|Form|AsHashtable|NoProxy|Resume|AllowUnencryptedAuthentication|HttpVersion|ConnectionTimeoutSeconds|OperationTimeoutSeconds|PreserveAuthorizationOnRedirect|AllowInsecureRedirect)([^A-Za-z]|$)'
-ps_code_nostr="$(cut -f2- <<<"$all_ps" | strip_strings)"
-assert_eq "" "$(grep -niE -- "$ps7_params" <<<"$ps_code_nostr")" "sem parâmetro que só existe no PowerShell 6+"
-assert_eq "" "$(grep -nE '&&|\|\||\?\?|\?\.' <<<"$ps_code_nostr")" "sem operador && || ?? ?. (PowerShell 7) fora de aspas"
-assert_eq "" "$(grep -niE 'Get-Credential.*-Title' <<<"$ps_code_nostr")" "Get-Credential sem -Title (PowerShell 6+)"
-
-# 1.4 Corpo JSON: -Body sempre de uma variável montada com ConvertTo-Json (hashtable direta vira formulário)
-#     e -ContentType com charset=utf-8 (sem charset, o 5.1 codifica a string do corpo em ISO-8859-1).
-n_body=0
-declare -A last_assign=()
-while IFS=$'\t' read -r where st; do
-  [[ -n "$where" ]] || continue
-  lhs_var="$(grep -oE '^[[:space:]]*\$[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=' <<<"$st" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*')"
-  [[ "$st" == *"-Body"* ]] || {
-    [[ -n "$lhs_var" ]] && last_assign["$lhs_var"]="$st"
-    continue
-  }
-  n_body=$((n_body + 1))
-  var="$(grep -oE -- '-Body[[:space:]]+\$[A-Za-z_][A-Za-z0-9_]*' <<<"$st" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*$')"
-  if [[ -z "$var" ]]; then
-    _assert_fail "-Body vem de uma variável ($where)" "comando: $st"
-    continue
-  fi
-  # A atribuição que vale é a última antes deste comando.
-  assign="${last_assign[$var]:-}"
-  [[ "$assign" == *"ConvertTo-Json"* ]] || _assert_fail "$var do -Body é montado com ConvertTo-Json ($where)" "atribuição: $assign"
-  grep -qiE -- '-ContentType[[:space:]]+"application/json;[[:space:]]*charset=utf-8"' <<<"$st" ||
-    _assert_fail "-Body com -ContentType \"application/json; charset=utf-8\" ($where)" "comando: $st"
-  [[ -n "$lhs_var" ]] && last_assign["$lhs_var"]="$st"
-done <<<"$all_stmts"
-((n_body >= 3)) || _assert_fail "roteiro envia corpo no login, no MARK_CLEAN e no MARK_DIRTY (achados: $n_body)"
-
-# 1.5 ConvertTo-Json sem -Depth corta no nível 2: hashtable aninhada além disso vira "System.Collections.Hashtable".
-while IFS=$'\t' read -r where st; do
-  [[ "$st" == *"ConvertTo-Json"* ]] || continue
-  grep -qi -- '-Depth' <<<"$st" && continue
-  depth="$(strip_strings <<<"$st" | awk '{n = split($0, c, ""); d = 0; m = 0; for (i = 1; i <= n; i++) { if (c[i] == "{") { d++; if (d > m) m = d } else if (c[i] == "}") d-- } print m}')"
-  ((depth <= 2)) || _assert_fail "ConvertTo-Json sem -Depth com hashtable de até 2 níveis ($where: $depth)" "comando: $st"
-done <<<"$all_stmts"
-
-# 1.6 Chave de hashtable com hífen sem aspas (If-Match = ...) é erro de sintaxe no PowerShell.
-unquoted_keys="$(cut -f2- <<<"$all_ps" | strip_strings | grep -nE '(@\{|;)[[:space:]]*[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9-]+[[:space:]]*=|^[[:space:]]*[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9-]+[[:space:]]*=')"
-assert_eq "" "$unquoted_keys" "chaves com hífen entre aspas nas hashtables (\"If-Match\" = ...)"
-
-# 1.7 ETag: lido do .Headers de um Invoke-WebRequest (o Invoke-RestMethod do 5.1 não expõe cabeçalhos) e
-#     repassado intacto, com as aspas, no If-Match.
-etag_vars="$(grep -oE '"If-Match"[[:space:]]*=[[:space:]]*\$[A-Za-z_][A-Za-z0-9_]*' <<<"$rot_stmts" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*$' | sort -u)"
-[[ -n "$etag_vars" ]] || _assert_fail "o If-Match recebe uma variável com o ETag"
-for ev in $etag_vars; do
-  assigns="$(cut -f2- <<<"$rot_stmts" | grep -E "^[[:space:]]*\\${ev}[[:space:]]*=")"
-  [[ -n "$assigns" ]] || _assert_fail "$ev (If-Match) é atribuída no roteiro"
-  while IFS= read -r a; do
-    [[ -n "$a" ]] || continue
-    src="$(grep -oE '\$[A-Za-z_][A-Za-z0-9_]*\.Headers' <<<"$a" | head -1 | sed 's/\.Headers$//')"
-    if [[ -z "$src" ]] || ! grep -qiE "\\.Headers(\\[[\"']ETag[\"']\\]|\\.ETag)" <<<"$a"; then
-      _assert_fail "$ev vem de .Headers[\"ETag\"] da resposta" "atribuição: $a"
-      continue
-    fi
-    src_assign="$(cut -f2- <<<"$rot_stmts" | grep -E "^[[:space:]]*\\${src}[[:space:]]*=" | head -1)"
-    grep -qiE '(^|[^A-Za-z-])(Invoke-WebRequest|iwr)([[:space:]]|$)' <<<"$src_assign" ||
-      _assert_fail "$src (de onde sai o ETag) vem de Invoke-WebRequest, não de Invoke-RestMethod" "atribuição: $src_assign"
-    # Nada que tire as aspas ou corte o valor: o servidor compara o ETag inteiro, com as aspas.
-    assert_eq "" "$(grep -oiE 'Trim|-replace|\.Replace\(|Substring|-split|\.Headers\[[^]]*\]\[' <<<"$a")" \
-      "$ev é o ETag intacto (sem Trim, -replace, -split nem índice; no 5.1 [0] pega só a aspa)"
-    # No 5.1 .Headers["ETag"] é string; no PowerShell 7 é string[], e o -Headers manda "System.String[]" no
-    # If-Match (412 em laço). [string] ou -join dão a mesma string intacta nos dois.
-    grep -qE '\[string\]|-join' <<<"$a" ||
-      _assert_fail "$ev normalizado para uma string só ([string] ou -join): .Headers[\"ETag\"] é string[] no PowerShell 7" "atribuição: $a"
-  done <<<"$assigns"
-done
-
-# 1.8 Senha: só da janela do Get-Credential; nunca em argumento, Read-Host sem -AsSecureString ou -AsPlainText.
-pw_stmts="$(cut -f2- <<<"$all_stmts" | grep -iE '(^|[^A-Za-z_])password[[:space:]]*=')"
-[[ -n "$pw_stmts" ]] || _assert_fail "o login da Governanta manda a senha no corpo"
-while IFS= read -r st; do
-  [[ -n "$st" ]] || continue
-  vals="$(grep -oiE '(^|[^A-Za-z_])password[[:space:]]*=[[:space:]]*[^[:space:];}]+' <<<"$st" | sed -E 's/.*=[[:space:]]*//')"
-  while IFS= read -r v; do
-    cvar="$(grep -oE '^\$[A-Za-z_][A-Za-z0-9_]*\.GetNetworkCredential\(\)\.Password$' <<<"$v" | sed 's/\..*//')"
-    if [[ -z "$cvar" ]]; then
-      _assert_fail "password vem de \$cred.GetNetworkCredential().Password" "valor: $v"
-      continue
-    fi
-    cassign="$(cut -f2- <<<"$all_stmts" | grep -E "^[[:space:]]*\\${cvar}[[:space:]]*=" | head -1)"
-    assert_contains "$cassign" "Get-Credential" "$cvar vem do Get-Credential"
-  done <<<"$vals"
-done <<<"$pw_stmts"
-assert_eq "" "$(grep -niE 'AsPlainText|ConvertTo-SecureString' <<<"$ps_code_nostr")" "sem ConvertTo-SecureString -AsPlainText"
-assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -iE 'Read-Host' | grep -viE -- '-AsSecureString')" "Read-Host só com -AsSecureString"
-
-# 1.9 O corpo com a senha sai da sessão logo depois do login.
-login_body_var="$(grep -E 'auth/login' <<<"$rot_stmts" | grep -oE -- '-Body[[:space:]]+\$[A-Za-z_][A-Za-z0-9_]*' | grep -oE '[A-Za-z_][A-Za-z0-9_]*$' | head -1)"
-if [[ -z "$login_body_var" ]]; then
-  _assert_fail "o login manda o corpo por uma variável"
-else
-  login_ln="$(grep -nE 'auth/login' <<<"$rot_ps" | head -1 | cut -d: -f1)"
-  rm_ln="$(grep -nE "Remove-Variable[[:space:]]+(-Name[[:space:]]+)?${login_body_var}([[:space:]]|$)" <<<"$rot_ps" | head -1 | cut -d: -f1)"
-  if [[ -z "$rm_ln" ]] || ((rm_ln <= login_ln)); then
-    _assert_fail "Remove-Variable $login_body_var depois do login (a senha não fica na sessão)"
-  fi
-fi
-
-# 1.10 "-Dzeny.devShell=true" sempre entre aspas (sem elas o PowerShell parte no ponto), com o nome que o app lê.
-assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE '(^|[^"])-Dzeny\.')" "-Dzeny.* entre aspas em todo bloco PowerShell"
-prop_name="$(grep -oE 'prop\("[^"]+"\) == "true"' "$approot_kt" | head -1 | sed -E 's/prop\("([^"]+)"\).*/\1/')"
-assert_eq "zeny.devShell" "$prop_name" "o app lê a propriedade zeny.devShell (AppRoot.kt)"
-assert_contains "$(cut -f2- <<<"$rot_ps")" "java \"-D${prop_name}=true\" -jar app\\zeny-desktop.jar" \
-  "roteiro abre o app com a propriedade que o app lê"
-
-# 1.11 Sem crase no fim da linha (continuação que quebra com um espaço depois dela ao copiar).
-assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE '`[[:space:]]*$')" "sem crase de continuação nos blocos PowerShell"
-
-# 1.12 Variáveis do passo da mudança ao vivo definidas antes do uso, na ordem dos blocos (a segunda janela começa
-#      vazia). Sem os comandos do passo, a asserção passaria no vazio.
-(($(grep -c . <<<"$live_stmts") >= 15)) ||
-  _assert_fail "$P (mudança ao vivo) tem os comandos do login ao logout (achados: $(grep -c . <<<"$live_stmts"))"
-defined=" "
-while IFS=$'\t' read -r where st; do
-  [[ -n "$where" ]] || continue
-  used="$(strip_strings <<<"$st" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*' | sort -u)"
-  # Variáveis dentro de strings expansíveis também contam.
-  used="$(printf '%s\n%s\n' "$used" "$(grep -oE '"[^"]*"' <<<"$st" | grep -oE '\$\(?\$?[A-Za-z_][A-Za-z0-9_]*' | tr -d '($' | sed 's/^/$/')" | sort -u)"
-  lhs="$(grep -oE '^[[:space:]]*\$[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=' <<<"$st" | grep -oE '\$[A-Za-z_][A-Za-z0-9_]*')"
-  for u in $used; do
-    case "$u" in
-      '$_' | '$Error' | '$true' | '$false' | '$null' | '$env' | '$PWD' | '$LASTEXITCODE' | "$lhs") continue ;;
-    esac
-    [[ "$defined" == *" $u "* ]] || _assert_fail "$P: $u usada antes de ser definida ($where)" "comando: $st"
-  done
-  [[ -n "$lhs" ]] && defined="$defined$lhs "
-  # Remove-Variable tira a variável da sessão: usá-la depois manda $null.
-  for rv in $(grep -oE 'Remove-Variable[[:space:]]+(-Name[[:space:]]+)?[A-Za-z_][A-Za-z0-9_]*' <<<"$st" | awk '{print $NF}'); do
-    defined="${defined// \$$rv / }"
-  done
-done <<<"$live_stmts"
+# Travas genéricas de todo roteiro (tests/lib/roteiro_checks.sh): 1.1 a 1.12, no roteiro e no LEIA-ME.
+roteiro_check_powershell_51 "$rot" "$leia_f"
 
 # =============================================================================================================
 # 2. Fidelidade ao contrato (api/openapi.yaml)
@@ -323,6 +145,8 @@ for want in "post /api/v1/auth/login" "get /api/v1/rooms/status" "get /api/v1/ro
   in_list "$want" "$seen_paths" || _assert_fail "$P chama $want"
 done
 
+# Variável do corpo do login (a mesma que a 1.9 confere).
+login_body_var="$(rc_login_body_var "$rot_stmts")"
 # 2.2 Corpo do login: as chaves do LoginRequest e do DeviceRequest, nenhuma a mais.
 login_props="$(schema_props LoginRequest)"
 device_props="$(schema_props DeviceRequest)"
@@ -405,84 +229,8 @@ done
 # 3. Segredos
 # =============================================================================================================
 
-# 3.1 ZENY_SEED_* só com valor de exemplo entre <...>, no roteiro e no LEIA-ME.
-for f in "$rot" "$leia_f"; do
-  bad="$(grep -nE 'ZENY_SEED_[A-Z_]*[[:space:]]*=' "$f" | grep -vE 'ZENY_SEED_[A-Z_]*[[:space:]]*=[[:space:]]*"<[^>"]+>"[[:space:]]*$')"
-  assert_eq "" "$bad" "${f#"$ROOT"/}: ZENY_SEED_* só com \"<...>\""
-done
-# 3.1b Os 6 segredos do seed: definidos por SetEnvironmentVariable(..., "Process"), num bloco PowerShell, antes do
-#      java -jar; o valor vem da janela do Get-Credential (senhas) ou de um Read-Host -AsSecureString (PIN), nunca de
-#      texto digitado na linha (o 5.1 grava cada linha no histórico); o $pin sai da sessão antes do java -jar.
-#      Vale para o LEIA-ME e, desde a Task 5a da E07 (o roteiro tem o seu próprio bloco do seed, passo a passo),
-#      também para o roteiro.
-seed_secrets="ZENY_SEED_ADMIN_PASSWORD ZENY_SEED_ADMIN_NEW_PASSWORD ZENY_SEED_MANAGER_PASSWORD
-ZENY_SEED_RECEPTIONIST_PASSWORD ZENY_SEED_HOUSEKEEPER_PASSWORD ZENY_SEED_MANAGER_PIN"
-# A lista acima é a dos segredos que o seed lê (senhas e PIN do SeedArgs.kt): nenhum a mais, nenhum a menos.
-assert_eq "$(tr ' ' '\n' <<<"$seed_secrets" | grep . | sort)" \
-  "$(grep -oE 'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)' "$seedargs_kt" | sort -u)" "os 6 segredos são os que o seed lê"
-leia_ps_text="$(cut -f2- <<<"$leia_ps")"
-rot_ps_text="$(cut -f2- <<<"$rot_ps")"
-gc_value='^\(Get-Credential( -UserName [A-Za-z0-9_.-]+)?( -Message "[^"$`]*")?\)\.GetNetworkCredential\(\)\.Password$'
-pin_value='^\[Runtime\.InteropServices\.Marshal\]::PtrToStringBSTR\(\[Runtime\.InteropServices\.Marshal\]::SecureStringToBSTR\(\$[A-Za-z_][A-Za-z0-9_]*\)\)$'
-# check_seed_secrets RÓTULO TEXTO : TEXTO são as linhas dos blocos PowerShell do arquivo, na ordem.
-check_seed_secrets() {
-  local lbl="$1" text="$2" java_ln v lines ln line value sv sv_ln rm_ln
-  java_ln="$(grep -nF 'java -jar app\demo-seed.jar --server' <<<"$text" | head -1 | cut -d: -f1)"
-  [[ -n "$java_ln" ]] || _assert_fail "$lbl: bloco PowerShell roda o demo-seed.jar"
-  for v in $seed_secrets; do
-    lines="$(grep -nE "^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\"," <<<"$text")"
-    if [[ "$(grep -c . <<<"$lines")" != 1 ]]; then
-      _assert_fail "$lbl define $v uma vez por [Environment]::SetEnvironmentVariable num bloco PowerShell" "linhas: $lines"
-      continue
-    fi
-    ln="${lines%%:*}"
-    line="${lines#*:}"
-    value="$(sed -nE "s/^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\", (.*), \"Process\"\\)$/\\1/p" <<<"$line")"
-    if [[ -z "$value" ]]; then
-      _assert_fail "$lbl: $v definida no escopo \"Process\"" "linha: $line"
-      continue
-    fi
-    [[ -n "$java_ln" ]] && ((ln < java_ln)) || _assert_fail "$lbl: $v definida antes do java -jar do seed"
-    if [[ "$v" == *_PIN ]]; then
-      if ! grep -qE "$pin_value" <<<"$value"; then
-        _assert_fail "$lbl: $v vem de um SecureString convertido pelo Marshal" "valor: $value"
-        continue
-      fi
-      sv="$(grep -oE '\$[A-Za-z_][A-Za-z0-9_]*\)\)$' <<<"$value" | tr -d ')$')"
-      sv_ln="$(grep -nE "^\\\$${sv}[[:space:]]*=[[:space:]]*Read-Host[[:space:]]+-AsSecureString([[:space:]]|$)" <<<"$text" | tail -1 | cut -d: -f1)"
-      [[ -n "$sv_ln" ]] && ((sv_ln < ln)) || _assert_fail "$lbl: \$$sv do $v vem de Read-Host -AsSecureString antes do uso"
-      rm_ln="$(grep -nE "^Remove-Variable[[:space:]]+(-Name[[:space:]]+)?${sv}([[:space:]]|$)" <<<"$text" | head -1 | cut -d: -f1)"
-      [[ -n "$rm_ln" ]] && ((rm_ln > ln)) || _assert_fail "$lbl: Remove-Variable $sv depois de definir $v"
-      [[ -n "$rm_ln" && -n "$java_ln" ]] && ((rm_ln < java_ln)) ||
-        _assert_fail "$lbl: Remove-Variable $sv antes do java -jar do seed"
-    else
-      grep -qE "$gc_value" <<<"$value" ||
-        _assert_fail "$lbl: $v vem de (Get-Credential ...).GetNetworkCredential().Password, sem valor literal" "valor: $value"
-    fi
-  done
-}
-check_seed_secrets LEIA-ME "$leia_ps_text"
-check_seed_secrets roteiro "$rot_ps_text"
-# 3.1c A volta do padrão antigo: segredo do seed atribuído na linha, com qualquer valor (até "<...>"), nos blocos.
-assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE '\$env:ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[[:space:]]*=')" \
-  "blocos PowerShell sem \$env:ZENY_SEED_*PASSWORD/PIN = (o 5.1 grava a linha no histórico)"
-assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE 'SetEnvironmentVariable\("ZENY_SEED_[A-Z_]*(PASSWORD|PIN)",[[:space:]]*["'"'"']')" \
-  "SetEnvironmentVariable dos segredos sem valor literal"
-
-# 3.2 Nenhum comando com senha ou PIN em argumento (o seed aceita --*-password e --manager-pin).
-assert_eq "" "$(cut -f2- <<<"$all_ps" | grep -nE -- '--[a-z-]*(password|pin)([=[:space:]]|$)')" \
-  "blocos PowerShell sem --*-password nem --manager-pin"
-assert_eq "" "$(grep -nE -- '--(admin|admin-new|manager|receptionist|housekeeper)-password|--manager-pin' "$rot" "$readme_f")" \
-  "roteiro e README não citam opção de senha em argumento"
-
-# 3.3 Nenhum token, senha ou PIN literal.
-for f in "$rot" "$leia_f" "$readme_f"; do
-  assert_eq "" "$(grep -nE 'eyJ[A-Za-z0-9_-]{8,}' "$f")" "${f#"$ROOT"/}: sem JWT literal"
-  assert_eq "" "$(grep -nE 'Bearer[[:space:]]+[^$[:space:]`…<]' "$f" | grep -vE 'Bearer[[:space:]]+(…|\.\.\.)')" \
-    "${f#"$ROOT"/}: Bearer só com variável"
-  assert_eq "" "$(grep -nE '(^|[^A-Za-z])PIN([^A-Za-z]|$)' "$f" | grep -E '(^|[^0-9A-Za-z-])[0-9]{4,8}([^0-9]|$)')" \
-    "${f#"$ROOT"/}: sem PIN literal"
-done
+# Travas genéricas de todo roteiro (tests/lib/roteiro_checks.sh): 3.1 a 3.3, no roteiro, no LEIA-ME e no README.
+roteiro_check_seed_secrets "$rot" "$leia_f" "$readme_f"
 
 # =============================================================================================================
 # 4. Coerência com o LEIA-ME
@@ -509,22 +257,9 @@ for f in "$rot" "$leia_f"; do
     "${f#"$ROOT"/}: não manda copiar JAR"
 done
 
-# 4.4 O comando do passo de abrir o app (antigo passo 2) é o mesmo da seção "Abrir o app" do LEIA-ME.
-app_cmd="$(step_text "$h_app" | awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' | head -1)"
-leia_app="$(section "$leia_f" "## ${ln_app:+$(sed -n "${ln_app}p" "$leia_f" | grep -oE '[0-9]+')}." | awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb')"
-[[ -n "$app_cmd" ]] || _assert_fail "passo ${n_app:-?} tem o comando de abrir o app"
-in_list "$app_cmd" "$leia_app" ||
-  _assert_fail "comando do passo ${n_app:-?} (abrir o app) igual ao do LEIA-ME" "roteiro: $app_cmd" "LEIA-ME: $leia_app"
-
-# 4.5 As variáveis de senha citadas pelo roteiro são as do LEIA-ME e as que o seed lê.
-for v in $(grep -oE 'ZENY_SEED_[A-Z_]+' "$rot" | sort -u); do
-  grep -qE "^\\[Environment\\]::SetEnvironmentVariable\\(\"${v}\", .*, \"Process\"\\)$" <<<"$leia_ps_text" ||
-    _assert_fail "$v citada pelo roteiro é definida no LEIA-ME por SetEnvironmentVariable(..., \"Process\")"
-  grep -qF -- "$v" "$seedargs_kt" || _assert_fail "$v citada pelo roteiro é lida pelo seed"
-done
-for v in ZENY_SEED_RECEPTIONIST_PASSWORD ZENY_SEED_MANAGER_PASSWORD ZENY_SEED_HOUSEKEEPER_PASSWORD; do
-  assert_contains "$(cat "$rot")" "$v" "roteiro diz de onde vem a senha ($v)"
-done
+# 4.4 e 4.5: travas genéricas de todo roteiro (tests/lib/roteiro_checks.sh): o comando de abrir o app é o do
+#     LEIA-ME e as variáveis de senha citadas são as do LEIA-ME e as que o seed lê.
+roteiro_check_leia_app_and_vars "$rot" "$leia_f"
 
 # =============================================================================================================
 # 5. Ordem e resultados esperados

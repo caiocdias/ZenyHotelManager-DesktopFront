@@ -6,6 +6,7 @@
 # diretório temporário, como no pacote. Não chama o Gradle nem containers.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
+source "$ROOT/tests/lib/roteiro_checks.sh"
 
 rot="$ROOT/docs/demo/roteiro-m1.md"
 leia_f="$ROOT/tools/server-env/LEIA-ME.md"
@@ -23,28 +24,16 @@ for f in "$rot" "$leia_f" "$envex" "$genenv" "$seedargs_kt" "$docs_test"; do
 done
 ((missing == 0)) || finish
 
-# --- utilitários --------------------------------------------------------------------------------------------
-# Só as linhas dentro de blocos ```powershell (de um arquivo ou de um texto na entrada).
-ps_code() { awk '/^```powershell[[:space:]]*$/{inb=1; next} /^```/{inb=0; next} inb' "$@"; }
-# Mesmo, com o número da linha no arquivo: "N<TAB>linha".
-ps_code_n() { awk '/^```powershell[[:space:]]*$/{inb=1; next} /^```/{inb=0; next} inb {print NR "\t" $0}' "$1"; }
-# Seção "## N. ..." pelo número, do título até antes do próximo "## ".
-step() { awk -v h="## $1. " 'index($0, h) == 1 {on = 1; print; next} on && /^## / {exit} on' "$rot"; }
+# --- utilitários (os genéricos vêm de tests/lib/roteiro_checks.sh) ---------------------------------------
+ps_code() { rc_ps_code "$@"; }
+ps_code_n() { rc_ps_code_n "$1"; }
+step() { rc_step "$rot" "$1"; }
 # Subseção "### Título" do roteiro, até o próximo "###" ou "##".
 sub_of() { awk -v h="### $1" '$0 == h {on = 1; next} on && /^###? / {exit} on' "$rot"; }
-# Número do passo que contém a linha N do roteiro.
-step_of_line() { awk -v n="$1" 'NR > n {exit} /^## [0-9]+\. / {s = $2} END {sub(/\.$/, "", s); print s}' "$rot"; }
-# Número do único passo cujo texto casa com o padrão (ERE); vazio se nenhum ou mais de um.
-step_with() {
-  PAT="$1" awk '
-    function flush() { if (h != "" && hit) { n++; out = h } }
-    /^## [0-9]+\. / { flush(); h = $2; hit = 0; next }
-    h != "" && $0 ~ ENVIRON["PAT"] { hit = 1 }
-    END { flush(); if (n == 1) { sub(/\.$/, "", out); print out } }' "$rot"
-}
-# Parágrafo logo antes da linha N (o texto que diz como rodar o bloco).
-para_before() { awk -v s="$1" 'NR < s' "$rot" | awk 'BEGIN{RS=""} {p=$0} END{print p}'; }
-first_ln() { grep -nE -- "$1" "$rot" | head -1 | cut -d: -f1; }
+step_of_line() { rc_step_of_line "$rot" "$1"; }
+step_with() { rc_step_with "$rot" "$1"; }
+para_before() { rc_para_before "$rot" "$1"; }
+first_ln() { rc_first_ln "$rot" "$1"; }
 
 rot_text="$(cat "$rot")"
 rot_ps="$(ps_code "$rot")"
@@ -71,101 +60,11 @@ done
 # 1. Folha de senhas
 # =============================================================================================================
 
-# 1.1 A folha fica no passo 0, antes do passo 1: antes de qualquer linha que peça segredo e antes de o .env existir.
+# Travas genéricas de todo roteiro (tests/lib/roteiro_checks.sh): 1.1 a 1.6, a folha e as remissões a ela.
+roteiro_check_password_sheet "$rot"
+# A linha da folha e o item da senha nova do admin, usados nas seções abaixo.
 folha_ln="$(first_ln '^### Folha de senhas$')"
-step1_ln="$(first_ln '^## 1\. ')"
-first_secret_ln="$(awk -F'\t' '$2 ~ /Get-Credential|Read-Host|SetEnvironmentVariable/ {print $1; exit}' <<<"$rot_ps_n")"
-first_login_ln="$(first_ln '\*\*Senha\*\*')"
-if [[ -z "$folha_ln" || -z "$step1_ln" || -z "$first_secret_ln" || -z "$first_login_ln" ]] ||
-  ! ((folha_ln < step1_ln && step1_ln < first_secret_ln && folha_ln < first_login_ln)); then
-  _assert_fail "folha de senhas no passo 0, antes do passo 1, da primeira linha de segredo e do primeiro login no app" \
-    "folha: ${folha_ln:-ausente}; passo 1: ${step1_ln:-ausente}; segredo: ${first_secret_ln:-ausente}; login: ${first_login_ln:-ausente}"
-fi
-assert_eq "0" "$(step_of_line "${folha_ln:-1}")" "a folha de senhas está no passo 0"
-
-# 1.2 A tabela: 5 itens numerados de 1 a 5, um por segredo do seed, com as regras do SeedArgs.kt.
-folha="$(awk '/^### Folha de senhas$/ {on = 1; next} on && /^##/ {exit} on' "$rot")"
-rows="$(grep -E '^\| [0-9]+ \|' <<<"$folha")"
-assert_eq "1 2 3 4 5" "$(awk -F'|' '{gsub(/ /, "", $2); print $2}' <<<"$rows" | tr '\n' ' ' | sed 's/ $//')" \
-  "folha: itens 1 a 5, em ordem"
-item_of() { grep -E -- "$1" <<<"$rows" | awk -F'|' '{gsub(/ /, "", $2); print $2}'; }
-i_admin="$(item_of 'senha nova do administrador')"
-i_ger="$(item_of 'login `gerente`')"
-i_rec="$(item_of 'login `recepcao`')"
-i_gov="$(item_of 'login `governanta`')"
-i_pin="$(item_of 'PIN do Gerente')"
-for pair in "senha nova do administrador|$i_admin" "gerente|$i_ger" "recepcao|$i_rec" "governanta|$i_gov" "PIN|$i_pin"; do
-  [[ "${pair#*|}" =~ ^[1-5]$ ]] || _assert_fail "folha: um só item para ${pair%%|*}" "achado: ${pair#*|}"
-done
-pw_rule="$(grep -oE 'PASSWORD_LENGTH = [0-9]+\.\.[0-9]+' "$seedargs_kt" | grep -oE '[0-9]+\.\.[0-9]+' | sed 's/\.\./ a /')"
-pin_rule="$(grep -oE 'PIN_LENGTH = [0-9]+\.\.[0-9]+' "$seedargs_kt" | grep -oE '[0-9]+\.\.[0-9]+' | sed 's/\.\./ a /')"
-[[ -n "$pw_rule" && -n "$pin_rule" ]] || _assert_fail "li as regras de senha e PIN do SeedArgs.kt"
-for i in "$i_admin" "$i_ger" "$i_rec" "$i_gov"; do
-  assert_contains "$(grep -E "^\\| $i \\|" <<<"$rows")" "de $pw_rule caracteres" "folha, item $i: senha de $pw_rule caracteres (SeedArgs)"
-done
-assert_contains "$(grep -E "^\\| ${i_pin:-x} \\|" <<<"$rows")" "de $pin_rule dígitos" "folha, item do PIN: de $pin_rule dígitos (SeedArgs)"
-assert_contains "$folha" "anote" "folha: manda anotar"
-assert_contains "$folha" "fora da pasta" "folha: anotar fora da pasta do pacote"
-
-# 1.3 Cada janela de senha aponta o item certo da folha (e só ele); a senha atual do admin aponta o passo do .env.
-#     O nome do usuário na janela é o login do item.
-n_prompts=0
-while IFS=: read -r start prompt_ln; do
-  [[ -n "$start" ]] || continue
-  n_prompts=$((n_prompts + 1))
-  line="$(sed -n "${prompt_ln}p" "$rot")"
-  prev="$(para_before "$start")"
-  want="" login=""
-  case "$line" in
-    *'"ZENY_SEED_ADMIN_PASSWORD"'*) want="passo" ;;
-    *'"ZENY_SEED_ADMIN_NEW_PASSWORD"'*) want="$i_admin" login="administrador" ;;
-    *'"ZENY_SEED_MANAGER_PASSWORD"'*) want="$i_ger" login="gerente" ;;
-    *'"ZENY_SEED_RECEPTIONIST_PASSWORD"'*) want="$i_rec" login="recepcao" ;;
-    *'"ZENY_SEED_HOUSEKEEPER_PASSWORD"'*) want="$i_gov" login="governanta" ;;
-    *Read-Host*) want="$i_pin" ;;
-    *'Get-Credential governanta'*) want="$i_gov" login="governanta" ;;
-    *) _assert_fail "janela de credencial conhecida (linha $prompt_ln)" "linha: $line" ;;
-  esac
-  got_items="$(grep -oE 'item [0-9]+ da folha' <<<"$prev" | grep -oE '[0-9]+' | sort -u | tr '\n' ' ' | sed 's/ $//')"
-  if [[ "$want" == "passo" ]]; then
-    assert_eq "" "$got_items" "janela da senha atual do admin (linha $prompt_ln) não aponta item da folha"
-    assert_contains "$prev" "passo $n_admin" "janela da senha atual do admin (linha $prompt_ln) aponta o passo $n_admin (.env)"
-  elif [[ -n "$want" ]]; then
-    assert_eq "$want" "$got_items" "janela da linha $prompt_ln aponta o item $want da folha, e só ele"
-  fi
-  if [[ -n "$login" ]]; then
-    got_user="$(grep -oE 'Get-Credential (-UserName )?[A-Za-z0-9_.-]+' <<<"$line" | awk '{print $NF}')"
-    assert_eq "$login" "$got_user" "janela da linha $prompt_ln com o usuário do item ($login)"
-  fi
-done < <(awk '
-  /^```powershell/ { s = NR; p = ""; next }
-  /^```/ && s { if (p != "") print s ":" p; s = 0; next }
-  s && /Get-Credential|Read-Host/ && p == "" { p = NR }' "$rot")
-assert_eq "7" "$n_prompts" "roteiro: 7 janelas de credencial (6 do seed e a da Governanta)"
-
-# 1.4 Os logins no app apontam o item do usuário digitado.
-while IFS= read -r l; do
-  [[ -n "$l" ]] || continue
-  user="$(grep -oE 'digite `[a-z]+`' <<<"$l" | grep -oE '[a-z]+`$' | tr -d '`')"
-  case "$user" in
-    gerente) want="$i_ger" ;; recepcao) want="$i_rec" ;; governanta) want="$i_gov" ;; *) want="?" ;;
-  esac
-  assert_eq "$want" "$(grep -oE 'item [0-9]+ da folha' <<<"$l" | grep -oE '[0-9]+' | tr '\n' ' ' | sed 's/ $//')" \
-    "login de $user no app aponta o item $want da folha"
-done < <(grep -E 'Em \*\*Login\*\*, digite' "$rot")
-(($(grep -cE 'Em \*\*Login\*\*, digite' "$rot") >= 2)) || _assert_fail "roteiro: logins da Recepcionista e do Gerente no app"
-
-# 1.5 Todo "item N da folha" existe; depois do seed, a senha do admin é o item da senha nova.
-for n in $(grep -oE 'item [0-9]+ da folha' "$rot" | grep -oE '[0-9]+' | sort -u); do
-  ((n >= 1 && n <= 5)) || _assert_fail "item $n citado existe na folha"
-done
-assert_contains "$(step "$n_seed")" "a senha do administrador é o item $i_admin da folha" \
-  "depois do seed, a senha do admin é o item $i_admin (senha nova)"
-# 1.6 "Você vai precisar deles nos passos ..." = os passos (antes do passo final) que citam um item da folha.
-said="$(grep -oE 'precisar deles nos passos [0-9]+((, | e )[0-9]+)*' <<<"$folha" | grep -oE '[0-9]+' | sort -n | tr '\n' ' ')"
-used="$(for ((n = 1; n < last_step; n++)); do step "$n" | grep -qE 'item [0-9]+ da folha' && echo "$n"; done | tr '\n' ' ')"
-[[ -n "$said" ]] || _assert_fail "folha diz em que passos os valores são usados"
-assert_eq "$used" "$said" "folha: os passos citados são os que usam um item da folha"
+i_admin="$(rc_folha_item "$(rc_folha_rows "$rot")" 'senha nova do administrador')"
 
 # =============================================================================================================
 # 2. Passo 1: pasta nova, projeto e volumes, limpeza só pelo projeto
@@ -279,37 +178,9 @@ assert_contains "$rot_text" "\"Erros comuns\", no passo $last_step" "a remissão
 # =============================================================================================================
 # 5. Linhas comuns ao roteiro e ao LEIA-ME: idênticas, e a checagem do test_docs.sh não passa no vazio
 # =============================================================================================================
-kinds='^(docker |curl\.exe |\[Environment\]::SetEnvironmentVariable|\$pin |Remove-Variable pin$|java -jar app\\demo-seed\.jar |java "-Dzeny)'
-rot_shared="$(grep -E "$kinds" <<<"$rot_ps" | grep -vxF 'docker compose version' | sort -u)"
-(($(grep -c . <<<"$rot_shared") >= 18)) ||
-  _assert_fail "roteiro: ao menos 18 linhas de servidor, seed e app em comum com o LEIA-ME" "achadas: $(grep -c . <<<"$rot_shared")"
-while IFS= read -r l; do
-  [[ -n "$l" ]] || continue
-  grep -qxF -- "$l" <<<"$leia_ps" || _assert_fail "linha do roteiro idêntica num bloco PowerShell do LEIA-ME" "$l"
-done <<<"$rot_shared"
-# A lista do test_docs.sh: não vazia e com toda linha comum do roteiro (só lida, nunca alterada aqui).
-# Só as linhas da definição são avaliadas (compose='...' e itens '...' ou "$compose <subcomando>", sem substituição
-# de comando); qualquer outra forma é falha, sem avaliar nada.
-compose_def="$(grep -E "^compose='[^']*'\$" "$docs_test")"
-arr_def="$(awk '/^shared_lines=\(/ {on = 1; first = NR} on {print} on && ((NR == first && /\)$/) || /^\)$/) {exit}' "$docs_test")"
-arr_items="$(sed '1d;$d' <<<"$arr_def")"
-docs_list=""
-if [[ -z "$compose_def" || "$(head -1 <<<"$arr_def")" != "shared_lines=(" || "$(tail -1 <<<"$arr_def")" != ")" ]] ||
-  grep -qvE "^  ('[^']*'|\"\\\$compose [a-z -]+\")\$" <<<"$arr_items"; then
-  _assert_fail "test_docs.sh: compose='...' e shared_lines=( ... ) com um item entre aspas por linha" "definição: $arr_def"
-else
-  docs_list="$(
-    eval "$compose_def"
-    eval "items=($arr_items)"
-    printf '%s\n' "${items[@]}"
-  )"
-fi
-(($(grep -c . <<<"$docs_list") >= 17)) ||
-  _assert_fail "test_docs.sh: a lista de linhas comuns tem ao menos 17 linhas" "achadas: $(grep -c . <<<"$docs_list")"
-while IFS= read -r l; do
-  [[ -n "$l" && "$l" != java\ \"-Dzeny* ]] || continue
-  grep -qxF -- "$l" <<<"$docs_list" || _assert_fail "test_docs.sh confere a linha comum do roteiro" "$l"
-done <<<"$rot_shared"
+# Travas genéricas de todo roteiro (tests/lib/roteiro_checks.sh): as linhas de servidor, seed e app do roteiro
+# idênticas no LEIA-ME, e a lista do test_docs.sh (só lida) com todas elas.
+roteiro_check_identical_to_leia "$rot" "$leia_f" "$docs_test"
 
 # =============================================================================================================
 # 6. A nota do IP: só a linha ZENY_STORAGE_PUBLIC_ENDPOINT, nunca --force
