@@ -106,4 +106,14 @@ class TraceFormDialogTest {
             assertTrue(source.calls.any { it is TraceCall.Create })
             assertEquals(1, closed)
         }
+
+    @Test
+    fun editShowsCurrentLink() =
+        runComposeUiTest {
+            val source = source().apply { reservationCodes[FORM_RESERVATION] = "R-77" }
+            val trace = formExisting().copy(reservationId = Option.Some(Uuid.parse(FORM_RESERVATION)))
+            source.seed(trace)
+            dialog(source, TraceTarget.Existing(trace.id.toString()))
+            onNodeWithText("Reserva R-77").assertExists()
+        }
 }

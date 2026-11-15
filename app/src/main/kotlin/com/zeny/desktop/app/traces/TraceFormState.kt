@@ -51,6 +51,7 @@ private data class LoadedTrace(
     val dueOn: BusinessDate,
     val assigneeUserId: String?,
     val assigneeName: String?,
+    val link: String,
 )
 
 /**
@@ -85,6 +86,10 @@ class TraceFormState(
     var rooms by mutableStateOf<List<RoomOption>>(emptyList())
         private set
     var assigneeName by mutableStateOf<String?>(null)
+        private set
+
+    /** O vínculo do recado em edição ("Reserva R-…" ou "UH 203"), lido com o recado; `null` antes disso. */
+    var linkText by mutableStateOf<String?>(null)
         private set
     var fieldErrors by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -204,18 +209,22 @@ class TraceFormState(
         mine: Int,
         notice: String?,
     ) {
-        val outcome = attempt { source.trace(id).let { loaded(it) } }
+        val outcome = attempt { loaded(source.trace(id)) }
         if (closed || mine != generation) return
         outcome.fold({ apply(it, notice) }, { applyFailure(it) })
     }
 
-    private fun loaded(version: TraceVersion): LoadedTrace {
+    private suspend fun loaded(version: TraceVersion): LoadedTrace {
         val trace = version.trace
+        val reservationId = (trace.reservationId as? Option.Some)?.value?.toString()
+        // O código é só rótulo: a leitura que falha deixa "Reserva" sem código e não bloqueia o formulário.
+        val code = reservationId?.let { attempt { source.reservationCode(it) }.getOrNull() }
         return LoadedTrace(
             version,
             BusinessDate.parse(trace.dueOn),
             (trace.assigneeUserId as? Option.Some)?.value?.toString(),
             (trace.assigneeName as? Option.Some)?.value,
+            TraceText.link(trace, code),
         )
     }
 
@@ -231,6 +240,7 @@ class TraceFormState(
         currentDepartment = Department(trace.departmentId.toString(), trace.departmentName)
         assigneeUserId = loaded.assigneeUserId
         assigneeName = loaded.assigneeName
+        linkText = loaded.link
         etag = loaded.version.etag
         resolved = trace.status != OPEN_STATUS
         error = null

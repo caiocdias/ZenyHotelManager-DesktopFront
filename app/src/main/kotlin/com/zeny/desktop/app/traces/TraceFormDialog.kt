@@ -89,7 +89,7 @@ private fun Link(state: TraceFormState) {
     when (val target = state.target) {
         is TraceTarget.ForReservation -> Text("Reserva ${target.code}")
         is TraceTarget.ForRoom -> RoomPicker(state)
-        is TraceTarget.Existing -> Unit
+        is TraceTarget.Existing -> state.linkText?.let { Text(it, Modifier.testTag("trace-link")) }
     }
     state.fieldErrors["reservationId"]?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 }
