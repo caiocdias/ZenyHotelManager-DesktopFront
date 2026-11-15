@@ -110,20 +110,19 @@
 **Estimativa:** 45 min · **Depende de:** nenhuma · **Risco:** alto (dependência nova; irreversível primeiro: valida a H4)
 
 **Files:**
-- Modify: `gradle/libs.versions.toml`, `design/build.gradle.kts` (PDFBox `implementation`; isolamento de tmp da tarefa `test`; tarefa nova `noDiskTest`, ligada ao `check`, em JVM própria com `-Djava.io.tmpdir` e `-Duser.home` em pastas novas do build, rodando só as classes com a anotação ou o pacote que a separa) e os lockfiles
-- Modify: `app/build.gradle.kts` (o `verifyDesktopJar` passa a exigir `org/apache/pdfbox/` e o recurso de fonte que o `FontMapper` usa)
+- Modify: `gradle/libs.versions.toml`, `design/build.gradle.kts` e os lockfiles. No `design/build.gradle.kts`: o PDFBox como `implementation`; o isolamento de tmp da tarefa `test` (como no `app`); e uma tarefa nova `noDiskTest` do tipo `Test` **sobre o próprio `sourceSets.test`** (mesmo `testClassesDirs` e `classpath`, sem conjunto de fontes novo, para não nascer configuração nova nos lockfiles), filtrada pelo pacote `com.zeny.desktop.design.pdf.nodisk` (que a tarefa `test` exclui), ligada ao `check`, em JVM própria com `-Djava.io.tmpdir` e `-Duser.home` em pastas novas do build criadas antes da partida
 - Create: `design/src/main/kotlin/com/zeny/desktop/design/pdf/PdfBoxSetup.kt`
-- Create: `tests/test_pdfbox_scope_ataque.sh` (no molde de `tests/test_design_testdeps_ataque.sh`: `org.apache.pdfbox` ausente do `core` e do `compileClasspath`/`runtimeClasspath` de produção do `app` declarados; presente só no `design`)
-- Test: `design/src/noDiskTest/kotlin/com/zeny/desktop/design/pdf/PdfNoDiskTest.kt` (ou o conjunto de fontes que a tarefa nova usar) e `design/src/test/kotlin/com/zeny/desktop/design/pdf/PdfBoxSetupTest.kt`
+- Create: `tests/test_pdfbox_scope_ataque.sh` (no molde de `tests/test_design_testdeps_ataque.sh`, pelos lockfiles e pelos `build.gradle.kts`): o PDFBox ausente do lockfile do `core`; ausente do `compileClasspath` do `app`; presente no `runtimeClasspath` do `app` (vem do `design`, e o JAR precisa dele) e no `compileClasspath` do `design`; no `app/build.gradle.kts`, só como `testImplementation` (a partir da Task 9)
+- Test: `design/src/test/kotlin/com/zeny/desktop/design/pdf/nodisk/PdfNoDiskTest.kt` e `design/src/test/kotlin/com/zeny/desktop/design/pdf/PdfBoxSetupTest.kt`
 
 **Interfaces:**
 - Produces (pacote `com.zeny.desktop.design.pdf`): `object PdfBoxSetup { fun install() }` (da Global Constraint "Disco"); um utilitário de teste do `design` que gera, depois do `install()`, um PDF de 3 páginas em memória com Helvetica, Helvetica-Bold e uma imagem JPEG (reaproveitado pelas Tasks 4–5).
 
 - [ ] **Step 1: Testes que falham:**
   - `PdfBoxSetupTest`: `installIsIdempotent`, `fontMapperIsOurs` (`FontMappers.instance()` é o mapper próprio), `imageIoCacheIsOff`, `standardFontsResolveWithoutSystemScan` (Helvetica, Helvetica-Bold, Times-Roman e Courier resolvem para fontes do JAR);
-  - `PdfNoDiskTest.pdfLifecycleCreatesNoFile`, na tarefa isolada: aquecimento documentado do que não é PDFBox (Skiko e fontes do AWT) antes da foto; foto recursiva de `java.io.tmpdir` e `user.home`; gerar o PDF (depois do `install()`), carregá-lo só em memória, renderizar as 3 páginas em 2 zooms e fechar; foto de novo, igual à primeira; um `WatchService` nas duas raízes durante o ciclo não vê nenhum evento de criação.
+  - `PdfNoDiskTest.pdfLifecycleCreatesNoFile`, na tarefa isolada: aquecimento documentado do que não é PDFBox (Skiko e fontes do AWT) antes da foto; foto recursiva de `java.io.tmpdir` e `user.home`; gerar o PDF (depois do `install()`), carregá-lo só em memória, renderizar as 3 páginas em 2 zooms e fechar; foto de novo, igual à primeira; um `WatchService` nas duas raízes durante o ciclo não vê nenhum evento de criação (sincronização sem dormir: depois da segunda foto, criar um arquivo sentinela em cada raiz e esperar com `poll(timeout)` até o evento dele chegar; só então afirmar que não houve outro evento).
 - [ ] **Step 2:** `./gradlew :design:test :design:noDiskTest --max-workers=2` → FAIL.
-- [ ] **Step 3:** acrescente o PDFBox, a tarefa isolada, o `PdfBoxSetup`, o `verifyDesktopJar` e a checagem estática. Se a regra de disco não fechar, pare (BLOCKED, regra de parada da H4).
+- [ ] **Step 3:** acrescente o PDFBox, a tarefa isolada, o `PdfBoxSetup` e a checagem estática. Se a regra de disco não fechar, pare (BLOCKED, regra de parada da H4).
 - [ ] **Step 4:** PASS; gate verde; `./gradlew :app:desktopJar --max-workers=2` e registre no relatório a versão, o tamanho do JAR antes/depois, o tempo e as fontes do JAR do PDFBox.
 - [ ] **Step 5: Commit** (`Acrescenta o PDFBox ao design sem gravar em disco`).
 
@@ -154,20 +153,20 @@
 
 ### Task 5: "Salvar como…" e "Imprimir" no `design`
 
-**Estimativa:** 45 min · **Depende de:** Task 3 · **Risco:** alto (escreve em disco por ação do usuário; impressão)
+**Estimativa:** 45 min · **Depende de:** Tasks 3 e 4 · **Risco:** alto (escreve em disco por ação do usuário; impressão)
 
 **Files:**
 - Create: `design/src/main/kotlin/com/zeny/desktop/design/pdf/PdfActions.kt`
 - Test: `design/src/test/kotlin/com/zeny/desktop/design/pdf/PdfActionsTest.kt`
 
 **Interfaces:**
-- Consumes: Task 3 (o `install()` e o utilitário de PDF de teste).
+- Consumes: Task 3 (o `install()` e o utilitário de PDF de teste) e Task 4 (`PdfDocumentState`, no teste de concorrência).
 - Produces:
   - `fun interface SaveLocationChooser { fun choose(suggestedName: String): java.nio.file.Path? }` (nulo = cancelado) e a real `FileDialogSaveChooser(parent: java.awt.Frame?)` (`java.awt.FileDialog` em modo `SAVE`); o mapeamento do resultado do diálogo é a função pura `saveDialogResult(directory: String?, file: String?): Path?` (sem arquivo → `null`);
-  - `fun interface PrintDialog { fun print(pageable: java.awt.print.Pageable): PrintOutcome }`, `enum class PrintOutcome { PRINTED, CANCELLED }` e a real `SystemPrintDialog(jobFactory: () -> PrinterJob = PrinterJob::getPrinterJob)` (`setPageable`, `printDialog()` falso → `CANCELLED` sem `print()`; verdadeiro → `print()`; `PrinterException` sobe para o `PdfActions`);
+  - `fun interface PrintDialog { fun print(pageable: java.awt.print.Pageable): PrintOutcome }`, `enum class PrintOutcome { PRINTED, CANCELLED }` e a real `SystemPrintDialog(jobFactory: () -> PrinterJob = PrinterJob::getPrinterJob)` (`setPageable`; o `printDialog()` roda na EDT por `invokeAndWait`; falso → `CANCELLED` sem `print()`; verdadeiro → `print()` na thread que chamou, fora da EDT; `PrinterException` sobe para o `PdfActions`);
   - `class PdfActions(bytes: ByteArray, suggestedName: String, chooser: SaveLocationChooser, printer: PrintDialog, uiDispatcher: CoroutineDispatcher, ioDispatcher: CoroutineDispatcher)`:
     - `suspend fun save(): SaveResult` (`Saved`, `Cancelled`, `Failed(message)`): diálogo no `uiDispatcher` (EDT), escrita no `ioDispatcher`;
-    - `suspend fun print(): PrintResult` (`Printed`, `Cancelled`, `Failed(message)`): carrega um `PDDocument` próprio dos bytes (só memória, depois do `install()`), monta o `PDFPageable`, chama o diálogo e o `print()` fora da thread de UI e fecha o documento no fim;
+    - `suspend fun print(): PrintResult` (`Printed`, `Cancelled`, `Failed(message)`): carrega um `PDDocument` próprio dos bytes (só memória, depois do `install()`), monta o `PDFPageable` e chama a porta no `ioDispatcher` (o `SystemPrintDialog` leva só o diálogo para a EDT) e fecha o documento no fim;
     - textos da Global Constraint;
   - `fun suggestedPdfName(raw: String?, fallback: String): String`.
 
@@ -251,13 +250,13 @@ O catálogo de componentes do `app` não ganha o visualizador (exigiria bytes de
 **Estimativa:** 45 min · **Depende de:** Task 8 · **Risco:** alto (critérios da etapa; lê dado pessoal fictício do seed)
 
 **Files:**
-- Modify: `app/build.gradle.kts` (`testImplementation(libs.pdfbox)`, input `zenyLiveCard` de `ZENY_LIVE_CARD` e o opt-in no `outputs.upToDateWhen`) e os lockfiles do `app` no mesmo commit
+- Modify: `app/build.gradle.kts` (`testImplementation(libs.pdfbox)`; o `verifyDesktopJar` passa a exigir `org/apache/pdfbox/` e o recurso de fonte que o `FontMapper` usa; input `zenyLiveCard` de `ZENY_LIVE_CARD` e o opt-in no `outputs.upToDateWhen`) e os lockfiles do `app` no mesmo commit
 - Create: `app/src/test/kotlin/com/zeny/desktop/app/reception/DesktopJarPdfTest.kt`
 - Create: `app/src/test/kotlin/com/zeny/desktop/app/reception/LiveRegistrationCardCheck.kt`
 
 **Interfaces:**
 - Produces:
-  - `DesktopJarPdfTest.jarRendersFirstPage`: carrega as classes do `zeny-desktop.jar` (propriedade `zeny.desktopJar`, que a tarefa `test` já recebe) num classloader isolado e, por ele, abre e renderiza a página 1 de um PDF com Helvetica pelo `PdfDocumentState` do JAR;
+  - `DesktopJarPdfTest.jarRendersFirstPage`: carrega as classes do `zeny-desktop.jar` (propriedade `zeny.desktopJar`, que a tarefa `test` já recebe) num classloader isolado e, por ele, só o que não usa o Skia: `PdfBoxSetup.install()`, a carga em memória de um PDF com Helvetica e o `PDFRenderer` até um `BufferedImage` da página 1 não vazio, conferindo que o recurso de fonte do mapper vem do JAR (o nativo do Skiko não pode ser carregado por um segundo classloader);
   - `LiveRegistrationCardCheck`, pulada sem `ZENY_LIVE_CARD=1`; com ele, exige `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD` (a Recepcionista) e falha sem eles; usa o `CoreConnection` real e os estados reais, no molde de `LiveTracesCheck`.
 
 - [ ] **Step 1: Os testes:**
@@ -266,7 +265,7 @@ O catálogo de componentes do `app` não ganha o visualizador (exigiria bytes de
   - `cancelledReservationHasNoButton` (ao vivo): com uma reserva cancelada do seed, se houver, o botão não aparece (sem candidata, o teste diz isso e pula só esse caso);
   - `pdfBoxSetupIsActive` (ao vivo): depois de abrir a ficha real, o `FontMapper` é o próprio e o cache do `ImageIO` está desligado.
 - [ ] **Step 2:** sem o opt-in → pulada; gate verde.
-- [ ] **Step 3:** o orquestrador roda a verificação com o arquivo 600 e o `smokeTest`, gera o JAR e abre a ficha a partir dele contra o ambiente (captura).
+- [ ] **Step 3:** o orquestrador roda a verificação com o arquivo 600 e o `smokeTest`. A evidência do JAR é o `DesktopJarPdfTest` com o `verifyDesktopJar`; abrir a ficha pelo JAR na mão é complementar, se houver como.
 - [ ] **Step 4: Commit** (`Prova a ficha pelo JAR e a verifica ao vivo`).
 
 ## Decisões para o usuário (tomadas pela opção recomendada; vão ao handoff)
