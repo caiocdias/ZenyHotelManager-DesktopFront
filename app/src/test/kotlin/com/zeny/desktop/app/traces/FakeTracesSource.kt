@@ -93,6 +93,9 @@ class FakeTracesSource : TracesSource {
     /** Quando não nulo, `resolve` espera por ele antes de agir. */
     var resolveGate: CompletableDeferred<Unit>? = null
 
+    /** Cada `page` toma o primeiro item da fila (se houver) e espera por ele antes de responder. */
+    val pageGates: ArrayDeque<CompletableDeferred<Unit>> = ArrayDeque()
+
     private val inFlight = AtomicInteger(0)
     private val maxInFlight = AtomicInteger(0)
     val reservationCodeInFlight: Int get() = inFlight.get()
@@ -149,6 +152,7 @@ class FakeTracesSource : TracesSource {
         limit: Int,
     ): Page<TraceResponse> {
         calls += TraceCall.Page(filter, cursor, limit)
+        pageGates.removeFirstOrNull()?.await()
         fail(TraceOp.PAGE)
         val all = traces.values.filter { matches(it, filter) }
         val from = cursor?.toInt() ?: 0
