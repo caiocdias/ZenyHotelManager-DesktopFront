@@ -16,23 +16,36 @@
 **Fatos que o plano usa:**
 - O seed já tem chegadas sem UH (`A3`, `A4`) e hospedados para a troca (`H1` a `H5`) em `DemoCatalog.reservations`; o roteiro do M1 lista as linhas da saída do seed (o teste `tests/test_roteiro_m1_ataque.sh` compara com a ordem do `SeedItem`).
 - `POST /api/v1/traces` não é idempotente no servidor: o seeder precisa listar antes (`GET /api/v1/traces` com o filtro da reserva ou da UH) e só criar o que falta, reconhecendo o recado pelo texto exato.
-- O administrador do seed lê os setores (`GET /api/v1/departments`).
+- O administrador do seed lê os setores (`GET /api/v1/departments`); o `DepartmentResponse` tem a chave estável `key` (`RECEPTION`, `HOUSEKEEPING`, `MAINTENANCE`), que o seed usa (o nome pode mudar).
+- As reservas do seed são achadas por `BookingGateway.findReservation("DEMO-SEED-<slot>")` e as UHs por `SeededConfig.roomIds`; o `BookingSeeder` não muda.
+- Rodar o seed de novo depois da demo: o `BookingSeeder.settle` refaz o check-in de um `H*` que voltou a `CONFIRMED`; por isso o roteiro só desfaz o check-in feito no próprio roteiro (`A3`/`A4`) e só edita e resolve recados criados pelo usuário.
 - O app é aberto no roteiro com `-Dzeny.devShell=true` (D6 do M1, decidida pelo usuário).
 
 ## Global Constraints
 
-- **Seed:** só dados fictícios; idempotente (rodar duas vezes não duplica nada); o relatório ganha a linha `recados: N criados, M já existiam` na ordem do `SeedItem`; continua abaixo de 2 minutos; nenhum segredo em saída ou mensagem.
-- **Recados de exemplo:** três, com vencimento na data operacional: um para a Governança ligado à UH `101` ("Trocar o enxoval extra da UH antes da chegada."), um para a Manutenção ligado à reserva do slot `H1` ("Verificar o ar-condicionado, reclamação do hóspede."), um para a Recepção ligado à reserva do slot `A1` ("Confirmar o horário de chegada por telefone."). Nenhum dado pessoal no texto.
-- **Roteiro:** pt-BR, passo a passo único e do zero como o `roteiro-m1.md` (numa pasta nova, folha de senhas, recriar a demo, `.env`, servidor, admin, seed, app com `-Dzeny.devShell=true`); acumula os passos do M1 e acrescenta, com "Resultado esperado" em cada passo: painel do dia (chegadas, saídas, hospedados); check-in de uma chegada sem UH com alocação; ficha de registro aberta, "Salvar como…" (cancelar; salvar; salvar sobre um arquivo existente) e "Imprimir" para "Microsoft Print to PDF" (e cancelar), conferindo que o diálogo de impressão abre na frente e a escala de 100%; walk-in; troca de UH; desfazer check-in com a aprovação do Gerente (login e PIN da folha; PIN errado mostra a mensagem); recados (aba "Recados", criar no detalhe e na aba, resolver, editar em dois lugares para ver o aviso de "Alguém alterou este recado"); e um aviso de que uma Recepcionista com o modelo padrão de role vê a mensagem de permissão em "Novo recado".
-- **Pacote:** `tools/server-env/package.sh` leva `roteiro-m2.md` além do `roteiro-m1.md`; os testes do pacote continuam valendo.
-- **Testes:** testes existentes só mudam onde a tarefa manda; nada de dormir.
+- **Seed:** só dados fictícios; idempotente; o relatório ganha a linha `recados: N criados, M já existiam` com `SeedItem.TRACE("recados")` **depois de `CHECK_IN`**, na ordem em que o seed roda; continua abaixo de 2 minutos; nenhum segredo em saída ou mensagem.
+- **Recados de exemplo:** três, com vencimento na data operacional: Governança (`HOUSEKEEPING`) ligado à UH `101` ("Trocar o enxoval extra da UH antes da chegada."); Manutenção (`MAINTENANCE`) ligado à reserva do slot `H1` ("Verificar o ar-condicionado, reclamação do hóspede."); Recepção (`RECEPTION`) ligado à reserva do slot `A1` ("Confirmar o horário de chegada por telefone."). Nenhum dado pessoal no texto.
+- **Idempotência dos recados (ruling):** qualquer recado existente com o mesmo vínculo (reserva ou UH) e o mesmo setor conta como "já existia", qualquer que seja o texto ou a situação; só cria o que falta.
+- **Roteiro:** pt-BR, passo a passo único e do zero como o `roteiro-m1.md` (pasta nova, folha de senhas, recriar a demo, `.env`, servidor, admin, seed, app com `-Dzeny.devShell=true`), acumulando os passos do M1 com as mesmas travas de segredo e as linhas idênticas ao `LEIA-ME.md`. Passos novos, cada um com "Resultado esperado" e o que conta como reprovação:
+  - painel do dia (chegadas, saídas, hospedados, com as contagens do seed);
+  - check-in de uma chegada sem UH (`A3` ou `A4`) com alocação;
+  - ficha de registro dessa reserva: conferir código, UH, nome e documento mascarado; "Salvar como…" (cancelar; salvar; salvar sobre um arquivo existente; abrir o PDF salvo e conferir); "Imprimir" (cancelar; imprimir para "Microsoft Print to PDF" e abrir o PDF impresso). Defeitos conhecidos, aceitos no gate: o diálogo de impressão pode abrir atrás da janela (saída: Alt+Tab ou a barra de tarefas) e, com escala de tela de 125–150%, o "100%" aparece menor que a folha real;
+  - walk-in;
+  - troca de UH de um hospedado;
+  - desfazer o check-in feito no próprio roteiro com a aprovação do Gerente (login e PIN da folha); uma tentativa com PIN errado mostra a mensagem e gasta uma tentativa do `gerente`;
+  - recados: a aba "Recados" com os três do seed; criar um no detalhe e um na aba; resolver um criado pelo usuário; a edição concorrente com dois apps abertos (duas janelas `java -jar`), mostrando "Alguém alterou este recado. Confira e salve de novo.";
+  - aviso: uma Recepcionista com o modelo padrão de role vê a mensagem de permissão em "Novo recado" (a demo dá a role "Consulta de setores (demo)");
+  - o passo "No fim" diz o que acontece ao rodar o seed de novo depois da demo.
+- **Pacote:** `tools/server-env/package.sh` leva `roteiro-m2.md` além do `roteiro-m1.md`; o `LEIA-ME.md` do pacote e o `README.md` apontam o `roteiro-m2.md` como o roteiro do gate atual.
+- **Testes:** testes existentes só mudam onde a tarefa manda (listado em cada tarefa); nada de dormir.
 - **Gate e commits:** `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes antes de cada commit; nunca `./gradlew --stop`; commits em pt-BR com `Soul:` e `Co-Authored-By:` consecutivos no último parágrafo.
 
 ## Review Focus
 
-1. **Seed rodado duas vezes** sobre o mesmo ambiente não duplica recados (o servidor não é idempotente na criação). Teste `secondRunCreatesNothing` (Task 2).
-2. **Setor ou reserva que não existe** no ambiente (servidor sem o setor pré-carregado, reserva do slot ausente): o seed falha com `SeedFailure` em pt-BR e não cria recado pela metade. Teste `missingDepartmentFails` (Task 2).
-3. **Roteiro divergente da build:** as linhas do seed e os rótulos de tela citados no roteiro batem com o código (teste de shell no molde do `test_roteiro_m1_ataque.sh`). Task 3.
+1. **Seed rodado duas vezes** não duplica recados. Testes `secondRunCreatesNothing` (Task 2) e o seed duas vezes contra o servidor real (Task 5).
+2. **Setor, reserva ou UH ausente:** `SeedFailure` em pt-BR antes de qualquer criação. Testes `missingDepartmentFails` e `missingReservationFails` (Task 2).
+3. **Roteiro divergente da build:** os "Resultado esperado" conferidos executando o roteiro do zero no Linux com o pacote real (Task 5); as linhas do seed e os rótulos conferidos por teste (Task 4).
+4. **Segredos no roteiro novo:** as mesmas travas do `roteiro-m1.md` (Task 4).
 
 ---
 
@@ -41,14 +54,14 @@
 **Estimativa:** 35 min · **Depende de:** nenhuma · **Risco:** alto (escreve no servidor; idempotência manual)
 
 **Files:**
-- Create: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/booking/TraceGateway.kt` (ou no pacote que o seed usar para a operação; siga a organização existente)
+- Create: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/frontdesk/TraceGateway.kt`
 - Create: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/sdk/SdkTraceGateway.kt`
-- Test: `demo-seed/src/test/kotlin/com/zeny/desktop/seed/sdk/SdkTraceGatewayTest.kt` e um falso em memória para a Task 2
+- Test: `demo-seed/src/test/kotlin/com/zeny/desktop/seed/sdk/SdkTraceGatewayTest.kt` e o falso em memória `demo-seed/src/test/kotlin/com/zeny/desktop/seed/frontdesk/FakeTraces.kt`
 
 **Interfaces:**
-- Produces: `interface TraceGateway { suspend fun departments(): Map<String, String>` (nome → id) `; suspend fun traces(reservationId: String?, roomId: String?): List<TraceRef>; suspend fun create(departmentId: String, dueOn: LocalDate, text: String, reservationId: String?, roomId: String?): String }`, com `data class TraceRef(val id: String, val text: String)` (`toString` sem o texto); erros sobem como `ApiError`, como nas outras portas do seed; listas lidas por inteiro, página a página.
+- Produces: `interface TraceGateway { suspend fun departmentIdsByKey(): Map<String, String>; suspend fun traces(reservationId: String?, roomId: String?): List<TraceRef>; suspend fun create(departmentId: String, dueOn: LocalDate, text: String, reservationId: String?, roomId: String?): String }`, com `data class TraceRef(val id: String, val departmentId: String)`; erros sobem como `ApiError`, como nas outras portas do seed; listas lidas por inteiro, página a página.
 
-- [ ] **Step 1: Testes que falham** (`MockEngine`, no molde de `SdkUserGatewayTest`): `departmentsByName`, `tracesFilteredByReservationOrRoom` (duas páginas), `createSendsBodyWithoutIdempotencyKey`, `errorsAreApiError`.
+- [ ] **Step 1: Testes que falham** (`MockEngine`, no molde de `SdkUserGatewayTest`): `departmentsByKey`, `tracesFilteredByReservationOrRoom` (duas páginas), `createSendsBodyWithoutIdempotencyKey`, `errorsAreApiError`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; gate verde.
 - [ ] **Step 5: Commit** (`Acrescenta a porta de recados ao seed`).
 
@@ -59,43 +72,72 @@
 **Estimativa:** 40 min · **Depende de:** Task 1 · **Risco:** alto (idempotência; relatório que o roteiro cita)
 
 **Files:**
-- Create: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/booking/TraceSeeder.kt`
-- Modify: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/data/SeedReport.kt` (`SeedItem.TRACE("recados")`, depois das alocações) e `demo-seed/src/main/kotlin/com/zeny/desktop/seed/DemoSeed.kt` (roda o `TraceSeeder` depois das reservas, com os ids delas e das UHs)
-- Modify (testes existentes, mudança mandada e de mesma força): `SeedReportAtaqueTest` (o rótulo `recados` entra na lista exata) e qualquer teste que fixe a lista de etapas do `DemoSeed`, só acrescentando a etapa nova
-- Modify: `docs/demo/roteiro-m1.md` (a linha `recados: 3 criados, 0 já existiam` na saída do seed, na ordem) — o teste do roteiro exige
-- Test: `demo-seed/src/test/kotlin/com/zeny/desktop/seed/booking/TraceSeederTest.kt`
+- Create: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/frontdesk/TraceSeeder.kt` (usa `BookingGateway.findReservation("DEMO-SEED-<slot>")` e `SeededConfig.roomIds`)
+- Modify: `demo-seed/src/main/kotlin/com/zeny/desktop/seed/data/SeedReport.kt` (`SeedItem.TRACE("recados")` depois de `CHECK_IN`) e `demo-seed/src/main/kotlin/com/zeny/desktop/seed/DemoSeed.kt` (o `AdminContext` ganha `traces: TraceGateway`; o `TraceSeeder` roda depois das reservas e dos check-ins)
+- Modify (testes existentes, mudança mandada, de mesma força): `SeedReportAtaqueTest` (o rótulo `recados` entra na lista exata); `DemoSeedTest.kt` e `DemoSeedAtaqueTest.kt` (só o argumento novo do `AdminContext`, com o falso `FakeTraces`)
+- Modify: `docs/demo/roteiro-m1.md` (a linha `recados: 3 criados, 0 já existiam` na saída do seed, na ordem) — o teste do roteiro do M1 exige
+- Test: `demo-seed/src/test/kotlin/com/zeny/desktop/seed/frontdesk/TraceSeederTest.kt`
 
 **Interfaces:**
 - Consumes: Task 1.
-- Produces: os três recados da Global Constraint, criados uma vez; o relatório conta `SeedItem.TRACE` criados e mantidos; um setor ausente ou uma reserva/UH ausente vira `SeedFailure` em pt-BR antes de qualquer criação.
+- Produces: os três recados da Global Constraint; idempotência pela chave (vínculo + setor); setor, reserva ou UH ausente → `SeedFailure` em pt-BR antes de qualquer criação.
 
-- [ ] **Step 1: Testes que falham:** `createsThreeTraces`, `secondRunCreatesNothing`, `partialStateCreatesOnlyMissing`, `missingDepartmentFails`, `missingReservationFails`, `reportCountsTraces`, `textsHaveNoPersonalData`.
+- [ ] **Step 1: Testes que falham:** `createsThreeTraces`, `secondRunCreatesNothing`, `existingTraceWithOtherTextCounts`, `partialStateCreatesOnlyMissing`, `missingDepartmentFails`, `missingReservationFails`, `missingRoomFails`, `reportCountsTraces`, `textsHaveNoPersonalData`.
 - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; gate verde.
 - [ ] **Step 5: Commit** (`Acrescenta recados de exemplo ao seed`).
 
 ---
 
-### Task 3: Roteiro do M2 no pacote
+### Task 3: O pacote leva o roteiro do M2
 
-**Estimativa:** 45 min · **Depende de:** Task 2 · **Risco:** alto (é o que o usuário executa no gate)
+**Estimativa:** 35 min · **Depende de:** Task 2 · **Risco:** alto (o pacote é o que vai ao Windows)
 
 **Files:**
-- Create: `docs/demo/roteiro-m2.md`
-- Modify: `tools/server-env/package.sh` (copia também o `roteiro-m2.md`)
-- Test: `tests/test_roteiro_m2_ataque.sh` (no molde de `tests/test_roteiro_m1_ataque.sh` e `test_roteiro_m1_zero_ataque.sh`: as linhas do seed na ordem do `SeedItem`; os rótulos e textos de tela citados existem no código — "Recados", "Novo recado", "Ficha de registro", "Salvar como…", "Imprimir", "Trocar UH", "Desfazer check-in", "Walk-in", "Alguém alterou este recado. Confira e salve de novo."; o roteiro começa do zero; o app abre com `-Dzeny.devShell=true`; nenhum segredo literal) e o caso novo nos testes do pacote (`roteiro-m2.md` presente e igual ao do repositório)
+- Modify: `tools/server-env/package.sh` (exige e copia `docs/demo/roteiro-m2.md`); nesta tarefa nasce um `docs/demo/roteiro-m2.md` provisório com só o título, que a Task 4 escreve
+- Modify (testes e fixtures, mudança mandada): `tests/lib/fixtures.sh` (`make_fake_jars` e os fronts falsos criam também o `roteiro-m2.md`); os casos de `test_package*.sh` e `test_gate_m1_ataque.sh` que montam o front falso; `tests/test_roteiro_m1_zero_ataque.sh` (a lista do pacote aceita o `roteiro-m2.md`)
+- Modify (docs): a lista do conteúdo do pacote nos passos 0 e 1 do `docs/demo/roteiro-m1.md`; `tools/server-env/LEIA-ME.md` (aponta o `roteiro-m2.md` como o roteiro do gate atual, e a asserção correspondente de `tests/test_docs.sh`); `README.md` (liga os dois roteiros)
+- Test: os casos novos nos testes do pacote (`roteiro-m2.md` presente e igual ao do repositório)
 
-**Interfaces:**
-- Consumes: Task 2 (a linha `recados`) e os textos de tela das E01–E07.
+- [ ] **Step 1: Testes que falham** (pacote sem o `roteiro-m2.md` → falha). - [ ] **Step 2:** FAIL. - [ ] **Step 3:** implemente. - [ ] **Step 4:** PASS; gate verde.
+- [ ] **Step 5: Commit** (`Leva o roteiro do M2 no pacote da demo`).
 
-- [ ] **Step 1: Testes que falham:** o teste de shell do roteiro e o do pacote.
-- [ ] **Step 2:** FAIL. - [ ] **Step 3:** escreva o roteiro (Global Constraint "Roteiro") e ajuste o `package.sh`. - [ ] **Step 4:** PASS; gate verde.
-- [ ] **Step 5: Commit** (`Acrescenta o roteiro do M2 e o leva no pacote`).
+---
+
+### Task 4: O roteiro do M2
+
+**Estimativa:** 45 min · **Depende de:** Task 3 · **Risco:** alto (é o que o usuário executa no gate; segredos)
+
+**Files:**
+- Modify: `docs/demo/roteiro-m2.md` (o roteiro inteiro, pela Global Constraint "Roteiro")
+- Modify (testes existentes, parametrização mandada, sem afrouxar): `tests/test_roteiro_m1_ataque.sh`, `tests/test_roteiro_m1_zero_ataque.sh` e as partes de roteiro de `tests/test_docs.sh` passam a rodar sobre os dois roteiros (variável com o caminho), mantendo todas as travas de segredo (`Get-Credential`/`Read-Host -AsSecureString`, `Remove-Variable pin`, nenhum `--*-password`, regras do PowerShell 5.1, folha de senhas por item, linhas idênticas ao `LEIA-ME.md`)
+- Create: `tests/test_roteiro_m2_ataque.sh` (só o que é do M2: as linhas do seed com `recados`; os rótulos e textos de tela citados existem no código do `app` ou do `design` — "Recados", "Novo recado", "Ficha de registro", "Salvar como…", "Imprimir", "Trocar UH", "Desfazer check-in", "Walk-in", "Alguém alterou este recado. Confira e salve de novo."; o desfazer usa só `A3`/`A4`; nenhum segredo literal)
+
+- [ ] **Step 1: Testes que falham** sobre o roteiro provisório. - [ ] **Step 2:** FAIL. - [ ] **Step 3:** escreva o roteiro e parametrize. - [ ] **Step 4:** PASS; gate verde.
+- [ ] **Step 5: Commit** (`Escreve o roteiro do M2`).
+
+---
+
+### Task 5: O roteiro do M2 executado no notebook
+
+**Estimativa:** 45 min · **Depende de:** Task 4 · **Risco:** alto (recria o ambiente; confere a demo)
+
+**Files:**
+- Modify: `docs/demo/roteiro-m2.md` (só os "Resultado esperado" que divergirem do que o app e o servidor fazem de fato, com o motivo no relatório)
+
+**Interfaces:** nenhuma de código. A tarefa segue o roteiro do zero no Linux com o pacote real (`build/demo-package/` gerado pelo `package.sh` a partir do HEAD), adaptando o que é de Windows (PowerShell → bash; janelas → variáveis), como a 5b da M1 E07:
+- recria o ambiente (`down -v`, `up`), troca a senha do admin, roda o seed (tempo abaixo de 2 minutos; a saída bate com o roteiro) e roda o seed **de novo** (a segunda saída bate com o texto do passo "No fim");
+- confere cada passo do M2 pela API, pelas verificações ao vivo do marco e por capturas do app (o relatório lista o que foi conferido e como);
+- não executa o que só existe no Windows (impressão real, diálogos nativos), que fica com o usuário.
+
+- [ ] **Step 1:** execute e anote cada divergência. - [ ] **Step 2:** corrija só o texto do roteiro. - [ ] **Step 3:** gate verde.
+- [ ] **Step 4: Commit** (`Ajusta o roteiro do M2 à execução no notebook`), se houver ajuste.
 
 ---
 
 ## Verificação do gate (orquestrador, depois das tarefas)
 
-1. Clone limpo do HEAD: `./gradlew build --max-workers=2`, `ktlintCheck detekt`, `:app:desktopJar :demo-seed:seedJar` e `bash tests/run.sh` verdes.
-2. Ambiente recriado: `down -v`, `up`, seed (tempo abaixo de 2 minutos, com a linha `recados`), `smokeTest`, e as verificações ao vivo do marco (`ZENY_LIVE_RECEPTION`, `ZENY_LIVE_CHECKIN`, `ZENY_LIVE_WALKIN`, `ZENY_LIVE_STAY`, `ZENY_LIVE_TRACES`, `ZENY_LIVE_CARD`).
-3. Pacote regenerado (`tools/server-env/package.sh`) com os JARs do HEAD, os dois roteiros e o `VERSAO.txt`; nenhum segredo no pacote.
-4. A etapa fica `#em-andamento` com "Aguardando o Windows" e entra na lista "Validações acumuladas no Windows" (regra 7).
+1. Clone limpo do HEAD: `./gradlew build --max-workers=2`, `ktlintCheck detekt`, `:app:desktopJar :demo-seed:seedJar` e `bash tests/run.sh` verdes; o JAR do pacote abre no Linux (`xwininfo`).
+2. Ambiente recriado (`down -v`, `up`, seed), `smokeTest` e as verificações ao vivo do marco, nesta ordem e por último as que escrevem: `ZENY_LIVE_REALTIME`, `ZENY_LIVE_RECEPTION`, `ZENY_LIVE_CARD`, `ZENY_LIVE_TRACES`, `ZENY_LIVE_CHECKIN`, `ZENY_LIVE_WALKIN`, `ZENY_LIVE_STAY`; depois, o ambiente é recriado de novo, para entregar a demo limpa.
+3. "Nenhuma etapa depende de pedido ao servidor": conferir `docs/pedidos-servidor.md` (PF-01 aberto, nenhuma etapa dependente) e as dependências do roadmap.
+4. Pacote regenerado (`tools/server-env/package.sh`) com os JARs do HEAD, os dois roteiros e o `VERSAO.txt`; nenhum segredo no pacote.
+5. A etapa fica `#em-andamento` com "Aguardando o Windows" e entra na lista "Validações acumuladas no Windows" (regra 7), registrando que o `roteiro-m2.md` fecha também a M0 E02.
