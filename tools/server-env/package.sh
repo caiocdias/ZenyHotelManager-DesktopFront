@@ -33,6 +33,7 @@ fi
 app_jar="$root/app/build/libs/zeny-desktop.jar"
 seed_jar="$root/demo-seed/build/libs/demo-seed.jar"
 roteiro="$root/docs/demo/roteiro-m1.md"
+roteiro_m2="$root/docs/demo/roteiro-m2.md"
 
 # require_artifact FILE HINT [zip] : arquivo regular (não symlink), legível, não vazio e, com zip, assinatura PK\x03\x04
 # e ZIP íntegro (diretório central e CRC de cada entrada, pelo zipfile do python3; um build interrompido falha).
@@ -61,6 +62,7 @@ sys.exit(0 if ok else 1)
 require_artifact "$app_jar" "gere com ./gradlew :app:desktopJar" zip
 require_artifact "$seed_jar" "gere com ./gradlew :demo-seed:seedJar" zip
 require_artifact "$roteiro" "o roteiro docs/demo/roteiro-m1.md é versionado no front"
+require_artifact "$roteiro_m2" "o roteiro docs/demo/roteiro-m2.md é versionado no front"
 # Os arquivos de origem que o pacote copia ou lê de tools/server-env (render_override lê o compose.override.yaml)
 # também são conferidos antes do rm -rf: arquivo regular, não symlink (um link para um segredo sairia com outro
 # nome, fora da salvaguarda *.env) e legível.
@@ -86,6 +88,7 @@ printf '%s\n' "$leia" >"$pkg/LEIA-ME.md"
 cp -- "$app_jar" "$pkg/app/zeny-desktop.jar" || die 1 "falha ao copiar zeny-desktop.jar"
 cp -- "$seed_jar" "$pkg/app/demo-seed.jar" || die 1 "falha ao copiar demo-seed.jar"
 cp -- "$roteiro" "$pkg/roteiro-m1.md" || die 1 "falha ao copiar o roteiro"
+cp -- "$roteiro_m2" "$pkg/roteiro-m2.md" || die 1 "falha ao copiar o roteiro do M2"
 
 # Origem dos artefatos, sem caminho absoluto. O sha256 é dos JARs copiados; não prova que saíram de front_commit.
 front_commit="$(git -C "$root" rev-parse HEAD)" || die 1 "não foi possível ler o HEAD do front"

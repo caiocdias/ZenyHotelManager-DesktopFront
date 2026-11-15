@@ -10,6 +10,7 @@ Cliente desktop do Zeny Hotel Manager, em Compose Multiplatform (ADR 0001). O re
 - Pedidos do front ao servidor: [`docs/pedidos-servidor.md`](docs/pedidos-servidor.md).
 - Pacote do Windows (demo): [`tools/server-env/LEIA-ME.md`](tools/server-env/LEIA-ME.md), a referência de operação do servidor no Windows.
 - Roteiro da demo do M1 no Windows: [`docs/demo/roteiro-m1.md`](docs/demo/roteiro-m1.md) (vai no pacote como `roteiro-m1.md`). É o passo a passo da demo, do zero, numa pasta nova, num arquivo só.
+- Roteiro da demo do M2 (gate atual): [`docs/demo/roteiro-m2.md`](docs/demo/roteiro-m2.md) (vai no pacote como `roteiro-m2.md`). Um dia na recepção.
 
 ## Comandos oficiais do app
 

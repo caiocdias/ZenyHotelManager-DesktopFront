@@ -96,6 +96,7 @@ jar_front() {
 assert_eq "1" "$(same_file "$front/app/build/libs/zeny-desktop.jar" "$pkg/app/zeny-desktop.jar")" "app/zeny-desktop.jar igual ao do checkout"
 assert_eq "1" "$(same_file "$front/demo-seed/build/libs/demo-seed.jar" "$pkg/app/demo-seed.jar")" "app/demo-seed.jar igual ao do checkout"
 assert_eq "1" "$(same_file "$front/docs/demo/roteiro-m1.md" "$pkg/roteiro-m1.md")" "roteiro-m1.md igual ao docs/demo/roteiro-m1.md"
+assert_eq "1" "$(same_file "$front/docs/demo/roteiro-m2.md" "$pkg/roteiro-m2.md")" "roteiro-m2.md igual ao docs/demo/roteiro-m2.md"
 assert_eq "0" "$([[ -e "$pkg/app/LEIA-ME.txt" ]] && echo 1 || echo 0)" "sem app/LEIA-ME.txt"
 
 assert_file "$pkg/VERSAO.txt" "VERSAO.txt"
@@ -133,13 +134,14 @@ echo marcador >"$fa/build/demo-package/marcador.txt"
 app_jar="$fa/app/build/libs/zeny-desktop.jar"
 seed_jar="$fa/demo-seed/build/libs/demo-seed.jar"
 roteiro="$fa/docs/demo/roteiro-m1.md"
+roteiro2="$fa/docs/demo/roteiro-m2.md"
 # falha_preserva DESCRIÇÃO TEXTO : package.sh sai com 1, cita TEXTO e deixa o pacote anterior intacto;
 # depois restaura os três artefatos válidos.
 falha_preserva() {
   assert_exit 1 "$1: package.sh sai com 1" -- bash "$fa/tools/server-env/package.sh"
   assert_contains "$ASSERT_OUT" "$2" "$1: mensagem cita $2"
   assert_file "$fa/build/demo-package/marcador.txt" "$1: pacote anterior intacto"
-  rm -rf -- "$app_jar" "$seed_jar" "$roteiro"
+  rm -rf -- "$app_jar" "$seed_jar" "$roteiro" "$roteiro2"
   make_fake_jars "$fa"
 }
 # troca ARQUIVO TIPO : substitui ARQUIVO por ausente, symlink (para um ZIP válido), vazio, não-ZIP, diretório
@@ -176,6 +178,8 @@ fi
 for tipo in "${tipos_roteiro[@]}"; do
   troca "$roteiro" "$tipo" "$tmp/outro-roteiro.md"
   falha_preserva "roteiro $tipo" "docs/demo/roteiro-m1.md"
+  troca "$roteiro2" "$tipo" "$tmp/outro-roteiro.md"
+  falha_preserva "roteiro M2 $tipo" "docs/demo/roteiro-m2.md"
 done
 # Arquivos de origem do pacote (LEIA-ME, .env.example, gen-env.sh e compose.override.yaml):
 # ilegível ou symlink (por exemplo, para um arquivo de segredo) falha antes do rm -rf.
@@ -249,6 +253,7 @@ _fgit "$fw" worktree add -q "$tmp/front-wt-arvore" -b wt >/dev/null 2>&1
 wt="$tmp/front-wt-arvore"
 make_fake_jars "$wt"
 printf '# Roteiro do worktree\n' >"$wt/docs/demo/roteiro-m1.md"
+printf '# Roteiro do M2 do worktree\n' >"$wt/docs/demo/roteiro-m2.md"
 _fgit "$wt" commit -q --allow-empty -m "commit do worktree"
 assert_exit 0 "package.sh de um worktree" -- bash "$wt/tools/server-env/package.sh"
 pkg="$fw/build/demo-package"
@@ -256,6 +261,7 @@ assert_eq "1" "$(same_file "$wt/app/build/libs/zeny-desktop.jar" "$pkg/app/zeny-
 assert_eq "1" "$(same_file "$wt/demo-seed/build/libs/demo-seed.jar" "$pkg/app/demo-seed.jar")" "worktree: demo-seed.jar do worktree"
 assert_eq "0" "$(same_file "$fw/app/build/libs/zeny-desktop.jar" "$pkg/app/zeny-desktop.jar")" "worktree: não usa o JAR do checkout principal"
 assert_eq "1" "$(same_file "$wt/docs/demo/roteiro-m1.md" "$pkg/roteiro-m1.md")" "worktree: roteiro do worktree"
+assert_eq "1" "$(same_file "$wt/docs/demo/roteiro-m2.md" "$pkg/roteiro-m2.md")" "worktree: roteiro-m2 do worktree"
 assert_eq "$(git -C "$wt" rev-parse HEAD)" "$(versao front_commit)" "worktree: front_commit do worktree"
 assert_eq "false" "$(versao front_dirty)" "worktree: front_dirty=false"
 assert_eq "0" "$([[ -e "$wt/build" ]] && echo 1 || echo 0)" "worktree sem build/"

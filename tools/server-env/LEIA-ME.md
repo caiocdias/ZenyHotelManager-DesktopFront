@@ -2,7 +2,7 @@
 
 Este pacote sobe o servidor do Zeny (commit `@SERVER_COMMIT@`, imagem `zeny-hotel-manager:@SERVER_TAG@`) no Docker Desktop, como o projeto compose `zeny-front`. Todos os comandos são PowerShell, a partir da pasta deste pacote.
 
-Para a demo do M1, siga `roteiro-m1.md` do início ao fim; este arquivo é a referência de operação.
+Para a demo atual (M2), siga `roteiro-m2.md` do início ao fim; este arquivo é a referência de operação.
 
 Atenção: o servidor fala HTTP puro. Use apenas em rede confiável. Nunca use `-p zeny` nos comandos (esse é o projeto de desenvolvimento do servidor); use sempre `-p zeny-front`.
 
@@ -124,7 +124,7 @@ Para a demo, abra no modo que mostra no menu todas as áreas do perfil, com "(em
 java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar
 ```
 
-O PowerShell fica ocupado enquanto a janela do app estiver aberta; fechar a janela devolve o prompt. Na tela inicial, informe o servidor (`http://localhost:8088` nesta máquina) e entre com um usuário da demo. O roteiro da demo está em `roteiro-m1.md`, nesta pasta.
+O PowerShell fica ocupado enquanto a janela do app estiver aberta; fechar a janela devolve o prompt. Na tela inicial, informe o servidor (`http://localhost:8088` nesta máquina) e entre com um usuário da demo. O roteiro da demo do M2 está em `roteiro-m2.md`, nesta pasta; o do M1, em `roteiro-m1.md`.
 
 ## 5. Firewall
 
