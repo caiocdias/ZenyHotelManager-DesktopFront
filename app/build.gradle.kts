@@ -49,15 +49,17 @@ tasks.test {
     inputs.property("zenyLiveCheckIn", providers.environmentVariable("ZENY_LIVE_CHECKIN").orElse(""))
     inputs.property("zenyLiveWalkIn", providers.environmentVariable("ZENY_LIVE_WALKIN").orElse(""))
     inputs.property("zenyLiveStay", providers.environmentVariable("ZENY_LIVE_STAY").orElse(""))
+    inputs.property("zenyLiveTraces", providers.environmentVariable("ZENY_LIVE_TRACES").orElse(""))
     // Com o opt-in, a verificação fala com o servidor, que muda entre rodadas: nunca sai UP-TO-DATE.
     val liveRealtime = providers.environmentVariable("ZENY_LIVE_REALTIME")
     val liveReception = providers.environmentVariable("ZENY_LIVE_RECEPTION")
     val liveCheckIn = providers.environmentVariable("ZENY_LIVE_CHECKIN")
     val liveWalkIn = providers.environmentVariable("ZENY_LIVE_WALKIN")
     val liveStay = providers.environmentVariable("ZENY_LIVE_STAY")
+    val liveTraces = providers.environmentVariable("ZENY_LIVE_TRACES")
     outputs.upToDateWhen {
         liveRealtime.orNull != "1" && liveReception.orNull != "1" && liveCheckIn.orNull != "1" &&
-            liveWalkIn.orNull != "1" && liveStay.orNull != "1"
+            liveWalkIn.orNull != "1" && liveStay.orNull != "1" && liveTraces.orNull != "1"
     }
     doFirst {
         isolatedPrefs.mkdirs()
