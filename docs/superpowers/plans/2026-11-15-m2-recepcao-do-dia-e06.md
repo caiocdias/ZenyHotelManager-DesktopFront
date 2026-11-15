@@ -147,6 +147,21 @@
 
 ---
 
+### Task 7 (adendo da execução): Recado ligado a UH aparece como "Reserva"
+
+**Estimativa:** 25 min · **Depende de:** Task 6 · **Risco:** alto (leitura de resposta do servidor; texto que o roteiro do gate cita)
+
+**Origem:** a execução do roteiro no notebook (Task 6) achou um defeito da M2 E05. O servidor fixado manda `"reservationId": null` explícito nos recados ligados a UH; o `sdk` lê isso como `Option.Some(null)`, e `TraceText.link` (`app/src/main/kotlin/com/zeny/desktop/app/traces/TraceText.kt:56`) testa `trace.reservationId is Option.Some` antes da UH. A tabela de recados e o formulário de edição mostram "Reserva" em vez de "UH 101"/"UH 102" (passos 17 e 18 do `roteiro-m2.md`, que dizem "UH 101"/"UH 102" e ficam como estão). Não é funcionalidade nova: é a correção do que a E05 prometeu.
+
+**Files:**
+- Modify: `app/src/main/kotlin/com/zeny/desktop/app/traces/TraceText.kt` (o vínculo só é reserva quando o valor da reserva existe; `Option.Some(null)` conta como ausente, como já fazem `TracesListState` e `TraceFormState`)
+- Test: o teste do `TraceText` (ou um arquivo novo de teste no pacote `traces`) com um `TraceResponse` lido do JSON real do servidor, com `"reservationId": null` explícito e `roomNumber` preenchido → "UH 101"; reserva preenchida → "Reserva R-…"; os dois ausentes → o texto de sem vínculo.
+
+- [ ] **Step 1: Teste que falha** (JSON com `reservationId` nulo explícito mostra "Reserva"). - [ ] **Step 2:** FAIL. - [ ] **Step 3:** corrija. - [ ] **Step 4:** PASS; procure no `app` e no `core` outros `is Option.Some` sobre campo anulável de resposta e relate (corrija só os do mesmo defeito, com teste); gate verde.
+- [ ] **Step 5: Commit** (`Mostra a UH no vínculo do recado quando a reserva vem nula`).
+
+---
+
 ## Verificação do gate (orquestrador, depois das tarefas)
 
 1. Clone limpo do HEAD: `./gradlew build --max-workers=2`, `ktlintCheck detekt`, `:app:desktopJar :demo-seed:seedJar` e `bash tests/run.sh` verdes; o JAR do pacote abre no Linux (`xwininfo`).
