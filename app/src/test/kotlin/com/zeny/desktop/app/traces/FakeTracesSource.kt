@@ -90,6 +90,9 @@ class FakeTracesSource : TracesSource {
     /** Quando não nulo, `reservationCode` espera por ele antes de responder. */
     var reservationCodeGate: CompletableDeferred<Unit>? = null
 
+    /** Quando não nulo, `trace` espera por ele antes de responder. */
+    var traceGate: CompletableDeferred<Unit>? = null
+
     /** Quando não nulo, `create` espera por ele antes de agir. */
     var createGate: CompletableDeferred<Unit>? = null
 
@@ -169,6 +172,7 @@ class FakeTracesSource : TracesSource {
 
     override suspend fun trace(id: String): TraceVersion {
         calls += TraceCall.Trace(id)
+        traceGate?.await()
         fail(TraceOp.TRACE)
         return current(id) ?: throw traceNotFound()
     }
