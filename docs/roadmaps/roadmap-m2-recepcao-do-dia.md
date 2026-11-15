@@ -187,7 +187,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
-| E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
+| E05 | Recados | #em-andamento | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
@@ -509,7 +509,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Recados — #pendente
+## E05 — Recados — #em-andamento
 
 **Objetivo:** recados (traces) por setor, ligados a uma reserva ou UH. O recepcionista cria, edita e resolve, vê os pendentes do dia e o detalhe da reserva mostra os recados dela.
 
