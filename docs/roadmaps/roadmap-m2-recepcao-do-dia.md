@@ -186,7 +186,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
-| E04 | Troca de UH e desfazer check-in | #em-andamento | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
+| E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
@@ -433,7 +433,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E04 — Troca de UH e desfazer check-in — #em-andamento
+## E04 — Troca de UH e desfazer check-in — #concluida
 
 **Objetivo:** num hospedado, o recepcionista troca a UH, escolhendo a nova e o motivo. Também desfaz um check-in feito por engano, o que exige a aprovação do gerente no próprio balcão.
 
@@ -451,9 +451,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Troca de UH contra o seed: a UH antiga e a nova mudam de status no mapa, e o histórico da reserva registra a troca.
-- [ ] Desfazer check-in como Recepcionista → diálogo de aprovação. Com login e PIN do Gerente do seed, a ação conclui. Com PIN errado, aparece mensagem em pt-BR e nada muda.
-- [ ] Teste: a repetição após a aprovação usa a mesma `Idempotency-Key` e o `X-Approval-Token`.
+- [x] Troca de UH contra o seed: a UH antiga e a nova mudam de status no mapa, e o histórico da reserva registra a troca.
+- [x] Desfazer check-in como Recepcionista → diálogo de aprovação. Com login e PIN do Gerente do seed, a ação conclui. Com PIN errado, aparece mensagem em pt-BR e nada muda.
+- [x] *(Verificado pela D2 do ADR 0007: a repetição aprovada leva o `X-Approval-Token` e outra chave; o desfazer não tem chave. O texto está desatualizado; ver "Decisões para o usuário".)* Teste: a repetição após a aprovação usa a mesma `Idempotency-Key` e o `X-Approval-Token`.
 
 **Validação obrigatória:**
 
@@ -472,12 +472,40 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-14):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e04.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e04.md), com 7 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura (opus) bloqueou na rodada 0 e aprovou com notas na rodada 1. Os 4 Importantes da rodada 0 foram:
+  - uma mudança desnecessária no `ApiExecutor` (o SDK já declara o `xApprovalToken`);
+  - textos do check-in reaproveitados errados na troca e no desfazer;
+  - o período da lista de UHs sem noite restante e no day use;
+  - o `412` relia só o `ETag`, e o `etag` não estava na tupla da chave.
+- **Commits:** `bbfa8d9..0c81152` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão; rodadas de correção:
+  - Task 4 (estado da troca): aprovação cancelada preserva o aviso anterior, `canConfirm` falso depois de fechar, a UH atual limpa quando a recarga falha e a ordem do texto do `412` com o erro da recarga;
+  - Task 5 (estado do desfazer): o resultado tardio depois de fechar é descartado (teste vermelho do testador);
+  - Task 6 (diálogos): o diálogo aberto sobrevive à recomposição da área (teste vermelho do testador).
+- **Revisão final** (`revisor-seguranca`, opus, sobre `bbfa8d9..89116f8`): pronto com correções menores, sem Crítico nem Importante. Três Menores foram corrigidos em `1b57277` (desenvolvedor) e `0c81152` (testador) e aprovados na re-revisão:
+  - a alocação encerrada de zero noites (troca no dia do check-in) aparecia como "day use" no detalhe; agora o rótulo só vale para reserva day use;
+  - o texto de "estadia sem noites" deixou de ser duplicado no estado da troca;
+  - uma asserção trivial no teste de ataque da porta passou a afirmar a UH.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base bbfa8d9`: nenhum apontamento. `osv-scanner`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova; o build só ganhou o opt-in `ZENY_LIVE_STAY`.
+- **Critérios verificados:**
+  - Troca de UH: `LiveStayActionsCheck.roomMoveChangesBothRoomsAndHistory`, contra o `zeny-front`, logado como Recepcionista. A R-2026-000005 foi da UH 103 para a 203 (motivo "Pedido do hóspede", tarifa mantida). Pelo evento `rooms`, a 103 ficou vaga e suja e a 203 ocupada; o histórico do detalhe registra "Troca de UH". A captura `app/build/live/room-move.png` foi inspecionada pelo orquestrador ("Troca feita para a UH 203. Noites restantes: R$ 320,00 → R$ 320,00 (diferença R$ 0,00).").
+  - Desfazer check-in: `undoCheckInNeedsManagerApproval`, como Recepcionista, na R-2026-000003 (check-in na data operacional). O servidor pediu aprovação; uma tentativa com PIN errado mostrou a mensagem pt-BR do coordenador e a reserva continuou hospedada; com login e PIN do Gerente do seed, o check-in foi desfeito, a reserva voltou a "Confirmada" e a UH 208 deixou de estar ocupada. Captura `app/build/live/undo-check-in.png` inspecionada ("Check-in desfeito.").
+  - Repetição aprovada: verificada pela D2 do ADR 0007 (ver decisões). `ReservationsFacade`/`ApiExecutor`: a repetição aprovada da troca leva o `X-Approval-Token` e outra `Idempotency-Key`; o desfazer leva só o token, sem chave (o contrato não a declara). Testes: `RoomMoveFacadeTest`, `UndoCheckInFacadeTest` (`undoNeverSendsIdempotencyKey`, `approvedUndoCarriesToken`) e os ataques da porta.
+  - Gate em `0c81152`: `./gradlew build ktlintCheck detekt --rerun-tasks` BUILD SUCCESSFUL, 85 tarefas executadas (core 1014 testes, design 259, app 1430, demo-seed 506, sdk 40; 0 falhas; 28 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 37 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Critério 3 pela D2:** o texto do critério ("a mesma `Idempotency-Key`") ficou desatualizado pela D2 do ADR 0007, que o usuário aceitou: a repetição aprovada gira a chave e leva o token, e o desfazer não tem chave. Proposta: corrigir o texto do critério.
+  - **Rótulo de day use:** a alocação de zero noites só é rotulada "day use" quando a reserva é day use (o servidor marca `dayUse` em toda alocação com início igual ao fim). Corrigido no detalhe da E02.
+  - **Desfazer com sessão encerrada no meio:** mostra o texto da sessão e não recarrega o detalhe; com a sessão encerrada a recarga falharia, e o novo login refaz as telas.
+  - **Resultado tardio depois de fechar:** um desfazer ou uma troca que conclui depois de o diálogo ser fechado não atualiza o painel na hora; o detalhe se atualiza na próxima carga.
+  - **Desfazer depois de falha de rede na repetição aprovada:** a nova tentativa pede aprovação de novo, porque o token não é guardado.
+  - **Fica para depois (Menores da revisão final):** o diálogo da troca não tem "Tentar de novo" depois de uma falha de carga (fechar e reabrir resolve); "Desfazer" continua habilitado depois de "a reserva não está mais hospedada" (repetir só devolve a mesma mensagem).
+- **Notas para a próxima etapa:**
+  - **Extensão e redução da estadia:** sem operação própria no contrato (é a alteração da reserva). Candidata a etapa nova do M3.
+  - **Troca só no mesmo tipo:** a troca para outro tipo ainda não é aceita pelo servidor (`ROOM_TYPE_MISMATCH`). A tarefa de limpeza da UH de origem é da governança (M6). No desfazer, a caução e o early ficam na conta (liberar e estornar é do `billing`, M4); a fila da FNRH é da M7 E10.
+  - **Risco do PIN do Gerente:** não se confirmou; o seed define `ZENY_SEED_MANAGER_PIN` e o login `gerente`.
+  - **Ambiente:** o `zeny-front` está alterado. Além do que a E03 deixou, a R-2026-000005 está na UH 203 (a 103 ficou suja) e a R-2026-000003 voltou a "Confirmada" na 208; uma tentativa de PIN errado do `gerente` foi gasta. Recrie a demo antes do roteiro ou de outra verificação que escreve.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_STAY=1 ./gradlew :app:test --tests '*LiveStayActionsCheck*' --rerun --max-workers=2)`, com `ZENY_LIVE_APPROVER_LOGIN` e `ZENY_LIVE_APPROVER_PIN` (numérico). Cada execução troca uma UH, desfaz um check-in e gasta uma tentativa de PIN errado; sem candidata, falha com as contagens.
+  - **Estados novos:** `RoomMoveState` e `UndoCheckInState` seguem a convenção dos estados (escopo próprio, cancelamento, travas no estado); `ReceptionScreen` ganhou `roomMove` e `undoCheckIn` com padrão nulo.
 
 ---
 
@@ -658,3 +686,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-14 — E01 `#concluida` (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). As Tasks 5 a 10 foram retomadas pelo ledger; a revisão final pediu duas correções, feitas e aprovadas na re-revisão.
 - 2026-11-14 — E02 `#concluida` (`claude --agent orquestrador`). A revisão de arquitetura aprovou com notas na rodada 1 (rodada 0 bloqueada pela regra da `Idempotency-Key`). A verificação ao vivo fez check-in de uma chegada do seed. Recriar a demo antes do roteiro.
 - 2026-11-14 — E03 `#concluida` (`claude --agent orquestrador`). O critério de desconto não se aplica (H24 do servidor). A verificação ao vivo criou dois walk-ins; recriar a demo antes do roteiro.
+- 2026-11-14 — E04 `#concluida` (`claude --agent orquestrador`). O critério 3 foi verificado pela D2 do ADR 0007 (texto a corrigir). A verificação ao vivo trocou a UH da R-2026-000005 e desfez o check-in da R-2026-000003; recriar a demo antes do roteiro.
