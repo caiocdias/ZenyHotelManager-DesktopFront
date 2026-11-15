@@ -551,7 +551,7 @@ Um hóspede sem reserva chega ao balcão para 2 noites. Na Recepção, clique em
 
 Em **Saída (dd/mm/aaaa)**, digite a data operacional mais 2 dias (por exemplo, com a data operacional 15/11/2026, digite `17/11/2026`). Deixe "Adultos" com 1 e clique em **Cotar**.
 
-**Resultado esperado:** a seção "Ofertas" mostra uma linha por tipo de UH com o plano e o total das 2 noites, como "Standard · Tarifa balcão · R$ 560,00", cada uma com o botão "Escolher".
+**Resultado esperado:** a seção "Ofertas" mostra uma linha por tipo de UH livre nas 2 noites, com o plano e o total, como "Standard · Tarifa balcão · R$ 560,00", cada uma com o botão "Escolher". Num servidor recém-criado são duas, Standard e Luxo: as suítes estão ocupadas ou fora de ordem.
 
 Clique em **Escolher** na oferta Standard.
 
@@ -601,7 +601,7 @@ Clique em **Desfazer**.
 
 **16.2. A aprovação do Gerente.** Em **Login de quem aprova**, digite `gerente` (se o campo ainda o mostra, deixe como está); em **PIN**, o PIN do Gerente (item 5 da folha); o **Motivo** continua o mesmo. Clique em **Aprovar**.
 
-**Resultado esperado:** o diálogo de aprovação fecha e o "Desfazer check-in" mostra "Check-in desfeito.". Clique em **Fechar**: o detalhe volta a "Confirmada" (a UH do passo 12 continua alocada à reserva, agora vaga), e o "Histórico" ganha "Check-in desfeito", com "Com aprovação de superior". A aba volta a "Hospedados (8)"; se não mudar em alguns segundos, clique em **Atualizar**.
+**Resultado esperado:** o diálogo de aprovação fecha e o "Desfazer check-in" mostra "Check-in desfeito.". Clique em **Fechar**: o detalhe volta a "Confirmada" (a UH do passo 12 continua alocada à reserva, agora vaga), e o "Histórico" ganha "Check-in desfeito", com "Situação: Hospedada → Confirmada". A aba volta a "Hospedados (8)"; se não mudar em alguns segundos, clique em **Atualizar**.
 
 **Reprovação:** o desfazer conclui sem a aprovação, ou com o PIN errado; o PIN aparece na tela ou numa mensagem; a mensagem do PIN errado mostra um código técnico; a reserva continua "Hospedada" depois de "Check-in desfeito.".
 

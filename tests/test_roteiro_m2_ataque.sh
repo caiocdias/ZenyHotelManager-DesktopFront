@@ -300,13 +300,17 @@ for lbl in '"Recados"' '"Novo recado"' '"Editar recado"' '"Ficha de registro"' '
   '"Editar"' '"Salvar"' '"Abertos"' '"Resolvidos"' '"Troca de UH"' '"Hóspedes da estadia"' '"Histórico"' \
   '"Sem permissão para ver os setores. ' '"Esta ação precisa da aprovação de um superior."' \
   '"Sua sessão foi encerrada. Entre novamente."' "\"$wrong_msg\"" '"Data operacional: ' '"Sem UH"' \
-  '"Sem early check-in agora."' '"Não escreva dados pessoais do hóspede no recado."' \
-  '"Com aprovação de superior"'; do
+  '"Sem early check-in agora."' '"Não escreva dados pessoais do hóspede no recado."'; do
   probe="${lbl//\"/}"
   probe="${probe% }"
   assert_contains "$rot_text" "$probe" "roteiro cita o rótulo [$probe]"
   assert_contains "$code_text" "$lbl" "o código tem o rótulo [$lbl]"
 done
+# O servidor fixado grava o desfazer check-in no histórico sem a aprovação (approvalId nulo, conferido na execução no
+# notebook): o detalhe mostra só a mudança de situação nessa linha, e o roteiro não promete "Com aprovação de superior".
+assert_not_contains "$rot_text" "Com aprovação de superior" "roteiro não promete a aprovação na linha do desfazer"
+assert_contains "$rot_text" '"Check-in desfeito", com "Situação: Hospedada → Confirmada"' \
+  "roteiro diz a linha do histórico do desfazer"
 
 # =============================================================================================================
 # 8. No fim: o seed rodado de novo depois da demo, sem repetir o bloco do seed
