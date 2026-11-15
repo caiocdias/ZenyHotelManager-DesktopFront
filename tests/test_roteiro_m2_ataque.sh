@@ -321,5 +321,16 @@ assert_contains "$fim_rerun" 'a linha `check-ins` não aparece' "No fim: nenhum 
 assert_contains "$fim_rerun" "\`status de UH: 1 criados, $((n_rooms - 1)) já existiam\`" "No fim: a UH de origem da troca volta ao status do seed"
 assert_eq "" "$(rc_ps_code <<<"$fim" | grep -E 'demo-seed|SetEnvironmentVariable|Read-Host|Get-Credential')" \
   "No fim: sem bloco do seed nem de segredo (remete ao passo do seed)"
+# Retomar: os passos do app e do ao vivo se repetem; os do dia na recepção gastam o estado do seed (que o seed
+# repetido não restaura), então rodam uma vez por servidor e se repetem só depois de "Recomeçar do zero".
+n_build="$(step_with 'docker compose .* build$')"
+resume="os passos ${n_app:-?} a ${n_live:-?} podem ser repetidos; os passos ${n_panel:-?} a ${n_concurrent:-?} rodam uma vez por servidor: para repeti-los, ou se você parou no meio deles, faça o \"Recomeçar do zero\""
+parar="$(awk '/^### Parar sem apagar$/ {on = 1; next} on && /^###? / {exit} on' <<<"$fim")"
+assert_contains "$parar" "siga do passo ${n_app:-?}" "Parar sem apagar: volta pelo passo de abrir o app"
+assert_contains "$parar" "$resume" "Parar sem apagar: os passos do dia na recepção rodam uma vez por servidor"
+assert_contains "$parar" "e siga do passo ${n_build:-?}." "Parar sem apagar: para repetir o dia, Recomeçar do zero e seguir do build"
+intro="$(awk '/^## / {exit} {print}' "$rot")"
+assert_contains "$intro" "$resume" "introdução: os passos do dia na recepção rodam uma vez por servidor"
+assert_contains "$intro" "no passo $last_step, e siga do passo ${n_build:-?}." "introdução: Recomeçar do zero no último passo, seguindo do build"
 
 finish

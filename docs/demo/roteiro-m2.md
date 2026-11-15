@@ -4,6 +4,8 @@ Este roteiro mostra o que o M2 entrega: um dia na recepção, no app desktop, co
 
 Ele vai do zero até o fim da demo, num arquivo só: começa sem nenhum container do Zeny, numa pasta nova, e termina com a demo rodando. Siga os passos na ordem. Cada passo diz o que fazer e o **Resultado esperado**. Do passo 11 ao 18, cada passo diz também o que conta como **Reprovação**: se acontecer, anote o passo e o que apareceu na tela. Se o resultado não bater, pare e veja "Erros comuns", no passo 20.
 
+Os passos 11 a 18 mudam os dados da demo (fazem check-in, trocam UH, criam recados), e rodar o seed de novo não os desfaz. Se você parar e voltar depois, os passos 6 a 10 podem ser repetidos; os passos 11 a 18 rodam uma vez por servidor: para repeti-los, ou se você parou no meio deles, faça o "Recomeçar do zero", no passo 20, e siga do passo 3.
+
 Como rodar os comandos:
 
 - Todos os comandos são do **Windows PowerShell 5.1**, o que vem com o Windows.
@@ -695,7 +697,7 @@ Para o servidor e mantém os dados da demo nos volumes:
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env down
 ```
 
-**Resultado esperado:** linhas `Container zeny-front-…  Removed` e `Network zeny-front_default  Removed`, sem nenhuma linha `Volume`. Para voltar depois, rode o `up -d` e o `curl.exe` do passo 3 (sem o `build`) e siga do passo 6; as senhas são as da folha.
+**Resultado esperado:** linhas `Container zeny-front-…  Removed` e `Network zeny-front_default  Removed`, sem nenhuma linha `Volume`. Para voltar depois, rode o `up -d` e o `curl.exe` do passo 3 (sem o `build`) e siga do passo 6; as senhas são as da folha. Ao voltar, os passos 6 a 10 podem ser repetidos; os passos 11 a 18 rodam uma vez por servidor: para repeti-los, ou se você parou no meio deles, faça o "Recomeçar do zero", abaixo, e siga do passo 3.
 
 ### Recomeçar do zero
 
