@@ -30,6 +30,7 @@ import com.zeny.desktop.app.reception.CheckInState
 import com.zeny.desktop.app.reception.DayPanelState
 import com.zeny.desktop.app.reception.ReceptionScreen
 import com.zeny.desktop.app.reception.ReceptionSource
+import com.zeny.desktop.app.reception.ReceptionTraces
 import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.reception.RoomMoveState
 import com.zeny.desktop.app.reception.UndoCheckInState
@@ -40,6 +41,9 @@ import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.app.shell.Area
 import com.zeny.desktop.app.shell.ShellScreen
 import com.zeny.desktop.app.shell.ShellState
+import com.zeny.desktop.app.traces.TraceFormState
+import com.zeny.desktop.app.traces.TracesListState
+import com.zeny.desktop.app.traces.TracesSource
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.session.SessionState
@@ -192,6 +196,7 @@ private fun ReceptionArea(connection: ServerConnection) {
                     detail.close()
                 }
             }
+            val traces = receptionTraces(connection.tracesSource(), sessionId, scope)
             val window = LocalWindowInfo.current
             LaunchedEffect(panel, detail, window) {
                 snapshotFlow { window.isWindowFocused }.collect { focused ->
@@ -229,8 +234,35 @@ private fun ReceptionArea(connection: ServerConnection) {
                 },
                 roomMove = roomMoveFactory(source, scope, approval, panel, detail),
                 undoCheckIn = undoCheckInFactory(source, scope, approval, panel, detail),
+                traces = traces,
             )
         }
+    }
+}
+
+/**
+ * Os recados da recepção, ou nulo sem porta de recados nesta conexão. A lista da aba nasce com a chave do `sessionId`,
+ * é iniciada ao entrar e fecha no `onDispose`, como o painel; a seção de cada reserva e o formulário são criados pela
+ * tela com estas fábricas.
+ */
+@Composable
+private fun receptionTraces(
+    source: TracesSource?,
+    sessionId: String,
+    scope: CoroutineScope,
+): ReceptionTraces? {
+    source ?: return null
+    val list = remember(source, sessionId) { TracesListState(source, scope) }
+    DisposableEffect(list) {
+        list.start()
+        onDispose { list.close() }
+    }
+    return remember(list) {
+        ReceptionTraces(
+            list = list,
+            forReservation = { id -> TracesListState(source, scope, id) },
+            form = { target -> TraceFormState(source, scope, target, list.departments, list.departmentsDenied) {} },
+        )
     }
 }
 
