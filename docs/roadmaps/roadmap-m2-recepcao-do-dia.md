@@ -189,7 +189,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #concluida | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #concluida | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
-| E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
+| E06 | Gate do marco M2 | #em-andamento | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
 
@@ -684,7 +684,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Gate do marco M2 — #pendente
+## E06 — Gate do marco M2 — #em-andamento
 
 **Objetivo:** o M2 entregue como build testável. O seed tem dados para todos os fluxos do marco, o roteiro do M2 existe e a definição global de pronto foi verificada num clone limpo e no Windows.
 
