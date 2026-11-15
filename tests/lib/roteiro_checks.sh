@@ -71,6 +71,26 @@ rc_folha() { awk '/^### Folha de senhas$/ {on = 1; next} on && /^##/ {exit} on' 
 rc_folha_rows() { grep -E '^\| [0-9]+ \|' <<<"$(rc_folha "$1")"; }
 # rc_folha_item LINHAS PADRÃO : número do item da folha cuja linha casa com o padrão (ERE).
 rc_folha_item() { grep -E -- "$2" <<<"$1" | awk -F'|' '{gsub(/ /, "", $2); print $2}'; }
+# rc_docs_shared_lines TEST_DOCS : as linhas comuns ao roteiro e ao LEIA-ME da lista do test_docs.sh (compose='...'
+# e shared_lines=( ... )), uma por linha. Só as linhas da definição são avaliadas (compose='...' e itens '...' ou
+# "$compose <subcomando>", sem substituição de comando); com qualquer outra forma, nada é avaliado: imprime a
+# definição achada (para a mensagem de falha) e devolve 1.
+rc_docs_shared_lines() {
+  local docs_test="$1" compose_def arr_def arr_items
+  compose_def="$(grep -E "^compose='[^']*'\$" "$docs_test")"
+  arr_def="$(awk '/^shared_lines=\(/ {on = 1; first = NR} on {print} on && ((NR == first && /\)$/) || /^\)$/) {exit}' "$docs_test")"
+  arr_items="$(sed '1d;$d' <<<"$arr_def")"
+  if [[ -z "$compose_def" || "$(head -1 <<<"$arr_def")" != "shared_lines=(" || "$(tail -1 <<<"$arr_def")" != ")" ]] ||
+    grep -qvE "^  ('[^']*'|\"\\\$compose [a-z -]+\")\$" <<<"$arr_items"; then
+    printf '%s\n' "$arr_def"
+    return 1
+  fi
+  (
+    eval "$compose_def"
+    eval "items=($arr_items)"
+    printf '%s\n' "${items[@]}"
+  )
+}
 # rc_login_body_var COMANDOS : nome da variável do -Body do login (comandos de rc_statements).
 rc_login_body_var() {
   grep -E 'auth/login' <<<"$1" | grep -oE -- '-Body[[:space:]]+\$[A-Za-z_][A-Za-z0-9_]*' | grep -oE '[A-Za-z_][A-Za-z0-9_]*$' | head -1
@@ -498,7 +518,7 @@ roteiro_check_password_sheet() {
 # igual num bloco PowerShell do LEIA-ME, e a lista de linhas comuns do test_docs.sh (só lida) cobre todas.
 roteiro_check_identical_to_leia() {
   local rot="$1" leia_f="$2" docs_test="$3"
-  local rot_ps leia_ps kinds rot_shared l compose_def arr_def arr_items docs_list
+  local rot_ps leia_ps kinds rot_shared l docs_list
   rot_ps="$(rc_ps_code "$rot")"
   leia_ps="$(rc_ps_code "$leia_f")"
   kinds='^(docker |curl\.exe |\[Environment\]::SetEnvironmentVariable|\$pin |Remove-Variable pin$|java -jar app\\demo-seed\.jar |java "-Dzeny)'
@@ -510,21 +530,10 @@ roteiro_check_identical_to_leia() {
     grep -qxF -- "$l" <<<"$leia_ps" || _assert_fail "linha do roteiro idêntica num bloco PowerShell do LEIA-ME" "$l"
   done <<<"$rot_shared"
   # A lista do test_docs.sh: não vazia e com toda linha comum do roteiro (só lida, nunca alterada aqui).
-  # Só as linhas da definição são avaliadas (compose='...' e itens '...' ou "$compose <subcomando>", sem substituição
-  # de comando); qualquer outra forma é falha, sem avaliar nada.
-  compose_def="$(grep -E "^compose='[^']*'\$" "$docs_test")"
-  arr_def="$(awk '/^shared_lines=\(/ {on = 1; first = NR} on {print} on && ((NR == first && /\)$/) || /^\)$/) {exit}' "$docs_test")"
-  arr_items="$(sed '1d;$d' <<<"$arr_def")"
-  docs_list=""
-  if [[ -z "$compose_def" || "$(head -1 <<<"$arr_def")" != "shared_lines=(" || "$(tail -1 <<<"$arr_def")" != ")" ]] ||
-    grep -qvE "^  ('[^']*'|\"\\\$compose [a-z -]+\")\$" <<<"$arr_items"; then
-    _assert_fail "test_docs.sh: compose='...' e shared_lines=( ... ) com um item entre aspas por linha" "definição: $arr_def"
-  else
-    docs_list="$(
-      eval "$compose_def"
-      eval "items=($arr_items)"
-      printf '%s\n' "${items[@]}"
-    )"
+  # rc_docs_shared_lines só avalia as linhas da definição; qualquer outra forma é falha, sem avaliar nada.
+  if ! docs_list="$(rc_docs_shared_lines "$docs_test")"; then
+    _assert_fail "test_docs.sh: compose='...' e shared_lines=( ... ) com um item entre aspas por linha" "definição: $docs_list"
+    docs_list=""
   fi
   (($(grep -c . <<<"$docs_list") >= 17)) ||
     _assert_fail "test_docs.sh: a lista de linhas comuns tem ao menos 17 linhas" "achadas: $(grep -c . <<<"$docs_list")"
