@@ -188,7 +188,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #concluida | E01 | Recados por setor ligados a reserva ou UH, com resolução |
-| E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
+| E07 | Ficha de registro e visualizador de PDF | #em-andamento | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
@@ -591,7 +591,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E07 — Ficha de registro e visualizador de PDF — #pendente
+## E07 — Ficha de registro e visualizador de PDF — #em-andamento
 
 **Objetivo:** depois do check-in, ou no detalhe de uma reserva confirmada, hospedada ou encerrada, o recepcionista abre a ficha de registro da hospedagem dentro do app. Ele a confere na tela, salva o arquivo onde escolher ou a imprime na impressora do computador. O PDF nunca toca o disco sem a ação dele.
 
