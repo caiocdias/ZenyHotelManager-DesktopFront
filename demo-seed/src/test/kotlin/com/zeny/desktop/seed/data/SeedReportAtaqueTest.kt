@@ -50,6 +50,7 @@ class SeedReportAtaqueTest {
                 "temporadas",
                 "planos",
                 "tabelas de preço",
+                "perfis",
                 "usuários",
                 "empresas",
                 "hóspedes",

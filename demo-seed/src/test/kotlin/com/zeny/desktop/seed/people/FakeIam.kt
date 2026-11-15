@@ -38,6 +38,8 @@ class FakeIam(
     var createCalls = 0
     var resetPasswordCalls = 0
     var failOnSignIn = false
+    var ensureRoleError: Throwable? = null
+    var ensureRoleCalls = 0
     private var nextId = 1
 
     fun plant(
@@ -103,6 +105,8 @@ class FakeIam(
         description: String,
         grants: Map<String, String>,
     ): RoleEnsured {
+        ensureRoleCalls++
+        ensureRoleError?.let { throw it }
         val existing = customRoles.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
         if (existing == null) {
             val id = "custom-${customRoles.size + 1}"

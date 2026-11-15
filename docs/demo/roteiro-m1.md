@@ -248,6 +248,7 @@ java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin
   temporadas: 2 criados, 0 já existiam
   planos: 1 criados, 0 já existiam
   tabelas de preço: 6 criados, 0 já existiam
+  perfis: 1 criados, 0 já existiam
   usuários: 3 criados, 0 já existiam
   empresas: 2 criados, 0 já existiam
   hóspedes: 12 criados, 0 já existiam
