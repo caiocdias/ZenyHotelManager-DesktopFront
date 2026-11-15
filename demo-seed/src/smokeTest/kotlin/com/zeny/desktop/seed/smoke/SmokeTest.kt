@@ -2,6 +2,7 @@ package com.zeny.desktop.seed.smoke
 
 import com.zeny.desktop.core.RawSdkAccess
 import com.zeny.desktop.core.config.ServerUrl
+import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.seed.DemoSeed
@@ -138,10 +139,21 @@ class SmokeTest {
             try {
                 val result = session.signIn(user.login, passwords.getValue(user.role))
                 assertEquals(SignIn.Active, result, "login de ${user.login}")
+                if (user.role == DemoRole.RECEPTIONIST) checkRegistrationCard(session)
             } finally {
                 close(session)
             }
         }
+    }
+
+    /** Logado como Recepcionista, baixa a ficha de um hospedado do seed; só o tamanho e a assinatura são conferidos. */
+    private suspend fun checkRegistrationCard(session: SdkSession) {
+        val core = session.seed.core
+        val inHouse = core.reservations.dayPage(DayList.IN_HOUSE, core.hotel.businessDate(), null, 1).items
+        assertTrue(inHouse.isNotEmpty(), "sem hospedados para a ficha de registro")
+        val document = core.documents.registrationCard(inHouse.first().id.toString())
+        assertTrue(document.bytes.size > PDF_MAGIC.length, "ficha vazia: ${document.bytes.size} bytes")
+        assertEquals(PDF_MAGIC, document.bytes.copyOf(PDF_MAGIC.length).decodeToString(), "assinatura da ficha")
     }
 
     @Suppress("TooGenericExceptionCaught", "SwallowedException") // a saída é melhor esforço
@@ -159,5 +171,6 @@ class SmokeTest {
 
     private companion object {
         const val MIN_ROOMS = 20
+        const val PDF_MAGIC = "%PDF-"
     }
 }

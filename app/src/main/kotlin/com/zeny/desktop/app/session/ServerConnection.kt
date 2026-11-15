@@ -3,6 +3,7 @@ package com.zeny.desktop.app.session
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
+import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
 import com.zeny.desktop.app.rooms.NaturalOrder
@@ -54,6 +55,7 @@ import kotlinx.coroutines.flow.StateFlow
 private const val GUEST_SEARCH_LIMIT = 20
 
 /** O que o `app` usa de um servidor: a sessão e as fachadas do `core`. Os testes do `app` usam um falso. */
+@Suppress("TooManyFunctions") // uma porta opcional por área do `core`
 interface ServerConnection : AutoCloseable {
     val state: StateFlow<SessionState>
 
@@ -90,6 +92,9 @@ interface ServerConnection : AutoCloseable {
 
     /** Os recados; `null` quando a conexão não os oferece. */
     fun tracesSource(): TracesSource? = null
+
+    /** A ficha de registro em PDF; `null` quando a conexão não a oferece. */
+    fun registrationCards(): RegistrationCards? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -288,6 +293,11 @@ class CoreConnection(
 
     /** Os recados sobre `core.traces`, `core.reservations`, `core.rooms`, `core.account` e `core.hotel`. */
     override fun tracesSource(): TracesSource = traces
+
+    private val registrationCards = RegistrationCards { id -> core.documents.registrationCard(id) }
+
+    /** A ficha de registro sobre `core.documents`. */
+    override fun registrationCards(): RegistrationCards = registrationCards
 
     override fun close() = core.close()
 }
