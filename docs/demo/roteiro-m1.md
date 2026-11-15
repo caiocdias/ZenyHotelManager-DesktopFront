@@ -255,6 +255,7 @@ java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin
   reservas: 11 criados, 0 já existiam
   alocações: 9 criados, 0 já existiam
   check-ins: 7 criados, 0 já existiam
+  recados: 3 criados, 0 já existiam
   Concluído em 9,6 s.
   ```
 

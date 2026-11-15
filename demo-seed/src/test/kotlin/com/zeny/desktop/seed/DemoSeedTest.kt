@@ -9,6 +9,7 @@ import com.zeny.desktop.seed.config.ConfigSeeder
 import com.zeny.desktop.seed.config.FakeConfigGateway
 import com.zeny.desktop.seed.data.DemoCatalog
 import com.zeny.desktop.seed.data.SeedReport
+import com.zeny.desktop.seed.frontdesk.FakeTraces
 import com.zeny.desktop.seed.people.FakeIam
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayOutputStream
@@ -41,6 +42,7 @@ class DemoSeedTest {
             runBlockingSeeded(),
             date,
         )
+    private val traces = FakeTraces()
     private var adminSession: FakeIam.FakeSession? = null
     private val lines = mutableListOf<String>()
 
@@ -53,7 +55,7 @@ class DemoSeedTest {
     ): AdminContext {
         val session = iam.open().also { adminSession = it }
         session.signIn("admin", config.adminNewPassword ?: config.adminPassword)
-        return AdminContext(session, { date }, configGateway, iam, bookings, iam)
+        return AdminContext(session, { date }, configGateway, iam, bookings, traces, iam)
     }
 
     private val ticks = longArrayOf(1_000_000_000L, 2_500_000_000L)
