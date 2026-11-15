@@ -47,6 +47,7 @@ import com.zeny.desktop.design.feedback.StatusChip
 import com.zeny.desktop.design.feedback.errorMessage
 import com.zeny.desktop.design.table.DataTable
 import com.zeny.desktop.design.theme.ZenyColors
+import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 
@@ -89,8 +90,11 @@ fun ReceptionScreen(
     roomMove: ((String) -> RoomMoveState)? = null,
     undoCheckIn: ((String) -> UndoCheckInState)? = null,
     traces: ReceptionTraces? = null,
+    registrationCard: ((reservationId: String, code: String) -> RegistrationCardState)? = null,
 ) {
-    var checkInState by remember { mutableStateOf<CheckInState?>(null) }
+    val currentCard by rememberUpdatedState(registrationCard)
+    val card = rememberRegistrationCard(detail) { currentCard }
+    val checkInUi = remember { CheckInUi() }
     var walkInState by remember { mutableStateOf<WalkInState?>(null) }
     val openWalkIn: (() -> Unit)? =
         walkIn
@@ -118,21 +122,17 @@ fun ReceptionScreen(
                 val open = detail.reservation?.takeIf { canCheckIn }
                 DetailPanel(
                     detail,
-                    open?.let { { checkInState = checkIn?.invoke(it.toCheckInSeed()) } },
+                    open?.let { { checkInUi.open(it, checkIn) } },
                     stay.moveAction(detail, panel.permissions),
                     stay.undoAction(detail, panel.permissions),
                     tracesUi,
+                    card.action(panel.permissions),
                 )
             }
         }
     }
-    checkInState?.let { state ->
-        CheckInDialog(state) {
-            state.close()
-            checkInState = null
-            detail.reload()
-        }
-    }
+    checkInUi.Show(detail, card)
+    card.Show()
     stay.Show(detail)
     tracesUi.ShowForm()
     walkInState?.let { state ->
@@ -141,6 +141,47 @@ fun ReceptionScreen(
             walkInState = null
             panel.refresh()
         }
+    }
+}
+
+/** O check-in aberto e a reserva (id e código) em que abriu: o atalho da ficha usa esta, mesmo que o detalhe mude. */
+@Stable
+private class CheckInUi {
+    private var state by mutableStateOf<CheckInState?>(null)
+    private var target by mutableStateOf<CardTarget?>(null)
+
+    fun open(
+        reservation: ReservationDetailResponse,
+        make: ((CheckInSeed) -> CheckInState)?,
+    ) {
+        target = CardTarget(reservation.reservation.id.toString(), reservation.reservation.code)
+        state = make?.invoke(reservation.toCheckInSeed())
+    }
+
+    @Composable
+    fun Show(
+        detail: ReservationDetailState,
+        card: RegistrationCardUi,
+    ) {
+        val open = state ?: return
+        val cardTarget = target
+        val close = {
+            open.close()
+            state = null
+            target = null
+            detail.reload()
+        }
+        CheckInDialog(
+            open,
+            onClose = close,
+            onOpenCard =
+                cardTarget?.takeIf { card.available }?.let { t ->
+                    {
+                        close()
+                        card.open(t)
+                    }
+                },
+        )
     }
 }
 
@@ -252,12 +293,14 @@ private fun Lists(
 }
 
 @Composable
+@Suppress("LongParameterList") // uma ação opcional por botão do detalhe
 private fun DetailPanel(
     detail: ReservationDetailState,
     onCheckIn: (() -> Unit)?,
     onMove: (() -> Unit)?,
     onUndo: (() -> Unit)?,
     tracesUi: ReceptionTracesUi,
+    onCard: (() -> Unit)?,
 ) {
     val error = detail.error
     val view = detail.view
@@ -280,6 +323,11 @@ private fun DetailPanel(
         if (onUndo != null) {
             OutlinedButton(onClick = onUndo, modifier = Modifier.testTag("open-undo-check-in")) {
                 Text("Desfazer check-in")
+            }
+        }
+        if (onCard != null) {
+            OutlinedButton(onClick = onCard, modifier = Modifier.testTag("open-registration-card")) {
+                Text("Ficha de registro")
             }
         }
         if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")

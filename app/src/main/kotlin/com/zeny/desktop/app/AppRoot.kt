@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
@@ -26,11 +27,13 @@ import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
 import com.zeny.desktop.app.login.PasswordChangeState
+import com.zeny.desktop.app.reception.CheckInSeed
 import com.zeny.desktop.app.reception.CheckInState
 import com.zeny.desktop.app.reception.DayPanelState
 import com.zeny.desktop.app.reception.ReceptionScreen
 import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.ReceptionTraces
+import com.zeny.desktop.app.reception.RegistrationCardState
 import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.reception.RoomMoveState
 import com.zeny.desktop.app.reception.UndoCheckInState
@@ -49,14 +52,26 @@ import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.approval.ApprovalDialog
 import com.zeny.desktop.design.feedback.EmptyState
+import com.zeny.desktop.design.pdf.FileDialogSaveChooser
+import com.zeny.desktop.design.pdf.PdfActions
+import com.zeny.desktop.design.pdf.PdfDocumentState
+import com.zeny.desktop.design.pdf.SystemPrintDialog
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import java.awt.EventQueue
+import java.awt.Frame
 import java.time.Clock
+import java.util.concurrent.Executor
+
+/** A janela do app, pai do diálogo nativo "Salvar como…" da ficha; nula fora da janela real (testes). */
+val LocalWindowFrame = staticCompositionLocalOf<Frame?> { null }
 
 /** Casca de desenvolvimento (áreas "(em breve)"): só com `ZENY_DEV_SHELL=1` ou `-Dzeny.devShell=true`. */
 fun isShellDevMode(
@@ -206,37 +221,46 @@ private fun ReceptionArea(connection: ServerConnection) {
             }
             // Fora da casca (sem coordenador) o check-in segue sem aprovação: o servidor decide se pede.
             val approval = LocalApprovalCoordinatorOrNull.current
-            val clock = remember { Clock.systemUTC() }
             ReceptionScreen(
                 panel,
                 detail,
-                checkIn = { seed ->
-                    CheckInState(
-                        source,
-                        scope,
-                        seed,
-                        panel.permissions,
-                        { approveAction(approval, it) },
-                        clock::instant,
-                    ) {
-                        panel.refresh()
-                        detail.reload()
-                    }
-                },
-                walkIn = {
-                    WalkInState(
-                        source,
-                        scope,
-                        panel.permissions,
-                        { approveAction(approval, it) },
-                        onChanged = { panel.refresh() },
-                    )
-                },
+                checkIn = checkInFactory(source, scope, approval, panel, detail),
+                walkIn = walkInFactory(source, scope, approval, panel),
                 roomMove = roomMoveFactory(source, scope, approval, panel, detail),
                 undoCheckIn = undoCheckInFactory(source, scope, approval, panel, detail),
                 traces = traces,
+                registrationCard = registrationCardFactory(connection, scope, LocalWindowFrame.current),
             )
         }
+    }
+}
+
+/**
+ * A fábrica da ficha de registro da recepção, ou nula sem porta de fichas nesta conexão. As portas reais (o diálogo
+ * "Salvar como…" com a janela por pai e o de impressão do sistema) nascem aqui, a cada abertura; o diálogo de salvar
+ * roda na thread de UI do AWT e a escrita e a impressão, fora dela.
+ */
+private fun registrationCardFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    window: Frame?,
+): ((String, String) -> RegistrationCardState)? {
+    val cards = connection.registrationCards() ?: return null
+
+    @Suppress("InjectDispatcher") // a escrita e a impressão vão para o pool de E/S, sem injeção nesta fábrica
+    val io = Dispatchers.IO
+    val awt = Executor { EventQueue.invokeLater(it) }.asCoroutineDispatcher()
+    return { id, code ->
+        RegistrationCardState(
+            source = cards,
+            scope = scope,
+            reservationId = id,
+            reservationCode = code,
+            newDocument = { bytes, documentScope -> PdfDocumentState(bytes, documentScope) },
+            newActions = { bytes, name ->
+                PdfActions(bytes, name, FileDialogSaveChooser(window), SystemPrintDialog(), awt, io)
+            },
+        )
     }
 }
 
@@ -267,6 +291,37 @@ private fun receptionTraces(
         )
     }
 }
+
+/** O check-in do detalhe: a aprovação é a do coordenador; depois dele a lista e o detalhe se refazem. */
+private fun checkInFactory(
+    source: ReceptionSource,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    panel: DayPanelState,
+    detail: ReservationDetailState,
+): (CheckInSeed) -> CheckInState =
+    { seed ->
+        CheckInState(
+            source,
+            scope,
+            seed,
+            panel.permissions,
+            { approveAction(approval, it) },
+            Clock.systemUTC()::instant,
+        ) {
+            panel.refresh()
+            detail.reload()
+        }
+    }
+
+/** O walk-in do cabeçalho, com a mesma aprovação; depois dele só a lista se refaz. */
+private fun walkInFactory(
+    source: ReceptionSource,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    panel: DayPanelState,
+): () -> WalkInState =
+    { WalkInState(source, scope, panel.permissions, { approveAction(approval, it) }, onChanged = { panel.refresh() }) }
 
 /** A troca de UH do detalhe: a aprovação é a do coordenador; depois dela a lista e o detalhe se refazem. */
 private fun roomMoveFactory(

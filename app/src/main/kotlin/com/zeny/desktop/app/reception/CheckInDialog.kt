@@ -39,6 +39,7 @@ private val DIALOG_MAX_BODY = 480.dp
 fun CheckInDialog(
     state: CheckInState,
     onClose: () -> Unit,
+    onOpenCard: (() -> Unit)? = null,
 ) {
     LaunchedEffect(state) { state.start() }
     val done = state.done
@@ -51,7 +52,7 @@ fun CheckInDialog(
                 Modifier.heightIn(max = DIALOG_MAX_BODY).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (done != null) Done(done) else Form(state)
+                if (done != null) Done(done, onOpenCard) else Form(state)
             }
         },
         confirmButton = {
@@ -74,9 +75,17 @@ fun CheckInDialog(
 }
 
 @Composable
-private fun Done(done: CheckInDone) {
+private fun Done(
+    done: CheckInDone,
+    onOpenCard: (() -> Unit)?,
+) {
     Text("Check-in feito na UH ${done.roomNumber}.", modifier = Modifier.testTag("check-in-done"))
     done.alerts.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
+    if (onOpenCard != null) {
+        Button(onClick = onOpenCard, modifier = Modifier.testTag("check-in-open-card")) {
+            Text("Abrir ficha de registro")
+        }
+    }
 }
 
 @Composable
