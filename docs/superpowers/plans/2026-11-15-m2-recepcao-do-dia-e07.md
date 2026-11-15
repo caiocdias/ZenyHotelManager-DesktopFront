@@ -112,7 +112,7 @@
 **Files:**
 - Modify: `gradle/libs.versions.toml`, `design/build.gradle.kts` e os lockfiles. No `design/build.gradle.kts`: o PDFBox como `implementation`; o isolamento de tmp da tarefa `test` (como no `app`); e uma tarefa nova `noDiskTest` do tipo `Test` **sobre o próprio `sourceSets.test`** (mesmo `testClassesDirs` e `classpath`, sem conjunto de fontes novo, para não nascer configuração nova nos lockfiles), filtrada pelo pacote `com.zeny.desktop.design.pdf.nodisk` (que a tarefa `test` exclui), ligada ao `check`, em JVM própria com `-Djava.io.tmpdir` e `-Duser.home` em pastas novas do build criadas antes da partida
 - Create: `design/src/main/kotlin/com/zeny/desktop/design/pdf/PdfBoxSetup.kt`
-- Create: `tests/test_pdfbox_scope_ataque.sh` (no molde de `tests/test_design_testdeps_ataque.sh`, pelos lockfiles e pelos `build.gradle.kts`): o PDFBox ausente do lockfile do `core`; ausente do `compileClasspath` do `app`; presente no `runtimeClasspath` do `app` (vem do `design`, e o JAR precisa dele) e no `compileClasspath` do `design`; no `app/build.gradle.kts`, só como `testImplementation` (a partir da Task 9)
+- Create: `tests/test_pdfbox_scope_ataque.sh` (no molde de `tests/test_design_testdeps_ataque.sh`, pelos lockfiles e pelos `build.gradle.kts`): o PDFBox ausente do lockfile do `core`; ausente do `compileClasspath` do `app`; presente no `runtimeClasspath` do `app` (vem do `design`, e o JAR precisa dele) e no `compileClasspath` do `design`; no `app/build.gradle.kts`, ausente ou só como `testImplementation` (a Task 9 o acrescenta), recusando qualquer outra declaração
 - Test: `design/src/test/kotlin/com/zeny/desktop/design/pdf/nodisk/PdfNoDiskTest.kt` e `design/src/test/kotlin/com/zeny/desktop/design/pdf/PdfBoxSetupTest.kt`
 
 **Interfaces:**
@@ -163,7 +163,7 @@
 - Consumes: Task 3 (o `install()` e o utilitário de PDF de teste) e Task 4 (`PdfDocumentState`, no teste de concorrência).
 - Produces:
   - `fun interface SaveLocationChooser { fun choose(suggestedName: String): java.nio.file.Path? }` (nulo = cancelado) e a real `FileDialogSaveChooser(parent: java.awt.Frame?)` (`java.awt.FileDialog` em modo `SAVE`); o mapeamento do resultado do diálogo é a função pura `saveDialogResult(directory: String?, file: String?): Path?` (sem arquivo → `null`);
-  - `fun interface PrintDialog { fun print(pageable: java.awt.print.Pageable): PrintOutcome }`, `enum class PrintOutcome { PRINTED, CANCELLED }` e a real `SystemPrintDialog(jobFactory: () -> PrinterJob = PrinterJob::getPrinterJob)` (`setPageable`; o `printDialog()` roda na EDT por `invokeAndWait`; falso → `CANCELLED` sem `print()`; verdadeiro → `print()` na thread que chamou, fora da EDT; `PrinterException` sobe para o `PdfActions`);
+  - `fun interface PrintDialog { fun print(pageable: java.awt.print.Pageable): PrintOutcome }`, `enum class PrintOutcome { PRINTED, CANCELLED }` e a real `SystemPrintDialog(jobFactory: () -> PrinterJob = PrinterJob::getPrinterJob)` (`setPageable`; o `printDialog()` roda na EDT por `invokeAndWait` (chamado já na EDT, roda direto; teste `printDialogFromEdtRunsDirectly`); falso → `CANCELLED` sem `print()`; verdadeiro → `print()` na thread que chamou, fora da EDT; `PrinterException` sobe para o `PdfActions`);
   - `class PdfActions(bytes: ByteArray, suggestedName: String, chooser: SaveLocationChooser, printer: PrintDialog, uiDispatcher: CoroutineDispatcher, ioDispatcher: CoroutineDispatcher)`:
     - `suspend fun save(): SaveResult` (`Saved`, `Cancelled`, `Failed(message)`): diálogo no `uiDispatcher` (EDT), escrita no `ioDispatcher`;
     - `suspend fun print(): PrintResult` (`Printed`, `Cancelled`, `Failed(message)`): carrega um `PDDocument` próprio dos bytes (só memória, depois do `install()`), monta o `PDFPageable` e chama a porta no `ioDispatcher` (o `SystemPrintDialog` leva só o diálogo para a EDT) e fecha o documento no fim;
@@ -272,3 +272,12 @@ O catálogo de componentes do `app` não ganha o visualizador (exigiria bytes de
 
 - **Critério "Imprimir abre o diálogo do sistema":** provado no notebook pelo adaptador `SystemPrintDialog` com um `PrinterJob` falso (cancelar não imprime; confirmar manda as N páginas) e no Windows pelo roteiro da E06, com os itens Imprimir → Cancelar, Imprimir → "Microsoft Print to PDF", Salvar como → Cancelar e Salvar como sobre um arquivo existente.
 - **Fidelidade das fontes:** Helvetica, Times e Courier (não embutidas na ficha) saem com as fontes que o PDFBox traz no JAR; se ele trouxer só a Liberation Sans regular, os negritos saem regulares na tela e no papel. Alternativa: embarcar as variantes da Liberation Sans (licença OFL) como recurso do `design`, medindo o JAR.
+
+---
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2 (rodada 0 bloqueada por 8 Importantes; rodada 1 bloqueada por 5 Importantes novos da reescrita; rodada 2 aprovada com notas).
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores** (incorporadas): a checagem estática aceita o PDFBox ausente do `app` até a Task 9; o `SystemPrintDialog` chama o diálogo direto quando já está na EDT. O revisor não conferiu os detalhes internos do PDFBox 3.0.x (fontes do JAR, `DCTFilter`, `FileSystemFontProvider`); a Task 3 e a regra de parada da H4 cobrem.
