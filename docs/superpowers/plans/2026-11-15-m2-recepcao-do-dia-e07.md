@@ -271,6 +271,8 @@ O catálogo de componentes do `app` não ganha o visualizador (exigiria bytes de
 ## Decisões para o usuário (tomadas pela opção recomendada; vão ao handoff)
 
 - **Critério "Imprimir abre o diálogo do sistema":** provado no notebook pelo adaptador `SystemPrintDialog` com um `PrinterJob` falso (cancelar não imprime; confirmar manda as N páginas) e no Windows pelo roteiro da E06, com os itens Imprimir → Cancelar, Imprimir → "Microsoft Print to PDF", Salvar como → Cancelar e Salvar como sobre um arquivo existente.
+- **"Salvar como…" sem escrita atômica:** grava direto no destino escolhido; uma falha no meio pode deixar o destino truncado. Um arquivo irmão com rename seria uma segunda cópia do PDF.
+- **Impressão no Linux:** o `PSPrinterJob` da JVM grava um `javaprint*.ps` temporário enquanto o `lpr` roda (diverge do ADR 0009; o Windows usa o spooler do sistema). Espera a decisão do usuário.
 - **Fidelidade das fontes:** Helvetica, Times e Courier (não embutidas na ficha) saem com as fontes que o PDFBox traz no JAR; se ele trouxer só a Liberation Sans regular, os negritos saem regulares na tela e no papel. Alternativa: embarcar as variantes da Liberation Sans (licença OFL) como recurso do `design`, medindo o JAR.
 
 ---

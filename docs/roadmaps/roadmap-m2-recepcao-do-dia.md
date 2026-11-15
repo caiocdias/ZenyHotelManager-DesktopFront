@@ -87,8 +87,8 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 | H1 | O cadastro mínimo de hóspede exigido pelo check-in cabe num diálogo curto (nome e documento), sem os dados sensíveis da FNRH | O diálogo cresce, ou o check-in pede o perfil completo do M5 | E02, E03 |
 | H2 | O seed consegue deixar UHs prontas e alocadas para as chegadas de hoje | O roteiro de check-in precisa de passos manuais extras | E02 |
 | H3 | Os tópicos SSE existentes (`rooms` e outros do contrato) bastam para manter as listas do dia em dia; senão, a tela rebusca ao voltar ao foco | Listas desatualizadas durante a demo; avaliar `PF-NN` | E01 |
-| H4 | Uma biblioteca de PDF para a JVM (candidata: Apache PDFBox) renderiza em memória a ficha do servidor e a manda para a impressora do sistema, no Linux e no Windows, dentro do JAR multiplataforma e sem estourar a memória do build | Trocar de biblioteca, registrando no handoff; se nenhuma servir, a decisão volta ao usuário (ADR 0009) antes de cair para arquivo temporário | E07 |
-| H5 | O Recepcionista do seed tem `frontdesk.stays.checkin`, que abre a ficha (D-E11-10 do servidor) | O botão some para ele; o roteiro mostra a ficha logado como Gerente | E07 |
+| H4 | *(Confirmada na E07 com o PDFBox 3.0.8.)* Uma biblioteca de PDF para a JVM (candidata: Apache PDFBox) renderiza em memória a ficha do servidor e a manda para a impressora do sistema, no Linux e no Windows, dentro do JAR multiplataforma e sem estourar a memória do build | Trocar de biblioteca, registrando no handoff; se nenhuma servir, a decisão volta ao usuário (ADR 0009) antes de cair para arquivo temporário | E07 |
+| H5 | *(Confirmada na E07.)* O Recepcionista do seed tem `frontdesk.stays.checkin`, que abre a ficha (D-E11-10 do servidor) | O botão some para ele; o roteiro mostra a ficha logado como Gerente | E07 |
 
 ## Definição global de pronto
 
@@ -188,7 +188,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #concluida | E01 | Recados por setor ligados a reserva ou UH, com resolução |
-| E07 | Ficha de registro e visualizador de PDF | #em-andamento | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
+| E07 | Ficha de registro e visualizador de PDF | #concluida | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
@@ -591,7 +591,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E07 — Ficha de registro e visualizador de PDF — #em-andamento
+## E07 — Ficha de registro e visualizador de PDF — #concluida
 
 **Objetivo:** depois do check-in, ou no detalhe de uma reserva confirmada, hospedada ou encerrada, o recepcionista abre a ficha de registro da hospedagem dentro do app. Ele a confere na tela, salva o arquivo onde escolher ou a imprime na impressora do computador. O PDF nunca toca o disco sem a ação dele.
 
@@ -621,12 +621,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, a ficha de um hospedado abre no app com o código da reserva, a UH e o nome do hóspede, e o documento aparece mascarado como o servidor manda.
-- [ ] Teste: abrir, navegar e fechar o visualizador não cria arquivo nenhum. A pasta temporária da JVM e a pasta do usuário são comparadas antes e depois, com o diretório temporário redirecionado no teste.
-- [ ] "Salvar como…" grava exatamente os bytes recebidos (hash igual ao da resposta) no destino escolhido. Cancelar o diálogo não grava nada.
-- [ ] "Imprimir" abre o diálogo de impressão do sistema, e cancelar não deixa efeito. Uma impressão real (ou para PDF, pela impressora virtual do Windows) é conferida pelo usuário no gate (E06).
-- [ ] Reserva cancelada ou sem ficha: o botão não aparece. Se o servidor recusar, a mensagem sai em pt-BR, sem `code` cru.
-- [ ] O `smokeTest` baixa a ficha de um hospedado do seed e confere que a resposta começa com `%PDF-`.
+- [x] Contra o seed, a ficha de um hospedado abre no app com o código da reserva, a UH e o nome do hóspede, e o documento aparece mascarado como o servidor manda.
+- [x] Teste: abrir, navegar e fechar o visualizador não cria arquivo nenhum. A pasta temporária da JVM e a pasta do usuário são comparadas antes e depois, com o diretório temporário redirecionado no teste.
+- [x] "Salvar como…" grava exatamente os bytes recebidos (hash igual ao da resposta) no destino escolhido. Cancelar o diálogo não grava nada.
+- [x] *(No notebook, pelo adaptador; a impressão real fica com o gate E06.)* "Imprimir" abre o diálogo de impressão do sistema, e cancelar não deixa efeito. Uma impressão real (ou para PDF, pela impressora virtual do Windows) é conferida pelo usuário no gate (E06).
+- [x] Reserva cancelada ou sem ficha: o botão não aparece. Se o servidor recusar, a mensagem sai em pt-BR, sem `code` cru.
+- [x] O `smokeTest` baixa a ficha de um hospedado do seed e confere que a resposta começa com `%PDF-`.
 
 **Validação obrigatória:**
 
@@ -653,12 +653,34 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-15):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7). A impressão real e o "Salvar como…" nativo no Windows ficam com o roteiro do gate (E06).
+- **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e07.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e07.md), com 9 tarefas em série (8 de risco alto). A revisão de arquitetura (opus) bloqueou nas rodadas 0 (8 Importantes) e 1 (5 Importantes da reescrita) e aprovou com notas na rodada 2. Os principais achados foram: a estratégia para o PDFBox não tocar o disco (`FontMapper` próprio, cache do `ImageIO` desligado); o teste de disco numa JVM própria; o confinamento do `PDDocument`; o contrato do nome do arquivo; o PDFBox fora da produção do `app`; e a prova pelo JAR sem o nativo do Skia.
+- **Commits:** `24010eb..5db1574` na branch `roadmap/m2-recepcao-do-dia`, com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão; houve rodadas de correção nas Tasks 1 (Content-Type malformado; caractere de formatação no nome), 3 (checagem estática do runtime do PDFBox), 4 (erro de página e navegação depois de fechar), 5 (nome sugerido no Windows e em bytes; salvamentos simultâneos), 8 (cancelar durante a carga) e 9 (asserções da máscara).
+- **Revisão final** (`revisor-seguranca`, opus, sobre `0c61d91..5db1574`): pronto "com correções" só de documentação, sem Crítico. O Importante é a impressão no Linux (abaixo, em decisões); o Menor era completar estas decisões.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base 0c61d91`: nenhum apontamento. `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 361 pacotes, com pdfbox, fontbox e pdfbox-io 3.0.8 e commons-logging 1.4.0), "No issues found".
+- **H4 confirmada:** o Apache PDFBox 3.0.8 renderiza em memória, imprime pela impressora do sistema e vai no JAR multiplataforma. O `zeny-desktop.jar` foi de 61.455.008 para 65.425.241 bytes (+4 MB, com os avisos de licença); o `:app:desktopJar` levou 35,5 s. Sem o `PdfBoxSetup`, o PDFBox gravaria `~/.pdfbox.cache`; com ele, nada é gravado (prova numa JVM isolada, com controle positivo). O que a biblioteca gravaria está documentado no relatório da Task 3: o cache de fontes na pasta do usuário e o cache de imagens do `ImageIO` no diretório temporário, ambos desligados.
+- **H5 confirmada:** o Recepcionista do seed abre a ficha.
+- **Critérios verificados:**
+  - Ficha de um hospedado (`LiveRegistrationCardCheck`, opt-in `ZENY_LIVE_CARD`, contra o `zeny-front`, logado como Recepcionista; 3 testes, 0 falhas): a R-2026-000005 abriu no visualizador; o texto extraído tem o código, a UH 203 e o titular; nenhum CPF ou CNPJ do hóspede por extenso, e o documento aparece como `***0570`. A captura `app/build/live/registration-card.png` foi inspecionada pelo orquestrador.
+  - Nenhum arquivo: `:design:noDiskTest` (JVM própria, `java.io.tmpdir` e `user.home` em pastas novas; fotos antes e depois e `WatchService` com sentinela) cobre o PDFBox, o `PdfDocumentState`, o salvar cancelado e a impressão para uma porta falsa; mais as travas estáticas `tests/test_pdf_disk_apis_ataque.sh` e `tests/test_pdfbox_scope_ataque.sh`.
+  - "Salvar como…": `saveWritesExactBytes` (SHA-256 igual) e `cancelSaveWritesNothing`, mais os ataques de sobrescrita, somente-leitura e nome.
+  - "Imprimir": `SystemPrintDialog` com um `PrinterJob` falso (cancelar não chama `print()`; confirmar manda as N páginas; a cópia da impressão é fechada em todo caminho). A impressão real, inclusive para PDF, fica para o roteiro da E06.
+  - Botão: só com `frontdesk.stays.checkin` e em `CONFIRMED`, `IN_HOUSE` ou `CHECKED_OUT` (`RegistrationCardScreenTest`/`AtaqueTest`); recusas do servidor em pt-BR, sem visualizador vazio. O caso "reserva cancelada" ao vivo ficou sem candidata no seed.
+  - `smokeTest` contra o ambiente: 1 teste, 0 falhas, com a ficha começando em `%PDF-`.
+  - JAR: `DesktopJarPdfTest` renderiza a página 1 pelas classes do `zeny-desktop.jar` num carregador isolado; o `verifyDesktopJar` exige as classes, a fonte e os avisos `NOTICE`/`LICENSE` de cada biblioteca Apache (lista em `app/desktop-jar-required.txt`).
+  - Gate em `5db1574`: `./gradlew cleanTest build --max-workers=2` BUILD SUCCESSFUL (core 1096 testes, design 368 + 5 do `noDiskTest`, app 1720, demo-seed 554, sdk 40; 0 falhas; 34 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 42 arquivos, 0 falhas.
+- **Decisões para o usuário:**
+  - **Impressão no Linux grava um arquivo temporário (espera o usuário, diverge do ADR 0009):** no Linux, a JVM (`PSPrinterJob`) grava a ficha em PostScript como `javaprint*.ps` no diretório temporário enquanto o `lpr` roda e o apaga depois; se o processo morrer no meio, o arquivo fica. No Windows, alvo da operação, a impressão vai pelo spooler do sistema, sem arquivo do app. Recomendado: aceitar no Linux, porque a impressão é ação explícita do usuário, e registrar a exceção no ADR 0009; alternativa: esconder "Imprimir" fora do Windows.
+  - **Fidelidade das fontes (tomada):** as fontes não embutidas da ficha saem com a Liberation Sans regular que vem no PDFBox, e o nome do hotel e os títulos ficam sem negrito. Alternativa: embarcar as variantes da Liberation Sans (OFL).
+  - **"Salvar como…" sem escrita atômica (tomada):** grava direto no destino escolhido; uma falha no meio (disco cheio) pode deixar o arquivo de destino truncado, com a mensagem de falha. Um arquivo irmão com rename seria uma segunda cópia do PDF com dado pessoal. Os salvamentos são serializados.
+  - **Nome sugerido (tomada):** o nome do servidor é saneado (último segmento, sem caracteres de controle, de formatação nem ilegais no Windows, sem nomes reservados, até 255 bytes UTF-8); senão, `ficha-<código>.pdf`.
+  - **Critério de imprimir (tomada):** provado no notebook pelo adaptador; no Windows, pelo roteiro da E06 (Imprimir → Cancelar; Imprimir → "Microsoft Print to PDF"; Salvar como → Cancelar; Salvar como sobre um arquivo existente).
+  - **Fica para depois** (Menores triados pela revisão final): a escala de tela no Windows (100% aparece menor com escala de 125–150%) e o diálogo de impressão sem janela dona (pode abrir atrás) entram no roteiro da E06; textos próprios da ficha no componente do `design` viram parâmetros antes da M3 E03 e da M4 E02; teto de pixels por página antes do reuso.
+- **Notas para a próxima etapa:**
+  - **E06 (gate):** o roteiro mostra a ficha logada como Recepcionista, imprime para "Microsoft Print to PDF" e confere o "Salvar como…" (cancelar e sobrescrever), a escala de tela e o diálogo de impressão na frente da janela.
+  - **Reuso (M3 E03, M4 E02):** `PdfViewer`, `PdfDocumentState` (uso único: crie um por abertura) e `PdfActions` no pacote `com.zeny.desktop.design.pdf`; o download binário é o `ApiExecutor.executeBytes` com teto de 20 MB. `PdfBoxSetup.install()` é chamado pelo próprio documento.
+  - **Dependência:** o log do PDFBox fica mudo porque o app não tem provedor SLF4J; um provedor futuro precisa silenciar `org.apache.pdfbox` e `org.apache.fontbox`.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_CARD=1 ./gradlew :app:test --tests '*LiveRegistrationCardCheck*' --rerun --max-workers=2)`; só lê do servidor.
 
 ---
 
@@ -722,3 +744,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-14 — E03 `#concluida` (`claude --agent orquestrador`). O critério de desconto não se aplica (H24 do servidor). A verificação ao vivo criou dois walk-ins; recriar a demo antes do roteiro.
 - 2026-11-14 — E04 `#concluida` (`claude --agent orquestrador`). O critério 3 foi verificado pela D2 do ADR 0007 (texto a corrigir). A verificação ao vivo trocou a UH da R-2026-000005 e desfez o check-in da R-2026-000003; recriar a demo antes do roteiro.
 - 2026-11-15 — E05 `#concluida` (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `3eeef989afb6`, só enums extensíveis), pin mantido. Recados com aba e seção no detalhe; a Recepcionista da demo ganhou a consulta de setores pelo seed, e o PF-01 foi aberto. Recriar a demo antes do roteiro.
+- 2026-11-15 — E07 `#concluida` (`claude --agent orquestrador`). H4 e H5 confirmadas (PDFBox 3.0.8, sem disco). A impressão no Linux grava um temporário da JVM: decisão do usuário pendente.
