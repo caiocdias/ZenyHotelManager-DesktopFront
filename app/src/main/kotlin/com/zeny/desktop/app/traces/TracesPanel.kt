@@ -95,7 +95,10 @@ private fun CompactTraces(
 
             tableError != null -> {
                 Text(TraceText.message(tableError), color = MaterialTheme.colorScheme.error)
-                Button(onClick = { scope.launch { table.reload() } }, modifier = Modifier.testTag("table-retry")) {
+                Button(
+                    onClick = { scope.launch { if (table.rows.isEmpty()) table.reload() else table.loadMore() } },
+                    modifier = Modifier.testTag("table-retry"),
+                ) {
                     Text("Tentar de novo")
                 }
             }

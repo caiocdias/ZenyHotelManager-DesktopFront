@@ -148,9 +148,10 @@ class TracesListState(
         reloadTable()
     }
 
-    /** Atualiza a lista sem esvaziá-la. */
+    /** Atualiza a lista sem esvaziá-la; a falha da última ação sai de cena (a tela refez a leitura). */
     fun refresh() {
         if (closed) return
+        actionError = null
         stateScope.launch { quietly { table.refresh() } }
     }
 
@@ -199,6 +200,7 @@ class TracesListState(
 
     private fun reloadTable() {
         if (closed) return
+        actionError = null
         stateScope.launch { quietly { table.reload() } }
     }
 
