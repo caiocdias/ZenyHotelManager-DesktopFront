@@ -23,6 +23,10 @@ assert_eq "$versao" "$(grep -E '^org\.apache\.pdfbox:pdfbox:' "$design_lock" | c
 # core: nenhum artefato do PDFBox em nenhuma configuração.
 assert_eq "0" "$(grep -cE '^org\.apache\.pdfbox:' "$core_lock")" "core: lockfile sem org.apache.pdfbox"
 
+# demo-seed: o seed não gera nem lê PDF. (Lido com cat: o teste por mutação copia só core, app e design.)
+assert_eq "0" "$(cat "$ROOT/demo-seed/gradle.lockfile" 2>/dev/null | grep -cE 'org\.apache\.pdfbox')" \
+  "demo-seed: lockfile sem org.apache.pdfbox"
+
 # design: o PDFBox compila e roda com o design.
 for cfg in compileClasspath runtimeClasspath; do
   assert_contains "$(configs_de "$design_lock" 'org\.apache\.pdfbox:pdfbox')" "$cfg" "design: pdfbox no $cfg"
@@ -37,12 +41,12 @@ for c in 'org\.apache\.pdfbox:pdfbox' 'org\.apache\.pdfbox:fontbox' 'org\.apache
 done
 
 # app: fora do compileClasspath e de toda configuração que não seja de runtime ou de teste, para cada artefato do
-# PDFBox (pdfbox, fontbox, pdfbox-io).
-for a in pdfbox fontbox pdfbox-io; do
-  cfgs="$(configs_de "$app_lock" "org\\.apache\\.pdfbox:$a")"
-  assert_eq "" "$(grep -xE 'compileClasspath' <<<"$cfgs")" "app: $a fora do compileClasspath"
+# PDFBox (pdfbox, fontbox, pdfbox-io) e para o commons-logging que ele traz.
+for a in org.apache.pdfbox:pdfbox org.apache.pdfbox:fontbox org.apache.pdfbox:pdfbox-io commons-logging:commons-logging; do
+  cfgs="$(configs_de "$app_lock" "${a//./\\.}")"
+  assert_eq "" "$(grep -xE 'compileClasspath' <<<"$cfgs")" "app: ${a#*:} fora do compileClasspath"
   assert_eq "" "$(grep -vE '^((composeHotReloadDev)?[Tt]est[A-Za-z]*|[A-Za-z]*[Rr]untimeClasspath)$' <<<"$cfgs")" \
-    "app: $a só em classpaths de runtime ou de teste"
+    "app: ${a#*:} só em classpaths de runtime ou de teste"
 done
 
 # Linhas do build file $1 que citam o PDFBox (comentários não contam).
