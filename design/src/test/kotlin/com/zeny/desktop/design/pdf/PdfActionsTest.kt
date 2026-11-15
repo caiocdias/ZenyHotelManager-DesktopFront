@@ -136,19 +136,40 @@ class PdfActionsTest {
     }
 
     @Test
-    fun suggestedNameIsCappedAt255KeepingExtension() {
-        val long = "a".repeat(400) + ".pdf"
-        val capped = suggestedPdfName(long, "f.pdf")
-        assertEquals(255, capped.length)
-        assertTrue(capped.endsWith(".pdf"))
-        val noExt = suggestedPdfName("b".repeat(400), "f.pdf")
-        assertEquals(255, noExt.length)
-        assertTrue(noExt.endsWith(".pdf"))
+    fun suggestedNameReplacesWindowsIllegalCharacters() {
+        assertEquals("a_b_c_d_e_f_g_.pdf", suggestedPdfName("a:b<c>d\"e|f?g*.pdf", "f.pdf"))
+        assertEquals("x_y.pdf", suggestedPdfName("x:y", "f.pdf"))
+    }
+
+    @Test
+    fun reservedNamesFallBackAndSimilarNamesSurvive() {
+        assertEquals("f.pdf", suggestedPdfName("CON", "f.pdf"))
+        assertEquals("f.pdf", suggestedPdfName("com1.pdf", "f.pdf"))
+        assertEquals("f.pdf", suggestedPdfName("Lpt9", "f.pdf"))
+        assertEquals("ficha.pdf", suggestedPdfName("nul", "AUX"))
+        assertEquals("console.pdf", suggestedPdfName("console", "f.pdf"))
+        assertEquals("COM10.pdf", suggestedPdfName("COM10", "f.pdf"))
+    }
+
+    @Test
+    fun suggestedNameTrimsTrailingDotsAndSpaces() {
+        assertEquals("a.pdf", suggestedPdfName("a.", "f.pdf"))
+        assertEquals("name.pdf", suggestedPdfName("name.pdf.", "f.pdf"))
+        assertEquals("a.pdf", suggestedPdfName("a .pdf", "f.pdf"))
+        assertEquals("f.pdf", suggestedPdfName(".", "f.pdf"))
+        assertEquals("f.pdf", suggestedPdfName(".pdf", "f.pdf"))
+    }
+
+    @Test
+    fun suggestedNameIsCappedAt255BytesKeepingExtension() {
+        for (ch in listOf("a", "é", "日", "\uD83D\uDE00")) {
+            val out = suggestedPdfName(ch.repeat(400) + ".pdf", "f.pdf")
+            assertTrue(out.toByteArray(Charsets.UTF_8).size <= 255, ch)
+            assertTrue(out.endsWith(".pdf"))
+            assertTrue(out.length > 10)
+        }
+        assertEquals(255, suggestedPdfName("c".repeat(400), "f.pdf").length)
         assertEquals("c".repeat(251) + ".pdf", suggestedPdfName("c".repeat(251) + ".pdf", "f.pdf"))
-        // Não corta um par substituto ao meio.
-        val emoji = suggestedPdfName("\uD83D\uDE00".repeat(200) + ".pdf", "f.pdf")
-        assertTrue(emoji.length <= 255)
-        assertFalse(Character.isHighSurrogate(emoji[emoji.length - ".pdf".length - 1]))
     }
 
     // ---- Imprimir

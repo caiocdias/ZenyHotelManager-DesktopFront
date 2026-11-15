@@ -2,6 +2,8 @@ package com.zeny.desktop.design.pdf
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.apache.pdfbox.pdmodel.PDDocument
 import org.apache.pdfbox.printing.PDFPageable
@@ -119,7 +121,10 @@ class PdfActions(
     private val uiDispatcher: CoroutineDispatcher,
     private val ioDispatcher: CoroutineDispatcher,
 ) {
-    suspend fun save(): SaveResult {
+    // Dois "Salvar como…" (do mesmo PdfActions ou de outro, no mesmo destino) não se misturam: o segundo espera.
+    suspend fun save(): SaveResult = saveLock.withLock { saveLocked() }
+
+    private suspend fun saveLocked(): SaveResult {
         val name = suggestedPdfName(suggestedName, FALLBACK_NAME)
         return try {
             val target = withContext(uiDispatcher) { chooser.choose(name) } ?: return SaveResult.Cancelled
@@ -154,6 +159,7 @@ class PdfActions(
     override fun toString() = "PdfActions(size=${bytes.size})"
 
     private companion object {
+        val saveLock = Mutex()
         const val FALLBACK_NAME = "ficha.pdf"
         const val SAVE_ERROR = "Não foi possível salvar o arquivo."
         const val PRINT_ERROR = "Não foi possível imprimir."
@@ -161,12 +167,15 @@ class PdfActions(
 }
 
 private const val PDF_EXTENSION = ".pdf"
-private const val MAX_NAME_LENGTH = 255
+private const val MAX_NAME_BYTES = 255
+private val WINDOWS_ILLEGAL = setOf(':', '<', '>', '"', '|', '?', '*')
+private val WINDOWS_RESERVED = setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
 
 /**
  * Nome sugerido ao diálogo: só o último segmento, sem `..` nem caractere de controle (inclusive Unicode de
- * formato, separador de linha e de parágrafo), com `.pdf` e no máximo 255 caracteres. Se [raw] é ausente ou
- * inválido, usa o [fallback], saneado do mesmo jeito (e `ficha.pdf` se ele também for inválido).
+ * formato, separador de linha e de parágrafo), sem ponto nem espaço no fim, sem nome reservado do Windows
+ * (CON, NUL, COM1...), com `:<>"|?*` trocados por `_`, com `.pdf` e no máximo 255 bytes UTF-8. Se [raw] é
+ * ausente ou inválido, usa o [fallback], saneado do mesmo jeito (e `ficha.pdf` se ele também for inválido).
  */
 fun suggestedPdfName(
     raw: String?,
@@ -174,27 +183,37 @@ fun suggestedPdfName(
 ): String = sanitizePdfName(raw) ?: sanitizePdfName(fallback) ?: "ficha$PDF_EXTENSION"
 
 private fun sanitizePdfName(raw: String?): String? {
-    val last =
+    val segment =
         raw
             ?.substringAfterLast('/')
             ?.substringAfterLast('\\')
             ?.trim()
             .orEmpty()
-    if (last.isEmpty() || last.contains("..") || last.any(::isForbidden)) return null
-    val hasExtension = last.endsWith(PDF_EXTENSION, ignoreCase = true) && last.length > PDF_EXTENSION.length
+    if (segment.isEmpty() || segment.contains("..") || segment.any(::isForbidden)) return null
+    val last = segment.map { if (it in WINDOWS_ILLEGAL) '_' else it }.joinToString("").trimEnd('.', ' ')
+    val hasExtension = last.endsWith(PDF_EXTENSION, ignoreCase = true)
+    val base = (if (hasExtension) last.dropLast(PDF_EXTENSION.length) else last).trimEnd('.', ' ')
     val extension = if (hasExtension) last.takeLast(PDF_EXTENSION.length) else PDF_EXTENSION
-    val base = if (hasExtension) last.dropLast(PDF_EXTENSION.length) else last
-    return capBase(base, MAX_NAME_LENGTH - extension.length).trimEnd().takeIf { it.isNotEmpty() }?.plus(extension)
+    val capped = capBase(base, MAX_NAME_BYTES - extension.length).trimEnd('.', ' ')
+    val reserved = capped.substringBefore('.').trimEnd().uppercase() in WINDOWS_RESERVED
+    return if (capped.isEmpty() || reserved) null else capped + extension
 }
 
-/** Corta em [max] chars sem partir um par substituto. */
+/** Corta em [maxBytes] UTF-8 sem partir um ponto de código. */
 private fun capBase(
     base: String,
-    max: Int,
+    maxBytes: Int,
 ): String {
-    if (base.length <= max) return base
-    val cut = if (Character.isHighSurrogate(base[max - 1])) max - 1 else max
-    return base.substring(0, cut)
+    var bytes = 0
+    var end = 0
+    while (end < base.length) {
+        val cp = base.codePointAt(end)
+        val size = String(Character.toChars(cp)).toByteArray(Charsets.UTF_8).size
+        if (bytes + size > maxBytes) break
+        bytes += size
+        end += Character.charCount(cp)
+    }
+    return base.substring(0, end)
 }
 
 private fun isForbidden(c: Char): Boolean =
