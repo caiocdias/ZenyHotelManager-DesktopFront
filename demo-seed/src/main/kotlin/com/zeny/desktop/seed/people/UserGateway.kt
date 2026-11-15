@@ -38,6 +38,12 @@ data class UserRef(
     val roleIds: Set<String>,
 )
 
+/** Resultado de garantir uma role: o id e se ela foi criada agora. */
+data class RoleEnsured(
+    val id: String,
+    val created: Boolean,
+)
+
 @Suppress("TooManyFunctions") // porta que espelha as operações do contrato usadas pelo seed
 interface UserGateway {
     suspend fun roleIdsByTemplate(): Map<String, String>
@@ -68,4 +74,11 @@ interface UserGateway {
         userId: String,
         pin: Secret,
     )
+
+    /** Garante a role pelo nome (sem diferenciar maiúsculas) com exatamente estas concessões: código -> escopo. */
+    suspend fun ensureRole(
+        name: String,
+        description: String,
+        grants: Map<String, String>,
+    ): RoleEnsured
 }

@@ -174,6 +174,7 @@ class SdkUserGatewayAtaqueTest {
             "setRoles" to { setRoles(ID_A, listOf(ROLE_1)) },
             "roleIdsByTemplate" to { roleIdsByTemplate() },
             "findUser" to { findUser("a") },
+            "ensureRole" to { ensureRole("Recepção demo", "Desc", mapOf("frontdesk.departments.read" to "ALL")) },
         )
 
     // ---------- segredos: URL, headers, log, mensagens ----------

@@ -9,9 +9,12 @@ import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.sdk.model.CreateUserRequest
 import com.zeny.desktop.sdk.model.ResetPasswordRequest
 import com.zeny.desktop.sdk.model.ResetPinRequest
+import com.zeny.desktop.sdk.model.RoleGrantRequest
+import com.zeny.desktop.sdk.model.RoleRequest
 import com.zeny.desktop.sdk.model.RoleResponse
 import com.zeny.desktop.sdk.model.SetUserRolesRequest
 import com.zeny.desktop.seed.cli.Secret
+import com.zeny.desktop.seed.people.RoleEnsured
 import com.zeny.desktop.seed.people.UserGateway
 import com.zeny.desktop.seed.people.UserRef
 import de.quati.kotlin.util.Option
@@ -114,6 +117,52 @@ class SdkUserGateway(
         val id = Uuid.parse(userId)
         val request = ResetPinRequest(pin.value)
         redacting(pin) { seed.executor.execute { seed.apis.iam.resetUserPin(id, null, request, it.headers) } }
+    }
+
+    /**
+     * Cria, reativa e/ou regrava a role até ela ficar ativa com as concessões pedidas. A regravação lê o `ETag`
+     * vigente (depois da reativação, se houve) e o manda em `If-Match`. Falhas do servidor sobem como `ApiError`.
+     */
+    override suspend fun ensureRole(
+        name: String,
+        description: String,
+        grants: Map<String, String>,
+    ): RoleEnsured {
+        val request =
+            RoleRequest(
+                description = description,
+                grants =
+                    grants.map { (code, scope) ->
+                        RoleGrantRequest(emptyList(), code, RoleGrantRequest.Scope.fromSerial(scope))
+                    },
+                name = name,
+            )
+        val existing =
+            allPages { cursor, limit ->
+                val page = seed.executor.execute { seed.apis.iam.listRoles(cursor, limit, it.headers) }.value
+                Page(page.items, page.nextCursor.value())
+            }.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        if (existing == null) {
+            val created = seed.executor.execute { seed.apis.iam.createRole(null, request, it.headers) }.value
+            return RoleEnsured(created.id.toString(), created = true)
+        }
+        val id = existing.id
+        if (!existing.active) seed.executor.execute { seed.apis.iam.reactivateRole(id, null, it.headers) }
+        if (existing.grants.associate { it.permission to it.scope.value } != grants) {
+            val etag =
+                seed.executor
+                    .execute { seed.apis.iam.getRole(id, it.headers) }
+                    .etag
+                    ?.takeIf { it.isNotBlank() }
+                    ?: throw ApiError.Problem(
+                        PRECONDITION_REQUIRED,
+                        "PRECONDITION_REQUIRED",
+                        "GET da role sem ETag",
+                        emptyList(),
+                    )
+            seed.executor.execute { seed.apis.iam.updateRole(id, etag, null, request, it.headers) }
+        }
+        return RoleEnsured(id.toString(), created = false)
     }
 }
 

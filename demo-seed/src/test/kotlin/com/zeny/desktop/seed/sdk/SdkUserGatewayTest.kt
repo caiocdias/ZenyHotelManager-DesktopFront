@@ -3,6 +3,7 @@ package com.zeny.desktop.seed.sdk
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.seed.cli.Secret
+import com.zeny.desktop.seed.people.RoleEnsured
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.engine.mock.respond
@@ -66,6 +67,15 @@ private fun role(
        |"id":"$id","name":"r$id","systemRole":true,${template?.let { "\"template\":\"$it\"," }.orEmpty()}
        |"updatedAt":"2026-01-01T00:00:00Z"}
     """.trimMargin()
+
+private fun namedRole(
+    id: String,
+    name: String,
+    active: Boolean = true,
+    grants: Map<String, String> = emptyMap(),
+) = """{"active":$active,"createdAt":"2026-01-01T00:00:00Z","customized":true,"description":"Desc","grants":[${
+    grants.entries.joinToString(",") { (code, scope) -> """{"limits":[],"permission":"$code","scope":"$scope"}""" }
+}],"id":"$id","name":"$name","systemRole":false,"updatedAt":"2026-01-01T00:00:00Z"}"""
 
 private fun user(
     id: String,
@@ -178,6 +188,181 @@ class SdkUserGatewayTest {
                     .jsonArray
                     .map { it.jsonPrimitive.content }
             assertEquals(listOf(ROLE_1, ROLE_2), sentRoles)
+        }
+
+    private val wanted = mapOf("frontdesk.departments.read" to "ALL")
+
+    @Test
+    fun ensureRoleCreatesWhenAbsent() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    when (request.method) {
+                        HttpMethod.Get -> json(page(listOf(namedRole(ROLE_1, "Outra")), null))
+                        else -> json(namedRole(ROLE_2, "Recepção demo", grants = wanted), HttpStatusCode.Created)
+                    }
+                }
+            assertEquals(RoleEnsured(ROLE_2, created = true), gateway.ensureRole("Recepção demo", "Desc", wanted))
+            val post = sent.single { it.method == HttpMethod.Post && it.path.endsWith("/roles") }
+            assertEquals(
+                "Recepção demo",
+                post.body!!
+                    .getValue("name")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "Desc",
+                post.body
+                    .getValue("description")
+                    .jsonPrimitive.content,
+            )
+            val grant =
+                post.body
+                    .getValue("grants")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("frontdesk.departments.read", grant.getValue("permission").jsonPrimitive.content)
+            assertEquals("ALL", grant.getValue("scope").jsonPrimitive.content)
+        }
+
+    @Test
+    fun ensureRoleFindsByNameIgnoringCase() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    if (request.url.parameters["cursor"] == null) {
+                        json(page(listOf(namedRole(ROLE_1, "Outra")), "c2"))
+                    } else {
+                        json(page(listOf(namedRole(ROLE_2, "RECEPÇÃO DEMO", grants = wanted)), null))
+                    }
+                }
+            assertEquals(RoleEnsured(ROLE_2, created = false), gateway.ensureRole("Recepção demo", "Desc", wanted))
+            assertTrue(sent.none { it.method != HttpMethod.Get && !it.path.endsWith("/login") })
+        }
+
+    @Test
+    fun ensureRoleReactivatesInactive() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    when {
+                        request.method == HttpMethod.Get -> {
+                            json(page(listOf(namedRole(ROLE_2, "Recepção demo", false, wanted)), null))
+                        }
+
+                        else -> {
+                            json(namedRole(ROLE_2, "Recepção demo", true, wanted))
+                        }
+                    }
+                }
+            assertEquals(RoleEnsured(ROLE_2, created = false), gateway.ensureRole("Recepção demo", "Desc", wanted))
+            val writes = sent.filter { it.method != HttpMethod.Get && !it.path.endsWith("/login") }
+            assertEquals(listOf("/api/v1/roles/$ROLE_2/reactivate"), writes.map { it.path })
+        }
+
+    @Test
+    fun ensureRoleRewritesDifferentGrantsWithIfMatch() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    when {
+                        request.method == HttpMethod.Get && request.url.encodedPath.endsWith("/roles") -> {
+                            json(page(listOf(namedRole(ROLE_2, "Recepção demo", true, mapOf("a.b" to "OWN"))), null))
+                        }
+
+                        request.method == HttpMethod.Get -> {
+                            json(namedRole(ROLE_2, "Recepção demo"), HttpStatusCode.OK, HttpHeaders.ETag to "\"v7\"")
+                        }
+
+                        else -> {
+                            json(namedRole(ROLE_2, "Recepção demo", true, wanted))
+                        }
+                    }
+                }
+            assertEquals(RoleEnsured(ROLE_2, created = false), gateway.ensureRole("Recepção demo", "Desc", wanted))
+            val put = sent.single { it.method == HttpMethod.Put }
+            assertEquals("/api/v1/roles/$ROLE_2", put.path)
+            assertEquals("\"v7\"", put.ifMatch)
+            assertEquals(
+                "Recepção demo",
+                put.body!!
+                    .getValue("name")
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "Desc",
+                put.body
+                    .getValue("description")
+                    .jsonPrimitive.content,
+            )
+            val grant =
+                put.body
+                    .getValue("grants")
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("frontdesk.departments.read", grant.getValue("permission").jsonPrimitive.content)
+        }
+
+    @Test
+    fun ensureRoleKeepsEqual() =
+        runTest {
+            val gateway =
+                gateway { json(page(listOf(namedRole(ROLE_2, "Recepção demo", true, wanted)), null)) }
+            assertEquals(RoleEnsured(ROLE_2, created = false), gateway.ensureRole("Recepção demo", "Desc", wanted))
+            assertTrue(sent.none { it.method != HttpMethod.Get && !it.path.endsWith("/login") })
+        }
+
+    @Test
+    fun ensureRoleReactivatesThenRewrites() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    when {
+                        request.method == HttpMethod.Get && request.url.encodedPath.endsWith("/roles") -> {
+                            json(page(listOf(namedRole(ROLE_2, "Recepção demo", false, mapOf("a.b" to "OWN"))), null))
+                        }
+
+                        request.method == HttpMethod.Get -> {
+                            json(namedRole(ROLE_2, "Recepção demo"), HttpStatusCode.OK, HttpHeaders.ETag to "\"v9\"")
+                        }
+
+                        else -> {
+                            json(namedRole(ROLE_2, "Recepção demo", true, wanted))
+                        }
+                    }
+                }
+            gateway.ensureRole("Recepção demo", "Desc", wanted)
+            val steps = sent.filter { !it.path.endsWith("/login") && !it.path.endsWith("/roles") }
+            assertEquals(
+                listOf(
+                    HttpMethod.Post to "/api/v1/roles/$ROLE_2/reactivate",
+                    HttpMethod.Get to "/api/v1/roles/$ROLE_2",
+                    HttpMethod.Put to "/api/v1/roles/$ROLE_2",
+                ),
+                steps.map { it.method to it.path },
+            )
+            assertEquals("\"v9\"", steps.last().ifMatch)
+        }
+
+    @Test
+    fun ensureRoleRejectionIsApiError() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    if (request.method == HttpMethod.Get) {
+                        json(page(emptyList(), null))
+                    } else {
+                        json(
+                            """{"code":"GRANT_EXCEEDS_OWN_PERMISSIONS","detail":"x","errors":[]}""",
+                            HttpStatusCode.UnprocessableEntity,
+                            HttpHeaders.ContentType to "application/problem+json",
+                        )
+                    }
+                }
+            val failure = assertFailsWith<ApiError.Problem> { gateway.ensureRole("Recepção demo", "Desc", wanted) }
+            assertEquals("GRANT_EXCEEDS_OWN_PERMISSIONS", failure.code)
         }
 
     @Test

@@ -14,6 +14,16 @@ class FakeUser(
     var locked = false
 }
 
+/** Role criada pelo seed, em memória, com versão que sobe a cada regravação. */
+class FakeRole(
+    val id: String,
+    val name: String,
+    var description: String,
+    var grants: Map<String, String>,
+    var active: Boolean,
+    var version: Int,
+)
+
 /** IAM em memória: senha, troca obrigatória, PIN e bloqueio na 3ª falha seguida de login. */
 @Suppress("TooManyFunctions") // falso da porta, que espelha as operações do contrato
 class FakeIam(
@@ -23,6 +33,7 @@ class FakeIam(
     SessionFactory<FakeIam.FakeSession> {
     val users = mutableMapOf<String, FakeUser>()
     val sessionsOpened = mutableListOf<FakeSession>()
+    val customRoles = mutableMapOf<String, FakeRole>()
     var totalFailures = 0
     var createCalls = 0
     var resetPasswordCalls = 0
@@ -85,6 +96,25 @@ class FakeIam(
         pin: Secret,
     ) {
         byId(userId).pin = pin.value
+    }
+
+    override suspend fun ensureRole(
+        name: String,
+        description: String,
+        grants: Map<String, String>,
+    ): RoleEnsured {
+        val existing = customRoles.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        if (existing == null) {
+            val id = "custom-${customRoles.size + 1}"
+            customRoles[id] = FakeRole(id, name, description, grants, active = true, version = 1)
+            return RoleEnsured(id, created = true)
+        }
+        if (!existing.active || existing.grants != grants) {
+            existing.active = true
+            existing.grants = grants
+            existing.version++
+        }
+        return RoleEnsured(existing.id, created = false)
     }
 
     private fun byId(id: String) = users.values.first { it.id == id }
