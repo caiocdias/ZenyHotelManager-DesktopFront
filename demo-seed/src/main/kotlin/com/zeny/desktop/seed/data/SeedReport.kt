@@ -13,6 +13,7 @@ enum class SeedItem(
     SEASON("temporadas"),
     RATE_PLAN("planos"),
     PRICES("tabelas de preço"),
+    ROLE("perfis"),
     USER("usuários"),
     COMPANY("empresas"),
     GUEST("hóspedes"),

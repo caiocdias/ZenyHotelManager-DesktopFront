@@ -87,8 +87,8 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 | H1 | O cadastro mínimo de hóspede exigido pelo check-in cabe num diálogo curto (nome e documento), sem os dados sensíveis da FNRH | O diálogo cresce, ou o check-in pede o perfil completo do M5 | E02, E03 |
 | H2 | O seed consegue deixar UHs prontas e alocadas para as chegadas de hoje | O roteiro de check-in precisa de passos manuais extras | E02 |
 | H3 | Os tópicos SSE existentes (`rooms` e outros do contrato) bastam para manter as listas do dia em dia; senão, a tela rebusca ao voltar ao foco | Listas desatualizadas durante a demo; avaliar `PF-NN` | E01 |
-| H4 | Uma biblioteca de PDF para a JVM (candidata: Apache PDFBox) renderiza em memória a ficha do servidor e a manda para a impressora do sistema, no Linux e no Windows, dentro do JAR multiplataforma e sem estourar a memória do build | Trocar de biblioteca, registrando no handoff; se nenhuma servir, a decisão volta ao usuário (ADR 0009) antes de cair para arquivo temporário | E07 |
-| H5 | O Recepcionista do seed tem `frontdesk.stays.checkin`, que abre a ficha (D-E11-10 do servidor) | O botão some para ele; o roteiro mostra a ficha logado como Gerente | E07 |
+| H4 | *(Confirmada na E07 com o PDFBox 3.0.8.)* Uma biblioteca de PDF para a JVM (candidata: Apache PDFBox) renderiza em memória a ficha do servidor e a manda para a impressora do sistema, no Linux e no Windows, dentro do JAR multiplataforma e sem estourar a memória do build | Trocar de biblioteca, registrando no handoff; se nenhuma servir, a decisão volta ao usuário (ADR 0009) antes de cair para arquivo temporário | E07 |
+| H5 | *(Confirmada na E07.)* O Recepcionista do seed tem `frontdesk.stays.checkin`, que abre a ficha (D-E11-10 do servidor) | O botão some para ele; o roteiro mostra a ficha logado como Gerente | E07 |
 
 ## Definição global de pronto
 
@@ -187,9 +187,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
-| E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
-| E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
-| E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
+| E05 | Recados | #concluida | E01 | Recados por setor ligados a reserva ou UH, com resolução |
+| E07 | Ficha de registro e visualizador de PDF | #concluida | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
+| E06 | Gate do marco M2 | #em-andamento | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
 
@@ -509,7 +509,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Recados — #pendente
+## E05 — Recados — #concluida
 
 **Objetivo:** recados (traces) por setor, ligados a uma reserva ou UH. O recepcionista cria, edita e resolve, vê os pendentes do dia e o detalhe da reserva mostra os recados dela.
 
@@ -529,9 +529,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Criar um recado para uma reserva do seed → aparece na lista e no detalhe da reserva.
-- [ ] Resolver → muda de situação, e a lista de pendentes atualiza.
-- [ ] Edição concorrente → `412` tratado com recarga e aviso.
+- [x] Criar um recado para uma reserva do seed → aparece na lista e no detalhe da reserva.
+- [x] Resolver → muda de situação, e a lista de pendentes atualiza.
+- [x] Edição concorrente → `412` tratado com recarga e aviso.
 
 **Validação obrigatória:**
 
@@ -548,16 +548,50 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-15):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Pré-voo do lote:** aditivo (código 11). A `main` do servidor está em `3eeef989afb6`; só dois enums extensíveis ganharam valores (`NO_SHOW` no tipo de submissão da FNRH e `RESERVATION_NO_SHOW` no motivo de encerramento da alocação). O pin continua `57eb5fac5b8a`.
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e05.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e05.md), com 9 tarefas executadas em série (7 de risco alto, 2 normais). A revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2. Os achados foram: a validação do vencimento na edição, a divisão da tarefa do seed, o risco da porta, o nome da classe `Apis` e o alcance real da concessão de setores.
+- **Commits:** `df4fedb..20f9f5a` na branch `roadmap/m2-recepcao-do-dia`. Os commits das souls levam o trailer `Soul:`; o `df4fedb` (tag do roadmap, do orquestrador) saiu com o trailer fora do último parágrafo.
+  - Task 1, `TracesFacade` no `core`: `a354676..ff1b8ed`;
+  - Task 2, porta `TracesSource`, adaptador e `TraceText`: `ff1b8ed..4febb5a`;
+  - Task 3, `TracesListState`: `4febb5a..94cd23b`;
+  - Task 4, `TraceFormState` (criação, edição e `412`): `94cd23b..9dc978a`;
+  - Task 5, telas (`TracesPanel`, `TraceFormDialog`): `9dc978a..a90d88f`, com uma rodada de correção (vínculo atual na edição);
+  - Task 6, recados na recepção (aba "Recados" e seção do detalhe): `a90d88f..674ed30`, com duas rodadas (resolver atualiza a outra lista; a seção virou cartões, porque as ações da tabela ficavam inalcançáveis em 380dp);
+  - Task 7, `ensureRole` no gateway do seed: `674ed30..453569e`;
+  - Task 8, role de consulta de setores da recepção da demo: `453569e..9d0dff3`;
+  - Task 9, verificação ao vivo: `9d0dff3..d8d0d17`;
+  - testador de etapa e correções: `d8d0d17..b67448b` (a faixa de erro de ação não sumia no "Tentar de novo"; o "Carregar mais" da seção recomeçava da primeira página);
+  - onda de correção da revisão final: `20f9f5a`.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `a7ff653..b67448b`): "com correções", sem Crítico. Os 2 Importantes de código e 2 Menores foram corrigidos em `20f9f5a` e aprovados na re-revisão:
+  - a lista não se atualizava depois de um resultado incerto na criação ou de um `409` na edição;
+  - abrir a aba "Recados" não a atualizava;
+  - a coluna de ações cortava "Editar" (agora 230dp nos recados, com `actionsWidth` opcional na `DataTable`);
+  - o seletor de setor podia vir vazio na edição.
+  O terceiro Importante era o registro do PF-01, feito neste fechamento.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base a7ff653` com 5 apontamentos, todos justificados pela revisão: o trailer do `df4fedb`; as extensões dos fakes (`FakeTracesSource`, `FakeIam`); a troca de assinatura do formulário num teste do testador; e as duas asserções de conjunto exato da recepcionista, que o plano mandou trocar (continuam conjunto exato, agora com a role de demo). `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+- **Critérios verificados** (`LiveTracesCheck`, opt-in `ZENY_LIVE_TRACES`, contra o `zeny-front` com o seed rodado de novo, logado como Recepcionista; 3 testes, 0 falhas, em `d8d0d17` e em `20f9f5a`):
+  - Criar: `createdTraceAppearsInListAndDetail`. Um recado para a R-2026-000005, setor Governança, vencimento na data operacional, aparece na aba (abertos) e na seção "Recados" do detalhe. A captura `app/build/live/traces.png` foi inspecionada pelo orquestrador: aba Recados com os filtros e o recado aberto com "Resolver" e "Editar".
+  - Resolver: `resolvingUpdatesPendingList`. O recado sai dos abertos, aparece em "Resolvidos" e o servidor confirma `RESOLVED`.
+  - Edição concorrente: `concurrentEditShowsReloadAndNotice`. O segundo formulário recebe o `412`, mostra "Alguém alterou este recado. Confira e salve de novo.", relê o texto do primeiro e salva na segunda confirmação com o `ETag` novo.
+  - Gate em `20f9f5a`: `./gradlew build --max-workers=2` BUILD SUCCESSFUL (core 1051 testes, design 262, app 1632, demo-seed 554, sdk 40; 0 falhas; 31 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 38 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Setores dos recados (segurança e dados):** a Recepcionista do modelo padrão cria recados, mas não lê os setores (`GET /api/v1/departments` exige `staff.employees.read`). O seed dá ao usuário `recepcao` uma role extra "Consulta de setores (demo)" com só `staff.employees.read`, sem mexer na role do modelo. **Alcance real:** pela API, essa Recepcionista também lê colaboradores (nome, e-mail, telefone) e turnos; o app não mostra nada disso. É um desvio do design §7.2 (os usuários da demo deixam de ter só os modelos do servidor). O app trata o `403`: some o filtro por setor e "Novo recado" mostra o texto da permissão. Alternativa: não conceder e demonstrar a criação como Gerente (a reversão é tirar a role do seed). Pedido **PF-01** aberto ao servidor.
+  - **Seção do detalhe em cartões:** a tabela de 6 colunas não cabia nos 380dp do detalhe e as ações ficavam inalcançáveis; a seção mostra um cartão por recado, com as ações abaixo.
+  - **Criação sem resultado confirmado:** o servidor não é idempotente na criação de recado. Uma falha de rede não é repetida sozinha: o formulário avisa "Não foi possível confirmar se o recado foi criado. Confira a lista antes de tentar de novo.", atualiza a lista e fica destravado para um novo clique (diferente do walk-in, que trava). Um recado duplicado custa pouco e se resolve na lista.
+  - **Responsável:** o formulário não escolhe responsável (exigiria ler colaboradores); mostra o nome quando houver e devolve o mesmo na edição, para o servidor não apagá-lo.
+  - **Fica para depois** (Menores triados pela revisão final como "pode esperar"): a situação aparece como texto na tabela (sem o chip colorido); um `412` na edição relê o formulário mas só atualiza a lista na próxima atualização; cada reserva aberta relê permissões e setores; `ensureRole` não compara limites das concessões nem exclui roles de sistema na busca por nome.
+- **Notas para a próxima etapa:**
+  - **PF-01:** captura `ZenyHotelManager - pedido do front PF-01 Setores dos recados legíveis com frontdesk.traces.manage` na Inbox do brain (2026-11-15). Quando o servidor atender, tire a role extra do seed.
+  - **E06 (gate):** o roteiro do M2 deve avisar que uma Recepcionista com o modelo padrão de role vê a mensagem de falta de permissão em "Novo recado"; o seed já tem a linha `perfis` no relatório (o `roteiro-m1.md` foi atualizado). O seed ainda não cria recados de exemplo (escopo da E06).
+  - **Estados novos:** `TracesListState` (aba e seção; `onResolved` liga as duas) e `TraceFormState` seguem a convenção dos estados (escopo próprio, travas no estado, resultado tardio descartado, `toString` sem o texto do recado). O pacote é `com.zeny.desktop.app.traces`, sem depender de `app.reception`, para a Governança reaproveitar no M6.
+  - **`DataTable`:** ganhou `rowActions` e `actionsWidth` opcionais.
+  - **Ambiente:** o `zeny-front` tem recados criados pela verificação ao vivo (todos resolvidos no fim de cada execução) e a role nova. Recrie a demo antes do roteiro.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_TRACES=1 ./gradlew :app:test --tests '*LiveTracesCheck*' --rerun --max-workers=2)`, com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN=recepcao` e `ZENY_LIVE_VIEWER_PASSWORD`; rode o seed antes, para a role existir.
 
 ---
 
-## E07 — Ficha de registro e visualizador de PDF — #pendente
+## E07 — Ficha de registro e visualizador de PDF — #concluida
 
 **Objetivo:** depois do check-in, ou no detalhe de uma reserva confirmada, hospedada ou encerrada, o recepcionista abre a ficha de registro da hospedagem dentro do app. Ele a confere na tela, salva o arquivo onde escolher ou a imprime na impressora do computador. O PDF nunca toca o disco sem a ação dele.
 
@@ -587,12 +621,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, a ficha de um hospedado abre no app com o código da reserva, a UH e o nome do hóspede, e o documento aparece mascarado como o servidor manda.
-- [ ] Teste: abrir, navegar e fechar o visualizador não cria arquivo nenhum. A pasta temporária da JVM e a pasta do usuário são comparadas antes e depois, com o diretório temporário redirecionado no teste.
-- [ ] "Salvar como…" grava exatamente os bytes recebidos (hash igual ao da resposta) no destino escolhido. Cancelar o diálogo não grava nada.
-- [ ] "Imprimir" abre o diálogo de impressão do sistema, e cancelar não deixa efeito. Uma impressão real (ou para PDF, pela impressora virtual do Windows) é conferida pelo usuário no gate (E06).
-- [ ] Reserva cancelada ou sem ficha: o botão não aparece. Se o servidor recusar, a mensagem sai em pt-BR, sem `code` cru.
-- [ ] O `smokeTest` baixa a ficha de um hospedado do seed e confere que a resposta começa com `%PDF-`.
+- [x] Contra o seed, a ficha de um hospedado abre no app com o código da reserva, a UH e o nome do hóspede, e o documento aparece mascarado como o servidor manda.
+- [x] Teste: abrir, navegar e fechar o visualizador não cria arquivo nenhum. A pasta temporária da JVM e a pasta do usuário são comparadas antes e depois, com o diretório temporário redirecionado no teste.
+- [x] "Salvar como…" grava exatamente os bytes recebidos (hash igual ao da resposta) no destino escolhido. Cancelar o diálogo não grava nada.
+- [x] *(No notebook, pelo adaptador; a impressão real fica com o gate E06.)* "Imprimir" abre o diálogo de impressão do sistema, e cancelar não deixa efeito. Uma impressão real (ou para PDF, pela impressora virtual do Windows) é conferida pelo usuário no gate (E06).
+- [x] Reserva cancelada ou sem ficha: o botão não aparece. Se o servidor recusar, a mensagem sai em pt-BR, sem `code` cru.
+- [x] O `smokeTest` baixa a ficha de um hospedado do seed e confere que a resposta começa com `%PDF-`.
 
 **Validação obrigatória:**
 
@@ -619,16 +653,38 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-15):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7). A impressão real e o "Salvar como…" nativo no Windows ficam com o roteiro do gate (E06).
+- **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e07.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e07.md), com 9 tarefas em série (8 de risco alto). A revisão de arquitetura (opus) bloqueou nas rodadas 0 (8 Importantes) e 1 (5 Importantes da reescrita) e aprovou com notas na rodada 2. Os principais achados foram: a estratégia para o PDFBox não tocar o disco (`FontMapper` próprio, cache do `ImageIO` desligado); o teste de disco numa JVM própria; o confinamento do `PDDocument`; o contrato do nome do arquivo; o PDFBox fora da produção do `app`; e a prova pelo JAR sem o nativo do Skia.
+- **Commits:** `24010eb..5db1574` na branch `roadmap/m2-recepcao-do-dia`, com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão; houve rodadas de correção nas Tasks 1 (Content-Type malformado; caractere de formatação no nome), 3 (checagem estática do runtime do PDFBox), 4 (erro de página e navegação depois de fechar), 5 (nome sugerido no Windows e em bytes; salvamentos simultâneos), 8 (cancelar durante a carga) e 9 (asserções da máscara).
+- **Revisão final** (`revisor-seguranca`, opus, sobre `0c61d91..5db1574`): pronto "com correções" só de documentação, sem Crítico. O Importante é a impressão no Linux (abaixo, em decisões); o Menor era completar estas decisões.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base 0c61d91`: nenhum apontamento. `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 361 pacotes, com pdfbox, fontbox e pdfbox-io 3.0.8 e commons-logging 1.4.0), "No issues found".
+- **H4 confirmada:** o Apache PDFBox 3.0.8 renderiza em memória, imprime pela impressora do sistema e vai no JAR multiplataforma. O `zeny-desktop.jar` foi de 61.455.008 para 65.425.241 bytes (+4 MB, com os avisos de licença); o `:app:desktopJar` levou 35,5 s. Sem o `PdfBoxSetup`, o PDFBox gravaria `~/.pdfbox.cache`; com ele, nada é gravado (prova numa JVM isolada, com controle positivo). O que a biblioteca gravaria está documentado no relatório da Task 3: o cache de fontes na pasta do usuário e o cache de imagens do `ImageIO` no diretório temporário, ambos desligados.
+- **H5 confirmada:** o Recepcionista do seed abre a ficha.
+- **Critérios verificados:**
+  - Ficha de um hospedado (`LiveRegistrationCardCheck`, opt-in `ZENY_LIVE_CARD`, contra o `zeny-front`, logado como Recepcionista; 3 testes, 0 falhas): a R-2026-000005 abriu no visualizador; o texto extraído tem o código, a UH 203 e o titular; nenhum CPF ou CNPJ do hóspede por extenso, e o documento aparece como `***0570`. A captura `app/build/live/registration-card.png` foi inspecionada pelo orquestrador.
+  - Nenhum arquivo: `:design:noDiskTest` (JVM própria, `java.io.tmpdir` e `user.home` em pastas novas; fotos antes e depois e `WatchService` com sentinela) cobre o PDFBox, o `PdfDocumentState`, o salvar cancelado e a impressão para uma porta falsa; mais as travas estáticas `tests/test_pdf_disk_apis_ataque.sh` e `tests/test_pdfbox_scope_ataque.sh`.
+  - "Salvar como…": `saveWritesExactBytes` (SHA-256 igual) e `cancelSaveWritesNothing`, mais os ataques de sobrescrita, somente-leitura e nome.
+  - "Imprimir": `SystemPrintDialog` com um `PrinterJob` falso (cancelar não chama `print()`; confirmar manda as N páginas; a cópia da impressão é fechada em todo caminho). A impressão real, inclusive para PDF, fica para o roteiro da E06.
+  - Botão: só com `frontdesk.stays.checkin` e em `CONFIRMED`, `IN_HOUSE` ou `CHECKED_OUT` (`RegistrationCardScreenTest`/`AtaqueTest`); recusas do servidor em pt-BR, sem visualizador vazio. O caso "reserva cancelada" ao vivo ficou sem candidata no seed.
+  - `smokeTest` contra o ambiente: 1 teste, 0 falhas, com a ficha começando em `%PDF-`.
+  - JAR: `DesktopJarPdfTest` renderiza a página 1 pelas classes do `zeny-desktop.jar` num carregador isolado; o `verifyDesktopJar` exige as classes, a fonte e os avisos `NOTICE`/`LICENSE` de cada biblioteca Apache (lista em `app/desktop-jar-required.txt`).
+  - Gate em `5db1574`: `./gradlew cleanTest build --max-workers=2` BUILD SUCCESSFUL (core 1096 testes, design 368 + 5 do `noDiskTest`, app 1720, demo-seed 554, sdk 40; 0 falhas; 34 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 42 arquivos, 0 falhas.
+- **Decisões para o usuário:**
+  - **Impressão no Linux grava um arquivo temporário (espera o usuário, diverge do ADR 0009):** no Linux, a JVM (`PSPrinterJob`) grava a ficha em PostScript como `javaprint*.ps` no diretório temporário enquanto o `lpr` roda e o apaga depois; se o processo morrer no meio, o arquivo fica. No Windows, alvo da operação, a impressão vai pelo spooler do sistema, sem arquivo do app. Recomendado: aceitar no Linux, porque a impressão é ação explícita do usuário, e registrar a exceção no ADR 0009; alternativa: esconder "Imprimir" fora do Windows.
+  - **Fidelidade das fontes (tomada):** as fontes não embutidas da ficha saem com a Liberation Sans regular que vem no PDFBox, e o nome do hotel e os títulos ficam sem negrito. Alternativa: embarcar as variantes da Liberation Sans (OFL).
+  - **"Salvar como…" sem escrita atômica (tomada):** grava direto no destino escolhido; uma falha no meio (disco cheio) pode deixar o arquivo de destino truncado, com a mensagem de falha. Um arquivo irmão com rename seria uma segunda cópia do PDF com dado pessoal. Os salvamentos são serializados.
+  - **Nome sugerido (tomada):** o nome do servidor é saneado (último segmento, sem caracteres de controle, de formatação nem ilegais no Windows, sem nomes reservados, até 255 bytes UTF-8); senão, `ficha-<código>.pdf`.
+  - **Critério de imprimir (tomada):** provado no notebook pelo adaptador; no Windows, pelo roteiro da E06 (Imprimir → Cancelar; Imprimir → "Microsoft Print to PDF"; Salvar como → Cancelar; Salvar como sobre um arquivo existente).
+  - **Fica para depois** (Menores triados pela revisão final): a escala de tela no Windows (100% aparece menor com escala de 125–150%) e o diálogo de impressão sem janela dona (pode abrir atrás) entram no roteiro da E06; textos próprios da ficha no componente do `design` viram parâmetros antes da M3 E03 e da M4 E02; teto de pixels por página antes do reuso.
+- **Notas para a próxima etapa:**
+  - **E06 (gate):** o roteiro mostra a ficha logada como Recepcionista, imprime para "Microsoft Print to PDF" e confere o "Salvar como…" (cancelar e sobrescrever), a escala de tela e o diálogo de impressão na frente da janela.
+  - **Reuso (M3 E03, M4 E02):** `PdfViewer`, `PdfDocumentState` (uso único: crie um por abertura) e `PdfActions` no pacote `com.zeny.desktop.design.pdf`; o download binário é o `ApiExecutor.executeBytes` com teto de 20 MB. `PdfBoxSetup.install()` é chamado pelo próprio documento.
+  - **Dependência:** o log do PDFBox fica mudo porque o app não tem provedor SLF4J; um provedor futuro precisa silenciar `org.apache.pdfbox` e `org.apache.fontbox`.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_CARD=1 ./gradlew :app:test --tests '*LiveRegistrationCardCheck*' --rerun --max-workers=2)`; só lê do servidor.
 
 ---
 
-## E06 — Gate do marco M2 — #pendente
+## E06 — Gate do marco M2 — #em-andamento
 
 **Objetivo:** o M2 entregue como build testável. O seed tem dados para todos os fluxos do marco, o roteiro do M2 existe e a definição global de pronto foi verificada num clone limpo e no Windows.
 
@@ -669,12 +725,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-15):** `#em-andamento`. O lote parou a pedido do usuário no meio da execução; a etapa é retomada pelo ledger do superpowers (`.superpowers/sdd/2026-11-15-m2-recepcao-do-dia-e06/progress.md` no worktree `roadmap-m2-recepcao-do-dia`, fora do git) e por esta seção.
+- **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md), com 6 tarefas e a verificação do gate pelo orquestrador. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (6 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2; a seção "Revisão de arquitetura" está no plano.
+- **Feito:**
+  - Task 1 (porta de recados no seed): `1c11fe4` (desenvolvedor; build e `tests/run.sh` verdes pelo relatório) e `6dab408` (testes de ataque do testador, commitados quando o lote parou; o testador não chegou a relatar). O `6dab408` quebrava o `detektTest` do `demo-seed` e foi revertido para a `main` ficar verde; o conteúdo continua no histórico.
+- **Para retomar:** restaurar os testes do testador revertendo o commit de reversão (`git log --grep 'Reverte os testes de ataque inacabados'`), mandar o testador corrigir o lint do arquivo dele e conferir o verde (`./gradlew build --max-workers=2`), rodar `check_test_integrity.py --base 9f1ea5d`, despachar a revisão da Task 1 e seguir com as Tasks 2 a 6 e a verificação do gate do plano.
+- **Rulings já tomadas no planejamento** (vão às "Decisões para o usuário" quando a etapa fechar): o `roteiro-m2.md` executado no Windows fecha também a M0 E02; a escala de tela e o diálogo de impressão atrás entram no gate como defeitos conhecidos, com resultado esperado explícito; a idempotência dos recados do seed é pela chave vínculo + setor, e o roteiro só desfaz o check-in feito nele mesmo (`A3`/`A4`) e só edita recados criados pelo usuário.
 
 ---
 
@@ -687,3 +743,6 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-14 — E02 `#concluida` (`claude --agent orquestrador`). A revisão de arquitetura aprovou com notas na rodada 1 (rodada 0 bloqueada pela regra da `Idempotency-Key`). A verificação ao vivo fez check-in de uma chegada do seed. Recriar a demo antes do roteiro.
 - 2026-11-14 — E03 `#concluida` (`claude --agent orquestrador`). O critério de desconto não se aplica (H24 do servidor). A verificação ao vivo criou dois walk-ins; recriar a demo antes do roteiro.
 - 2026-11-14 — E04 `#concluida` (`claude --agent orquestrador`). O critério 3 foi verificado pela D2 do ADR 0007 (texto a corrigir). A verificação ao vivo trocou a UH da R-2026-000005 e desfez o check-in da R-2026-000003; recriar a demo antes do roteiro.
+- 2026-11-15 — E05 `#concluida` (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `3eeef989afb6`, só enums extensíveis), pin mantido. Recados com aba e seção no detalhe; a Recepcionista da demo ganhou a consulta de setores pelo seed, e o PF-01 foi aberto. Recriar a demo antes do roteiro.
+- 2026-11-15 — E07 `#concluida` (`claude --agent orquestrador`). H4 e H5 confirmadas (PDFBox 3.0.8, sem disco). A impressão no Linux grava um temporário da JVM: decisão do usuário pendente.
+- 2026-11-15 — E06 `#em-andamento` (`claude --agent orquestrador`): plano aprovado com notas e Task 1 feita; o lote parou a pedido do usuário. Retomar pelo handoff da E06.

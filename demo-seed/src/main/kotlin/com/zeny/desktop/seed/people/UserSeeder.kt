@@ -1,5 +1,6 @@
 package com.zeny.desktop.seed.people
 
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.seed.SeedFailure
 import com.zeny.desktop.seed.cli.Secret
 import com.zeny.desktop.seed.cli.SeedConfig
@@ -122,33 +123,48 @@ class UserSeeder(
         managerPin: Secret,
     ) {
         val roleIds = users.roleIdsByTemplate()
+        val departmentsRoleId = ensureDepartmentsRole()
         for (spec in specs) {
             val password = passwords[spec.role] ?: throw SeedFailure("Falta a senha do usuário ${spec.login}.")
             val roleId =
                 roleIds[spec.role.template]
                     ?: throw SeedFailure("O servidor não tem o modelo de perfil ${spec.role.template}.")
-            seedOne(spec, password, roleId, managerPin)
+            val wanted = listOfNotNull(roleId, departmentsRoleId.takeIf { spec.role == DemoRole.RECEPTIONIST })
+            seedOne(spec, password, wanted, managerPin)
         }
+    }
+
+    /** Garante, uma vez por execução, a role de setores da recepção; o corpo do erro não vai à mensagem. */
+    private suspend fun ensureDepartmentsRole(): String {
+        val ensured =
+            try {
+                users.ensureRole(DEPARTMENTS_ROLE_NAME, DEPARTMENTS_ROLE_DESCRIPTION, DEPARTMENTS_ROLE_GRANTS)
+            } catch (_: ApiError) {
+                throw SeedFailure("Não foi possível garantir o perfil de consulta de setores da recepção.")
+            }
+        if (ensured.created) report.created(SeedItem.ROLE) else report.kept(SeedItem.ROLE)
+        return ensured.id
     }
 
     private suspend fun seedOne(
         spec: UserSpec,
         password: Secret,
-        roleId: String,
+        roleIds: List<String>,
         managerPin: Secret,
     ) {
         val pin = managerPin.takeIf { spec.role == DemoRole.MANAGER }
         val existing = users.findUser(spec.login)
         if (existing == null) {
             val provisional = ProvisionalPasswords.next()
-            users.createUser(spec.login, spec.name, provisional, listOf(roleId), pin)
+            users.createUser(spec.login, spec.name, provisional, roleIds, pin)
             report.created(SeedItem.USER)
             complete(spec.login, password, provisional)
             return
         }
         report.kept(SeedItem.USER)
         if (!existing.active) users.reactivate(existing.id)
-        if (roleId !in existing.roleIds) users.setRoles(existing.id, (existing.roleIds + roleId).toList())
+        val missing = roleIds.filter { it !in existing.roleIds }
+        if (missing.isNotEmpty()) users.setRoles(existing.id, (existing.roleIds + missing).toList())
         if (!verified(spec.login, password)) {
             val provisional = ProvisionalPasswords.next()
             users.resetPassword(existing.id, provisional)
@@ -193,5 +209,11 @@ class UserSeeder(
         } finally {
             session.shutDown()
         }
+    }
+
+    private companion object {
+        const val DEPARTMENTS_ROLE_NAME = "Consulta de setores (demo)"
+        const val DEPARTMENTS_ROLE_DESCRIPTION = "Leitura de setores para os recados da recepção (pedido PF-01)."
+        val DEPARTMENTS_ROLE_GRANTS = mapOf("staff.employees.read" to "ALL")
     }
 }

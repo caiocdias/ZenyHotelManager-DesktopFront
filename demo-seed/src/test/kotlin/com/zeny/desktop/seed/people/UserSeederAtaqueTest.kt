@@ -142,7 +142,7 @@ class UserSeederAtaqueTest {
             iam.plant("recepcao", "Senha-Antiga-222", mustChange = true, active = false, roleIds = setOf("outra"))
             seed()
             assertAllWork()
-            assertEquals(setOf("outra", "role-r"), iam.users.getValue("recepcao").roleIds)
+            assertEquals(setOf("outra", "role-r", "custom-1"), iam.users.getValue("recepcao").roleIds)
             assertTrue((iam.failuresByLogin["recepcao"] ?: 0) <= 1)
             assertNoOpenSessions()
         }

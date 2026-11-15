@@ -23,6 +23,8 @@ dependencies {
 
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Só nos testes (ADR 0008): extrair o texto da ficha ao vivo e provar o JAR; o `app` de produção não o declara.
+    testImplementation(libs.pdfbox)
     // Teste de UI só no classpath de teste: o JAR de produção não o carrega (como no design).
     @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
     testImplementation(compose.uiTest)
@@ -49,15 +51,20 @@ tasks.test {
     inputs.property("zenyLiveCheckIn", providers.environmentVariable("ZENY_LIVE_CHECKIN").orElse(""))
     inputs.property("zenyLiveWalkIn", providers.environmentVariable("ZENY_LIVE_WALKIN").orElse(""))
     inputs.property("zenyLiveStay", providers.environmentVariable("ZENY_LIVE_STAY").orElse(""))
+    inputs.property("zenyLiveTraces", providers.environmentVariable("ZENY_LIVE_TRACES").orElse(""))
+    inputs.property("zenyLiveCard", providers.environmentVariable("ZENY_LIVE_CARD").orElse(""))
     // Com o opt-in, a verificação fala com o servidor, que muda entre rodadas: nunca sai UP-TO-DATE.
     val liveRealtime = providers.environmentVariable("ZENY_LIVE_REALTIME")
     val liveReception = providers.environmentVariable("ZENY_LIVE_RECEPTION")
     val liveCheckIn = providers.environmentVariable("ZENY_LIVE_CHECKIN")
     val liveWalkIn = providers.environmentVariable("ZENY_LIVE_WALKIN")
     val liveStay = providers.environmentVariable("ZENY_LIVE_STAY")
+    val liveTraces = providers.environmentVariable("ZENY_LIVE_TRACES")
+    val liveCard = providers.environmentVariable("ZENY_LIVE_CARD")
     outputs.upToDateWhen {
         liveRealtime.orNull != "1" && liveReception.orNull != "1" && liveCheckIn.orNull != "1" &&
-            liveWalkIn.orNull != "1" && liveStay.orNull != "1"
+            liveWalkIn.orNull != "1" && liveStay.orNull != "1" && liveTraces.orNull != "1" &&
+            liveCard.orNull != "1"
     }
     doFirst {
         isolatedPrefs.mkdirs()
@@ -105,6 +112,60 @@ val mergeDesktopServices =
         }
     }
 
+// Apache 2.0 §4(d): os NOTICE e LICENSE das bibliotecas listadas em desktop-jar-required.txt precisam estar no JAR.
+// Com DuplicatesStrategy.EXCLUDE só o primeiro META-INF/NOTICE sobrevive; estes vão para uma pasta por artefato.
+val noticeEntry = Regex("META-INF/(NOTICE|LICENSE)[^/]*", RegexOption.IGNORE_CASE)
+val requiredLines =
+    file("desktop-jar-required.txt")
+        .readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") }
+// Do mais longo ao mais curto: "x-io-1.0.jar" é de "x-io", não de "x".
+val noticedArtifacts =
+    requiredLines
+        .filter { it.startsWith("notice:") }
+        .map { it.removePrefix("notice:") }
+        .sortedByDescending { it.length }
+val requiredEntries = requiredLines.filterNot { it.startsWith("notice:") }
+val mergedNoticesDir = layout.buildDirectory.dir("generated/merged-notices")
+
+/** O artefato de aviso de um JAR do runtimeClasspath (`lib-3.0.8.jar` é `lib`), ou nulo se não for dos avisados. */
+fun noticedArtifact(jar: File): String? =
+    noticedArtifacts.firstOrNull { jar.name.startsWith("$it-") && jar.name.endsWith(".jar") }
+
+val mergeDesktopNotices =
+    tasks.register("mergeDesktopNotices") {
+        val runtime = configurations.runtimeClasspath
+        val out = mergedNoticesDir
+        inputs.file("desktop-jar-required.txt")
+        inputs.files(runtime)
+        outputs.dir(out)
+        doLast {
+            val root = out.get().asFile
+            root.deleteRecursively()
+            runtime.get().files.filter { it.isFile }.forEach { dep ->
+                val artifact = noticedArtifact(dep) ?: return@forEach
+                ZipFile(dep).use { zip ->
+                    zip
+                        .entries()
+                        .asSequence()
+                        .filter { !it.isDirectory && noticeEntry.matches(it.name) }
+                        .forEach { e ->
+                            val target =
+                                File(
+                                    root,
+                                    "META-INF/third-party-notices/$artifact-${dep.nameWithoutExtension.removePrefix(
+                                        "$artifact-",
+                                    )}/${e.name.substringAfterLast('/')}",
+                                )
+                            target.parentFile.mkdirs()
+                            target.writeBytes(zip.getInputStream(e).readBytes())
+                        }
+                }
+            }
+        }
+    }
+
 val desktopJar =
     tasks.register<Jar>("desktopJar") {
         group = "build"
@@ -112,10 +173,11 @@ val desktopJar =
         archiveFileName = "zeny-desktop.jar"
         destinationDirectory = layout.buildDirectory.dir("libs")
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-        dependsOn(mergeDesktopServices)
+        dependsOn(mergeDesktopServices, mergeDesktopNotices)
         val runtime = configurations.runtimeClasspath
         from(sourceSets.main.get().output)
         from(mergedServicesDir)
+        from(mergedNoticesDir)
         from(runtime.map { cp -> cp.files.map { if (it.isDirectory) it else zipTree(it) } }) {
             exclude("META-INF/services/**", "META-INF/MANIFEST.MF", "**/module-info.class")
             exclude("META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "META-INF/*.EC")
@@ -154,10 +216,12 @@ tasks.test {
 val verifyDesktopJar =
     tasks.register("verifyDesktopJar") {
         group = "verification"
-        description = "Confere o JAR único do app: Main-Class, nativos do Skia, sem assinaturas e serviços fundidos."
+        description =
+            "Confere o JAR único do app: Main-Class, nativos do Skia, entradas e avisos exigidos, sem assinaturas e serviços fundidos."
         val jar = desktopJarFile
         val runtime = configurations.runtimeClasspath
         inputs.file(jar)
+        inputs.file("desktop-jar-required.txt")
         dependsOn(desktopJar)
         inputs.files(runtime)
         doLast {
@@ -177,6 +241,26 @@ val verifyDesktopJar =
                                 .getOrPut(e.name) { linkedSetOf() }
                                 .addAll(serviceLines(zip.getInputStream(e).bufferedReader().readText()))
                         }
+                }
+            }
+            val expectedNotices = sortedSetOf<String>()
+            runtime.get().files.filter { it.isFile }.forEach { dep ->
+                val artifact = noticedArtifact(dep) ?: return@forEach
+                ZipFile(dep).use { zip ->
+                    zip
+                        .entries()
+                        .asSequence()
+                        .filter { !it.isDirectory && noticeEntry.matches(it.name) }
+                        .forEach { e ->
+                            val version = dep.nameWithoutExtension.removePrefix("$artifact-")
+                            expectedNotices +=
+                                "META-INF/third-party-notices/$artifact-$version/${e.name.substringAfterLast('/')}"
+                        }
+                }
+            }
+            noticedArtifacts.forEach { artifact ->
+                if (expectedNotices.none { it.startsWith("META-INF/third-party-notices/$artifact-") }) {
+                    problems += "o runtimeClasspath não traz NOTICE/LICENSE de $artifact"
                 }
             }
             val signature = Regex("META-INF/[^/]+\\.(SF|DSA|RSA|EC)", RegexOption.IGNORE_CASE)
@@ -200,6 +284,8 @@ val verifyDesktopJar =
                 listOf("libskiko-linux-x64.so", "skiko-windows-x64.dll").forEach { lib ->
                     if (names.none { it == lib || it.endsWith("/$lib") }) problems += "nativo ausente: $lib"
                 }
+                requiredEntries.filter { it !in names }.forEach { problems += "entrada exigida ausente: $it" }
+                expectedNotices.filter { it !in names }.forEach { problems += "aviso de licença ausente: $it" }
                 names.filter { signature.matches(it) }.forEach { problems += "assinatura presente: $it" }
                 names.filter { it.endsWith("module-info.class") }.forEach { problems += "module-info presente: $it" }
                 expected.forEach { (name, lines) ->

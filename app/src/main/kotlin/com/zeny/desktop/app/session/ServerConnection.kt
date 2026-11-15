@@ -3,9 +3,13 @@ package com.zeny.desktop.app.session
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
+import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
+import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.app.rooms.RoomsSource
+import com.zeny.desktop.app.traces.RoomOption
+import com.zeny.desktop.app.traces.TracesSource
 import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
@@ -13,11 +17,16 @@ import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
+import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
+import com.zeny.desktop.core.facade.NewTrace
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
+import com.zeny.desktop.core.facade.TraceChange
+import com.zeny.desktop.core.facade.TraceFilter
+import com.zeny.desktop.core.facade.TraceVersion
 import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -37,6 +46,7 @@ import com.zeny.desktop.sdk.model.RoomResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
+import com.zeny.desktop.sdk.model.TraceResponse
 import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
@@ -45,6 +55,7 @@ import kotlinx.coroutines.flow.StateFlow
 private const val GUEST_SEARCH_LIMIT = 20
 
 /** O que o `app` usa de um servidor: a sessão e as fachadas do `core`. Os testes do `app` usam um falso. */
+@Suppress("TooManyFunctions") // uma porta opcional por área do `core`
 interface ServerConnection : AutoCloseable {
     val state: StateFlow<SessionState>
 
@@ -78,9 +89,16 @@ interface ServerConnection : AutoCloseable {
 
     /** As leituras da recepção do dia; `null` quando a conexão não as oferece. */
     fun receptionSource(): ReceptionSource? = null
+
+    /** Os recados; `null` quando a conexão não os oferece. */
+    fun tracesSource(): TracesSource? = null
+
+    /** A ficha de registro em PDF; `null` quando a conexão não a oferece. */
+    fun registrationCards(): RegistrationCards? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
+@Suppress("TooManyFunctions") // adaptador que repassa cada operação do `core`
 class CoreConnection(
     private val core: ZenyCore,
 ) : ServerConnection {
@@ -232,6 +250,54 @@ class CoreConnection(
 
     /** A recepção do dia sobre `core.reservations`, `core.guests`, `core.rates` e `core.realtime`. */
     override fun receptionSource(): ReceptionSource = reception
+
+    @Suppress("TooManyFunctions") // adaptador que repassa cada operação da porta ao `core`
+    private val traces =
+        object : TracesSource {
+            override suspend fun permissions(): Set<String> = core.account.me().permissions
+
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun page(
+                filter: TraceFilter,
+                cursor: String?,
+                limit: Int,
+            ): Page<TraceResponse> = core.traces.page(filter, cursor, limit)
+
+            override suspend fun trace(id: String): TraceVersion = core.traces.trace(id)
+
+            override suspend fun create(input: NewTrace): TraceVersion = core.traces.create(input)
+
+            override suspend fun update(
+                id: String,
+                change: TraceChange,
+                etag: String,
+            ): TraceVersion = core.traces.update(id, change, etag)
+
+            override suspend fun resolve(id: String): TraceResponse = core.traces.resolve(id)
+
+            override suspend fun departments(): List<Department> = core.traces.departments()
+
+            override suspend fun reservationCode(id: String): String =
+                core.reservations
+                    .reservation(id)
+                    .reservation.code
+
+            override suspend fun rooms(): List<RoomOption> =
+                core.rooms
+                    .statuses()
+                    .filter { it.active }
+                    .sortedWith(compareBy(NaturalOrder) { it.number })
+                    .map { RoomOption(it.roomId.toString(), it.number) }
+        }
+
+    /** Os recados sobre `core.traces`, `core.reservations`, `core.rooms`, `core.account` e `core.hotel`. */
+    override fun tracesSource(): TracesSource = traces
+
+    private val registrationCards = RegistrationCards { id -> core.documents.registrationCard(id) }
+
+    /** A ficha de registro sobre `core.documents`. */
+    override fun registrationCards(): RegistrationCards = registrationCards
 
     override fun close() = core.close()
 }

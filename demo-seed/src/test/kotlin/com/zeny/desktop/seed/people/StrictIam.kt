@@ -31,6 +31,7 @@ class StrictIam :
     val failuresByLogin = mutableMapOf<String, Int>()
     val provisionals = mutableListOf<String>()
     val roles = mutableMapOf("MANAGER" to "role-m", "RECEPTIONIST" to "role-r", "HOUSEKEEPER" to "role-h")
+    val customRoles = mutableMapOf<String, FakeRole>()
     var changePasswordHook: suspend () -> Unit = {}
     var signOutHook: suspend () -> Unit = {}
     var signOutChecksCancellation = false
@@ -100,6 +101,26 @@ class StrictIam :
     }
 
     private fun checkLength(password: String) = check(password.length in MIN_PASSWORD..MAX_PASSWORD) { "WEAK_PASSWORD" }
+
+    override suspend fun ensureRole(
+        name: String,
+        description: String,
+        grants: Map<String, String>,
+    ): RoleEnsured {
+        val existing = customRoles.values.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        if (existing == null) {
+            val id = "custom-${customRoles.size + 1}"
+            customRoles[id] = FakeRole(id, name, description, grants, active = true, version = 1)
+            return RoleEnsured(id, created = true)
+        }
+        if (existing.grants != grants) existing.description = description // o adaptador só regrava (PUT) ao divergir
+        if (!existing.active || existing.grants != grants) {
+            existing.active = true
+            existing.grants = grants
+            existing.version++
+        }
+        return RoleEnsured(existing.id, created = false)
+    }
 
     private fun byId(id: String) = users.values.first { it.id == id }
 

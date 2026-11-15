@@ -1,6 +1,7 @@
 package com.zeny.desktop.app
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -29,7 +30,9 @@ fun main() =
         val dev = isDevMode()
         Window(onCloseRequest = ::exitApplication, title = APP_TITLE) {
             ZenyTheme {
-                if (dev) ComponentCatalog() else ConnectedApp()
+                CompositionLocalProvider(LocalWindowFrame provides window) {
+                    if (dev) ComponentCatalog() else ConnectedApp()
+                }
             }
         }
     }

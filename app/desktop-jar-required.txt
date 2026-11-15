@@ -1,0 +1,10 @@
+# O que o verifyDesktopJar exige do zeny-desktop.jar além de Main-Class, nativos, serviços e ausência de assinaturas.
+# Linha "notice:<artefato>": os NOTICE e LICENSE de toda biblioteca com esse nome no runtimeClasspath precisam estar
+# no JAR, em META-INF/third-party-notices/<artefato>-<versão>/ (Apache 2.0 §4(d)).
+# Outra linha: uma entrada que o JAR precisa ter.
+org/apache/pdfbox/pdmodel/PDDocument.class
+org/apache/pdfbox/resources/ttf/LiberationSans-Regular.ttf
+notice:pdfbox
+notice:pdfbox-io
+notice:fontbox
+notice:commons-logging

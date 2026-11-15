@@ -162,6 +162,25 @@ assert_contains "$pt" "17/11" "pedidos: regra de 17/11"
 assert_contains "$pt" "PF-NN entregue e sincronizado pelo M0" "pedidos: desbloqueio"
 assert_eq "1" "$(grep -cE '^\| PF-NN \|' "$pedidos")" "pedidos: uma só tabela de controle"
 assert_contains "$(grep -A1 -E '^\| PF-NN \|' "$pedidos")" "|---|---|---|---|---|---|" "pedidos: separador com 6 colunas"
-assert_eq "" "$(grep -E '^\| PF-[0-9]+' "$pedidos")" "pedidos: tabela de controle começa vazia"
+# Toda linha `| PF-... |` da tabela de controle é bem formada (6 colunas, id PF-NN com 2+ dígitos,
+# estado válido, id único) e fica logo abaixo do separador do cabeçalho. Imprime um problema por linha.
+pedidos_linhas_malformadas() {
+  awk -F'|' '
+    /^\| PF-NN \|/ { hdr = NR; next }
+    hdr && NR == hdr + 1 { intable = ($0 ~ /^\|---\|---\|---\|---\|---\|---\|$/); next }
+    !/^\| *PF-/ { if (NR > hdr + 1) intable = 0; next }
+    {
+      id = $2; st = $4
+      gsub(/^ +| +$/, "", id); gsub(/^ +| +$/, "", st)
+      if (!intable) { print "linha " NR ": fora da tabela de controle"; next }
+      if (NF - 2 != 6) print "linha " NR ": " (NF - 2) " colunas em vez de 6"
+      if (id !~ /^PF-[0-9][0-9]+$/) print "linha " NR ": id inválido: " id
+      if (st !~ /^(aberto|aceito|entregue|recusado)$/) print "linha " NR ": estado inválido: " st
+      if (id in visto) print "linha " NR ": id repetido: " id
+      visto[id] = 1
+    }
+  ' "$1"
+}
+assert_eq "" "$(pedidos_linhas_malformadas "$pedidos")" "pedidos: linhas PF-NN da tabela de controle bem formadas"
 
 finish

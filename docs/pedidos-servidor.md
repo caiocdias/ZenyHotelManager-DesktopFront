@@ -41,6 +41,7 @@ A resposta do servidor é a captura de fechamento da etapa dele, que cita **"ate
 
 | PF-NN | título | estado | captura | etapa do front | commit de entrega |
 |---|---|---|---|---|---|
+| PF-01 | Setores dos recados legíveis com `frontdesk.traces.manage` | aberto | `ZenyHotelManager - pedido do front PF-01 Setores dos recados legíveis com frontdesk.traces.manage` (2026-11-15) | M2 E05 (não depende; tira a role extra do seed quando entregue) | — |
 
 ## Rodadas de análise do M0
 

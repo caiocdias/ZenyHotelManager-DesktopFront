@@ -110,7 +110,7 @@ class UserSeederTest {
         runTest {
             iam.plant("recepcao", passwords.getValue(DemoRole.RECEPTIONIST).value, roleIds = setOf("outra"))
             seed()
-            assertEquals(setOf("outra", "role-r"), iam.users.getValue("recepcao").roleIds)
+            assertEquals(setOf("outra", "role-r", "custom-1"), iam.users.getValue("recepcao").roleIds)
         }
 
     @Test

@@ -25,6 +25,7 @@ class ApisTest {
             val apis = core.apis
             assertNotNull(apis.rates)
             assertNotNull(apis.guests)
+            assertNotNull(apis.staff)
             assertSame(apis.rates, apis.rates)
             assertSame(apis.guests, apis.guests)
         }
