@@ -320,10 +320,11 @@ Alternativas descartadas:
   - existe inativa → `reactivateRole`;
   - existe com concessões diferentes → `getRole` (com `ETag`) e `updateRole` com `If-Match` (mesmo nome e descrição);
   - existe igual e ativa → nada;
+  - inativa e com concessões diferentes: a ordem é `reactivateRole`, depois `getRole` (o `ETag` vigente) e só então `updateRole`;
   - falhas do servidor (`403`, `422 GRANT_EXCEEDS_OWN_PERMISSIONS`, `412`, `428`, …) sobem como `ApiError`, como nas outras operações do gateway (que não traduzem nada; `SdkUserGatewayAtaqueTest.failuresOfEveryKindCarryNoSecret` o exige); a tradução para `SeedFailure` em pt-BR fica no `UserSeeder` (Task 8);
   - o `FakeIam` guarda roles em memória com versão; o `StrictIam` segue o comportamento que já tem para as outras operações.
 
-- [ ] **Step 1: Testes que falham** (`MockEngine`, no molde de `SdkUserGatewayTest`): `ensureRoleCreatesWhenAbsent`, `ensureRoleFindsByNameIgnoringCase` (na segunda página), `ensureRoleReactivatesInactive`, `ensureRoleRewritesDifferentGrantsWithIfMatch`, `ensureRoleKeepsEqual` (nenhuma escrita), `ensureRoleRejectionIsApiError` (`422 GRANT_EXCEEDS_OWN_PERMISSIONS` → `ApiError.Problem` com o código); `everyOperation` inclui `ensureRole` (e o `failuresOfEveryKindCarryNoSecret` existente passa a cobri-la sem mudança).
+- [ ] **Step 1: Testes que falham** (`MockEngine`, no molde de `SdkUserGatewayTest`): `ensureRoleCreatesWhenAbsent`, `ensureRoleFindsByNameIgnoringCase` (na segunda página), `ensureRoleReactivatesInactive`, `ensureRoleRewritesDifferentGrantsWithIfMatch`, `ensureRoleKeepsEqual` (nenhuma escrita), `ensureRoleReactivatesThenRewrites` (inativa e diferente: reativa, relê e regrava com o `ETag` relido), `ensureRoleRejectionIsApiError` (`422 GRANT_EXCEEDS_OWN_PERMISSIONS` → `ApiError.Problem` com o código); `everyOperation` inclui `ensureRole` (e o `failuresOfEveryKindCarryNoSecret` existente passa a cobri-la sem mudança).
 - [ ] **Step 2:** `./gradlew :demo-seed:test --tests '*SdkUserGateway*' --max-workers=2` → FAIL.
 - [ ] **Step 3:** implemente.
 - [ ] **Step 4:** PASS; gate verde.
@@ -375,3 +376,16 @@ Alternativas descartadas:
 - [ ] **Step 2:** sem o opt-in → pulada; `./gradlew build --max-workers=2` e `bash tests/run.sh` verdes.
 - [ ] **Step 3:** o orquestrador roda o seed de novo e a verificação: `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_TRACES=1 ./gradlew :app:test --tests '*LiveTracesCheck*' --rerun --max-workers=2)` → verde.
 - [ ] **Step 4: Commit** (`Verifica os recados ao vivo`).
+
+---
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2 (rodada 0 bloqueada por 5 Importantes; rodada 1 bloqueada por 2 Importantes novos da divisão da Task 7; rodada 2 aprovada com notas).
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores:**
+  - ordem no `ensureRole` com a role inativa e com concessões diferentes (reativar, reler, regravar): incorporada à Task 7 com o teste `ensureRoleReactivatesThenRewrites`;
+  - não verificado pelo revisor: se `LiveUsersCheck`/`LiveBookingCheck` (fora do gate, com opt-in) fixam o conjunto de roles da recepcionista;
+  - o revisor leu o servidor pela árvore de trabalho, não pelo commit fixado.
+
