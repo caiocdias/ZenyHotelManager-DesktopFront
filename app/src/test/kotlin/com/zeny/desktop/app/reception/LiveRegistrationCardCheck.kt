@@ -45,6 +45,9 @@ private const val LOAD_TIMEOUT_MILLIS = 60_000L
 private const val CANCELLED_LABEL = "Cancelada"
 private const val OPEN_CARD = "open-registration-card"
 private val ELEVEN_DIGITS = Regex("\\d{11}")
+private val FORMATTED_CPF = Regex("\\d{3}\\.\\d{3}\\.\\d{3}-\\d{2}")
+private val FORMATTED_CNPJ = Regex("\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2}")
+private val MASKED_DOCUMENT = Regex("\\*{3}\\d{4}")
 
 /**
  * Verificação da ficha de registro contra um servidor real (o ambiente `zeny-front`), com a Recepcionista, pelo
@@ -87,8 +90,14 @@ class LiveRegistrationCardCheck {
             val text = Loader.loadPDF(bytes).use { PDFTextStripper().getText(it) }.replace(Regex("\\s+"), " ")
             assertTrue(text.contains(row.code), "o texto da ficha não traz o código da reserva ${row.code}")
             assertTrue(row.room.isNotBlank() && text.contains(row.room), "o texto da ficha não traz a UH alocada")
+            assertTrue(view.holder.isNotBlank(), "o detalhe não traz o nome do titular")
             assertTrue(text.contains(view.holder, ignoreCase = true), "o texto da ficha não traz o nome do titular")
             assertFalse(ELEVEN_DIGITS.containsMatchIn(text), "o documento aparece sem máscara (11 dígitos seguidos)")
+            assertFalse(FORMATTED_CPF.containsMatchIn(text), "um CPF formatado aparece sem máscara")
+            // O CNPJ do estabelecimento (cabeçalho) é público; o do hóspede estaria depois do nome dele.
+            val guestPart = text.substringAfter(view.holder, missingDelimiterValue = text)
+            assertFalse(FORMATTED_CNPJ.containsMatchIn(guestPart), "um CNPJ formatado aparece sem máscara")
+            assertTrue(MASKED_DOCUMENT.containsMatchIn(text), "o documento mascarado (***NNNN) não aparece na ficha")
             capture("registration-card")
             println(
                 "LiveRegistrationCardCheck: ficha da reserva ${row.code} (UH ${row.room}) abriu: " +
