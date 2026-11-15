@@ -113,6 +113,7 @@ class StrictIam :
             customRoles[id] = FakeRole(id, name, description, grants, active = true, version = 1)
             return RoleEnsured(id, created = true)
         }
+        if (existing.grants != grants) existing.description = description // o adaptador só regrava (PUT) ao divergir
         if (!existing.active || existing.grants != grants) {
             existing.active = true
             existing.grants = grants
