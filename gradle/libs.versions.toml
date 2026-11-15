@@ -11,6 +11,8 @@ ogen = "0.16.1"
 quati-kotlin-util = "2.6.1"
 ktor = "3.6.1"
 kotlinx-serialization = "1.12.0"
+# Visualizador de PDF do design (ADR 0009); só no design, nunca no core nem no compileClasspath do app (ADR 0008).
+pdfbox = "3.0.8"
 # Classpath dos plugins (o ogen traz swagger-parser e openapi-generator 7.26.0): o Jackson 2 chega na 2.22.1,
 # o guava na 32.1.3-jre e o handlebars na 4.3.1. A plataforma do Jackson na 2.22.3 fecha 5 High
 # (GHSA-7hhh-6rmp-j9qf, GHSA-p6pp-m3f8-5c89, GHSA-cxp5-3px4-pw24, GHSA-wv8q-qhhj-9h54, GHSA-q4xh-88c3-wmh7) e
@@ -40,6 +42,7 @@ guava = { module = "com.google.guava:guava", version.ref = "guava" }
 handlebars = { module = "com.github.jknack:handlebars", version.ref = "handlebars" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 logback-core = { module = "ch.qos.logback:logback-core", version.ref = "logback" }
+pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
 kotlin-test-junit5 = { module = "org.jetbrains.kotlin:kotlin-test-junit5", version.ref = "kotlin" }
 
 [plugins]
