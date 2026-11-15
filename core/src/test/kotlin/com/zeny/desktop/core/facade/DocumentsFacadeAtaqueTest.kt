@@ -46,6 +46,7 @@ private val MAGIC = "%PDF-".encodeToByteArray()
 private val PDF = "%PDF-1.7\n$SECRET\n%%EOF".encodeToByteArray()
 
 /** Ataques ao download binário da ficha: teto, tipos, erros, nomes, cancelamento e vazamento. */
+@Suppress("InjectDispatcher")
 class DocumentsFacadeAtaqueTest {
     private val requests = CopyOnWriteArrayList<HttpRequestData>()
 
@@ -376,7 +377,7 @@ class DocumentsFacadeAtaqueTest {
     fun cancellationThrownByEngineIsNotWrapped() =
         runTest {
             core { throw CancellationException("cancelado") }.use { core ->
-                val error = assertFailsWith<CancellationException> { core.documents.registrationCard(RES) }
+                assertFailsWith<CancellationException> { core.documents.registrationCard(RES) }
             }
         }
 
