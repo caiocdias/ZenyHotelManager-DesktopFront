@@ -2,6 +2,7 @@ package com.zeny.desktop.app.reception
 
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasAnyAncestor
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.rooms.roomType
@@ -314,5 +316,31 @@ class ReceptionTracesTest {
             assertEquals(before, traces.calls.size, "a seção anterior ainda carrega")
             inDetail("Levar toalhas 2").assertExists()
             onNodeWithText("Levar toalhas 1").assertDoesNotExist()
+        }
+
+    @Test
+    fun resolvingRefreshesTabAndDetail() =
+        runComposeUiTest {
+            val traces = traces()
+            screen(traces)
+            openReservation(1)
+            val section = trResId(1).toString()
+
+            // Resolver na seção atualiza a aba.
+            var before = traces.calls.size
+            // Pela ação semântica: o botão da seção compacta pode ficar fora da área clicável.
+            inDetailTag("trace-resolve-0").performSemanticsAction(SemanticsActions.OnClick)
+            waitForIdle()
+            var pages = traces.calls.drop(before).filterIsInstance<TraceCall.Page>()
+            assertTrue(pages.any { it.filter.reservationId == null }, "a aba não atualizou")
+
+            // Resolver na aba atualiza a seção.
+            onNodeWithTag("tab-TRACES").performClick()
+            waitForIdle()
+            before = traces.calls.size
+            onNode(hasTestTag("trace-resolve-0") and !hasAnyAncestor(hasTestTag("reservation-detail"))).performClick()
+            waitForIdle()
+            pages = traces.calls.drop(before).filterIsInstance<TraceCall.Page>()
+            assertTrue(pages.any { it.filter.reservationId == section }, "a seção não atualizou")
         }
 }

@@ -34,6 +34,8 @@ private const val MANAGE_PERMISSION = "frontdesk.traces.manage"
 private const val RESOLVE_PERMISSION = "frontdesk.traces.resolve"
 private const val OPEN_STATUS = "OPEN"
 private const val HTTP_FORBIDDEN = 403
+private const val HTTP_CONFLICT = 409
+private const val ALREADY_RESOLVED = "TRACE_ALREADY_RESOLVED"
 private val dueFormat = DateTimeFormatter.ofPattern("dd/MM/yyyy")
 
 /** O filtro de vencimento: qualquer um, ou os que vencem na data operacional. */
@@ -76,6 +78,12 @@ class TracesListState(
     private val reservationCodes = mutableMapOf<String, String>()
     private val lookups = Mutex()
     private var closed = false
+
+    /**
+     * Chamado depois de um `resolve` que mudou o recado no servidor (sucesso ou `409 TRACE_ALREADY_RESOLVED`), com a
+     * lista própria já atualizada: quem mostra outra lista dos mesmos recados a atualiza aqui.
+     */
+    var onResolved: (() -> Unit)? = null
 
     var departmentFilter by mutableStateOf<String?>(null)
         private set
@@ -152,8 +160,13 @@ class TracesListState(
         busy = true
         actionError = null
         stateScope.launch {
+            var changed = false
             try {
                 source.resolve(id)
+                changed = true
+            } catch (e: ApiError.Problem) {
+                actionError = e
+                changed = e.status == HTTP_CONFLICT && e.code == ALREADY_RESOLVED
             } catch (e: ApiError) {
                 actionError = e
             } catch (e: CancellationException) {
@@ -168,6 +181,7 @@ class TracesListState(
             } finally {
                 busy = false
             }
+            if (changed && !closed) onResolved?.invoke()
         }
     }
 

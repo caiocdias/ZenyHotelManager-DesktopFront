@@ -425,6 +425,9 @@ internal fun rememberReceptionTracesUi(
     }
     val ui = remember(traces?.list) { ReceptionTracesUi { current } }
     ui.section = section
+    // Resolver numa lista atualiza a outra: a aba e a seção mostram os mesmos recados.
+    traces?.list?.onResolved = { section?.refresh() }
+    section?.onResolved = { traces?.list?.refresh() }
     val window = LocalWindowInfo.current
     LaunchedEffect(ui, window) {
         // O ganho de foco relê a aba e a seção; o estado inicial (já carregado agora) não conta.
