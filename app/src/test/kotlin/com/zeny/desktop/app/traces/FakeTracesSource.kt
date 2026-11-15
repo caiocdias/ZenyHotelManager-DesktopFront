@@ -90,6 +90,12 @@ class FakeTracesSource : TracesSource {
     /** Quando não nulo, `reservationCode` espera por ele antes de responder. */
     var reservationCodeGate: CompletableDeferred<Unit>? = null
 
+    /** Quando não nulo, `create` espera por ele antes de agir. */
+    var createGate: CompletableDeferred<Unit>? = null
+
+    /** Quando não nulo, `update` espera por ele antes de agir. */
+    var updateGate: CompletableDeferred<Unit>? = null
+
     /** Quando não nulo, `resolve` espera por ele antes de agir. */
     var resolveGate: CompletableDeferred<Unit>? = null
 
@@ -169,6 +175,7 @@ class FakeTracesSource : TracesSource {
 
     override suspend fun create(input: NewTrace): TraceVersion {
         calls += TraceCall.Create(input)
+        createGate?.await()
         fail(TraceOp.CREATE)
         val id = Uuid.random()
         val department = departments.firstOrNull { it.id == input.departmentId }
@@ -197,6 +204,7 @@ class FakeTracesSource : TracesSource {
         etag: String,
     ): TraceVersion {
         calls += TraceCall.Update(id, change, etag)
+        updateGate?.await()
         fail(TraceOp.UPDATE)
         val old = matchingVersion(id, etag)
         if (old.status == "RESOLVED") throw alreadyResolved()
