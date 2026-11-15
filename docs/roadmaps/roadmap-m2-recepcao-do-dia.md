@@ -725,12 +725,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-15):** `#em-andamento`. O lote parou a pedido do usuário no meio da execução; a etapa é retomada pelo ledger do superpowers (`.superpowers/sdd/2026-11-15-m2-recepcao-do-dia-e06/progress.md` no worktree `roadmap-m2-recepcao-do-dia`, fora do git) e por esta seção.
+- **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md), com 6 tarefas e a verificação do gate pelo orquestrador. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (6 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2; a seção "Revisão de arquitetura" está no plano.
+- **Feito:**
+  - Task 1 (porta de recados no seed): `1c11fe4` (desenvolvedor; build e `tests/run.sh` verdes pelo relatório) e `6dab408` (testes de ataque do testador, commitados quando o lote parou; o testador não chegou a relatar).
+- **Para retomar:** conferir que `6dab408` está verde (`./gradlew :demo-seed:test --max-workers=2`), rodar `check_test_integrity.py --base 9f1ea5d`, despachar a revisão da Task 1 e seguir com as Tasks 2 a 6 e a verificação do gate do plano.
+- **Rulings já tomadas no planejamento** (vão às "Decisões para o usuário" quando a etapa fechar): o `roteiro-m2.md` executado no Windows fecha também a M0 E02; a escala de tela e o diálogo de impressão atrás entram no gate como defeitos conhecidos, com resultado esperado explícito; a idempotência dos recados do seed é pela chave vínculo + setor, e o roteiro só desfaz o check-in feito nele mesmo (`A3`/`A4`) e só edita recados criados pelo usuário.
 
 ---
 
@@ -745,3 +745,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-14 — E04 `#concluida` (`claude --agent orquestrador`). O critério 3 foi verificado pela D2 do ADR 0007 (texto a corrigir). A verificação ao vivo trocou a UH da R-2026-000005 e desfez o check-in da R-2026-000003; recriar a demo antes do roteiro.
 - 2026-11-15 — E05 `#concluida` (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `3eeef989afb6`, só enums extensíveis), pin mantido. Recados com aba e seção no detalhe; a Recepcionista da demo ganhou a consulta de setores pelo seed, e o PF-01 foi aberto. Recriar a demo antes do roteiro.
 - 2026-11-15 — E07 `#concluida` (`claude --agent orquestrador`). H4 e H5 confirmadas (PDFBox 3.0.8, sem disco). A impressão no Linux grava um temporário da JVM: decisão do usuário pendente.
+- 2026-11-15 — E06 `#em-andamento` (`claude --agent orquestrador`): plano aprovado com notas e Task 1 feita; o lote parou a pedido do usuário. Retomar pelo handoff da E06.
