@@ -187,7 +187,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
 | E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
-| E05 | Recados | #em-andamento | E01 | Recados por setor ligados a reserva ou UH, com resolução |
+| E05 | Recados | #concluida | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
@@ -509,7 +509,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Recados — #em-andamento
+## E05 — Recados — #concluida
 
 **Objetivo:** recados (traces) por setor, ligados a uma reserva ou UH. O recepcionista cria, edita e resolve, vê os pendentes do dia e o detalhe da reserva mostra os recados dela.
 
@@ -529,9 +529,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Criar um recado para uma reserva do seed → aparece na lista e no detalhe da reserva.
-- [ ] Resolver → muda de situação, e a lista de pendentes atualiza.
-- [ ] Edição concorrente → `412` tratado com recarga e aviso.
+- [x] Criar um recado para uma reserva do seed → aparece na lista e no detalhe da reserva.
+- [x] Resolver → muda de situação, e a lista de pendentes atualiza.
+- [x] Edição concorrente → `412` tratado com recarga e aviso.
 
 **Validação obrigatória:**
 
@@ -548,12 +548,46 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-15):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Pré-voo do lote:** aditivo (código 11). A `main` do servidor está em `3eeef989afb6`; só dois enums extensíveis ganharam valores (`NO_SHOW` no tipo de submissão da FNRH e `RESERVATION_NO_SHOW` no motivo de encerramento da alocação). O pin continua `57eb5fac5b8a`.
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e05.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e05.md), com 9 tarefas executadas em série (7 de risco alto, 2 normais). A revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2. Os achados foram: a validação do vencimento na edição, a divisão da tarefa do seed, o risco da porta, o nome da classe `Apis` e o alcance real da concessão de setores.
+- **Commits:** `df4fedb..20f9f5a` na branch `roadmap/m2-recepcao-do-dia`. Os commits das souls levam o trailer `Soul:`; o `df4fedb` (tag do roadmap, do orquestrador) saiu com o trailer fora do último parágrafo.
+  - Task 1, `TracesFacade` no `core`: `a354676..ff1b8ed`;
+  - Task 2, porta `TracesSource`, adaptador e `TraceText`: `ff1b8ed..4febb5a`;
+  - Task 3, `TracesListState`: `4febb5a..94cd23b`;
+  - Task 4, `TraceFormState` (criação, edição e `412`): `94cd23b..9dc978a`;
+  - Task 5, telas (`TracesPanel`, `TraceFormDialog`): `9dc978a..a90d88f`, com uma rodada de correção (vínculo atual na edição);
+  - Task 6, recados na recepção (aba "Recados" e seção do detalhe): `a90d88f..674ed30`, com duas rodadas (resolver atualiza a outra lista; a seção virou cartões, porque as ações da tabela ficavam inalcançáveis em 380dp);
+  - Task 7, `ensureRole` no gateway do seed: `674ed30..453569e`;
+  - Task 8, role de consulta de setores da recepção da demo: `453569e..9d0dff3`;
+  - Task 9, verificação ao vivo: `9d0dff3..d8d0d17`;
+  - testador de etapa e correções: `d8d0d17..b67448b` (a faixa de erro de ação não sumia no "Tentar de novo"; o "Carregar mais" da seção recomeçava da primeira página);
+  - onda de correção da revisão final: `20f9f5a`.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `a7ff653..b67448b`): "com correções", sem Crítico. Os 2 Importantes de código e 2 Menores foram corrigidos em `20f9f5a` e aprovados na re-revisão:
+  - a lista não se atualizava depois de um resultado incerto na criação ou de um `409` na edição;
+  - abrir a aba "Recados" não a atualizava;
+  - a coluna de ações cortava "Editar" (agora 230dp nos recados, com `actionsWidth` opcional na `DataTable`);
+  - o seletor de setor podia vir vazio na edição.
+  O terceiro Importante era o registro do PF-01, feito neste fechamento.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base a7ff653` com 5 apontamentos, todos justificados pela revisão: o trailer do `df4fedb`; as extensões dos fakes (`FakeTracesSource`, `FakeIam`); a troca de assinatura do formulário num teste do testador; e as duas asserções de conjunto exato da recepcionista, que o plano mandou trocar (continuam conjunto exato, agora com a role de demo). `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+- **Critérios verificados** (`LiveTracesCheck`, opt-in `ZENY_LIVE_TRACES`, contra o `zeny-front` com o seed rodado de novo, logado como Recepcionista; 3 testes, 0 falhas, em `d8d0d17` e em `20f9f5a`):
+  - Criar: `createdTraceAppearsInListAndDetail`. Um recado para a R-2026-000005, setor Governança, vencimento na data operacional, aparece na aba (abertos) e na seção "Recados" do detalhe. A captura `app/build/live/traces.png` foi inspecionada pelo orquestrador: aba Recados com os filtros e o recado aberto com "Resolver" e "Editar".
+  - Resolver: `resolvingUpdatesPendingList`. O recado sai dos abertos, aparece em "Resolvidos" e o servidor confirma `RESOLVED`.
+  - Edição concorrente: `concurrentEditShowsReloadAndNotice`. O segundo formulário recebe o `412`, mostra "Alguém alterou este recado. Confira e salve de novo.", relê o texto do primeiro e salva na segunda confirmação com o `ETag` novo.
+  - Gate em `20f9f5a`: `./gradlew build --max-workers=2` BUILD SUCCESSFUL (core 1051 testes, design 262, app 1632, demo-seed 554, sdk 40; 0 falhas; 31 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 38 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Setores dos recados (segurança e dados):** a Recepcionista do modelo padrão cria recados, mas não lê os setores (`GET /api/v1/departments` exige `staff.employees.read`). O seed dá ao usuário `recepcao` uma role extra "Consulta de setores (demo)" com só `staff.employees.read`, sem mexer na role do modelo. **Alcance real:** pela API, essa Recepcionista também lê colaboradores (nome, e-mail, telefone) e turnos; o app não mostra nada disso. É um desvio do design §7.2 (os usuários da demo deixam de ter só os modelos do servidor). O app trata o `403`: some o filtro por setor e "Novo recado" mostra o texto da permissão. Alternativa: não conceder e demonstrar a criação como Gerente (a reversão é tirar a role do seed). Pedido **PF-01** aberto ao servidor.
+  - **Seção do detalhe em cartões:** a tabela de 6 colunas não cabia nos 380dp do detalhe e as ações ficavam inalcançáveis; a seção mostra um cartão por recado, com as ações abaixo.
+  - **Criação sem resultado confirmado:** o servidor não é idempotente na criação de recado. Uma falha de rede não é repetida sozinha: o formulário avisa "Não foi possível confirmar se o recado foi criado. Confira a lista antes de tentar de novo.", atualiza a lista e fica destravado para um novo clique (diferente do walk-in, que trava). Um recado duplicado custa pouco e se resolve na lista.
+  - **Responsável:** o formulário não escolhe responsável (exigiria ler colaboradores); mostra o nome quando houver e devolve o mesmo na edição, para o servidor não apagá-lo.
+  - **Fica para depois** (Menores triados pela revisão final como "pode esperar"): a situação aparece como texto na tabela (sem o chip colorido); um `412` na edição relê o formulário mas só atualiza a lista na próxima atualização; cada reserva aberta relê permissões e setores; `ensureRole` não compara limites das concessões nem exclui roles de sistema na busca por nome.
+- **Notas para a próxima etapa:**
+  - **PF-01:** captura `ZenyHotelManager - pedido do front PF-01 Setores dos recados legíveis com frontdesk.traces.manage` na Inbox do brain (2026-11-15). Quando o servidor atender, tire a role extra do seed.
+  - **E06 (gate):** o roteiro do M2 deve avisar que uma Recepcionista com o modelo padrão de role vê a mensagem de falta de permissão em "Novo recado"; o seed já tem a linha `perfis` no relatório (o `roteiro-m1.md` foi atualizado). O seed ainda não cria recados de exemplo (escopo da E06).
+  - **Estados novos:** `TracesListState` (aba e seção; `onResolved` liga as duas) e `TraceFormState` seguem a convenção dos estados (escopo próprio, travas no estado, resultado tardio descartado, `toString` sem o texto do recado). O pacote é `com.zeny.desktop.app.traces`, sem depender de `app.reception`, para a Governança reaproveitar no M6.
+  - **`DataTable`:** ganhou `rowActions` e `actionsWidth` opcionais.
+  - **Ambiente:** o `zeny-front` tem recados criados pela verificação ao vivo (todos resolvidos no fim de cada execução) e a role nova. Recrie a demo antes do roteiro.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_TRACES=1 ./gradlew :app:test --tests '*LiveTracesCheck*' --rerun --max-workers=2)`, com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN=recepcao` e `ZENY_LIVE_VIEWER_PASSWORD`; rode o seed antes, para a role existir.
 
 ---
 
@@ -687,3 +721,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-14 — E02 `#concluida` (`claude --agent orquestrador`). A revisão de arquitetura aprovou com notas na rodada 1 (rodada 0 bloqueada pela regra da `Idempotency-Key`). A verificação ao vivo fez check-in de uma chegada do seed. Recriar a demo antes do roteiro.
 - 2026-11-14 — E03 `#concluida` (`claude --agent orquestrador`). O critério de desconto não se aplica (H24 do servidor). A verificação ao vivo criou dois walk-ins; recriar a demo antes do roteiro.
 - 2026-11-14 — E04 `#concluida` (`claude --agent orquestrador`). O critério 3 foi verificado pela D2 do ADR 0007 (texto a corrigir). A verificação ao vivo trocou a UH da R-2026-000005 e desfez o check-in da R-2026-000003; recriar a demo antes do roteiro.
+- 2026-11-15 — E05 `#concluida` (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `3eeef989afb6`, só enums extensíveis), pin mantido. Recados com aba e seção no detalhe; a Recepcionista da demo ganhou a consulta de setores pelo seed, e o PF-01 foi aberto. Recriar a demo antes do roteiro.
