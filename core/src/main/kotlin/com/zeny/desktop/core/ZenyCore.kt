@@ -78,7 +78,7 @@ class ZenyCore internal constructor(
     val hotel: HotelFacade = HotelFacade(sdkApis.hotel, sdkExecutor)
     val approvals: ApprovalFacade = ApprovalFacade(sdkApis.iam, sdkExecutor)
     val rooms: RoomsFacade = RoomsFacade(sdkApis.rooms, sdkExecutor)
-    val reservations: ReservationsFacade = ReservationsFacade(sdkApis.reservations, sdkExecutor)
+    val reservations: ReservationsFacade = ReservationsFacade(sdkApis.reservations, sdkApis.frontdesk, sdkExecutor)
     val guests: GuestsFacade = GuestsFacade(sdkApis.guests, sdkExecutor)
     val rates: RatesFacade = RatesFacade(sdkApis.rates, sdkExecutor)
 

@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // detekt: a casca reúne a raiz e uma composição por área
+
 package com.zeny.desktop.app
 
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,24 +10,38 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.approval.ApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinator
+import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
 import com.zeny.desktop.app.login.PasswordChangeState
+import com.zeny.desktop.app.reception.CheckInState
+import com.zeny.desktop.app.reception.DayPanelState
+import com.zeny.desktop.app.reception.ReceptionScreen
+import com.zeny.desktop.app.reception.ReceptionSource
+import com.zeny.desktop.app.reception.ReservationDetailState
+import com.zeny.desktop.app.reception.RoomMoveState
+import com.zeny.desktop.app.reception.UndoCheckInState
+import com.zeny.desktop.app.reception.WalkInState
 import com.zeny.desktop.app.rooms.RoomMapScreen
 import com.zeny.desktop.app.rooms.RoomMapState
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.app.shell.Area
 import com.zeny.desktop.app.shell.ShellScreen
 import com.zeny.desktop.app.shell.ShellState
+import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.approval.ApprovalDialog
 import com.zeny.desktop.design.feedback.EmptyState
@@ -36,6 +52,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
+import java.time.Clock
 
 /** Casca de desenvolvimento (áreas "(em breve)"): só com `ZENY_DEV_SHELL=1` ou `-Dzeny.devShell=true`. */
 fun isShellDevMode(
@@ -107,7 +124,10 @@ internal fun AppRoot(
                         approvals.close()
                     }
                 }
-                CompositionLocalProvider(LocalApprovalCoordinator provides approvals) {
+                CompositionLocalProvider(
+                    LocalApprovalCoordinator provides approvals,
+                    LocalApprovalCoordinatorOrNull provides approvals,
+                ) {
                     ShellScreen(state, onLogout = { scope.launch { controller.logout() } }) { area ->
                         AreaContent(area, connection)
                     }
@@ -130,17 +150,128 @@ private fun ServerConnection.activeSessionIds(): Flow<String?> =
 
 private fun SessionState.activeSessionId(): String? = (this as? SessionState.Active)?.sessionId
 
-/** A tela da área aberta na casca: a Governança é o mapa de UHs; as demais ainda mostram só o nome. */
+/**
+ * A tela da área aberta na casca: a Recepção é o painel do dia; a Governança, o mapa de UHs; as demais ainda mostram
+ * só o nome.
+ */
 @Composable
 internal fun AreaContent(
     area: Area,
     connection: ServerConnection,
 ) {
     when (area) {
+        Area.RECEPTION -> ReceptionArea(connection)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
     }
 }
+
+/**
+ * O painel do dia e o detalhe da reserva vivem enquanto a Recepção está aberta na mesma sessão, como o mapa de UHs:
+ * nascem com a chave do `sessionId` vigente (o cache de titulares é da sessão) e fecham ao sair da área, da casca ou
+ * da sessão, o que cancela a assinatura de tempo real. Sem sessão `Active` o quadro fica vazio de propósito. O ganho
+ * de foco da janela atualiza o painel e relê a reserva aberta; a perda só o registra no painel.
+ */
+@Composable
+private fun ReceptionArea(connection: ServerConnection) {
+    val source = remember(connection) { connection.receptionSource() }
+    val session by connection.state.collectAsState()
+    val sessionId = (session as? SessionState.Active)?.sessionId
+    val scope = rememberCoroutineScope()
+    when {
+        source == null -> {
+            Unavailable("Recepção indisponível nesta conexão.")
+        }
+
+        sessionId != null -> {
+            val panel = remember(source, sessionId) { DayPanelState(source, scope) }
+            val detail = remember(source, sessionId) { ReservationDetailState(source, scope) }
+            DisposableEffect(panel, detail) {
+                onDispose {
+                    panel.close()
+                    detail.close()
+                }
+            }
+            val window = LocalWindowInfo.current
+            LaunchedEffect(panel, detail, window) {
+                snapshotFlow { window.isWindowFocused }.collect { focused ->
+                    panel.onWindowFocus(focused)
+                    if (focused) detail.reload()
+                }
+            }
+            // Fora da casca (sem coordenador) o check-in segue sem aprovação: o servidor decide se pede.
+            val approval = LocalApprovalCoordinatorOrNull.current
+            val clock = remember { Clock.systemUTC() }
+            ReceptionScreen(
+                panel,
+                detail,
+                checkIn = { seed ->
+                    CheckInState(
+                        source,
+                        scope,
+                        seed,
+                        panel.permissions,
+                        { approveAction(approval, it) },
+                        clock::instant,
+                    ) {
+                        panel.refresh()
+                        detail.reload()
+                    }
+                },
+                walkIn = {
+                    WalkInState(
+                        source,
+                        scope,
+                        panel.permissions,
+                        { approveAction(approval, it) },
+                        onChanged = { panel.refresh() },
+                    )
+                },
+                roomMove = roomMoveFactory(source, scope, approval, panel, detail),
+                undoCheckIn = undoCheckInFactory(source, scope, approval, panel, detail),
+            )
+        }
+    }
+}
+
+/** A troca de UH do detalhe: a aprovação é a do coordenador; depois dela a lista e o detalhe se refazem. */
+private fun roomMoveFactory(
+    source: ReceptionSource,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    panel: DayPanelState,
+    detail: ReservationDetailState,
+): (String) -> RoomMoveState =
+    { id ->
+        RoomMoveState(source, scope, id, { approveAction(approval, it) }) {
+            panel.refresh()
+            detail.reload()
+        }
+    }
+
+/** O desfazer check-in do detalhe, com a mesma aprovação e o mesmo refresh da troca. */
+private fun undoCheckInFactory(
+    source: ReceptionSource,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    panel: DayPanelState,
+    detail: ReservationDetailState,
+): (String) -> UndoCheckInState =
+    { id ->
+        UndoCheckInState(source, scope, id, { approveAction(approval, it) }) {
+            panel.refresh()
+            detail.reload()
+        }
+    }
+
+/**
+ * A aprovação pelo coordenador da sessão. Só sem coordenador (fora da casca) a ação corre sem aprovação; o
+ * cancelamento da aprovação devolve `null` e nunca refaz a ação.
+ */
+private suspend fun <T : Any> approveAction(
+    approval: ApprovalCoordinator?,
+    action: ApprovableAction<T>,
+): ApiResponse<T>? = if (approval == null) action.run(null) else approval.run(action)
 
 /**
  * O mapa de UHs vive enquanto a Governança está aberta na mesma sessão: nasce com a chave do `sessionId` vigente e
@@ -157,7 +288,7 @@ private fun HousekeepingMap(connection: ServerConnection) {
     val scope = rememberCoroutineScope()
     when {
         source == null -> {
-            MapUnavailable()
+            Unavailable("Mapa indisponível nesta conexão.")
         }
 
         sessionId != null -> {
@@ -169,9 +300,9 @@ private fun HousekeepingMap(connection: ServerConnection) {
 }
 
 @Composable
-private fun MapUnavailable() {
+private fun Unavailable(message: String) {
     Text(
-        "Mapa indisponível nesta conexão.",
+        message,
         Modifier.padding(24.dp),
         color = MaterialTheme.colorScheme.error,
     )

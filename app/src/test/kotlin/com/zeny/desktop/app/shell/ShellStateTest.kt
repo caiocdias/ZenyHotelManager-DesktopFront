@@ -246,8 +246,8 @@ class ShellStateTest {
             val dev = loaded(FakeConnection(me = me), devMode = true)
             val release = loaded(FakeConnection(me = me), devMode = false)
 
-            assertEquals(Area.entries.map { it to (it == Area.HOUSEKEEPING) }, dev.areas)
-            assertEquals(listOf(Area.HOUSEKEEPING to true), release.areas)
+            assertEquals(Area.entries.map { it to (it in setOf(Area.RECEPTION, Area.HOUSEKEEPING)) }, dev.areas)
+            assertEquals(listOf(Area.RECEPTION to true, Area.HOUSEKEEPING to true), release.areas)
         }
 
     @Test
@@ -255,7 +255,7 @@ class ShellStateTest {
         runTest {
             val state = loaded(FakeConnection(me = { Me("u-1", "admin", "Administrador", administrator) }), true)
 
-            state.select(Area.RECEPTION)
+            state.select(Area.RESERVATIONS)
 
             assertNull(state.selected)
         }

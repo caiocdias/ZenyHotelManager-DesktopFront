@@ -83,7 +83,7 @@ object ErrorCatalog {
             "ROOM_NOT_READY" to "A UH ainda não está pronta.",
             "ROOM_NOT_OCCUPIED" to "A UH não está ocupada.",
             "ROOM_NOT_ASSIGNED" to "A reserva ainda não tem UH alocada.",
-            "ROOM_ALREADY_ASSIGNED" to "A reserva já tem UH alocada.",
+            "ROOM_ALREADY_ASSIGNED" to "A UH já está alocada a outra reserva em parte do período.",
             "ROOM_ASSIGNMENT_LOCKED" to "A UH da reserva está travada e não pode ser trocada.",
             "ROOM_ASSIGNMENT_NOT_ALLOWED" to "Não é possível alocar esta UH à reserva.",
             "ROOM_OUT_OF_ORDER" to "A UH está fora de ordem.",

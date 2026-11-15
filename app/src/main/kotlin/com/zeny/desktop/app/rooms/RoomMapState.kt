@@ -380,7 +380,7 @@ private fun tileOf(status: RoomStatusResponse) =
     )
 
 /** "2" antes de "10": trechos numéricos comparam pelo valor; empate desfeito pelo texto, para nunca juntar dois. */
-private object NaturalOrder : Comparator<String> {
+internal object NaturalOrder : Comparator<String> {
     private val chunk = Regex("\\d+|\\D+")
 
     override fun compare(

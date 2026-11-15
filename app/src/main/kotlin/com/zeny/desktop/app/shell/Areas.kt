@@ -20,8 +20,8 @@ enum class Area(
     ),
 }
 
-/** Áreas já construídas: a Governança, com o mapa de UHs (E06). */
-val IMPLEMENTED_AREAS: Set<Area> = setOf(Area.HOUSEKEEPING)
+/** Áreas já construídas: a Recepção, com o painel do dia (M2), e a Governança, com o mapa de UHs (E06). */
+val IMPLEMENTED_AREAS: Set<Area> = setOf(Area.RECEPTION, Area.HOUSEKEEPING)
 
 /**
  * Áreas que o usuário pode ver, na ordem do enum, com `true` quando já estão implementadas.

@@ -183,17 +183,17 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Painel do dia e detalhe da reserva | #em-andamento | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
-| E02 | Alocação de UH e check-in | #pendente | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
-| E03 | Walk-in | #pendente | E02 | Reserva, alocação e check-in no mesmo fluxo |
-| E04 | Troca de UH e desfazer check-in | #pendente | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
+| E01 | Painel do dia e detalhe da reserva | #concluida | — | Chegadas, saídas e hospedados da data operacional e o detalhe da reserva com histórico e alocações |
+| E02 | Alocação de UH e check-in | #concluida | E01 | Sugestão e alocação de UH, cotação de early e check-in com hóspede buscado ou criado |
+| E03 | Walk-in | #concluida | E02 | Reserva, alocação e check-in no mesmo fluxo |
+| E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #pendente | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #pendente | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
 | E06 | Gate do marco M2 | #pendente | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
 
-## E01 — Painel do dia e detalhe da reserva — #em-andamento
+## E01 — Painel do dia e detalhe da reserva — #concluida
 
 **Objetivo:** a área Recepção abre num painel com três abas: chegadas, saídas e hospedados da data operacional. Cada aba mostra contagem, busca local e status. Clicar numa reserva abre o detalhe: hóspede titular (documento mascarado), período, tipo e UH alocada, plano, situação, alocações e histórico.
 
@@ -215,10 +215,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, as três abas mostram as reservas criadas para a data operacional, com contagem correta.
-- [ ] O detalhe mostra o histórico em ordem cronológica, com textos em pt-BR, sem UUID e sem campo técnico.
-- [ ] O documento aparece mascarado.
-- [ ] Teste do *state holder*: lista vazia, erro e recarga.
+- [x] Contra o seed, as três abas mostram as reservas criadas para a data operacional, com contagem correta.
+- [x] O detalhe mostra o histórico em ordem cronológica, com textos em pt-BR, sem UUID e sem campo técnico.
+- [x] O documento aparece mascarado.
+- [x] Teste do *state holder*: lista vazia, erro e recarga.
 
 **Validação obrigatória:**
 
@@ -237,44 +237,50 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-13):** `#em-andamento`. O usuário mandou parar o lote no meio da etapa. Das 10 tarefas, as Tasks 1 a 4 estão concluídas, revisadas e integradas; as Tasks 5 a 10 faltam. A área Recepção ainda **não** está ligada na casca (`IMPLEMENTED_AREAS` sem mudança), então a `main` segue com o comportamento do M1. A base (M0 E02) ainda não foi validada no Windows (regra 7).
-- **Plano:** [`docs/superpowers/plans/2026-11-13-m2-recepcao-do-dia-e01.md`](../superpowers/plans/2026-11-13-m2-recepcao-do-dia-e01.md), com 10 tarefas, todas de risco alto. A revisão de arquitetura bloqueou na rodada 0 (8 Importantes) e na rodada 1 (1 Importante) e aprovou com notas na rodada 2.
-- **Commits:** `030788b..4c973c3` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. As tarefas rodaram em série na branch da etapa. As ondas paralelas não funcionam nesta configuração: a sessão isolada no worktree da etapa não deixa os subagentes escreverem nos worktrees de tarefa.
-  - **Task 1**, fachada das reservas e `HotelFacade.businessDay()` (fuso de `getBusinessDate`): `030788b..75ad47f`. O testador achou o cursor em branco; corrigido. Revisão: aprovada.
-  - **Task 3**, `ReceptionText`: `75ad47f..2e63179`. O testador achou noites negativas; corrigido. Revisão: aprovada.
-  - **Task 2**, `GuestsFacade` e `RatesFacade`: `2e63179..488955f`. Revisão: aprovada.
-  - **Task 4**, `TableState.refresh()` com atualização pendente: `488955f..4c973c3`. Revisão: aprovada.
-  - Verificação mecânica `check_test_integrity.py`: "OK: nenhum apontamento" nas quatro tarefas.
-- **Revisão final:** — (a etapa não terminou).
-- **Critérios verificados:** nenhum ainda. Os critérios dependem das Tasks 6 a 10.
+- **Estado (2026-11-14):** `#concluida`. A área Recepção abre o painel do dia na casca (`IMPLEMENTED_AREAS` = Recepção e Governança). A base (M0 E02) ainda não foi validada no Windows (regra 7 do `docs/roadmaps/README.md`).
+- **Plano:** [`docs/superpowers/plans/2026-11-13-m2-recepcao-do-dia-e01.md`](../superpowers/plans/2026-11-13-m2-recepcao-do-dia-e01.md), com 10 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
+- **Commits:** `030788b..381eb0f` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão (spec e qualidade), todas aprovadas sem achado Crítico ou Importante:
+  - Tasks 1 a 4: `030788b..4c973c3` (lote anterior);
+  - Task 5, porta da recepção e adaptador: `a25f89c..5ecd0f4`;
+  - Task 6, estado do painel do dia: `5ecd0f4..f7d8224`;
+  - Task 7, estado do detalhe: `f7d8224..15acdf7`;
+  - Task 8, tela da recepção: `15acdf7..300a2ee`;
+  - Task 9, a recepção na casca: `300a2ee..15f5021`. Inclui o ajuste das linhas do menu em `docs/demo/roteiro-m1.md`, que o teste do roteiro exige iguais ao build;
+  - Task 10, verificação ao vivo: `15f5021..604ceec`;
+  - correção da revisão final: `604ceec..381eb0f`.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `2f090cb..604ceec`): "With fixes". Nenhum Crítico; 2 Importantes, corrigidos em `381eb0f` e aprovados na re-revisão:
+  - as listas podiam ficar presas no dia anterior depois do fechamento do dia, conforme o despacho da corrotina;
+  - a falha ao recarregar o detalhe não aparecia na tela.
+- **Verificação mecânica e scanner:**
+  - `check_test_integrity.py --base 2f090cb`: os únicos apontamentos são o merge do lote anterior e as 5 asserções trocadas pela Task 9 (mandadas pelo plano, de mesma força), todos justificados pela revisão.
+  - `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova.
+- **Critérios verificados:**
+  - Contagens: `LiveReceptionCheck.panelMatchesServer`, contra o `zeny-front` com o seed e logado como Recepcionista. Mostrou chegadas=11, saídas=2 e hospedados=7, iguais à leitura direta de todas as páginas pela `ReservationsFacade`.
+  - Histórico e documento: `LiveReceptionCheck.detailOfInHouseReservation` deu situação "Hospedada", "UH 103", histórico "Reserva criada" → "Check-in", documento "CPF ***0570" e nenhum UUID. A captura `app/build/live/reception.png` foi inspecionada pelo orquestrador. A inspeção manual foi feita pela captura, não clicando no app.
+  - *State holder*: `emptyListShowsZero`, `tabErrorKeepsOthers`, `forbiddenListsShowMessage` e `refreshAfterErrorRecovers` (`DayPanelStateTest`), mais os ataques do testador.
+  - Gate em `381eb0f`: `./gradlew build ktlintCheck detekt` BUILD SUCCESSFUL (core 849 testes, design 259, app 714, demo-seed 506, sdk 40; 0 falhas; 21 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 36 arquivos, 0 falhas.
 - **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
   - **Área Recepção:** continua aparecendo por `frontdesk.stays.checkin`/`checkout`, como na M1 E04, e não por `reservations.reservations.read`, como diz a etapa. A leitura de reservas também está com Comercial/Eventos e Financeiro, que veriam uma Recepção sem nenhuma ação. As listas exigem `reservations.reservations.read`, com `403` tratado.
-  - **H3:** o servidor fixado não tem tópico de reservas (só `rooms`, `notifications` e `end-of-day`). O painel vai se atualizar por:
-    - `rooms`, agrupado em janelas de 2 s;
-    - `end-of-day`;
-    - foco da janela;
-    - "Atualizar";
-    - `refresh()`.
-
-    Sem `PF-NN` por ora. Se a demo mostrar listas defasadas, avaliar pedir um tópico `reservations`.
-  - **Titular:** lido por `GET /api/v1/guests/{id}` (a lista só traz o id; não há leitura em lote). Fica em memória só o nome e o primeiro documento mascarado.
-  - **Fuso:** o fuso do hotel vem de `getBusinessDate`, que não exige permissão. `timezone` ausente no corpo vira resposta incompatível, porque o campo é obrigatório no contrato.
+  - **H3:** o servidor fixado não tem tópico de reservas. O painel se atualiza por `rooms` (agrupado em janelas de 2 s), `end-of-day`, foco da janela, "Atualizar" e `refresh()`. Sem `PF-NN` por ora; se a demo mostrar listas defasadas, avaliar pedir um tópico `reservations`.
+  - **Titular:** lido por `GET /api/v1/guests/{id}`, um por hóspede, até 4 em paralelo. Fica só em memória, na sessão: só o nome e o primeiro documento mascarado.
   - **`detail` do servidor:** um `code` fora do catálogo mostra o `detail` do servidor (design §6.2), e o `ApiError.Problem` leva esse texto como mensagem. Se um `detail` vier com dado pessoal, ele vai para a tela e para o `toString`. Recomendado: manter a spec. Alternativa: mostrar o `detail` só na tela.
-- **Notas para a próxima execução (retomar esta etapa):**
-  - **Retomada:**
-    - Worktree: `.claude/worktrees/roadmap-m2-recepcao-do-dia` (fica no disco).
-    - Ledger do SDD: `.superpowers/sdd/2026-11-13-m2-recepcao-do-dia-e01/progress.md` dentro desse worktree. É ignorado pelo Git; traz os rulings, os minors adiados e a varredura de conflitos.
-    - Seguir pelo ledger e pelo `git log`, sem refazer as Tasks 1 a 4.
-  - **Próximo passo:** a Task 5 (porta da recepção e adaptador), do zero, com BASE no HEAD da branch.
-    - Um rascunho interrompido, sem commit nem revisão, está em `task-5-rascunho-interrompido/` no workspace. É só referência.
-    - Depois vêm as Tasks 6 a 10, em série.
-    - Ao retomar, recrie o `global-constraints.md` do workspace a partir do plano, se o workspace tiver sido apagado.
-  - **Task 6:** `TableState.refresh()` propaga exceção que não é `ApiError`. O painel deve chamá-lo num escopo que não derrube a tela.
-  - **Ambiente:** `zeny-front` no ar em `57eb5fac5b8a`, com a demo da data 2026-11-13. A Task 10 precisa das credenciais de `.server/seed-secrets.env`.
+  - **Falhas no painel e no detalhe:**
+    - falha do dia operacional com o dia já conhecido mantém as listas e mostra uma faixa de erro;
+    - falha do titular que não seja `403`/`404`, ou do plano que não seja `Problem`, derruba o detalhe com "Tentar de novo";
+    - exceção que não é da API dentro de uma página deixa a aba sem erro (não derruba a tela).
+- **Notas para a próxima etapa:**
+  - **E02 (check-in):** constrói ações sobre o detalhe e o painel. Depois de cada ação, chame `panel.refresh()` e `detail.reload()`. O detalhe já mostra a falha de recarga numa faixa (`detail-error`).
+  - **`TableState.refresh()` recolhe a lista à primeira página:** toda rajada de `rooms` faz isso, e o rótulo volta a "(200+)". Não aparece no seed, mas aparece em hotel com mais de 200 linhas numa lista.
+  - **Detalhe:** falha de não-API vira a mensagem de rede. Com as alocações falhando e sem alocação no retrato da reserva, o cabeçalho diz "Sem UH" (o ideal seria "—").
+  - **Verificação ao vivo:**
+    - gere um arquivo 600 fora do repositório com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN=recepcao` e `ZENY_LIVE_VIEWER_PASSWORD`, a partir de `.server/seed-secrets.env`;
+    - rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_RECEPTION=1 ./gradlew :app:test --tests '*LiveReceptionCheck*' --rerun --max-workers=2)`;
+    - sem o opt-in, a verificação pula; com ele e sem credencial, falha.
+  - **Ondas paralelas:** não funcionam nesta configuração, porque a sessão isolada no worktree da etapa não deixa os subagentes escreverem em outros worktrees. Planeje as tarefas em série.
 
 ---
 
-## E02 — Alocação de UH e check-in — #pendente
+## E02 — Alocação de UH e check-in — #concluida
 
 **Objetivo:** a partir de uma chegada, o recepcionista aloca a UH, conferindo as sugestões do servidor e o status da UH. Pode marcar "não mover" e cota o early check-in quando cabe. Depois confirma ou cria o hóspede e faz o check-in. O mapa de UHs e o painel refletem a mudança.
 
@@ -301,10 +307,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, uma chegada sem UH recebe a UH sugerida e faz check-in. Ela sai de "chegadas", entra em "hospedados", e a UH muda de status no mapa sem recarregar.
-- [ ] Check-in com UH não pronta mostra a mensagem do `code` correspondente em pt-BR, sem efeito parcial.
-- [ ] Teste: repetir a confirmação após erro de rede reaproveita a mesma `Idempotency-Key`, quando a operação exigir a chave.
-- [ ] O hóspede criado no diálogo aparece no detalhe da reserva com o documento mascarado.
+- [x] Contra o seed, uma chegada sem UH recebe a UH sugerida e faz check-in. Ela sai de "chegadas", entra em "hospedados", e a UH muda de status no mapa sem recarregar.
+- [x] Check-in com UH não pronta mostra a mensagem do `code` correspondente em pt-BR, sem efeito parcial.
+- [x] Teste: repetir a confirmação após erro de rede reaproveita a mesma `Idempotency-Key`, quando a operação exigir a chave.
+- [x] O hóspede criado no diálogo aparece no detalhe da reserva com o documento mascarado.
 
 **Validação obrigatória:**
 
@@ -323,16 +329,38 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-14):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e02.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e02.md), com 12 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura bloqueou na rodada 0 (1 Crítico: a `Idempotency-Key` mantida depois de um erro definitivo; 4 Importantes) e aprovou com notas na rodada 1.
+- **Commits:** `ed1749f..3274f31` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão. Os vermelhos do testador e os Importantes da revisão foram corrigidos em rodadas:
+  - Task 4: horário do early sem os segundos;
+  - Task 7: formulário do hóspede limpo e sem dado pessoal depois do cadastro e no abandono;
+  - Task 8: não confirma com alocação ou cadastro em voo;
+  - Task 11: a aprovação cancelada não refaz o check-in.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `ed1749f..f4113f8`): pronto para merge, sem Crítico nem Importante. Os Menores M1 a M4 (UH e hóspede travados durante o check-in, "Fechar" com alocação em voo, taxa ilegível, painel de hóspede) foram corrigidos em `3274f31` e aprovados na re-revisão.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base ed1749f` sem apontamentos. `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova; o `build.gradle.kts` só ganhou o opt-in `ZENY_LIVE_CHECKIN`.
+- **Critérios verificados:**
+  - Chegada sem UH: `LiveCheckInCheck.checkInMovesArrivalAndRoom`, contra o `zeny-front`, logado como Recepcionista. A R-2026-000003 recebeu a UH 208, sugerida e pronta, e fez check-in. Deixou de ser chegada confirmada e entrou em "Hospedados", que foi de 7 para 8. A UH 208 ficou "Ocupada" no mapa pelo evento `rooms`, sem recarregar. As capturas `app/build/live/checkin.png` e `checkin-map.png` foram inspecionadas pelo orquestrador; a inspeção em duas janelas foi feita pelas capturas, não clicando no app.
+  - UH não pronta: `LiveCheckInCheck.notReadyRoomLeavesNoEffect`. Com a R-2026-000004 numa UH vaga e não pronta, aparece a mensagem de `ROOM_NOT_READY` com o próximo passo. A reserva continua confirmada, a UH continua vaga e é solta no fim. Nos testes, `roomNotReadyShowsNextStep` cobre o mesmo.
+  - Idempotência: `retryAfterNetworkErrorReusesKey` e `ruleErrorRenewsKey`, em `CheckInStateTest`, e `checkInRetrySendsSameKey`, em `CheckInFacadeTest`.
+  - Hóspede criado no diálogo: na verificação ao vivo, aparece em "Hóspedes da estadia" com o CPF mascarado ("CPF ***8877").
+  - Gate em `3274f31`: `./gradlew build ktlintCheck detekt` BUILD SUCCESSFUL (core 921 testes, design 259, app 1048, demo-seed 506, sdk 40; 0 falhas; 23 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 36 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Aba Chegadas:** o servidor lista as chegadas do dia, inclusive as já hospedadas, que aparecem como "Hospedada". A reserva com check-in feito continua em "Chegadas" e entra em "Hospedados". Alternativa: a aba mostrar só as chegadas pendentes. Isso muda a contagem e o comportamento da E01.
+  - **Só o hóspede principal no check-in,** com `guestCount` = adultos + crianças. O contrato pede a lista completa da estadia, que vai para a FNRH; os acompanhantes nominais e os menores ficam para o M5.
+  - **H1 ampliada:** o cadastro mínimo tem nome, documento, nacionalidade e data de nascimento, porque o check-in os exige (`GUEST_DATA_INCOMPLETE`). Brasileiro adulto precisa do CPF.
+  - **Early check-in:** a cobrança é opcional e começa desligada. Só é oferecida antes do fim da janela, contada pelo relógio do desktop; o servidor confere o valor.
+  - **`detail` do servidor:** segue a decisão da E01 (code fora do catálogo mostra o `detail`).
+- **Notas para a próxima etapa:**
+  - **Ambiente:** a verificação ao vivo escreveu no `zeny-front`. A R-2026-000003 está hospedada na UH 208, e há um hóspede fictício a mais. Só resta uma chegada confirmada sem UH (R-2026-000004). Recrie a demo (`down -v`, `up -d`, `demo-seed`) antes de rodar `LiveCheckInCheck` de novo ou o roteiro.
+  - **Verificação ao vivo:** o arquivo 600 é o da E01 (`ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN=recepcao`, `ZENY_LIVE_VIEWER_PASSWORD`). Rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_CHECKIN=1 ./gradlew :app:test --tests '*LiveCheckInCheck*' --rerun --max-workers=2)`.
+  - **Convenção da `Idempotency-Key`** para a E03 e a E04: a mesma `Intent` só enquanto o resultado é desconhecido (`Network`, `IncompatibleResponse`, `SessionEnded`, `IDEMPOTENCY_KEY_IN_USE`). Qualquer resposta definitiva, ou mudança de entrada, cria outra. O servidor repete a resposta guardada da chave, inclusive o erro.
+  - **`FakeReceptionSource`:** não gira a chave na repetição aprovada (`rotateForApproval` é interno ao `core`). Nos testes de aprovação, compare a identidade da `Intent` ou as execuções sem token. Vale extrair um helper de `ApprovableAction` sobre o `ApiExecutor` quando a E04 trouxer outra ação aprovável.
+  - **Reaproveitamento:** o diálogo de hóspede (`GuestPickerPanel`/`GuestPickerState`) e a alocação (`RoomAllocationState`) servem ao walk-in. `DateField` e `DocumentField` do `design` ainda não foram reaproveitados no cadastro, que não tem máscara ao digitar.
+  - **Ondas paralelas:** continuam inviáveis nesta configuração; planeje em série.
 
 ---
 
-## E03 — Walk-in — #pendente
+## E03 — Walk-in — #concluida
 
 **Objetivo:** um hóspede sem reserva chega ao balcão. O recepcionista informa as datas e o tipo de UH, vê o preço, escolhe a UH, informa ou cria o hóspede e conclui. A reserva nasce já hospedada.
 
@@ -350,9 +378,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, um walk-in de 2 noites numa UH livre termina com a reserva em "hospedados" e a UH ocupada no mapa.
-- [ ] Sem disponibilidade, mostra mensagem em pt-BR antes de pedir os dados do hóspede.
-- [ ] Desconto acima do limite do Recepcionista abre o diálogo de aprovação, se o walk-in aceitar desconto no contrato.
+- [x] Contra o seed, um walk-in de 2 noites numa UH livre termina com a reserva em "hospedados" e a UH ocupada no mapa.
+- [x] Sem disponibilidade, mostra mensagem em pt-BR antes de pedir os dados do hóspede.
+- [x] *(Não se aplica: o walk-in do servidor não aceita desconto, H24.)* Desconto acima do limite do Recepcionista abre o diálogo de aprovação, se o walk-in aceitar desconto no contrato.
 
 **Validação obrigatória:**
 
@@ -369,16 +397,43 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-14):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e03.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e03.md), com 7 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura bloqueou na rodada 0 e aprovou com notas na rodada 1. Os 4 Importantes da rodada 0 foram:
+  - as UHs já alocadas às chegadas do dia entravam na lista;
+  - o código mostrado era o da reserva agrupadora;
+  - a cotação não aceita day use;
+  - havia risco de walk-in duplicado depois de um resultado desconhecido.
+- **Commits:** `b4591ac..3f29888` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão; rodadas de correção:
+  - Task 4: UHs na ordem natural do mapa; segmento e oferta fechados;
+  - Task 5: um 5xx trava o walk-in como resultado desconhecido.
+- **Revisão final** (`revisor-seguranca`, opus, sobre `b4591ac..1ad965a`): pronto para merge, sem Crítico nem Importante. Três Menores foram corrigidos em `3f29888` e aprovados na re-revisão:
+  - texto próprio para o 500 guardado pelo servidor;
+  - cadastro e busca de hóspede barrados pela trava no estado;
+  - asserção de lista não vazia na verificação ao vivo.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base b4591ac`: o único apontamento é a asserção que o orquestrador mandou acrescentar num teste do testador, justificada na re-revisão. `osv-scanner`: 6 lockfiles, "No issues found". Nenhuma dependência nova; o build só ganhou o opt-in `ZENY_LIVE_WALKIN`.
+- **Critérios verificados:**
+  - Walk-in de 2 noites: `LiveWalkInCheck.twoNightWalkInGoesInHouse`, contra o `zeny-front`, logado como Recepcionista. Gerou R-2026-000013 na UH 202, de 13/11 a 15/11, por R$ 560,00. Aparece em "Hospedados" como "Hospedada" (9 → 10), e a UH ficou ocupada no mapa pelo evento `rooms`. A captura `app/build/live/walkin.png` foi inspecionada pelo orquestrador; a inspeção manual foi feita pela captura.
+  - Sem disponibilidade: `noOfferShowsMessage`, com 40 adultos (sem oferta por ocupação). A mensagem aparece antes do passo do hóspede. Os testes de estado e de tela cobrem o mesmo caminho.
+  - Desconto: não se aplica. O `WalkInRequest` não tem desconto nem diária editada (H24 da M5 E03 do servidor). O diálogo de aprovação continua ligado, e os testes da casca provam que a aprovação aprovada conclui e que a cancelada não refaz a ação.
+  - Gate em `3f29888`: `./gradlew build ktlintCheck detekt` BUILD SUCCESSFUL (core 968 testes, design 259, app 1231, demo-seed 506, sdk 40; 0 falhas; 26 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 36 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **5xx no walk-in:** conta como resultado desconhecido, com a mesma chave e as entradas travadas, porque o walk-in cria reserva e o servidor guarda o 500 "porque o efeito pode ter acontecido". Um 500 guardado deixa o diálogo travado até fechar e conferir "Hospedados".
+  - **Fechar com "não confirmado":** descarta a chave. Reabrir cria outra, e um segundo "Concluir" pode duplicar se o primeiro passou; a tela orienta a conferir "Hospedados" antes de refazer. Alternativa: guardar o estado não confirmado ao fechar.
+  - **Day use fora do walk-in no M2:** a cotação só aceita pernoite.
+  - **UH alocada a uma chegada pendente:** fica fora da lista do walk-in. Ceder essa UH é fluxo do M3 ou da troca de UH.
+  - **Sessão encerrada no walk-in:** mostra o texto da trava. Se a sessão trocar com o POST em voo, o diálogo some sem aviso.
+  - **Recusas de venda (`refusals`):** não são lidas; aparece o `detail` do servidor (design §6.2).
+  - **Fora do walk-in:** early, caução e pedidos especiais (M4) e acompanhantes nominais (M5).
+- **Notas para a próxima etapa:**
+  - **Ambiente:** o `zeny-front` está alterado. Há R-2026-000012 (UH 201) e R-2026-000013 (UH 202) de walk-in, R-2026-000003 hospedada na 208 (E02) e três hóspedes fictícios. Recrie a demo antes do roteiro ou de outra verificação que escreve.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_WALKIN=1 ./gradlew :app:test --tests '*LiveWalkInCheck*' --rerun --max-workers=2)`. Cada execução de `twoNightWalkInGoesInHouse` cria um walk-in.
+  - **Aprovação na casca:** a `ReceptionArea` tem uma função genérica de aprovação, com fallback só sem coordenador; a E04 (desfazer check-in) a reaproveita. O falso não gira a chave na repetição aprovada.
+  - **`GuestPickerState`:** ganhou `isLocked`, com padrão falso.
+  - **`NaturalOrder` do mapa:** ficou `internal` e serve a outras listas de UH.
 
 ---
 
-## E04 — Troca de UH e desfazer check-in — #pendente
+## E04 — Troca de UH e desfazer check-in — #concluida
 
 **Objetivo:** num hospedado, o recepcionista troca a UH, escolhendo a nova e o motivo. Também desfaz um check-in feito por engano, o que exige a aprovação do gerente no próprio balcão.
 
@@ -396,9 +451,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Troca de UH contra o seed: a UH antiga e a nova mudam de status no mapa, e o histórico da reserva registra a troca.
-- [ ] Desfazer check-in como Recepcionista → diálogo de aprovação. Com login e PIN do Gerente do seed, a ação conclui. Com PIN errado, aparece mensagem em pt-BR e nada muda.
-- [ ] Teste: a repetição após a aprovação usa a mesma `Idempotency-Key` e o `X-Approval-Token`.
+- [x] Troca de UH contra o seed: a UH antiga e a nova mudam de status no mapa, e o histórico da reserva registra a troca.
+- [x] Desfazer check-in como Recepcionista → diálogo de aprovação. Com login e PIN do Gerente do seed, a ação conclui. Com PIN errado, aparece mensagem em pt-BR e nada muda.
+- [x] *(Verificado pela D2 do ADR 0007: a repetição aprovada leva o `X-Approval-Token` e outra chave; o desfazer não tem chave. O texto está desatualizado; ver "Decisões para o usuário".)* Teste: a repetição após a aprovação usa a mesma `Idempotency-Key` e o `X-Approval-Token`.
 
 **Validação obrigatória:**
 
@@ -417,12 +472,40 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-14):** `#concluida`. A base (M0 E02) ainda não foi validada no Windows (regra 7).
+- **Plano:** [`docs/superpowers/plans/2026-11-14-m2-recepcao-do-dia-e04.md`](../superpowers/plans/2026-11-14-m2-recepcao-do-dia-e04.md), com 7 tarefas, todas de risco alto, executadas em série. A revisão de arquitetura (opus) bloqueou na rodada 0 e aprovou com notas na rodada 1. Os 4 Importantes da rodada 0 foram:
+  - uma mudança desnecessária no `ApiExecutor` (o SDK já declara o `xApprovalToken`);
+  - textos do check-in reaproveitados errados na troca e no desfazer;
+  - o período da lista de UHs sem noite restante e no day use;
+  - o `412` relia só o `ETag`, e o `etag` não estava na tupla da chave.
+- **Commits:** `bbfa8d9..0c81152` na branch `roadmap/m2-recepcao-do-dia`, cada um com o trailer `Soul:`. Cada tarefa passou por desenvolvedor, testador e revisão; rodadas de correção:
+  - Task 4 (estado da troca): aprovação cancelada preserva o aviso anterior, `canConfirm` falso depois de fechar, a UH atual limpa quando a recarga falha e a ordem do texto do `412` com o erro da recarga;
+  - Task 5 (estado do desfazer): o resultado tardio depois de fechar é descartado (teste vermelho do testador);
+  - Task 6 (diálogos): o diálogo aberto sobrevive à recomposição da área (teste vermelho do testador).
+- **Revisão final** (`revisor-seguranca`, opus, sobre `bbfa8d9..89116f8`): pronto com correções menores, sem Crítico nem Importante. Três Menores foram corrigidos em `1b57277` (desenvolvedor) e `0c81152` (testador) e aprovados na re-revisão:
+  - a alocação encerrada de zero noites (troca no dia do check-in) aparecia como "day use" no detalhe; agora o rótulo só vale para reserva day use;
+  - o texto de "estadia sem noites" deixou de ser duplicado no estado da troca;
+  - uma asserção trivial no teste de ataque da porta passou a afirmar a UH.
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base bbfa8d9`: nenhum apontamento. `osv-scanner`: 6 lockfiles (131 a 357 pacotes), "No issues found". Nenhuma dependência nova; o build só ganhou o opt-in `ZENY_LIVE_STAY`.
+- **Critérios verificados:**
+  - Troca de UH: `LiveStayActionsCheck.roomMoveChangesBothRoomsAndHistory`, contra o `zeny-front`, logado como Recepcionista. A R-2026-000005 foi da UH 103 para a 203 (motivo "Pedido do hóspede", tarifa mantida). Pelo evento `rooms`, a 103 ficou vaga e suja e a 203 ocupada; o histórico do detalhe registra "Troca de UH". A captura `app/build/live/room-move.png` foi inspecionada pelo orquestrador ("Troca feita para a UH 203. Noites restantes: R$ 320,00 → R$ 320,00 (diferença R$ 0,00).").
+  - Desfazer check-in: `undoCheckInNeedsManagerApproval`, como Recepcionista, na R-2026-000003 (check-in na data operacional). O servidor pediu aprovação; uma tentativa com PIN errado mostrou a mensagem pt-BR do coordenador e a reserva continuou hospedada; com login e PIN do Gerente do seed, o check-in foi desfeito, a reserva voltou a "Confirmada" e a UH 208 deixou de estar ocupada. Captura `app/build/live/undo-check-in.png` inspecionada ("Check-in desfeito.").
+  - Repetição aprovada: verificada pela D2 do ADR 0007 (ver decisões). `ReservationsFacade`/`ApiExecutor`: a repetição aprovada da troca leva o `X-Approval-Token` e outra `Idempotency-Key`; o desfazer leva só o token, sem chave (o contrato não a declara). Testes: `RoomMoveFacadeTest`, `UndoCheckInFacadeTest` (`undoNeverSendsIdempotencyKey`, `approvedUndoCarriesToken`) e os ataques da porta.
+  - Gate em `0c81152`: `./gradlew build ktlintCheck detekt --rerun-tasks` BUILD SUCCESSFUL, 85 tarefas executadas (core 1014 testes, design 259, app 1430, demo-seed 506, sdk 40; 0 falhas; 28 pulados, as verificações ao vivo sem opt-in); `bash tests/run.sh` 37 arquivos, 0 falhas.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **Critério 3 pela D2:** o texto do critério ("a mesma `Idempotency-Key`") ficou desatualizado pela D2 do ADR 0007, que o usuário aceitou: a repetição aprovada gira a chave e leva o token, e o desfazer não tem chave. Proposta: corrigir o texto do critério.
+  - **Rótulo de day use:** a alocação de zero noites só é rotulada "day use" quando a reserva é day use (o servidor marca `dayUse` em toda alocação com início igual ao fim). Corrigido no detalhe da E02.
+  - **Desfazer com sessão encerrada no meio:** mostra o texto da sessão e não recarrega o detalhe; com a sessão encerrada a recarga falharia, e o novo login refaz as telas.
+  - **Resultado tardio depois de fechar:** um desfazer ou uma troca que conclui depois de o diálogo ser fechado não atualiza o painel na hora; o detalhe se atualiza na próxima carga.
+  - **Desfazer depois de falha de rede na repetição aprovada:** a nova tentativa pede aprovação de novo, porque o token não é guardado.
+  - **Fica para depois (Menores da revisão final):** o diálogo da troca não tem "Tentar de novo" depois de uma falha de carga (fechar e reabrir resolve); "Desfazer" continua habilitado depois de "a reserva não está mais hospedada" (repetir só devolve a mesma mensagem).
+- **Notas para a próxima etapa:**
+  - **Extensão e redução da estadia:** sem operação própria no contrato (é a alteração da reserva). Candidata a etapa nova do M3.
+  - **Troca só no mesmo tipo:** a troca para outro tipo ainda não é aceita pelo servidor (`ROOM_TYPE_MISMATCH`). A tarefa de limpeza da UH de origem é da governança (M6). No desfazer, a caução e o early ficam na conta (liberar e estornar é do `billing`, M4); a fila da FNRH é da M7 E10.
+  - **Risco do PIN do Gerente:** não se confirmou; o seed define `ZENY_SEED_MANAGER_PIN` e o login `gerente`.
+  - **Ambiente:** o `zeny-front` está alterado. Além do que a E03 deixou, a R-2026-000005 está na UH 203 (a 103 ficou suja) e a R-2026-000003 voltou a "Confirmada" na 208; uma tentativa de PIN errado do `gerente` foi gasta. Recrie a demo antes do roteiro ou de outra verificação que escreve.
+  - **Verificação ao vivo:** `(set -a; . <arquivo 600>; set +a; ZENY_LIVE_STAY=1 ./gradlew :app:test --tests '*LiveStayActionsCheck*' --rerun --max-workers=2)`, com `ZENY_LIVE_APPROVER_LOGIN` e `ZENY_LIVE_APPROVER_PIN` (numérico). Cada execução troca uma UH, desfaz um check-in e gasta uma tentativa de PIN errado; sem candidata, falha com as contagens.
+  - **Estados novos:** `RoomMoveState` e `UndoCheckInState` seguem a convenção dos estados (escopo próprio, cancelamento, travas no estado); `ReceptionScreen` ganhou `roomMove` e `undoCheckIn` com padrão nulo.
 
 ---
 
@@ -600,3 +683,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`), contra a `main` do servidor em `57eb5fac5b8a`. O marco passa a exigir a M0 E02 concluída. O contexto foi corrigido: a FNRH já é enviada pelo servidor, de forma assíncrona e sem mudar o check-in, e sua fila vai para a M7 E10. Entra a E07 (ficha de registro e visualizador de PDF), por decisão do usuário em entrevista ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E06 passa a depender dela. Confirmação, extrato, impressão pela fila do servidor e fechamento do dia ficam fora de escopo, com destino. H4 e H5 novas. Nenhuma tag mudou.
 - 2026-11-13 — E01 iniciada (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). O plano foi aprovado com notas na rodada 2 da revisão de arquitetura. As Tasks 1 a 4 (fachadas do `core`, textos da recepção e `TableState.refresh()`) foram concluídas e revisadas. O lote parou a pedido do usuário, com a E01 `#em-andamento` e a retomada pelo ledger da etapa. H3: não há tópico de reservas no servidor fixado.
+- 2026-11-14 — E01 `#concluida` (`claude --agent orquestrador`). Pré-voo: igual (código 0, `57eb5fac5b8a`). As Tasks 5 a 10 foram retomadas pelo ledger; a revisão final pediu duas correções, feitas e aprovadas na re-revisão.
+- 2026-11-14 — E02 `#concluida` (`claude --agent orquestrador`). A revisão de arquitetura aprovou com notas na rodada 1 (rodada 0 bloqueada pela regra da `Idempotency-Key`). A verificação ao vivo fez check-in de uma chegada do seed. Recriar a demo antes do roteiro.
+- 2026-11-14 — E03 `#concluida` (`claude --agent orquestrador`). O critério de desconto não se aplica (H24 do servidor). A verificação ao vivo criou dois walk-ins; recriar a demo antes do roteiro.
+- 2026-11-14 — E04 `#concluida` (`claude --agent orquestrador`). O critério 3 foi verificado pela D2 do ADR 0007 (texto a corrigir). A verificação ao vivo trocou a UH da R-2026-000005 e desfez o check-in da R-2026-000003; recriar a demo antes do roteiro.
