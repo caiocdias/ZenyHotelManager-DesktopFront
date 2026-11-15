@@ -5,9 +5,14 @@ import com.zeny.desktop.core.error.ProblemMapper
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import de.quati.ogen.client.ktor.ogenAuthAttr
 import io.ktor.client.call.NoTransformationFoundException
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.HttpStatement
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.ContentConvertException
+import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.CancellationException
+import kotlinx.io.readByteArray
 import kotlinx.serialization.SerializationException
 import java.io.IOException
 import java.nio.channels.UnresolvedAddressException
@@ -17,6 +22,15 @@ class ApiResponse<T : Any>(
     val etag: String?,
     val status: Int,
 )
+
+/** O corpo binário de uma resposta, com os cabeçalhos que o `core` interpreta. Os bytes nunca vão a `toString`. */
+class BinaryResponse(
+    val bytes: ByteArray,
+    val contentType: String?,
+    val contentDisposition: String?,
+) {
+    override fun toString(): String = "BinaryResponse(${bytes.size} bytes)"
+}
 
 /**
  * Executa uma chamada gerada do `sdk` e a traduz em `ApiResponse` ou `ApiError`.
@@ -43,6 +57,37 @@ class ApiExecutor {
         return run(CallOptions(key, approvalToken), call)
     }
 
+    /**
+     * Executa uma chamada que devolve um corpo binário (sem `Intent`), com os mesmos erros tipados do `execute`.
+     * Um corpo acima de `maxBytes` vira `IncompatibleResponse` sem ler o resto.
+     */
+    suspend fun executeBytes(
+        maxBytes: Long,
+        call: suspend (CallOptions) -> HttpStatement,
+    ): BinaryResponse =
+        try {
+            val options = CallOptions(null, null)
+            call(options).execute { raw ->
+                if (raw.status.value !in HTTP_SUCCESS) throw errorOf(options, raw)
+                val declared = raw.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+                if (declared != null && declared > maxBytes) throw tooLarge()
+                val bytes = raw.bodyAsChannel().readBuffer(maxBytes + 1).readByteArray()
+                if (bytes.size > maxBytes) throw tooLarge()
+                BinaryResponse(bytes, raw.headers[HttpHeaders.ContentType], raw.headers[HttpHeaders.ContentDisposition])
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ApiError) {
+            throw e
+        } catch (e: IOException) {
+            throw ApiError.Network(e)
+        } catch (e: UnresolvedAddressException) {
+            throw ApiError.Network(e)
+        }
+
+    private fun tooLarge(): ApiError =
+        ApiError.IncompatibleResponse(ResponseFormatException(IOException("corpo acima do teto")))
+
     private suspend fun <T : Any> run(
         options: CallOptions,
         call: suspend (CallOptions) -> HttpResponseTyped<T>,
@@ -50,7 +95,7 @@ class ApiExecutor {
         try {
             val typed = call(options)
             val raw = typed.raw
-            if (raw.status.value !in HTTP_SUCCESS) throw errorOf(options, typed)
+            if (raw.status.value !in HTTP_SUCCESS) throw errorOf(options, raw)
             ApiResponse(typed.body(), raw.headers[HttpHeaders.ETag], raw.status.value)
         } catch (e: CancellationException) {
             throw e
@@ -73,9 +118,8 @@ class ApiExecutor {
 
     private suspend fun errorOf(
         options: CallOptions,
-        typed: HttpResponseTyped<*>,
+        raw: HttpResponse,
     ): ApiError {
-        val raw = typed.raw
         val error = ProblemMapper.fromResponse(raw)
         val code = (error as? ApiError.Problem)?.code
         val secured =

@@ -4,6 +4,7 @@ import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.facade.AccountFacade
 import com.zeny.desktop.core.facade.ApprovalFacade
+import com.zeny.desktop.core.facade.DocumentsFacade
 import com.zeny.desktop.core.facade.GuestsFacade
 import com.zeny.desktop.core.facade.HotelFacade
 import com.zeny.desktop.core.facade.RatesFacade
@@ -84,6 +85,7 @@ class ZenyCore internal constructor(
     val guests: GuestsFacade = GuestsFacade(sdkApis.guests, sdkExecutor)
     val rates: RatesFacade = RatesFacade(sdkApis.rates, sdkExecutor)
     val traces: TracesFacade = TracesFacade(sdkApis.frontdesk, sdkApis.staff, sdkExecutor)
+    val documents: DocumentsFacade = DocumentsFacade(sdkApis.frontdesk, sdkExecutor)
 
     /**
      * O stream da sessão corrente: cada conexão leva o `Bearer` da sessão aberta quando ela abre. Sair de uma sessão
