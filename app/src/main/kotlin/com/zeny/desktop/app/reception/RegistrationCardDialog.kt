@@ -1,6 +1,7 @@
 package com.zeny.desktop.app.reception
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,7 +42,14 @@ internal fun RegistrationCardDialog(
     onClose: () -> Unit,
 ) {
     LaunchedEffect(state) { state.start() }
-    Dialog(onDismissRequest = {}, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // Sem visualizador (carregando ou com erro) o Esc sai; com ele, quem fecha é o "Fechar" do próprio visualizador.
+    Dialog(onDismissRequest = {
+        if (state.viewer ==
+            null
+        ) {
+            onClose()
+        }
+    }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(
             Modifier.fillMaxSize(DIALOG_FRACTION).testTag("registration-card-dialog"),
             shape = MaterialTheme.shapes.medium,
@@ -51,7 +59,7 @@ internal fun RegistrationCardDialog(
             when {
                 viewer != null -> PdfViewer(state.title, viewer.document, viewer.actions, onClose)
                 error != null -> CardError(error, onRetry = state::retry, onClose = onClose)
-                else -> LoadingState()
+                else -> CardLoading(onClose)
             }
         }
     }
@@ -131,3 +139,11 @@ internal fun rememberRegistrationCard(
     detail: ReservationDetailState,
     factory: () -> ((String, String) -> RegistrationCardState)?,
 ): RegistrationCardUi = remember(detail) { RegistrationCardUi(detail, factory) }
+
+@Composable
+private fun CardLoading(onClose: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.weight(1f)) { LoadingState() }
+        OutlinedButton(onClick = onClose, modifier = Modifier.testTag("registration-card-close")) { Text("Cancelar") }
+    }
+}

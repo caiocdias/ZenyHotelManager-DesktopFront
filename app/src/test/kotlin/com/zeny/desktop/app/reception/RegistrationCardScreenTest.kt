@@ -38,6 +38,7 @@ import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.StayReservationResponse
 import com.zeny.desktop.sdk.model.StayRoomResponse
 import de.quati.kotlin.util.Option
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import java.time.Instant
@@ -487,5 +488,28 @@ class RegistrationCardScreenTest {
             waitForIdle()
             onNodeWithTag("pdf-viewer").assertDoesNotExist()
             assertTrue(isClosed(documents.single()))
+        }
+
+    @Test
+    fun cancellingWhileLoadingClosesDialogAndDiscardsLateDownload() =
+        runComposeUiTest {
+            val gate = CompletableDeferred<Unit>()
+            cards.result = {
+                gate.await()
+                PdfDocument(RC_PDF, "ficha.pdf")
+            }
+            screen(source())
+            openReservation()
+            onNodeWithTag("open-registration-card").performClick()
+            waitForIdle()
+            onNodeWithTag("registration-card-dialog").assertExists()
+            onNodeWithText("Cancelar").assertExists()
+            onNodeWithTag("registration-card-close").performClick()
+            waitForIdle()
+            onNodeWithTag("registration-card-dialog").assertDoesNotExist()
+            gate.complete(Unit)
+            waitForIdle()
+            onNodeWithTag("pdf-viewer").assertDoesNotExist()
+            assertTrue(documents.all { isClosed(it) })
         }
 }
