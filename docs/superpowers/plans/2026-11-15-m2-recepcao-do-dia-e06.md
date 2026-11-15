@@ -15,7 +15,7 @@
 
 **Fatos que o plano usa:**
 - O seed já tem chegadas sem UH (`A3`, `A4`) e hospedados para a troca (`H1` a `H5`) em `DemoCatalog.reservations`; o roteiro do M1 lista as linhas da saída do seed (o teste `tests/test_roteiro_m1_ataque.sh` compara com a ordem do `SeedItem`).
-- `POST /api/v1/traces` não é idempotente no servidor: o seeder precisa listar antes (`GET /api/v1/traces` com o filtro da reserva ou da UH) e só criar o que falta, reconhecendo o recado pelo texto exato.
+- `POST /api/v1/traces` não é idempotente no servidor: o seeder precisa listar antes (`GET /api/v1/traces` com o filtro da reserva ou da UH) e só criar o que falta, reconhecendo o recado pela chave vínculo + setor (Global Constraint).
 - O administrador do seed lê os setores (`GET /api/v1/departments`); o `DepartmentResponse` tem a chave estável `key` (`RECEPTION`, `HOUSEKEEPING`, `MAINTENANCE`), que o seed usa (o nome pode mudar).
 - As reservas do seed são achadas por `BookingGateway.findReservation("DEMO-SEED-<slot>")` e as UHs por `SeededConfig.roomIds`; o `BookingSeeder` não muda.
 - Rodar o seed de novo depois da demo: o `BookingSeeder.settle` refaz o check-in de um `H*` que voltou a `CONFIRMED`; por isso o roteiro só desfaz o check-in feito no próprio roteiro (`A3`/`A4`) e só edita e resolve recados criados pelo usuário.
@@ -42,10 +42,10 @@
 
 ## Review Focus
 
-1. **Seed rodado duas vezes** não duplica recados. Testes `secondRunCreatesNothing` (Task 2) e o seed duas vezes contra o servidor real (Task 5).
+1. **Seed rodado duas vezes** não duplica recados. Testes `secondRunCreatesNothing` (Task 2) e o seed rodado de novo contra o servidor real, antes e depois da demo (Task 6).
 2. **Setor, reserva ou UH ausente:** `SeedFailure` em pt-BR antes de qualquer criação. Testes `missingDepartmentFails` e `missingReservationFails` (Task 2).
-3. **Roteiro divergente da build:** os "Resultado esperado" conferidos executando o roteiro do zero no Linux com o pacote real (Task 5); as linhas do seed e os rótulos conferidos por teste (Task 4).
-4. **Segredos no roteiro novo:** as mesmas travas do `roteiro-m1.md` (Task 4).
+3. **Roteiro divergente da build:** os "Resultado esperado" conferidos executando o roteiro do zero no Linux com o pacote real (Task 6); as linhas do seed e os rótulos conferidos por teste (Task 5).
+4. **Segredos no roteiro novo:** as mesmas travas do `roteiro-m1.md`, extraídas na Task 4 e aplicadas na Task 5.
 
 ---
 
@@ -103,30 +103,43 @@
 
 ---
 
-### Task 4: O roteiro do M2
+### Task 4: Testes de roteiro parametrizados (refatoração pura)
 
-**Estimativa:** 45 min · **Depende de:** Task 3 · **Risco:** alto (é o que o usuário executa no gate; segredos)
+**Estimativa:** 40 min · **Depende de:** Task 3 · **Risco:** alto (travas de segredo)
+
+**Files:**
+- Modify (testes existentes, refatoração mandada, sem afrouxar): `tests/test_roteiro_m1_ataque.sh`, `tests/test_roteiro_m1_zero_ataque.sh` e as partes de roteiro de `tests/test_docs.sh` passam a receber o caminho do roteiro, separando as travas genéricas (segredos: `Get-Credential`/`Read-Host -AsSecureString`, `Remove-Variable pin`, nenhum `--*-password`; regras do PowerShell 5.1; folha de senhas por item; linhas idênticas ao `LEIA-ME.md`) das asserções só do M1 (estrutura dos passos 0–12, o passo de sair depois da mudança ao vivo, a legenda contra o seed, "Gerente nos passos do mapa e do ao vivo"). As genéricas ficam num arquivo comum em `tests/lib/` (por exemplo `roteiro_checks.sh`).
+- Nesta tarefa tudo roda só sobre o `roteiro-m1.md`.
+
+- [ ] **Step 1:** conte as asserções de cada teste antes. - [ ] **Step 2:** refatore. - [ ] **Step 3:** os três testes verdes no `roteiro-m1.md`, com a mesma contagem de asserções (ou maior), e uma mutação de segredo no roteiro (por exemplo um `--admin-password`) ainda reprova; gate verde.
+- [ ] **Step 4: Commit** (`Parametriza os testes de roteiro pelo arquivo`).
+
+---
+
+### Task 5: O roteiro do M2
+
+**Estimativa:** 45 min · **Depende de:** Task 4 · **Risco:** alto (é o que o usuário executa no gate)
 
 **Files:**
 - Modify: `docs/demo/roteiro-m2.md` (o roteiro inteiro, pela Global Constraint "Roteiro")
-- Modify (testes existentes, parametrização mandada, sem afrouxar): `tests/test_roteiro_m1_ataque.sh`, `tests/test_roteiro_m1_zero_ataque.sh` e as partes de roteiro de `tests/test_docs.sh` passam a rodar sobre os dois roteiros (variável com o caminho), mantendo todas as travas de segredo (`Get-Credential`/`Read-Host -AsSecureString`, `Remove-Variable pin`, nenhum `--*-password`, regras do PowerShell 5.1, folha de senhas por item, linhas idênticas ao `LEIA-ME.md`)
-- Create: `tests/test_roteiro_m2_ataque.sh` (só o que é do M2: as linhas do seed com `recados`; os rótulos e textos de tela citados existem no código do `app` ou do `design` — "Recados", "Novo recado", "Ficha de registro", "Salvar como…", "Imprimir", "Trocar UH", "Desfazer check-in", "Walk-in", "Alguém alterou este recado. Confira e salve de novo."; o desfazer usa só `A3`/`A4`; nenhum segredo literal)
+- Create: `tests/test_roteiro_m2_ataque.sh`: aplica ao `roteiro-m2.md` as travas genéricas da Task 4 e acrescenta só o que é do M2 (as linhas do seed com `recados`; os rótulos e textos de tela citados existem no código do `app` ou do `design` — "Recados", "Novo recado", "Ficha de registro", "Salvar como…", "Imprimir", "Trocar UH", "Desfazer check-in", "Walk-in", "Alguém alterou este recado. Confira e salve de novo."; o desfazer usa só `A3`/`A4`; nenhum segredo literal)
 
-- [ ] **Step 1: Testes que falham** sobre o roteiro provisório. - [ ] **Step 2:** FAIL. - [ ] **Step 3:** escreva o roteiro e parametrize. - [ ] **Step 4:** PASS; gate verde.
+- [ ] **Step 1: Teste que falha** sobre o roteiro provisório. - [ ] **Step 2:** FAIL. - [ ] **Step 3:** escreva o roteiro. - [ ] **Step 4:** PASS; gate verde.
 - [ ] **Step 5: Commit** (`Escreve o roteiro do M2`).
 
 ---
 
-### Task 5: O roteiro do M2 executado no notebook
+### Task 6: O roteiro do M2 executado no notebook
 
-**Estimativa:** 45 min · **Depende de:** Task 4 · **Risco:** alto (recria o ambiente; confere a demo)
+**Estimativa:** 45 min · **Depende de:** Task 5 · **Risco:** alto (recria o ambiente; confere a demo)
 
 **Files:**
 - Modify: `docs/demo/roteiro-m2.md` (só os "Resultado esperado" que divergirem do que o app e o servidor fazem de fato, com o motivo no relatório)
 
 **Interfaces:** nenhuma de código. A tarefa segue o roteiro do zero no Linux com o pacote real (`build/demo-package/` gerado pelo `package.sh` a partir do HEAD), adaptando o que é de Windows (PowerShell → bash; janelas → variáveis), como a 5b da M1 E07:
-- recria o ambiente (`down -v`, `up`), troca a senha do admin, roda o seed (tempo abaixo de 2 minutos; a saída bate com o roteiro) e roda o seed **de novo** (a segunda saída bate com o texto do passo "No fim");
-- confere cada passo do M2 pela API, pelas verificações ao vivo do marco e por capturas do app (o relatório lista o que foi conferido e como);
+- recria o ambiente (`down -v`, `up`), troca a senha do admin, roda o seed (tempo abaixo de 2 minutos; a saída bate com o roteiro) e roda o seed de novo logo em seguida (idempotência sobre o estado inicial);
+- confere cada passo do M2 seguindo o próprio fluxo do roteiro, pela API e por capturas do app (o relatório lista o que foi conferido e como); as verificações ao vivo que escrevem (`CHECKIN`, `STAY`, `WALKIN`, `TRACES`) não rodam antes dessa conferência, para não gastar as candidatas nem mudar as contagens;
+- depois da demo, roda o seed uma terceira vez e compara a saída com o passo "No fim" (os efeitos da demo: check-in desfeito em `A3`/`A4`, o hospedado trocado de UH com a origem suja, o walk-in, os recados do usuário);
 - não executa o que só existe no Windows (impressão real, diálogos nativos), que fica com o usuário.
 
 - [ ] **Step 1:** execute e anote cada divergência. - [ ] **Step 2:** corrija só o texto do roteiro. - [ ] **Step 3:** gate verde.
@@ -137,7 +150,7 @@
 ## Verificação do gate (orquestrador, depois das tarefas)
 
 1. Clone limpo do HEAD: `./gradlew build --max-workers=2`, `ktlintCheck detekt`, `:app:desktopJar :demo-seed:seedJar` e `bash tests/run.sh` verdes; o JAR do pacote abre no Linux (`xwininfo`).
-2. Ambiente recriado (`down -v`, `up`, seed), `smokeTest` e as verificações ao vivo do marco, nesta ordem e por último as que escrevem: `ZENY_LIVE_REALTIME`, `ZENY_LIVE_RECEPTION`, `ZENY_LIVE_CARD`, `ZENY_LIVE_TRACES`, `ZENY_LIVE_CHECKIN`, `ZENY_LIVE_WALKIN`, `ZENY_LIVE_STAY`; depois, o ambiente é recriado de novo, para entregar a demo limpa.
+2. Ambiente recriado (`down -v`, `up`, seed), `smokeTest` e as verificações ao vivo do marco: primeiro as que só leem (`ZENY_LIVE_RECEPTION`, `ZENY_LIVE_CARD`), depois as que escrevem (`ZENY_LIVE_REALTIME`, `ZENY_LIVE_TRACES`, `ZENY_LIVE_CHECKIN`, `ZENY_LIVE_WALKIN`, `ZENY_LIVE_STAY`); depois, o ambiente é recriado de novo, para entregar a demo limpa.
 3. "Nenhuma etapa depende de pedido ao servidor": conferir `docs/pedidos-servidor.md` (PF-01 aberto, nenhuma etapa dependente) e as dependências do roadmap.
 4. Pacote regenerado (`tools/server-env/package.sh`) com os JARs do HEAD, os dois roteiros e o `VERSAO.txt`; nenhum segredo no pacote.
-5. A etapa fica `#em-andamento` com "Aguardando o Windows" e entra na lista "Validações acumuladas no Windows" (regra 7), registrando que o `roteiro-m2.md` fecha também a M0 E02.
+5. A etapa fica `#em-andamento` com "Aguardando o Windows" e entra na lista "Validações acumuladas no Windows" (regra 7), registrando que o `roteiro-m2.md` fecha também a M0 E02: a entrada 1 da lista em `docs/roadmaps/README.md` passa a pedir o `roteiro-m2.md`, e a ruling vai às "Decisões para o usuário" do handoff.
