@@ -83,6 +83,8 @@ docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.y
 docker compose -p zeny-front -f server/docker/compose.yaml -f compose.override.yaml --env-file .env up -d
 ```
 
+**A recriação vale só para o dia em que é feita.** O servidor fecha o dia sozinho às 03:00 do dia seguinte: as chegadas confirmadas sem check-in viram "Não compareceu", com multa, as diárias são lançadas e a data operacional passa ao dia seguinte. Recrie a demo (`down -v`, `up -d` e o seed) no mesmo dia do roteiro ou da demo, depois das 03:00, e nunca use no dia seguinte um ambiente recriado na véspera.
+
 Depois de recriar, popule os dados com o `demo-seed.jar`, que já vem na pasta `app\` deste pacote. Depois do `down -v`, a senha inicial do administrador volta a ser a `ZENY_ADMIN_PASSWORD` do `.env`, mesmo que uma execução anterior a tenha trocado.
 
 O seed lê os segredos de variáveis de ambiente (`$env:ZENY_SEED_ADMIN_PASSWORD` e as demais abaixo), nunca da linha de comando, que fica na lista de processos. O bloco abaixo pede cada valor numa janela de credencial ou num prompt sem eco. Não digite o valor numa linha do PowerShell (por exemplo, `$env:… =` com a senha): o PowerShell 5.1 grava em texto puro cada linha digitada no histórico (`ConsoleHost_history.txt`). Senhas têm de 12 a 128 caracteres; o PIN do Gerente, de 4 a 8 dígitos. Escolha os seus próprios valores; em cada janela, só a senha importa (o nome do usuário é só um rótulo).

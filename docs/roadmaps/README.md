@@ -67,6 +67,7 @@ Pendentes da regra 7, na ordem em que entraram. Por decisão do usuário (2026-1
 
 1. **M0 E02** (servidor em `57eb5fac5b8a`): executar o `roteiro-m2.md` do pacote mais recente, do zero; ele acumula o do M1 (decisão da M2 E06). Para não construir a imagem no Windows, fazer antes o `docker load` de `images/zeny-server-images.tar`. A aprovação fecha a etapa `#concluida`.
 2. **M2 E06** (gate do M2): a mesma execução do `roteiro-m2.md` da entrada 1. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
+3. **M0 E03** (servidor em `5e06f16d51ff`): a mesma execução do `roteiro-m2.md` da entrada 1, com o pacote desta etapa ou um mais recente. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
 
 ## Pendências do usuário antes da primeira execução
 
@@ -86,3 +87,4 @@ Estão no design, §10:
 - 2026-11-15 — a M2 E06 (gate do M2) entra na lista "Validações acumuladas no Windows", e a entrada 1 passa a pedir o `roteiro-m2.md`, que acumula o do M1 (`claude --agent orquestrador`).
 - 2026-11-15 — por decisão do usuário, a validação no Windows (regra 7) fica para o fim do M3: a lista acumulada é executada no gate do M3, e o M3 começa sem esperar o Windows (`claude --agent orquestrador`).
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`), contra o servidor em `5e06f16d51ff`. Entra a M0 E03 (sincronização), que vem antes da M3 E01 (regra 3). A M6 E08 sai de `#bloqueada`, porque as etapas do fechamento (M6 E11 do servidor) chegaram. A regra 5 foi revista para o fechamento automático das 03:00. O tratamento do primeiro `oneOf` do contrato ficou no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md), decidido pelo usuário em entrevista. Notas novas na M3 E04, na M3 E05, na M5 E02 e na M7 E10.
+- 2026-11-16 — a M0 E03 entra na lista "Validações acumuladas no Windows" (item 3), aguardando o Windows pela regra 7; o M3 pode começar (`claude --agent orquestrador`).

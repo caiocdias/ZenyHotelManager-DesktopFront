@@ -36,6 +36,8 @@ java -version
 
 **Resultado esperado:** a primeira linha diz versão `25` (por exemplo, `openjdk version "25.0.1"`). Outra versão, ou `java` não reconhecido: instale o JDK 25.
 
+**A recriação vale só para o dia em que é feita.** O servidor fecha o dia sozinho às 03:00 do dia seguinte: as chegadas confirmadas sem check-in viram "Não compareceu", com multa, as diárias são lançadas e a data operacional passa ao dia seguinte. Recrie a demo (`down -v`, `up -d` e o seed) no mesmo dia do roteiro ou da demo, depois das 03:00, e nunca use no dia seguinte um ambiente recriado na véspera.
+
 ### Folha de senhas
 
 Antes de qualquer outro passo, escolha os valores abaixo e **anote** cada um fora da pasta do pacote: num gerenciador de senhas ou no papel. Não os grave num arquivo dentro da pasta. Você vai precisar deles nos passos 5, 7, 8 e 10, e de novo se rodar o seed outra vez.
