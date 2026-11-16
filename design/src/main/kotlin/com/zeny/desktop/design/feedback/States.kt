@@ -51,7 +51,15 @@ fun ErrorState(
     error: ApiError,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
+) = ErrorState(errorMessage(error), onRetry, modifier)
+
+/** Para quem já guarda o texto de pessoa da falha (o `userMessage`). */
+@Composable
+fun ErrorState(
+    message: String,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
 ) = CenteredState(modifier) {
-    Text(errorMessage(error), color = MaterialTheme.colorScheme.error)
+    Text(message, color = MaterialTheme.colorScheme.error)
     Button(onClick = onRetry) { Text("Tentar de novo") }
 }
