@@ -172,8 +172,8 @@ private fun ServerConnection.activeSessionIds(): Flow<String?> =
 private fun SessionState.activeSessionId(): String? = (this as? SessionState.Active)?.sessionId
 
 /**
- * A tela da área aberta na casca: a Recepção é o painel do dia; a Governança, o mapa de UHs; as demais ainda mostram
- * só o nome.
+ * A tela da área aberta na casca: a Recepção é o painel do dia; as Reservas, a busca de reservas; a Governança, o mapa
+ * de UHs; as demais ainda mostram só o nome.
  */
 @Composable
 internal fun AreaContent(

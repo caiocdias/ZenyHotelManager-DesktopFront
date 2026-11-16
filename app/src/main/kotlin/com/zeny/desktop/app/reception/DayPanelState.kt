@@ -42,7 +42,7 @@ private val tabNames =
  *
  * - Nenhuma página sai antes da primeira data operacional: o `fetch` espera por ela, e cada listagem usa a data da
  *   carga que a criou. A primeira carga das abas é um `reload`; as seguintes, `refresh`, que não esvazia a tabela.
- * - Cada página resolve os titulares que faltam no cache (até [HolderNames] leituras em paralelo; `403` e
+ * - Cada página resolve os titulares que faltam no cache (até 4 leituras em paralelo; `403` e
  *   `404` viram "—") e os tipos de UH, lidos uma vez por carga (`ApiError.Problem` vira "—" para todos).
  * - Atualizam o painel: [refresh], o ganho de foco da janela, o primeiro `ready` e todo `reset` do stream, a
  *   mensagem de `end-of-day` e, uma vez por rajada, as de `rooms` (2 s depois da primeira). No máximo uma

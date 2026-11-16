@@ -135,7 +135,11 @@ private fun DocumentRow(search: ReservationSearchState) {
         GUEST_DOCUMENT_TYPES.forEach { type ->
             FilterChip(
                 selected = search.documentType == type,
-                onClick = { search.documentType = type },
+                onClick = {
+                    search.documentType = type
+                    // O campo do país some para estes tipos: o que sobrou de uma escolha anterior não vai à busca.
+                    if (type !in COUNTRY_REQUIRED) search.issuingCountry = ""
+                },
                 label = { Text(ReceptionText.document(type, "").trim()) },
                 modifier = Modifier.testTag("doc-type-$type"),
             )

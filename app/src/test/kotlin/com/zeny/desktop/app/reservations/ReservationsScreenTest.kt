@@ -197,6 +197,25 @@ class ReservationsScreenTest {
         }
 
     @Test
+    fun switchingToBrazilianTypeDropsTheCountry() =
+        runComposeUiTest {
+            val source = fakeSource()
+            screen(source)
+            onNodeWithTag("doc-type-PASSPORT").performClick()
+            onNodeWithTag("issuing-country").performTextInput("AR")
+            onNodeWithTag("doc-type-CPF").performClick()
+            onNodeWithTag("document-number").performTextInput(FULL_DOCUMENT)
+            onNodeWithTag("document-submit").performClick()
+            waitForIdle()
+            assertEquals(
+                null,
+                source.documentCalls
+                    .single()
+                    .query.issuingCountry,
+            )
+        }
+
+    @Test
     fun countryFieldOnlyForForeignTypes() =
         runComposeUiTest {
             screen(fakeSource())
