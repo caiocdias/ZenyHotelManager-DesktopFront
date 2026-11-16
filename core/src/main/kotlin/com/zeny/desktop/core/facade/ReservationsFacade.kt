@@ -19,6 +19,7 @@ import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.QuoteStayParamChannel
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
+import com.zeny.desktop.sdk.model.ReservationDocumentSearchRequest
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.RoomAssignRequest
@@ -92,6 +93,42 @@ private val MOVE_REASONS =
         RoomMoveRequest.Reason.ROOM_ISSUE,
         RoomMoveRequest.Reason.OPERATIONAL,
     )
+
+/** As situações da reserva no contrato, na ordem em que a busca as envia. */
+val RESERVATION_STATUSES: List<String> =
+    listOf("PROVISIONAL", "CONFIRMED", "IN_HOUSE", "CHECKED_OUT", "CANCELLED", "NO_SHOW")
+
+/** Menor termo de nome que a busca aceita, já aparado. */
+private const val MIN_NAME_LENGTH = 2
+
+/**
+ * Os filtros da busca de reservas; `null` ou em branco não vão. O `toString` não mostra nada: o nome é dado pessoal.
+ */
+data class ReservationFilter(
+    val code: String? = null,
+    val bookingCode: String? = null,
+    val externalId: String? = null,
+    val name: String? = null,
+    val from: BusinessDate? = null,
+    val to: BusinessDate? = null,
+    val statuses: Set<String> = emptySet(),
+) {
+    override fun toString(): String = "ReservationFilter(***)"
+}
+
+/** O documento da busca por documento; o `toString` não mostra nada: o número é dado pessoal. */
+data class DocumentQuery(
+    val type: String,
+    val number: String,
+    val issuingCountry: String?,
+) {
+    override fun toString(): String = "DocumentQuery(***)"
+}
+
+/** Causa que guarda só o nome da classe da falha original: a mensagem dela pode trazer a URL com o termo buscado. */
+private class SearchFailure(
+    className: String?,
+) : Exception(className)
 
 /**
  * As reservas do dia: as listas de chegadas, saídas e hospedados, o detalhe, o histórico e as alocações de UH.
@@ -339,6 +376,90 @@ class ReservationsFacade internal constructor(
         }
         return rooms
     }
+
+    /**
+     * Uma página da busca por filtros. Entrada inválida (situação desconhecida, período invertido, nome com menos de
+     * 2 caracteres) lança `IllegalArgumentException` antes da rede, sem o valor. Os textos vão aparados e as situações
+     * em ordem do contrato. A falha de rede ou de formato não leva a mensagem original: a URL traz o termo buscado.
+     */
+    suspend fun search(
+        filter: ReservationFilter,
+        cursor: String?,
+        limit: Int,
+    ): Page<ReservationListItemResponse> {
+        val from = filter.from
+        val to = filter.to
+        require(from == null || to == null || !to.value.isBefore(from.value)) { "período inválido" }
+        val name = filter.name.presentOrNull()
+        require(name == null || name.length >= MIN_NAME_LENGTH) { "nome curto demais" }
+        val status = statusesOf(filter.statuses).takeIf { it.isNotEmpty() }?.joinToString(",")
+        val page =
+            withoutTermInFailure {
+                executor.execute {
+                    reservations.searchReservations(
+                        code = filter.code.presentOrNull(),
+                        bookingCode = filter.bookingCode.presentOrNull(),
+                        externalId = filter.externalId.presentOrNull(),
+                        name = name,
+                        from = from?.toApi(),
+                        to = to?.toApi(),
+                        status = status,
+                        cursor = cursor,
+                        limit = limit,
+                        block = it.headers,
+                    )
+                }
+            }.value
+        return Page(page.items, page.nextCursor.valueOrNull())
+    }
+
+    /**
+     * Uma página da busca por documento: o número vai só no corpo (`POST`), nunca na URL, e as mensagens de erro não o
+     * trazem. Tipo ou situação desconhecidos e número em branco lançam `IllegalArgumentException` antes da rede.
+     */
+    suspend fun searchByDocument(
+        query: DocumentQuery,
+        statuses: Set<String>,
+        cursor: String?,
+        limit: Int,
+    ): Page<ReservationListItemResponse> {
+        val type =
+            ReservationDocumentSearchRequest.Type.fromSerialOrNull(query.type)
+                ?: throw IllegalArgumentException("tipo de documento inválido")
+        val number = query.number.presentOrNull() ?: throw IllegalArgumentException("número de documento inválido")
+        val country = query.issuingCountry.presentOrNull()?.uppercase()
+        val request =
+            ReservationDocumentSearchRequest(
+                issuingCountry = country?.let { Option.Some(it) } ?: Option.Undefined,
+                number = number,
+                statuses = statusesOf(statuses).map { ReservationDocumentSearchRequest.StatusesItem.fromSerial(it) },
+                type = type,
+            )
+        val page =
+            withoutTermInFailure {
+                executor.execute { reservations.searchReservationsByDocument(cursor, limit, request, it.headers) }
+            }.value
+        return Page(page.items, page.nextCursor.valueOrNull())
+    }
+
+    /** As situações em ordem do contrato; uma fora dele lança `IllegalArgumentException` sem o valor. */
+    private fun statusesOf(statuses: Set<String>): List<String> {
+        require(RESERVATION_STATUSES.containsAll(statuses)) { "situação inválida" }
+        return RESERVATION_STATUSES.filter { it in statuses }
+    }
+
+    private fun String?.presentOrNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Troca a causa de `Network` e `IncompatibleResponse` por uma que guarda só o nome da classe original. */
+    @Suppress("SwallowedException") // a troca é proposital: a mensagem e a causa originais trazem o termo buscado
+    private suspend fun <T> withoutTermInFailure(block: suspend () -> T): T =
+        try {
+            block()
+        } catch (e: ApiError.Network) {
+            throw ApiError.Network(SearchFailure(e.cause?.let { it::class.qualifiedName }))
+        } catch (e: ApiError.IncompatibleResponse) {
+            throw ApiError.IncompatibleResponse(SearchFailure(e.cause?.message))
+        }
 
     private fun roomMoveRequestOf(input: RoomMoveInput): RoomMoveRequest {
         val room = idOf(input.roomId, "UH")
