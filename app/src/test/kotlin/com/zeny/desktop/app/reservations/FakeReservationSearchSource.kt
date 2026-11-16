@@ -65,9 +65,11 @@ data class DocumentCall(
  * Servidor de mentira para a busca de reservas.
  *
  * - [reservations] é a base em memória, na ordem em que a página sai. `search` filtra por código, código da reserva,
- *   id externo, nome do titular (em [holders]), período (que cruza o da reserva) e situações; `searchByDocument` acha
- *   as reservas cujo titular está em [documentHolders] sob o par (tipo, número), com o mesmo filtro de situações.
- * - A paginação é por índice: o cursor é o índice do próximo item, e o `limit` recebido vale.
+ *   id externo, nome do titular (em [holders]), período (que cruza o da reserva, inclusivo nas bordas) e situações;
+ *   `searchByDocument` acha as reservas cujo titular está em [documentHolders] sob o par (tipo, número), com o mesmo
+ *   filtro de situações.
+ * - A paginação é por índice: o cursor é numérico (o índice do próximo item), e o `limit` recebido vale (maior que 0).
+ * - Um titular sem resumo em [holders] nem erro em [holderFailures] é erro do teste, não `404`.
  * - Cada chamada fica registrada ([searchCalls], [documentCalls], [holderCalls], [businessDayCalls], [roomTypesCalls]).
  * - [hold] prende a próxima resposta de uma operação até o teste completar o portão devolvido; cada operação tem o
  *   seu portão. [failures] e [holderFailures] programam o erro (lançado depois do portão, se houver).
@@ -119,6 +121,7 @@ class FakeReservationSearchSource : ReservationSearchSource {
         cursor: String?,
         limit: Int,
     ): Page<ReservationListItemResponse> {
+        require(limit > 0) { "limit inválido" }
         searchCalls += SearchCall(filter, cursor, limit)
         reached(Op.SEARCH)
         return pageOf(reservations.filter { matches(it, filter) }, cursor, limit)
@@ -130,6 +133,7 @@ class FakeReservationSearchSource : ReservationSearchSource {
         cursor: String?,
         limit: Int,
     ): Page<ReservationListItemResponse> {
+        require(limit > 0) { "limit inválido" }
         documentCalls += DocumentCall(query, statuses, cursor, limit)
         reached(Op.SEARCH_BY_DOCUMENT)
         val guests = documentHolders[query.type to query.number].orEmpty()
@@ -141,7 +145,7 @@ class FakeReservationSearchSource : ReservationSearchSource {
         holderCalls += guestId
         reached(Op.HOLDER)
         holderFailures[guestId]?.let { throw it }
-        return holders.getValue(guestId)
+        return holders[guestId] ?: error("holder sem resumo no fake: $guestId")
     }
 
     override suspend fun roomTypes(): List<RoomTypeResponse> {
