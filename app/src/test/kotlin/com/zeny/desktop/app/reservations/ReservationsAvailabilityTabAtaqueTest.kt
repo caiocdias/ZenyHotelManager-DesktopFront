@@ -351,4 +351,27 @@ class ReservationsAvailabilityTabAtaqueTest {
 
             assertEquals(2, source.availabilityCalls.size)
         }
+
+    @Test
+    fun newSessionWithoutPermissionNeverLoadsCalendarAndReturnsToSearch() =
+        runComposeUiTest {
+            val source = availability()
+            val conn = Conn(search(), null, source)
+            area(conn)
+            click(TAB)
+            assertEquals(1, source.availabilityCalls.size)
+
+            source.permissions = emptySet()
+            val permissionsBefore = source.permissionsCalls
+            val gate = source.hold(FakeAvailabilitySource.Op.PERMISSIONS)
+            conn.state.value = SessionState.Active("u-1", "s-2", false)
+            waitForIdle()
+
+            assertEquals(1, source.availabilityCalls.size, "carregou o calendário na sessão nova sem ler a permissão")
+            gate.complete(Unit)
+            waitForIdle()
+            assertSearchOnly()
+            assertEquals(1, source.availabilityCalls.size)
+            assertEquals(permissionsBefore + 1, source.permissionsCalls)
+        }
 }

@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -314,10 +314,12 @@ private fun reservationsAvailability(
     sessionId: String,
     scope: CoroutineScope,
 ): ReservationsAvailability? {
-    val canRead by produceState(false, source, sessionId) {
-        value = source != null && runCatching { AVAILABILITY_READ in source.permissions() }.getOrDefault(false)
+    // A leitura pertence à (source, sessionId) que a produziu: com a chave nova, o valor da sessão anterior não vale.
+    val granted by produceState<Pair<AvailabilitySource, String>?>(null, source, sessionId) {
+        val allowed = source != null && runCatching { AVAILABILITY_READ in source.permissions() }.getOrDefault(false)
+        value = if (allowed) source to sessionId else null
     }
-    if (source == null || !canRead) return null
+    if (source == null || granted != (source to sessionId)) return null
     val availability =
         remember(source, sessionId) {
             ReservationsAvailability(AvailabilityState(source, scope), QuoteState(source, scope))
@@ -346,7 +348,7 @@ private fun ReservationsTabs(
 ) {
     var tab by remember { mutableStateOf(ReservationsTab.SEARCH) }
     Column(Modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = tab.ordinal) {
+        PrimaryTabRow(selectedTabIndex = tab.ordinal) {
             ReservationsTab.entries.forEach {
                 Tab(selected = tab == it, onClick = { tab = it }, text = { Text(it.label) })
             }
