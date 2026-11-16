@@ -2,10 +2,14 @@
 
 package com.zeny.desktop.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -13,8 +17,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -38,6 +45,10 @@ import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.reception.RoomMoveState
 import com.zeny.desktop.app.reception.UndoCheckInState
 import com.zeny.desktop.app.reception.WalkInState
+import com.zeny.desktop.app.reservations.AvailabilityScreen
+import com.zeny.desktop.app.reservations.AvailabilitySource
+import com.zeny.desktop.app.reservations.AvailabilityState
+import com.zeny.desktop.app.reservations.QuoteState
 import com.zeny.desktop.app.reservations.ReservationSearchState
 import com.zeny.desktop.app.reservations.ReservationsScreen
 import com.zeny.desktop.app.rooms.RoomMapScreen
@@ -274,7 +285,87 @@ private fun ReservationsArea(connection: ServerConnection) {
                     if (focused) detail?.reload()
                 }
             }
-            ReservationsScreen(search, detail)
+            val availability = reservationsAvailability(connection.availabilitySource(), sessionId, scope)
+            if (availability == null) {
+                ReservationsScreen(search, detail)
+            } else {
+                ReservationsTabs(availability) { ReservationsScreen(search, detail) }
+            }
+        }
+    }
+}
+
+private const val AVAILABILITY_READ = "reservations.availability.read"
+
+/** O calendário e a cotação de uma sessão; só existem com a permissão de leitura da disponibilidade. */
+private class ReservationsAvailability(
+    val calendar: AvailabilityState,
+    val quote: QuoteState,
+)
+
+/**
+ * A disponibilidade e a cotação da área Reservas, ou nulo enquanto as permissões não foram lidas, se a leitura falhou,
+ * se falta `reservations.availability.read` ou se a conexão não tem a porta. As permissões são lidas uma vez por
+ * sessão; os dois estados nascem com a chave `(source, sessionId)` e fecham ao sair da área.
+ */
+@Composable
+private fun reservationsAvailability(
+    source: AvailabilitySource?,
+    sessionId: String,
+    scope: CoroutineScope,
+): ReservationsAvailability? {
+    val canRead by produceState(false, source, sessionId) {
+        value = source != null && runCatching { AVAILABILITY_READ in source.permissions() }.getOrDefault(false)
+    }
+    if (source == null || !canRead) return null
+    val availability =
+        remember(source, sessionId) {
+            ReservationsAvailability(AvailabilityState(source, scope), QuoteState(source, scope))
+        }
+    DisposableEffect(availability) {
+        onDispose {
+            availability.calendar.close()
+            availability.quote.close()
+        }
+    }
+    return availability
+}
+
+private enum class ReservationsTab(
+    val label: String,
+) {
+    SEARCH("Busca"),
+    AVAILABILITY("Disponibilidade e cotação"),
+}
+
+/** A busca fica composta fora das abas só no estado: o conteúdo é recriado, mas os estados vivem acima. */
+@Composable
+private fun ReservationsTabs(
+    availability: ReservationsAvailability,
+    search: @Composable () -> Unit,
+) {
+    var tab by remember { mutableStateOf(ReservationsTab.SEARCH) }
+    Column(Modifier.fillMaxSize()) {
+        TabRow(selectedTabIndex = tab.ordinal) {
+            ReservationsTab.entries.forEach {
+                Tab(selected = tab == it, onClick = { tab = it }, text = { Text(it.label) })
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            when (tab) {
+                ReservationsTab.SEARCH -> {
+                    search()
+                }
+
+                ReservationsTab.AVAILABILITY -> {
+                    LaunchedEffect(availability) { availability.calendar.start() }
+                    AvailabilityScreen(
+                        availability.calendar,
+                        availability.quote,
+                        Modifier.fillMaxSize().padding(16.dp),
+                    )
+                }
+            }
         }
     }
 }
