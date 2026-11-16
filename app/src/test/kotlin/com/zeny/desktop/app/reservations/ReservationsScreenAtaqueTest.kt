@@ -392,4 +392,56 @@ class ReservationsScreenAtaqueTest {
             waitForIdle()
             assertEquals(1, source.documentCalls.size)
         }
+
+    @Test
+    fun ctrlZUndoesTypingInDocumentFieldBeforeSearch() =
+        runComposeUiTest {
+            screen(fakeSource())
+            onNodeWithTag("document-number").performClick()
+            "529982247".forEach { onNodeWithTag("document-number").performTextInput(it.toString()) }
+            waitForIdle()
+            // Controle do teste do undo: o Ctrl+Z do teste chega mesmo ao UndoManager do campo.
+            onNodeWithTag("document-number").performKeyInput {
+                keyDown(Key.CtrlLeft)
+                pressKey(Key.Z)
+                keyUp(Key.CtrlLeft)
+            }
+            waitForIdle()
+            assertFalse(texts().any { it == "529982247" }, "o Ctrl+Z não desfez nada: o teste do undo seria vazio")
+        }
+
+    @Test
+    fun undoInDocumentFieldAfterSearchDoesNotBringTheNumberBack() =
+        runComposeUiTest {
+            val source = fakeSource()
+            screen(source)
+            onNodeWithTag("document-number").performClick()
+            // `pressKey` não gera texto no teste de desktop (o guarda abaixo pegou isso); um caractere por vez,
+            // como a digitação real, é o que grava um snapshot de undo por edição.
+            "529982247".forEach { onNodeWithTag("document-number").performTextInput(it.toString()) }
+            waitForIdle()
+            // Prova de que o teste não é vazio: o número foi mesmo digitado, tecla a tecla.
+            assertTrue(texts().any { it == "529982247" }, "digitação por teclas não chegou ao campo")
+            onNodeWithTag("document-submit").performClick()
+            waitForIdle()
+            assertEquals(1, source.documentCalls.size)
+            onNodeWithTag("document-number").assertTextEquals("Número do documento", "")
+            onNodeWithTag("document-number").performClick()
+            repeat(6) {
+                onNodeWithTag("document-number").performKeyInput {
+                    keyDown(Key.CtrlLeft)
+                    pressKey(Key.Z)
+                    keyUp(Key.CtrlLeft)
+                }
+                waitForIdle()
+                onNodeWithTag("document-number").assertTextEquals("Número do documento", "")
+            }
+            val all = texts()
+            val number = "529982247"
+            val leaked =
+                (0..number.length - 5).flatMap { start ->
+                    (start + 5..number.length).map { end -> number.substring(start, end) }
+                }
+            assertTrue(all.none { text -> leaked.any { text.contains(it) } }, "pedaço do número voltou à tela")
+        }
 }
