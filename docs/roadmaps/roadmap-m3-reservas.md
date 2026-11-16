@@ -188,7 +188,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
-| E02 | Disponibilidade e cotação | #pendente | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
+| E02 | Disponibilidade e cotação | #em-andamento | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #pendente | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
@@ -290,7 +290,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Disponibilidade e cotação — #pendente
+## E02 — Disponibilidade e cotação — #em-andamento
 
 **Objetivo:** um calendário mostra, por tipo de UH, a disponibilidade dos próximos dias. Escolhendo período, tipo e ocupação, o usuário vê a cotação por plano, com o total e o preço por noite vindos do servidor.
 
