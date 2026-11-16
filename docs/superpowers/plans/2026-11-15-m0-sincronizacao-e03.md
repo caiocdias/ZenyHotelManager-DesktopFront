@@ -78,7 +78,7 @@ Use o mesmo cliente de teste do `SdkAttackTest` (`MockEngine` + `HttpClientOgen.
 @Test fun summaryWithUnknownPropertyIsKeptVerbatim()   // {"id":…,"restricted":true,"novo":1}
 ```
 
-Em cada um: `assertEquals(Json.parseToJsonElement(sent), response.body())` (o corpo inteiro, sem perda nem reescrita); `assertEquals("W/\"7\"", response.raw.headers[HttpHeaders.ETag])` (o acessor do `SdkAttackTest.keepsWeakEtagVerbatim`); e a decodificação do ramo com o serializer gerado e o mesmo `json`: o completo por `GuestResponse.serializer()` dá o `fullName` enviado; o resumo por `GuestWriteSummaryResponse.serializer()` dá o `id` e o `restricted` enviados. Use um `GuestResponse` completo válido no contrato novo (todos os `required` de `GuestResponse` em `api/openapi.yaml`).
+Em cada um: `assertEquals(Json.parseToJsonElement(sent), response.body())` (na linha 2 da tabela do Step 2, `Json.parseToJsonElement(response.raw.bodyAsText())` no lugar de `response.body()`) (o corpo inteiro, sem perda nem reescrita); `assertEquals("W/\"7\"", response.raw.headers[HttpHeaders.ETag])` (o acessor do `SdkAttackTest.keepsWeakEtagVerbatim`); e a decodificação do ramo com o serializer gerado e o mesmo `json`: o completo por `GuestResponse.serializer()` dá o `fullName` enviado; o resumo por `GuestWriteSummaryResponse.serializer()` dá o `id` e o `restricted` enviados. Use um `GuestResponse` completo válido no contrato novo (todos os `required` de `GuestResponse` em `api/openapi.yaml`).
 
 - [ ] **Step 4: Rode os testes do `sdk`**
 
@@ -207,5 +207,14 @@ Sem código: os resultados vão para o handoff e para o pacote da revisão final
 
 **Caminho de falha:**
 
-- **Sem memória** depois das 6 tentativas: o ambiente, o `smokeTest` e o `save-images.sh` ficam pendentes, com a medição no handoff. A etapa não fecha `#concluida` sem eles, e a pendência entra na lista do Windows (regra 7), para rodar no gate do M3: o `smokeTest` do notebook contra `http://<IP do Windows>:8088`, com os segredos `ZENY_SEED_*` daquele ambiente.
+- **Sem memória** depois das 6 tentativas: o ambiente, o `smokeTest` e o `save-images.sh` ficam pendentes, com a medição no handoff, e a etapa fica `#em-andamento` com "Aguardando o `smokeTest`". Ela **não** conta como concluída para o M3 (a spec diz "o `smokeTest` passa contra o servidor novo, e o M3 pode começar", e a regra 7 só cobre o que o usuário executa no Windows): o próximo orquestrador roda os itens 2 a 4 quando a memória deixar, antes da M3 E01. A ruling vai a "Decisões para o usuário".
 - **`up.sh`, readiness ou `smokeTest` falham:** diagnóstico pelos logs (`superpowers:systematic-debugging`). Falha transitória do ambiente (rede, daemon que caiu) tem uma nova tentativa; defeito no front vira rodada de correção do desenvolvedor, com o ciclo de revisão. O `smokeTest` e o seed **nunca** se repetem às cegas: cada tentativa com senha errada gasta as do administrador (`tools/server-env/LEIA-ME.md`, seção 3). Antes de repetir, confira os segredos; se o ambiente ficou num estado parcial, recrie com `down.sh -v`.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas (`revisor-arquitetura`, modelo opus), na rodada 1. A rodada 0 bloqueou com 5 Importantes (README e `tests/run.sh` fora da Task 1; caminho para tipo diferente de `JsonElement`; segredos no `compose config`; memória, caminho de falha e invariante do `zeny-front`; símbolo do teste de cobertura no arquivo errado), todos corrigidos.
+- **Rodadas:** 1.
+- **Notas Menores:**
+  - N1: a falta de memória deixava o M3 começar sem o `smokeTest`; resolvido no "Caminho de falha" (a etapa não conta como concluída para o M3 sem ele) e registrado para "Decisões para o usuário".
+  - N2: o Step 3 da Task 1 agora remete à linha 2 da tabela do Step 2.
+  - N3: o repositório não tem `docs/ARCHITECTURE.md`; o plano foi julgado contra a spec, o design e os ADRs 0002, 0003, 0007, 0008 e 0010.
