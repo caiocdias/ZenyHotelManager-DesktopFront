@@ -47,7 +47,7 @@ import kotlin.test.assertTrue
 
 private const val ROOMS = "rooms.status.read"
 private const val GUESTS = "guests.profiles.read"
-private const val RESERVATIONS = "reservations.reservations.read"
+private const val BILLING = "billing.folios.read"
 private const val NO_SCREENS_YET = "As telas do seu perfil chegam nas próximas versões."
 private const val PICK_AN_AREA = "Selecione uma área no menu."
 private const val UNAVAILABLE = "Mapa indisponível nesta conexão."
@@ -225,7 +225,7 @@ class RoomMapShellAtaqueTest {
     @Test
     fun releaseWithoutRoomsPermissionHidesHousekeepingAndSaysNoScreensYet() {
         val rooms = BroadcastRoomsSource()
-        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(GUESTS, RESERVATIONS)))
+        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(GUESTS, BILLING)))
         shell(Fake(users, rooms)) {
             onNodeWithText("Ana Souza").assertExists()
             onNodeWithText("Governança", substring = true).assertDoesNotExist()
@@ -238,12 +238,12 @@ class RoomMapShellAtaqueTest {
     @Test
     fun devModeKeepsOtherAreasComingSoonAndNotSelectable() {
         val rooms = BroadcastRoomsSource()
-        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(ROOMS, GUESTS, RESERVATIONS)))
+        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(ROOMS, GUESTS, BILLING)))
         shell(Fake(users, rooms), devMode = true) {
             onNodeWithText("Governança").assertExists()
             onNodeWithText("Governança (em breve)").assertDoesNotExist()
             onNodeWithText("Hóspedes (em breve)").assertExists()
-            onNodeWithText("Reservas (em breve)").assertExists()
+            onNodeWithText("Contas e caixa (em breve)").assertExists()
             onNodeWithText(PICK_AN_AREA).assertExists()
 
             onNodeWithText("Hóspedes (em breve)").performClick()

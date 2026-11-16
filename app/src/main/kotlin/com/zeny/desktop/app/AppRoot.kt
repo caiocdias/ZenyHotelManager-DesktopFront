@@ -38,6 +38,8 @@ import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.reception.RoomMoveState
 import com.zeny.desktop.app.reception.UndoCheckInState
 import com.zeny.desktop.app.reception.WalkInState
+import com.zeny.desktop.app.reservations.ReservationSearchState
+import com.zeny.desktop.app.reservations.ReservationsScreen
 import com.zeny.desktop.app.rooms.RoomMapScreen
 import com.zeny.desktop.app.rooms.RoomMapState
 import com.zeny.desktop.app.session.ServerConnection
@@ -180,6 +182,7 @@ internal fun AreaContent(
 ) {
     when (area) {
         Area.RECEPTION -> ReceptionArea(connection)
+        Area.RESERVATIONS -> ReservationsArea(connection)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
     }
@@ -231,6 +234,47 @@ private fun ReceptionArea(connection: ServerConnection) {
                 traces = traces,
                 registrationCard = registrationCardFactory(connection, scope, LocalWindowFrame.current),
             )
+        }
+    }
+}
+
+/**
+ * A busca de reservas e o detalhe somente leitura vivem enquanto a área está aberta na mesma sessão: nascem com a
+ * chave do `sessionId` vigente (o cache de titulares é da sessão), a busca é iniciada ao entrar e os dois fecham ao
+ * sair da área, da casca ou da sessão (o fechamento descarta a consulta, o cache e o documento mascarado). O detalhe
+ * usa a porta da Recepção; sem ela a tela funciona sem painel. O ganho de foco da janela relê a reserva aberta, sem
+ * refazer a busca.
+ */
+@Composable
+private fun ReservationsArea(connection: ServerConnection) {
+    val source = remember(connection) { connection.reservationSearchSource() }
+    val receptionSource = remember(connection) { connection.receptionSource() }
+    val session by connection.state.collectAsState()
+    val sessionId = (session as? SessionState.Active)?.sessionId
+    val scope = rememberCoroutineScope()
+    when {
+        source == null -> {
+            Unavailable("Reservas indisponíveis nesta conexão.")
+        }
+
+        sessionId != null -> {
+            val search = remember(source, sessionId) { ReservationSearchState(source, scope) }
+            val detail =
+                remember(receptionSource, sessionId) { receptionSource?.let { ReservationDetailState(it, scope) } }
+            DisposableEffect(search, detail) {
+                search.start()
+                onDispose {
+                    search.close()
+                    detail?.close()
+                }
+            }
+            val window = LocalWindowInfo.current
+            LaunchedEffect(detail, window) {
+                snapshotFlow { window.isWindowFocused }.collect { focused ->
+                    if (focused) detail?.reload()
+                }
+            }
+            ReservationsScreen(search, detail)
         }
     }
 }
