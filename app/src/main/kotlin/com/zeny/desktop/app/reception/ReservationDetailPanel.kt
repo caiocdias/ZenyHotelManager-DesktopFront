@@ -36,6 +36,9 @@ data class DetailActions(
     val onMove: (() -> Unit)? = null,
     val onUndo: (() -> Unit)? = null,
     val onCard: (() -> Unit)? = null,
+    val onChange: (() -> Unit)? = null,
+    val onConfirmReservation: (() -> Unit)? = null,
+    val onConfirmationPdf: (() -> Unit)? = null,
 )
 
 /** A falha de uma releitura com o conteúdo antigo à vista: o conteúdo fica, e a falha aparece por cima dele. */
@@ -96,6 +99,22 @@ internal fun ReservationDetailPanel(
             OutlinedButton(onClick = actions.onCard, modifier = Modifier.testTag("open-registration-card")) {
                 Text("Ficha de registro")
             }
+        }
+        if (actions.onChange != null) {
+            Button(onClick = actions.onChange, modifier = Modifier.testTag("open-reservation-change")) {
+                Text("Alterar")
+            }
+        }
+        if (actions.onConfirmReservation != null) {
+            Button(onClick = actions.onConfirmReservation, modifier = Modifier.testTag("open-reservation-confirm")) {
+                Text("Confirmar reserva")
+            }
+        }
+        if (actions.onConfirmationPdf != null) {
+            OutlinedButton(
+                onClick = actions.onConfirmationPdf,
+                modifier = Modifier.testTag("open-reservation-confirmation"),
+            ) { Text("Confirmação (PDF)") }
         }
         if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
         Box(Modifier.weight(1f)) {

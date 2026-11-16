@@ -7,6 +7,10 @@ import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
 import com.zeny.desktop.app.reservations.AvailabilitySource
+import com.zeny.desktop.app.reservations.NewReservationSource
+import com.zeny.desktop.app.reservations.ReservationChangeSource
+import com.zeny.desktop.app.reservations.ReservationConfirmSource
+import com.zeny.desktop.app.reservations.ReservationConfirmations
 import com.zeny.desktop.app.reservations.ReservationSearchSource
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.app.rooms.RoomsSource
@@ -25,6 +29,7 @@ import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
+import com.zeny.desktop.core.facade.ReservationChangeInput
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
@@ -106,6 +111,18 @@ interface ServerConnection : AutoCloseable {
 
     /** A ficha de registro em PDF; `null` quando a conexão não a oferece. */
     fun registrationCards(): RegistrationCards? = null
+
+    /** A criação de reserva a partir da cotação; `null` quando a conexão não a oferece. */
+    fun newReservationSource(): NewReservationSource? = null
+
+    /** A alteração de reserva; `null` quando a conexão não a oferece. */
+    fun reservationChangeSource(): ReservationChangeSource? = null
+
+    /** A confirmação da pré-reserva; `null` quando a conexão não a oferece. */
+    fun reservationConfirmSource(): ReservationConfirmSource? = null
+
+    /** A confirmação da reserva em PDF; `null` quando a conexão não a oferece. */
+    fun reservationConfirmations(): ReservationConfirmations? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -357,6 +374,55 @@ class CoreConnection(
 
     /** A ficha de registro sobre `core.documents`. */
     override fun registrationCards(): RegistrationCards = registrationCards
+
+    private val newReservation =
+        NewReservationSource { input, intent -> core.bookings.createBooking(input, intent) }
+
+    /** A criação de reserva sobre `core.bookings`. */
+    override fun newReservationSource(): NewReservationSource = newReservation
+
+    private val reservationChange =
+        object : ReservationChangeSource {
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun reservationVersion(id: String): ReservationVersion =
+                core.reservations.reservationVersion(id)
+
+            override suspend fun quote(
+                arrival: BusinessDate,
+                departure: BusinessDate,
+                adults: Int,
+                childAges: List<Int>,
+            ): QuoteResponse = core.reservations.quoteStay(arrival, departure, adults, childAges)
+
+            override fun changeReservation(
+                id: String,
+                input: ReservationChangeInput,
+                etag: String,
+            ): ApprovableAction<ReservationDetailResponse> = core.bookings.changeReservation(id, input, etag)
+        }
+
+    /** A alteração de reserva sobre `core.bookings`, `core.reservations` e `core.hotel`. */
+    override fun reservationChangeSource(): ReservationChangeSource = reservationChange
+
+    private val reservationConfirm =
+        object : ReservationConfirmSource {
+            override suspend fun reservation(id: String): ReservationDetailResponse = core.reservations.reservation(id)
+
+            override suspend fun confirmReservation(
+                id: String,
+                guarantee: String,
+                intent: Intent,
+            ): ReservationDetailResponse = core.bookings.confirmReservation(id, guarantee, intent)
+        }
+
+    /** A confirmação da pré-reserva sobre `core.reservations` e `core.bookings`. */
+    override fun reservationConfirmSource(): ReservationConfirmSource = reservationConfirm
+
+    private val reservationConfirmations = ReservationConfirmations { id -> core.documents.reservationConfirmation(id) }
+
+    /** A confirmação da reserva em PDF sobre `core.documents`. */
+    override fun reservationConfirmations(): ReservationConfirmations = reservationConfirmations
 
     override fun close() = core.close()
 }
