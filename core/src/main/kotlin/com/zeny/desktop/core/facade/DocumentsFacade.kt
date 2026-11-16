@@ -2,14 +2,16 @@ package com.zeny.desktop.core.facade
 
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.ApiExecutor
+import com.zeny.desktop.core.http.BinaryResponse
 import com.zeny.desktop.core.http.ResponseFormatException
 import com.zeny.desktop.sdk.client.FrontdeskApi
+import com.zeny.desktop.sdk.client.ReservationsApi
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import java.io.ByteArrayOutputStream
 import kotlin.uuid.Uuid
 
-/** Teto do PDF da ficha: acima disso a resposta não é uma ficha. */
+/** Teto de um PDF do servidor: acima disso a resposta não é a ficha nem a confirmação. */
 private const val MAX_PDF_BYTES = 20L * 1024 * 1024
 private val PDF_MAGIC = "%PDF-".encodeToByteArray()
 private const val PDF_EXTENSION = ".pdf"
@@ -39,6 +41,7 @@ class PdfDocument(
  */
 class DocumentsFacade internal constructor(
     private val frontdesk: FrontdeskApi,
+    private val reservations: ReservationsApi,
     private val executor: ApiExecutor,
 ) {
     /**
@@ -46,11 +49,32 @@ class DocumentsFacade internal constructor(
      * 20 MB) é `ApiError.IncompatibleResponse`, sem os bytes na causa.
      */
     suspend fun registrationCard(reservationId: String): PdfDocument {
-        val id = Uuid.parseOrNull(reservationId) ?: throw IllegalArgumentException("id de reserva inválido")
-        val response =
+        val id = reservationUuid(reservationId)
+        return pdfOf(
             executor.executeBytes(MAX_PDF_BYTES) {
                 frontdesk.prepareGetRegistrationCardPdf(id, ContentType.Application.Pdf, it.headers)
-            }
+            },
+        )
+    }
+
+    /**
+     * A confirmação da reserva em PDF, com a mesma validação da ficha. Cancelada ou no-show é
+     * `ApiError.Problem` `409 CONFIRMATION_UNAVAILABLE`.
+     */
+    suspend fun reservationConfirmation(reservationId: String): PdfDocument {
+        val id = reservationUuid(reservationId)
+        return pdfOf(
+            executor.executeBytes(MAX_PDF_BYTES) {
+                reservations.prepareGetReservationConfirmationPdf(id, ContentType.Application.Pdf, it.headers)
+            },
+        )
+    }
+
+    private fun reservationUuid(reservationId: String): Uuid =
+        Uuid.parseOrNull(reservationId) ?: throw IllegalArgumentException("id de reserva inválido")
+
+    /** Tipo `application/pdf`, assinatura `%PDF-` e corpo não vazio; senão `IncompatibleResponse`, sem os bytes. */
+    private fun pdfOf(response: BinaryResponse): PdfDocument {
         val typeOk =
             response.contentType
                 ?.takeIf(::wellFormedParameters)
