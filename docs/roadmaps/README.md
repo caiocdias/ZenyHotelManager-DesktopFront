@@ -60,7 +60,8 @@ O gate de cada marco é um dia de trabalho (o usuário faz um gate por dia). Se 
 
 Pendentes da regra 7, na ordem em que entraram:
 
-1. **M0 E02** (servidor em `57eb5fac5b8a`): executar o `roteiro-m1.md` do pacote do zero. Para não construir a imagem no Windows, fazer antes o `docker load` de `images/zeny-server-images.tar`. A aprovação fecha a etapa `#concluida`.
+1. **M0 E02** (servidor em `57eb5fac5b8a`): executar o `roteiro-m2.md` do pacote mais recente, do zero; ele acumula o do M1 (decisão da M2 E06). Para não construir a imagem no Windows, fazer antes o `docker load` de `images/zeny-server-images.tar`. A aprovação fecha a etapa `#concluida`.
+2. **M2 E06** (gate do M2): a mesma execução do `roteiro-m2.md` da entrada 1. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
 
 ## Pendências do usuário antes da primeira execução
 
@@ -77,3 +78,4 @@ Estão no design, §10:
 - 2026-11-10 — marcos definidos e roadmaps criados (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`), contra o servidor em `57eb5fac5b8a`. Entraram a M0 E02 (sincronização), a M2 E07 (ficha de registro), a M6 E08 (fechamento do dia, `#bloqueada`) e a M7 E12 (impressão), e cresceram a M3 E03, a M4 E02, a M5 E01 e a M7 E10. Decisões no [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md). O M2 passa a exigir a M0 E02 concluída.
 - 2026-11-13 — regra 7 e a lista "Validações acumuladas no Windows", por decisão do usuário: sem acesso ao Windows até 2026-11-15 pelo menos, a validação lá é acumulada e não para o lote. A M0 E02 é a primeira da lista (`claude --agent orquestrador`).
+- 2026-11-15 — a M2 E06 (gate do M2) entra na lista "Validações acumuladas no Windows", e a entrada 1 passa a pedir o `roteiro-m2.md`, que acumula o do M1 (`claude --agent orquestrador`).

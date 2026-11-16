@@ -92,10 +92,10 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 
 ## Definição global de pronto
 
-- [ ] Comandos oficiais de build, teste e lint verdes.
-- [ ] O `smokeTest` passa contra o ambiente recriado.
+- [x] Comandos oficiais de build, teste e lint verdes. *(E06, clone limpo.)*
+- [x] O `smokeTest` passa contra o ambiente recriado. *(E06.)*
 - [ ] O roteiro `docs/demo/roteiro-m2.md`, acumulando o do M1, executado pelo usuário no Windows.
-- [ ] Nenhuma etapa depende de pedido ao servidor.
+- [x] Nenhuma etapa depende de pedido ao servidor. *(E06: PF-01 e PF-02 abertos, sem etapa dependente.)*
 
 ## Protocolo de execução
 
@@ -703,8 +703,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Clone limpo: build, teste e lint verdes.
-- [ ] O `smokeTest` passa e o seed roda em menos de 2 minutos.
+- [x] Clone limpo: build, teste e lint verdes.
+- [x] O `smokeTest` passa e o seed roda em menos de 2 minutos.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 
 **Validação obrigatória:**
@@ -725,12 +725,37 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-15):** `#em-andamento`. O lote parou a pedido do usuário no meio da execução; a etapa é retomada pelo ledger do superpowers (`.superpowers/sdd/2026-11-15-m2-recepcao-do-dia-e06/progress.md` no worktree `roadmap-m2-recepcao-do-dia`, fora do git) e por esta seção.
-- **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md), com 6 tarefas e a verificação do gate pelo orquestrador. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (6 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2; a seção "Revisão de arquitetura" está no plano.
-- **Feito:**
-  - Task 1 (porta de recados no seed): `1c11fe4` (desenvolvedor; build e `tests/run.sh` verdes pelo relatório) e `6dab408` (testes de ataque do testador, commitados quando o lote parou; o testador não chegou a relatar). O `6dab408` quebrava o `detektTest` do `demo-seed` e foi revertido para a `main` ficar verde; o conteúdo continua no histórico.
-- **Para retomar:** restaurar os testes do testador revertendo o commit de reversão (`git log --grep 'Reverte os testes de ataque inacabados'`), mandar o testador corrigir o lint do arquivo dele e conferir o verde (`./gradlew build --max-workers=2`), rodar `check_test_integrity.py --base 9f1ea5d`, despachar a revisão da Task 1 e seguir com as Tasks 2 a 6 e a verificação do gate do plano.
-- **Rulings já tomadas no planejamento** (vão às "Decisões para o usuário" quando a etapa fechar): o `roteiro-m2.md` executado no Windows fecha também a M0 E02; a escala de tela e o diálogo de impressão atrás entram no gate como defeitos conhecidos, com resultado esperado explícito; a idempotência dos recados do seed é pela chave vínculo + setor, e o roteiro só desfaz o check-in feito nele mesmo (`A3`/`A4`) e só edita recados criados pelo usuário.
+- **Estado (2026-11-15):** `#em-andamento`, **Aguardando o Windows** (regra 7 do `docs/roadmaps/README.md`). Tudo o que dá para verificar no notebook foi verificado; falta só o usuário executar o `roteiro-m2.md` do pacote no Windows e aprovar. A base (M0 E02) também ainda não foi validada no Windows: a mesma execução a fecha (entrada 1 das "Validações acumuladas no Windows").
+- **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md), com 7 tarefas em série (todas de risco alto) e a verificação do gate pelo orquestrador. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (6 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2. A Task 7 é um adendo da execução, aprovado com notas na revisão do adendo (rodada 0): a execução do roteiro no notebook achou um defeito da E05 (abaixo).
+- **Commits:** `aae75c3..8390605` na branch `roadmap/m2-recepcao-do-dia` (com o merge `e288efb` do lote anterior no meio), com o trailer `Soul:`.
+  - Task 1, porta de recados no seed (`TraceGateway`, `SdkTraceGateway`): `1c11fe4`, `77c0118` (o testador restaurou e corrigiu os testes de ataque revertidos em `c49bb6e` no lote anterior).
+  - Task 2, recados de exemplo no seed (`TraceSeeder`, linha `recados: N criados, M já existiam` depois de `check-ins`): `f635efb`, `6f31318`.
+  - Task 3, o pacote leva o `roteiro-m2.md`: `92599f7`, `0efa6c8`.
+  - Task 4, travas dos roteiros parametrizadas em `tests/lib/roteiro_checks.sh` (132/101/194 asserções iguais antes e depois): `d42cc10`, `7c0b70e`, `beac765` (a trava de valores de segredo passava com o arquivo ausente).
+  - Task 5, o `roteiro-m2.md` (passos 0 a 20) e `tests/test_roteiro_m2_ataque.sh`: `c16a584`, `8e0bff5` (mutantes), `ff28b63` (os passos 11 a 18 valem uma vez por servidor; repetir pede "Recomeçar do zero").
+  - Task 6, o roteiro executado do zero no notebook contra o `zeny-front` recriado, com o pacote real: `1866606` (ofertas do walk-in só dos tipos livres; o histórico do desfazer sem "Com aprovação de superior", ver PF-02).
+  - Task 7, recado ligado a UH aparecia como "Reserva" (o servidor manda `"reservationId": null` e o `sdk` lê `Option.Some(null)`; defeito da E05): `7f0997d`, `8d9c348`.
+  - Verificação do gate: `20a2923` (o testador corrigiu uma corrida no `findRow` do `LiveTracesCheck`, exposta pelos recados do seed; causa confirmada no teste, não no app). Revisão final: `8390605` (saída para a janela de nome do "Microsoft Print to PDF" que abre atrás; linha a mais do diálogo do passo 16).
+- **Revisão final** (`revisor-seguranca`, opus, sobre `aae75c3..20a2923`): pronto "com correções", sem Crítico. Os dois Importantes foram o fechamento documental (este handoff e a lista do README) e a janela do "Microsoft Print to PDF" (corrigida em `8390605`, re-revisão limpa).
+- **Verificação mecânica e scanner:** `check_test_integrity.py --base aae75c3`: 5 apontamentos mais o aviso do merge, todos justificados nas revisões (a reversão `c49bb6e` do lote anterior, restaurada pelo testador; duas asserções trocadas por mandato da Task 3; duas movidas para `tests/lib/roteiro_checks.sh` na Task 4); `--base 20a2923`: nenhum. `osv-scanner scan source -r --no-ignore .`: 6 lockfiles (131 a 361 pacotes), "No issues found". Nenhuma dependência nova.
+- **Critérios verificados:**
+  - Clone limpo de `8d9c348`: `./gradlew build ktlintCheck detekt :app:desktopJar :demo-seed:seedJar --max-workers=2` BUILD SUCCESSFUL; 3860 testes JVM, 0 falhas, 34 pulados (verificações ao vivo sem opt-in); `bash tests/run.sh` 46 arquivos, 0 falhas. Depois disso só mudaram um teste ao vivo (opt-in) e o roteiro, com build e `tests/run.sh` verdes no worktree; o gate do HEAD final roda antes do merge.
+  - Seed: 10,3 s e 9,2 s na primeira execução contra o ambiente recriado, com a saída igual à do roteiro; a segunda logo depois cria nada; a terceira, depois da demo da Task 6, bate com o passo "No fim".
+  - `smokeTest`: 1 teste, 0 falhas. Ao vivo, contra o ambiente recriado: `LiveReceptionCheck` 2/0 e `LiveRegistrationCardCheck` 3/0 (só leem), depois `LiveCheckInCheck` 2/0, `LiveStayActionsCheck` 2/0, `LiveWalkInCheck` 3/0, `LiveRoomMapCheck` 1/0 (a queda do api fica sem opt-in) e `LiveTracesCheck` 3/0 depois da correção do teste.
+  - Task 7 no app real: a aba "Recados" mostra "UH 101" e "UH 102" (driver da Task 6, janela de 1100 px).
+  - Pacote de `8d9c348` (`front_dirty=false`) com os JARs, os dois roteiros e o `VERSAO.txt`; nenhum segredo gerado nem da folha no pacote nem no git (só os padrões públicos do `.env.example` do servidor). O pacote é regenerado do HEAD final no fim do lote.
+  - "Nenhuma etapa depende de pedido": PF-01 e PF-02 abertos, nenhuma etapa dependente.
+- **Decisões para o usuário** (tomadas, revisáveis):
+  - **O `roteiro-m2.md` fecha também a M0 E02:** a entrada 1 das "Validações acumuladas no Windows" passou a pedir o `roteiro-m2.md`, que acumula o do M1. Custo se errado: o usuário roda também o `roteiro-m1.md`.
+  - **Defeitos conhecidos aceitos no gate:** o diálogo de impressão e a janela de nome do "Microsoft Print to PDF" podem abrir atrás do app; com escala de 125–150%, o "100%" aparece menor que a folha. O roteiro diz a saída e que não são reprovação.
+  - **Idempotência dos recados do seed** pela chave vínculo + setor, qualquer que seja o texto ou a situação; o roteiro só edita e resolve recados criados pelo usuário e só desfaz o check-in feito nele (A3).
+  - **O defeito da E05 (UH aparecendo como "Reserva") foi corrigido no gate** (Task 7), por adendo ao plano revisado pela arquitetura, em vez de virar defeito conhecido.
+  - **PF-02 aberto** (`docs/pedidos-servidor.md`): o servidor fixado grava o desfazer check-in no histórico sem a aprovação (`approvalId` e `approvedBy` nulos); o roteiro deixou de prometer "Com aprovação de superior" nessa linha.
+  - **A segunda janela do passo 18 entra como `gerente`:** o servidor encerra a sessão anterior do mesmo usuário no mesmo dispositivo, e as duas janelas compartilham o dispositivo.
+  - **Fica para depois** (Menores triados pela revisão final): mutantes antigos que as travas não pegam (senha literal na descrição da folha, ternário do PowerShell 7, `If-None-Match`); o `tests/run.sh` ficou mais lento com os mutantes do roteiro (um `rc=124` sob carga reprova de forma visível); `roomNumber` em branco daria "UH "; o falso `FakeTraces` com os dois filtros nulos; a lista de recados numa janela baixa mostra menos linhas (rolar).
+- **Notas para a próxima etapa:**
+  - **Gate no Windows:** executar o `roteiro-m2.md` do pacote mais recente, do zero, com `docker load` de `images/zeny-server-images.tar` antes; a aprovação fecha a M0 E02 e esta etapa `#concluida`; uma reprovação reabre esta etapa com uma rodada de correção.
+  - **Verificação ao vivo dos recados:** rode o seed antes; o `LiveTracesCheck` agora espera a carga do filtro de fato.
 
 ---
 
@@ -746,3 +771,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-15 — E05 `#concluida` (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `3eeef989afb6`, só enums extensíveis), pin mantido. Recados com aba e seção no detalhe; a Recepcionista da demo ganhou a consulta de setores pelo seed, e o PF-01 foi aberto. Recriar a demo antes do roteiro.
 - 2026-11-15 — E07 `#concluida` (`claude --agent orquestrador`). H4 e H5 confirmadas (PDFBox 3.0.8, sem disco). A impressão no Linux grava um temporário da JVM: decisão do usuário pendente.
 - 2026-11-15 — E06 `#em-andamento` (`claude --agent orquestrador`): plano aprovado com notas e Task 1 feita; o lote parou a pedido do usuário. Retomar pelo handoff da E06.
+- 2026-11-15 — E06 aguardando o Windows (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `5e06f16d51ff`; avisos só em operações de hóspede não usadas pelo front), pin mantido. Tasks 1 a 7 concluídas e revisadas; a Task 7 corrigiu um defeito da E05 achado pelo roteiro (recado de UH aparecendo como "Reserva"). Revisão final limpa depois de uma onda de correção. PF-02 aberto. Falta só o usuário executar o `roteiro-m2.md` no Windows.
