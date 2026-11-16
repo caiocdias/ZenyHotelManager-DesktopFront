@@ -9,6 +9,8 @@ import com.zeny.desktop.seed.config.ConfigSeeder
 import com.zeny.desktop.seed.data.DemoCatalog
 import com.zeny.desktop.seed.data.DemoRole
 import com.zeny.desktop.seed.data.SeedReport
+import com.zeny.desktop.seed.frontdesk.TraceGateway
+import com.zeny.desktop.seed.frontdesk.TraceSeeder
 import com.zeny.desktop.seed.people.AdminSignIn
 import com.zeny.desktop.seed.people.SessionFactory
 import com.zeny.desktop.seed.people.SessionPort
@@ -18,6 +20,7 @@ import com.zeny.desktop.seed.people.shutDown
 import com.zeny.desktop.seed.sdk.SdkBookingGateway
 import com.zeny.desktop.seed.sdk.SdkConfigGateway
 import com.zeny.desktop.seed.sdk.SdkSessionFactory
+import com.zeny.desktop.seed.sdk.SdkTraceGateway
 import com.zeny.desktop.seed.sdk.SdkUserGateway
 import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
@@ -30,6 +33,7 @@ data class AdminContext(
     val config: ConfigGateway,
     val users: UserGateway,
     val bookings: BookingGateway,
+    val traces: TraceGateway,
     val sessions: SessionFactory<SessionPort>,
 )
 
@@ -57,6 +61,7 @@ object DemoSeed {
             config = SdkConfigGateway(seed),
             users = SdkUserGateway(seed),
             bookings = SdkBookingGateway(seed),
+            traces = SdkTraceGateway(seed),
             sessions = factory,
         )
     }
@@ -119,6 +124,7 @@ object DemoSeed {
                 )
             UserSeeder(admin.users, admin.sessions, report).seed(data.users, passwords, config.managerPin)
             BookingSeeder(admin.bookings, report).seed(data, seeded)
+            TraceSeeder(admin.traces, admin.bookings, report).seed(seeded, admin.businessDate())
             return report
         } finally {
             admin.session.shutDown()

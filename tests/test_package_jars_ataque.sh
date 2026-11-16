@@ -110,6 +110,7 @@ for tipo in fifo ilegivel quebrado; do
 done
 for tipo in fifo quebrado; do
   hostil roteiro "$fd/docs/demo/roteiro-m1.md" "$tipo" "docs/demo/roteiro-m1.md"
+  hostil roteiro-m2 "$fd/docs/demo/roteiro-m2.md" "$tipo" "docs/demo/roteiro-m2.md"
 done
 assert_exit 0 "fd restaurado: package.sh volta a sair com 0" -- pkg_sh "$fd"
 
@@ -121,6 +122,7 @@ pk="$fs/build/demo-package"
 assert_eq "1" "$(same_file "$(jar "$fs" zeny-desktop)" "$pk/app/zeny-desktop.jar")" "espaço: zeny-desktop.jar copiado"
 assert_eq "1" "$(same_file "$(jar "$fs" demo-seed)" "$pk/app/demo-seed.jar")" "espaço: demo-seed.jar copiado"
 assert_eq "1" "$(same_file "$fs/docs/demo/roteiro-m1.md" "$pk/roteiro-m1.md")" "espaço: roteiro copiado"
+assert_eq "1" "$(same_file "$fs/docs/demo/roteiro-m2.md" "$pk/roteiro-m2.md")" "espaço: roteiro-m2 copiado"
 assert_eq "$(printf 'demo-seed.jar\nzeny-desktop.jar')" "$(ls -A "$pk/app")" "espaço: app/ só com os dois JARs"
 assert_not_contains "$(cat "$pk/VERSAO.txt")" "/" "espaço: VERSAO.txt sem nenhuma barra (nenhum caminho)"
 assert_eq "$(git -C "$fs" rev-parse HEAD)" "$(versao "$pk" front_commit)" "espaço: front_commit"
@@ -143,6 +145,7 @@ antes_fm="$(tree_sum "$fm/build/demo-package")"
 _fgit "$fm" worktree add -q "$tmp/fm-wt" -b wt-sem-jar >/dev/null 2>&1
 mkdir -p "$tmp/fm-wt/docs/demo"
 cp "$fm/docs/demo/roteiro-m1.md" "$tmp/fm-wt/docs/demo/roteiro-m1.md"
+cp "$fm/docs/demo/roteiro-m2.md" "$tmp/fm-wt/docs/demo/roteiro-m2.md"
 assert_exit 1 "worktree sem JARs: sai com 1" -- pkg_sh "$tmp/fm-wt"
 assert_contains "$ASSERT_OUT" "$tmp/fm-wt/app/build/libs/zeny-desktop.jar" "worktree sem JARs: cita o JAR do worktree"
 assert_contains "$ASSERT_OUT" "./gradlew :app:desktopJar" "worktree sem JARs: cita o comando do Gradle"
@@ -346,6 +349,7 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 done
 assert_eq "0" "$(same_file "$(jar "$fj" zeny-desktop)" "$(jar "$fj" demo-seed)")" "make_fake_jars: os dois JARs diferem"
 assert_file "$fj/docs/demo/roteiro-m1.md" "make_fake_jars: roteiro criado"
+assert_file "$fj/docs/demo/roteiro-m2.md" "make_fake_jars: roteiro do M2 criado"
 
 # idempotente
 make_fake_jars "$fj"

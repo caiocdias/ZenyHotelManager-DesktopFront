@@ -100,6 +100,7 @@ else
   assert_exit 0 "docs/demo só com x: package.sh sai com 0" -- pkg_sh "$fr"
   chmod 755 "$fr/docs/demo"
   assert_eq "1" "$(cmp -s -- "$rot" "$pk/roteiro-m1.md" && echo 1 || echo 0)" "docs/demo só com x: roteiro copiado igual"
+  assert_eq "1" "$(cmp -s -- "$fr/docs/demo/roteiro-m2.md" "$pk/roteiro-m2.md" && echo 1 || echo 0)" "docs/demo só com x: roteiro-m2 copiado igual"
   assert_eq "0" "$([[ -e "$pk/marcador.txt" ]] && echo 1 || echo 0)" "docs/demo só com x: pacote recriado"
 
   # 1h. Roteiro ilegível sem pacote anterior: nada de build/demo-package criado pela metade.

@@ -20,6 +20,7 @@ enum class SeedItem(
     RESERVATION("reservas"),
     ROOM_ASSIGNMENT("alocações"),
     CHECK_IN("check-ins"),
+    TRACE("recados"),
 }
 
 /** Relatório do seed: só contagens por tipo de item, nunca dado de hóspede ou empresa (LGPD). */

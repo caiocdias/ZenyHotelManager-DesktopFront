@@ -3,6 +3,7 @@
 # docs/pedidos-servidor.md traz a tabela de controle.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
+source "$ROOT/tests/lib/roteiro_checks.sh"
 
 readme="$ROOT/README.md"
 pedidos="$ROOT/docs/pedidos-servidor.md"
@@ -71,8 +72,6 @@ assert_file "$roteiro" "docs/demo/roteiro-m1.md existe"
 rot_text="$(cat "$roteiro" 2>/dev/null)"
 # rot_section PREFIXO : do título "## N. ..." até antes do próximo "## " (o prefixo inclui o ponto).
 rot_section() { awk -v h="$1" 'index($0, h) == 1 {on = 1; print; next} on && /^## / {exit} on' "$roteiro"; }
-# ps_code ARQUIVO : só as linhas dentro de blocos ```powershell.
-ps_code() { awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' "$1" 2>/dev/null; }
 steps=(
   "## 0. Antes de começar"
   "## 1. Pasta nova e nada do projeto no Docker"
@@ -119,12 +118,7 @@ for word in "docker compose version" "java -version" "JDK 25" "Folha de senhas" 
   '`gerente`' '`recepcao`' '`governanta`' "PIN do Gerente" "12 a 128" "4 a 8 dígitos" "anote"; do
   assert_contains "$step0" "$word" "roteiro, passo 0: cita $word"
 done
-folha_ln="$(grep -nF 'Folha de senhas' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
-secret_ln="$(grep -nE 'Get-Credential|Read-Host|SetEnvironmentVariable' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
-if [[ -z "$folha_ln" || -z "$secret_ln" ]] || ((folha_ln > secret_ln)); then
-  _assert_fail "roteiro: a folha de senhas vem antes da primeira linha que pede segredo" \
-    "folha: ${folha_ln:-ausente}; segredo: ${secret_ln:-ausente}"
-fi
+roteiro_check_folha_before_secrets "$roteiro"
 
 # Passo 1: pasta nova; conferir projeto e volumes; limpar só pelo projeto (sem compose nem .env).
 step1="$(rot_section "## 1. ")"
@@ -219,44 +213,16 @@ shared_lines=(
   'Remove-Variable pin'
   'java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin'
 )
-rot_ps_code="$(ps_code "$roteiro")"
-leia_ps_code="$(ps_code "$leia_file")"
-for l in "${shared_lines[@]}"; do
-  grep -qxF -- "$l" <<<"$rot_ps_code" || _assert_fail "roteiro: bloco PowerShell com a linha comum" "$l"
-  grep -qxF -- "$l" <<<"$leia_ps_code" || _assert_fail "LEIA-ME: bloco PowerShell com a linha comum" "$l"
-done
-# Toda linha de roteiro com docker, curl.exe, SetEnvironmentVariable, $pin ou o java do seed é uma das comuns.
-while IFS= read -r l; do
-  [[ -n "$l" ]] || continue
-  found=0
-  for s in "${shared_lines[@]}"; do [[ "$l" == "$s" ]] && found=1 && break; done
-  ((found)) || _assert_fail "roteiro: linha de servidor ou seed fora da lista comum com o LEIA-ME" "$l"
-done < <(grep -E '^(docker (run|compose -p|compose ls|volume) |curl\.exe |\[Environment\]::SetEnvironmentVariable|\$pin |Remove-Variable pin|java -jar app\\demo-seed)' <<<"$rot_ps_code")
+roteiro_check_shared_lines "$roteiro" "$leia_file" "${shared_lines[@]}"
 # No roteiro, o seed roda depois dos 6 segredos e o $pin sai da sessão depois de usado.
-seed_ln="$(grep -nF 'java -jar app\demo-seed.jar' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
-last_set_ln="$(grep -nF '[Environment]::SetEnvironmentVariable("ZENY_SEED_' "$roteiro" 2>/dev/null | tail -1 | cut -d: -f1)"
-assert_eq "6" "$(grep -cF '[Environment]::SetEnvironmentVariable("ZENY_SEED_' "$roteiro" 2>/dev/null)" "roteiro: 6 segredos do seed"
-if [[ -z "$seed_ln" || -z "$last_set_ln" ]] || ((seed_ln < last_set_ln)); then
-  _assert_fail "roteiro: o java -jar do seed vem depois dos 6 SetEnvironmentVariable"
-fi
-pin_set_ln="$(grep -nF 'SetEnvironmentVariable("ZENY_SEED_MANAGER_PIN"' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
-pin_rm_ln="$(grep -nxF 'Remove-Variable pin' "$roteiro" 2>/dev/null | head -1 | cut -d: -f1)"
-if [[ -z "$pin_set_ln" || -z "$pin_rm_ln" ]] || ((pin_rm_ln < pin_set_ln)); then
-  _assert_fail "roteiro: Remove-Variable pin depois do SetEnvironmentVariable do PIN"
-fi
+roteiro_check_seed_order "$roteiro"
 
 for word in recepcao gerente governanta '"-Dzeny.devShell=true"' "http://localhost:8088" MARK_CLEAN MARK_DIRTY \
   If-Match Get-Credential "[guid]::NewGuid().ToString()" "charset=utf-8" "-UseBasicParsing" \
   '$etag = [string]$status.Headers["ETag"]'; do
   assert_contains "$rot_text" "$word" "roteiro cita $word"
 done
-assert_contains "$rot_ps_code" 'java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar' "roteiro abre o app no modo da demo"
-assert_eq "" "$(grep -nE '(^|[^"])-Dzeny\.' <<<"$rot_ps_code")" "roteiro: -Dzeny.* sempre entre aspas"
-assert_eq "" "$(grep -E 'Invoke-WebRequest' <<<"$rot_ps_code" | grep -vF -- '-UseBasicParsing')" \
-  "roteiro: todo Invoke-WebRequest com -UseBasicParsing"
-assert_eq "" "$(grep -E -- '-Body ' <<<"$rot_ps_code" | grep -vF 'charset=utf-8')" "roteiro: todo -Body com charset=utf-8"
-assert_eq "" "$(grep -E 'Headers\["ETag"\]' <<<"$rot_ps_code" | grep -vF '[string]$status.Headers["ETag"]')" \
-  "roteiro: o ETag sempre com [string], intacto"
+roteiro_check_ps51_lines "$roteiro"
 # Seed repetido (conferido ao vivo na E07): as reservas com check-in saem das alocações e a linha check-ins some.
 rerun="$(grep -F 'Rodar o seed de novo' "$roteiro" 2>/dev/null)"
 assert_contains "$rerun" '`alocações: 0 criados, 2 já existiam`' "roteiro: no seed repetido, alocações ficam em 2"
@@ -270,48 +236,16 @@ assert_eq "" "$(grep -oE '(^|[^0-9.])10\.[0-9]+' <<<"$rerun")" "roteiro: o seed 
 assert_contains "$rot_text" "cada execução com a senha atual do admin errada gasta até duas tentativas (o seed tenta primeiro a senha nova)" \
   "roteiro: a execução com a senha do admin errada gasta até duas tentativas"
 assert_eq "" "$(grep -nE 'cada (erro|senha errada) gasta uma tentativa' "$roteiro" 2>/dev/null)" "roteiro: sem \"gasta uma tentativa\""
-# Bloco com Get-Credential ou Read-Host: a linha que pede a credencial é a única do bloco (colada junto com
-# outras, ela leria a linha seguinte como resposta), e o parágrafo logo antes diz como rodá-la. No passo 5,
-# o parágrafo liga a janela a um item da folha (ou à senha inicial do passo 4).
-n_prompt_blocks=0
-while IFS=: read -r start end prompt_ln; do
-  n_prompt_blocks=$((n_prompt_blocks + 1))
-  assert_eq "1" "$((end - start - 1))" "roteiro: o bloco da linha $start (com credencial) tem só a linha da credencial"
-  prev="$(awk -v s="$start" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
-  assert_contains "$prev" "(cole, Enter, responda a janela)" \
-    "roteiro: o bloco da linha $start (com credencial) diz como rodá-lo"
-  if sed -n "${prompt_ln}p" "$roteiro" | grep -qE 'SetEnvironmentVariable|Read-Host'; then
-    [[ "$prev" == *folha* || "$prev" == *"passo 4"* ]] ||
-      _assert_fail "roteiro: o bloco da linha $start diz de onde vem o valor (folha ou passo 4)" "parágrafo: ${prev:0:200}"
-  fi
-done < <(awk '
-  /^```powershell/ { s = NR; p = ""; next }
-  /^```/ && s { if (p != "") print s ":" NR ":" p; s = 0; next }
-  s && /Get-Credential|Read-Host/ && p == "" { p = NR }
-' "$roteiro")
-assert_eq "7" "$n_prompt_blocks" "roteiro: 7 blocos com credencial (5 senhas e o PIN no passo 5; a Governanta no 10.1)"
-# O bloco do corpo do login (hashtable em várias linhas) avisa que o >> do PowerShell é esperado.
-body_start="$(awk '/^```powershell/ { s = NR; next } /^```/ { s = 0; next } s && /\$loginBody = @\{/ { print s; exit }' "$roteiro")"
-body_prev="$(awk -v s="${body_start:-1}" 'NR < s' "$roteiro" | awk 'BEGIN{RS=""} {p=$0} END{print p}')"
-assert_contains "$body_prev" '`>>`' "roteiro: o parágrafo antes do corpo do login explica o >>"
+# Bloco com Get-Credential ou Read-Host: só a linha da credencial, e o parágrafo antes diz como rodá-la e de onde
+# vem o valor; o bloco do corpo do login explica o >>.
+roteiro_check_prompt_blocks "$roteiro"
 
 # Sem segredo nem comando perigoso.
-assert_eq "" "$(grep -nE -e '-Password\b' "$roteiro" 2>/dev/null)" "roteiro sem -Password"
-assert_eq "" "$(grep -niE 'password[[:space:]]*=[[:space:]]*["'"'"']?[^$<"'"'"'[:space:]]' "$roteiro" 2>/dev/null)" \
-  "roteiro sem password= com valor literal"
-assert_eq "" "$(grep -niE '"password"[[:space:]]*:[[:space:]]*"[^<$]' "$roteiro" 2>/dev/null)" \
-  "roteiro sem \"password\":\"valor\""
-assert_eq "" "$(grep -nE 'ZENY_SEED_[A-Z_]*[[:space:]]*=[[:space:]]*"?[^<"[:space:]]' "$roteiro" 2>/dev/null)" \
-  "roteiro sem valor atribuído a ZENY_SEED_*"
-assert_eq "" "$(grep -nE -e '--[a-z-]*(password|pin)([=[:space:]]|$)' "$roteiro" 2>/dev/null)" \
-  "roteiro sem senha ou PIN em argumento"
-assert_eq "" "$(grep -nE -e '-p zeny( |$|`)' "$roteiro" 2>/dev/null)" "roteiro sem -p zeny"
-assert_contains "$rot_ps_code" "Invoke-RestMethod" "roteiro tem blocos PowerShell com os comandos HTTP"
-assert_eq "" "$(grep -nE '(^|[^.A-Za-z0-9_-])curl([[:space:]]|$)' <<<"$rot_ps_code")" "bloco PowerShell sem curl (alias), só curl.exe"
+roteiro_check_no_secret_text "$roteiro"
 
 # LEIA-ME: remete ao roteiro para a demo; a seção 1 confere e limpa pelo projeto; a nota do endereço.
 leia_head="$(awk '/^## /{exit} {print}' "$leia_file" 2>/dev/null)"
-assert_contains "$leia_head" 'siga `roteiro-m1.md` do início ao fim' "LEIA-ME: no topo, manda seguir o roteiro na demo"
+assert_contains "$leia_head" 'siga `roteiro-m2.md` do início ao fim' "LEIA-ME: no topo, manda seguir o roteiro atual (M2)"
 assert_contains "$leia_head" "referência de operação" "LEIA-ME: no topo, diz que é a referência de operação"
 leia_s1="$(awk '/^## 1\. /{on=1; print; next} on && /^## /{exit} on' "$leia_file" 2>/dev/null)"
 leia_s1_ps="$(awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' <<<"$leia_s1")"
@@ -334,11 +268,7 @@ assert_contains "$leia" 'java -jar app\demo-seed.jar --server http://localhost:8
 # cada senha vem do Get-Credential e o PIN do Read-Host -AsSecureString.
 leia_file="$ROOT/tools/server-env/LEIA-ME.md"
 for f in "$leia_file" "$roteiro"; do
-  n="${f#"$ROOT"/}"
-  assert_eq "" "$(grep -nE 'ZENY_SEED_[A-Z_]*(PASSWORD|PIN)[A-Z_]*["'"'"']?[[:space:]]*=' "$f" 2>/dev/null)" \
-    "$n: nenhuma atribuição a ZENY_SEED_*PASSWORD ou *_PIN"
-  assert_eq "" "$(grep -nE 'SetEnvironmentVariable\([^,]*ZENY_SEED_[^,]*,[[:space:]]*["'"'"']' "$f" 2>/dev/null)" \
-    "$n: SetEnvironmentVariable de ZENY_SEED_* sem valor literal"
+  roteiro_check_seed_secret_values "$f"
 done
 for v in ADMIN_PASSWORD ADMIN_NEW_PASSWORD MANAGER_PASSWORD RECEPTIONIST_PASSWORD HOUSEKEEPER_PASSWORD; do
   set_line="$(grep -E "SetEnvironmentVariable\\(\"ZENY_SEED_$v\"," "$leia_file" 2>/dev/null)"
@@ -369,6 +299,7 @@ assert_contains "$new_pw_note" "apaga a variável" "LEIA-ME: valor vazio no SetE
 
 # README: link do roteiro e os JARs gerados antes do package.sh.
 assert_contains "$readme_text" "(docs/demo/roteiro-m1.md)" "README liga o roteiro do M1"
+assert_contains "$readme_text" "(docs/demo/roteiro-m2.md)" "README liga o roteiro do M2"
 pkg_row="$(grep -F '`tools/server-env/package.sh`' "$readme" | head -1)"
 assert_contains "$pkg_row" ":demo-seed:seedJar" "linha do package.sh manda gerar os JARs"
 pre="${pkg_row%%\`tools/server-env/package.sh\`*}"

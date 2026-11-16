@@ -18,7 +18,7 @@ Você precisa de:
 - Windows com o **Docker Desktop** instalado e aberto (o ícone da baleia na bandeja diz "Engine running").
 - **JDK 25** instalado. Com um Java mais antigo, o app e o seed não abrem.
 - Internet, na primeira vez: o servidor é construído a partir do código e baixa as dependências.
-- A pasta do pacote da demo (`demo-package`), copiada do notebook. Ela tem as pastas `app`, `images` e `server` e os arquivos `roteiro-m1.md` (este), `LEIA-ME.md`, `gen-env.sh`, `.env.example`, `compose.override.yaml`, `server-pin.properties` e `VERSAO.txt`. Você não precisa abrir o `LEIA-ME.md` para seguir este roteiro.
+- A pasta do pacote da demo (`demo-package`), copiada do notebook. Ela tem as pastas `app`, `images` e `server` e os arquivos `roteiro-m1.md` (este), `roteiro-m2.md`, `LEIA-ME.md`, `gen-env.sh`, `.env.example`, `compose.override.yaml`, `server-pin.properties` e `VERSAO.txt`. Você não precisa abrir o `LEIA-ME.md` para seguir este roteiro.
 
 Abra o Windows PowerShell (menu Iniciar, digite `PowerShell`, clique em "Windows PowerShell") e confira as versões. Primeiro, o Docker Compose:
 
@@ -81,7 +81,7 @@ Confira o conteúdo:
 Get-ChildItem -Name
 ```
 
-**Resultado esperado:** a lista tem `app`, `images`, `server`, `.env.example`, `compose.override.yaml`, `gen-env.sh`, `LEIA-ME.md`, `roteiro-m1.md`, `server-pin.properties` e `VERSAO.txt`. Não pode ter `.env` (sem `.example`): se tiver, a pasta não é nova. Nesse caso, volte ao começo deste passo: o bloco que renomeia a pasta para `zeny-demo-antiga` sai dela antes, e depois você cria a `C:\zeny-demo` de novo.
+**Resultado esperado:** a lista tem `app`, `images`, `server`, `.env.example`, `compose.override.yaml`, `gen-env.sh`, `LEIA-ME.md`, `roteiro-m1.md`, `roteiro-m2.md`, `server-pin.properties` e `VERSAO.txt`. Não pode ter `.env` (sem `.example`): se tiver, a pasta não é nova. Nesse caso, volte ao começo deste passo: o bloco que renomeia a pasta para `zeny-demo-antiga` sai dela antes, e depois você cria a `C:\zeny-demo` de novo.
 
 Agora confira que o Docker não tem nada do projeto `zeny-front`. Primeiro, os projetos:
 
@@ -255,6 +255,7 @@ java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin
   reservas: 11 criados, 0 já existiam
   alocações: 9 criados, 0 já existiam
   check-ins: 7 criados, 0 já existiam
+  recados: 3 criados, 0 já existiam
   Concluído em 9,6 s.
   ```
 

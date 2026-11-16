@@ -51,9 +51,11 @@ object TraceText {
         trace: TraceResponse,
         reservationCode: String?,
     ): String {
+        // O servidor manda `null` explícito no que não tem valor, e o `sdk` lê isso como `Option.Some(null)`.
+        val hasReservation = (trace.reservationId as? Option.Some)?.value != null
         val roomNumber = (trace.roomNumber as? Option.Some)?.value
         return when {
-            trace.reservationId is Option.Some -> reservationCode?.let { "Reserva $it" } ?: "Reserva"
+            hasReservation -> reservationCode?.let { "Reserva $it" } ?: "Reserva"
             roomNumber != null -> "UH $roomNumber"
             else -> NO_LINK
         }

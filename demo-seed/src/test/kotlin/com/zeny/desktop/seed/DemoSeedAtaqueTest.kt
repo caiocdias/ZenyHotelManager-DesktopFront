@@ -9,6 +9,7 @@ import com.zeny.desktop.seed.config.ConfigSeeder
 import com.zeny.desktop.seed.config.FakeConfigGateway
 import com.zeny.desktop.seed.data.DemoCatalog
 import com.zeny.desktop.seed.data.SeedReport
+import com.zeny.desktop.seed.frontdesk.FakeTraces
 import com.zeny.desktop.seed.people.AdminSignIn
 import com.zeny.desktop.seed.people.FakeIam
 import com.zeny.desktop.seed.people.SessionFactory
@@ -59,7 +60,8 @@ class DemoSeedAtaqueTest {
     ): AdminContext {
         val s = iam.open().also { session = it }
         kotlinx.coroutines.runBlocking { s.signIn("admin", Secret("Nova-Admin-12345")) }
-        return AdminContext(wrap(s), businessDate, FakeConfigGateway(), iam, FakeBookingGateway(seeded(), date), iam)
+        val bookings = FakeBookingGateway(seeded(), date)
+        return AdminContext(wrap(s), businessDate, FakeConfigGateway(), iam, bookings, FakeTraces(), iam)
     }
 
     private suspend fun execute(
@@ -199,7 +201,8 @@ class DemoSeedAtaqueTest {
                     { cfg ->
                         val factory = SessionFactory { iam.open().also { session = it } }
                         val admin = AdminSignIn(factory).open(cfg)
-                        AdminContext(admin, { date }, FakeConfigGateway(), iam, FakeBookingGateway(seeded(), date), iam)
+                        val bookings = FakeBookingGateway(seeded(), date)
+                        AdminContext(admin, { date }, FakeConfigGateway(), iam, bookings, FakeTraces(), iam)
                     },
                     { queue.removeFirst() },
                     { lines += it },

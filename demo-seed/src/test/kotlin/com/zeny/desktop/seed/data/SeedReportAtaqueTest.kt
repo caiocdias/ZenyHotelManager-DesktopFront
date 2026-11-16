@@ -57,6 +57,7 @@ class SeedReportAtaqueTest {
                 "reservas",
                 "alocações",
                 "check-ins",
+                "recados",
             )
         assertEquals(labels, SeedItem.entries.map { it.label })
         val r = SeedReport()
