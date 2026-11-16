@@ -1,6 +1,6 @@
 # Roadmap — M0 Sincronização com o servidor
 
-> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-15
+> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-16
 
 ## Como usar
 
@@ -482,17 +482,17 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] `api/server-pin.properties` tem `commit=5e06f16d51ff9913f0da09df8f62639996cd6c52`, e `sha256sum api/openapi.yaml` é igual a `contract_sha256` e ao hash de `git -C <servidor> show 5e06f16d51ff:api/openapi.yaml`.
-- [ ] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `5e06f16d51ff`. Se ela tiver andado, a saída vai para o handoff e o pin fica em `5e06f16d51ff`.
-- [ ] O SDK compila as 335 operações, e o teste de cobertura do SDK amarra os 335 `operationId` a métodos gerados.
-- [ ] Um teste do `sdk` caracteriza o tipo de resposta gerado para `restrictGuest`, `liftGuestRestriction` e `mergeGuests`, e os dois corpos (completo e resumo) passam pelo cliente gerado sem perda. O tipo encontrado fica registrado no handoff e no ADR 0010, se divergir de `JsonElement`.
-- [ ] No detalhe da reserva, `NO_SHOW` (histórico) e `RESERVATION_NO_SHOW` (alocação) têm rótulo pt-BR próprio, e um teste prova que nenhum dos dois cai em "Outro (…)".
-- [ ] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde.
-- [ ] `zeny-front` sobe do zero em `5e06f16d51ff` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele.
-- [ ] O fluxo 3 do `LEIA-ME` e o início dos dois roteiros avisam do fechamento automático às 03:00, e o passo da ficha do `roteiro-m2.md` trata "(código FNRH)" como exceção.
-- [ ] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
+- [x] `api/server-pin.properties` tem `commit=5e06f16d51ff9913f0da09df8f62639996cd6c52`, e `sha256sum api/openapi.yaml` é igual a `contract_sha256` e ao hash de `git -C <servidor> show 5e06f16d51ff:api/openapi.yaml`. *(Os três: `6c0512fdd91e805b6a67664b6881080707eaea820b3425ae92884250daeebdc9`; `cmp` idênticos.)*
+- [x] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `5e06f16d51ff`. Se ela tiver andado, a saída vai para o handoff e o pin fica em `5e06f16d51ff`. *(`igual (código 0)`, base e alvo `5e06f16d51ff`.)*
+- [x] O SDK compila as 335 operações, e o teste de cobertura do SDK amarra os 335 `operationId` a métodos gerados. *(`SdkAttackTest.everyOperationInTheContractHasAGeneratedMethod`, 335.)*
+- [x] Um teste do `sdk` caracteriza o tipo de resposta gerado para `restrictGuest`, `liftGuestRestriction` e `mergeGuests`, e os dois corpos (completo e resumo) passam pelo cliente gerado sem perda. O tipo encontrado fica registrado no handoff e no ADR 0010, se divergir de `JsonElement`. *(`HttpResponseTyped<JsonElement>`, como o ADR 0010 previa; o ADR não muda. `SdkOneOfTest` e `SdkOneOfAttackTest`.)*
+- [x] No detalhe da reserva, `NO_SHOW` (histórico) e `RESERVATION_NO_SHOW` (alocação) têm rótulo pt-BR próprio, e um teste prova que nenhum dos dois cai em "Outro (…)". *("Não compareceu" nos dois; `ReservationDetailNoShowLabelTest`.)*
+- [x] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde. *(Em `fdfbc89`: 3884 testes, 0 falhas, 34 pulados; 48 arquivos, 0 falhas; lint verde.)*
+- [x] `zeny-front` sobe do zero em `5e06f16d51ff` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele. *(No notebook: `down.sh -v`, `up.sh`, `{"status":"UP"}` com `zeny-hotel-manager:5e06f16d51ff`; `smokeTest` 1/1.)*
+- [x] O fluxo 3 do `LEIA-ME` e o início dos dois roteiros avisam do fechamento automático às 03:00, e o passo da ficha do `roteiro-m2.md` trata "(código FNRH)" como exceção. *(`tests/test_fechamento_automatico.sh` e o de ataque.)*
+- [x] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
 - [ ] O usuário executou o `roteiro-m2.md` no Windows com o pacote regenerado e aprovou. Pela regra 7 do README, essa validação é acumulada para o gate do M3.
-- [ ] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`).
+- [x] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`). *(`status --porcelain` vazio antes e depois; o `worktree list` mudou só pelo orquestrador do servidor, ver o handoff.)*
 
 **Validação obrigatória:**
 
@@ -524,12 +524,53 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-16):** `#em-andamento`, **aguardando o Windows**. A implementação foi revisada e integrada na `main`, a verificação da etapa foi feita no notebook e o pacote foi regenerado. Falta só o usuário executar o `roteiro-m2.md` no Windows com o pacote novo e aprovar; pela regra 7 do [README](README.md), a etapa entrou na lista "Validações acumuladas no Windows" (item 3), conta como concluída para dependências, e o M3 pode começar. Não retomar esta etapa antes da aprovação do usuário.
+- **Pré-voo (início do lote, 2026-11-15):** aditivo (código 11), pin `57eb5fac5b8a` × `main` `5e06f16d51ff`, 3 `warning` de `oneOf`, 0 `error`.
+- **Plano:** [`docs/superpowers/plans/2026-11-15-m0-sincronizacao-e03.md`](../superpowers/plans/2026-11-15-m0-sincronizacao-e03.md), 3 tasks. Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (5 Importantes: o README do pin fora da Task 1, caminho para tipo diferente de `JsonElement`, segredos no `compose config`, memória e caminho de falha do ambiente, símbolo do teste de cobertura) e aprovado com notas na rodada 1.
+- **Commits** na branch `roadmap/m0-sincronizacao` (cada um com o trailer `Soul:`):
+  - documentação: `fa91d53` (início), `a1d8602`, `29089d6`, `4768396` (plano e revisão);
+  - Task 1, pin, contrato e caracterização do `oneOf`: `4768396..f014c3b` (`f262c4e` desenvolvedor, `f014c3b` testador);
+  - Task 2, rótulos do no-show: `f014c3b..268d36e`;
+  - Task 3, aviso do fechamento automático: `268d36e..fd183fe`;
+  - testador de etapa: `9a9077c`, `fdfbc89` (correção do `detektTest`); este handoff.
+- **Revisão final** (`revisor-seguranca`, opus): aprovado com ressalvas, "Ready to merge: sim" quanto ao código, 0 Críticos e 0 Importantes. Três Menores estacionados (abaixo). Sem onda de correção.
+  - Scanner `osv-scanner 2.7.0 scan source -r --no-ignore .`: 6 lockfiles (131 a 361 pacotes), "No issues found". Nenhuma dependência, lockfile ou script de build mudou.
+  - Verificação mecânica `check_test_integrity.py --base ebfd468`: "OK: nenhum apontamento" (também por task).
+  - Gate em `fdfbc89`: `./gradlew build` BUILD SUCCESSFUL (3884 testes, 0 falhas, 34 pulados, as verificações ao vivo); `bash tests/run.sh` 48 arquivos, 0 falhas; `ktlintCheck detekt` verde. Um gate anterior, em `9a9077c`, caiu no `:app:detektTest` (`RedundantSuspendModifier` num teste do testador), corrigido em `fdfbc89`.
+- **Critérios verificados:**
+  - **Pin:** `commit=5e06f16d51ff9913f0da09df8f62639996cd6c52`; sha256 `6c0512fdd91e805b6a67664b6881080707eaea820b3425ae92884250daeebdc9` na cópia, no pin e no `git show` do servidor; `cmp` idênticos; 335 `operationId`; `README.md` cita o pin novo.
+  - **Pré-voo depois da troca:** `igual (código 0)`.
+  - **SDK e `oneOf`:** o ogen gerou e compilou o contrato inteiro sem código à mão. As três operações devolvem `HttpResponseTyped<JsonElement>` (`GuestsApi.kt` gerado), e o modelo `GuestWriteSummaryResponse(id: Uuid, restricted: Boolean)` existe. `SdkOneOfTest` (7) prova os dois ramos íntegros nas três operações, com a árvore JSON inteira, o `ETag` e a decodificação pelo serializer gerado; a declaração explícita do tipo não compila se ele mudar (provado). `SdkOneOfAttackTest` (12) cobre `If-Match`, método e caminho, `ETag` ausente, precisão e unicode, e corpos fora do contrato. O ADR 0010 não muda.
+  - **Conserto:** nada quebrou em `core`, `app` ou `demo-seed`; o catálogo de erros continua com 377 códigos.
+  - **Rótulos:** `ReceptionText` ganhou `NO_SHOW` → "Não compareceu" (histórico) e `RESERVATION_NO_SHOW` → "Não compareceu" (motivo de liberação), o mesmo texto da situação `NO_SHOW`. `ReservationDetailNoShowLabelTest` passa pelo estado do detalhe: "Não compareceu" no histórico, "Solta · Não compareceu" na alocação, nenhum "Outro (".
+  - **Avisos:** o mesmo parágrafo no fluxo 3 do `LEIA-ME` (logo depois do `down -v`/`up -d`) e na seção 0 dos dois roteiros (antes da folha de senhas); o passo 13 do `roteiro-m2.md` trata "(código FNRH)" como exceção. Testes estáticos com mutação, unicidade, posição e chegada ao pacote.
+  - **Ambiente no notebook:** `down.sh -v`, `up.sh` (build da imagem `zeny-hotel-manager:5e06f16d51ff`), readiness `{"status":"UP"}`, `smokeTest -PserverUrl=http://127.0.0.1:8088` 1/1, com os segredos de `.server/seed-secrets.env` (a senha do administrador conferida com a inicial do `.env` antes, sem imprimir valores).
+  - **Pacote** (`build/demo-package/` do checkout principal, 503 MB com `images/zeny-server-images.tar`): `VERSAO.txt` com `front_commit=fdfbc89…`, `front_dirty=false`, `server_commit=5e06f16d51ff…`, `zeny-desktop.jar` sha256 `844cf108…` e `demo-seed.jar` `a8b4a512…`; nenhum `.env`; o aviso aparece uma vez no `LEIA-ME.md` e nos dois roteiros do pacote.
+  - **Revisão de `tools/server-env/`.** No servidor, `git diff 57eb5fac5b8a 5e06f16d51ff -- docker/` é vazio; o `application.yaml` só ganhou `zeny.endofday.trigger.wait` (`PT5S`, com padrão); o wrapper do Gradle não mudou; os dois `.env.example` têm as mesmas 21 chaves. A configuração efetiva saiu só por `config --services`, `config --images` e `config --format json` filtrado em `name` e `services.proxy.ports`.
+
+    | Arquivo | Resultado | Motivo |
+    |---|---|---|
+    | `compose.override.yaml` | sem mudança | o compose do servidor não mudou; `name` = `zeny-front`, `proxy` em `127.0.0.1:8088->80` |
+    | `up.sh` | sem mudança | subiu do zero e construiu `zeny-hotel-manager:5e06f16d51ff`; serviços db, storage, storage-init, api, proxy |
+    | `down.sh` | sem mudança | o `down -v` atingiu só o projeto `zeny-front` |
+    | `package.sh` | sem mudança | gerou o pacote com o pin novo; o aviso chega ao `LEIA-ME` e aos roteiros do pacote (teste de ataque) |
+    | `save-images.sh` | sem mudança | `config --images` = minio, caddy, `zeny-hotel-manager:5e06f16d51ff`, postgres; gravou o `.tar` |
+    | `gen-env.sh` | sem mudança | as chaves do `.env.example` do servidor não mudaram |
+    | `lib.sh` | sem mudança | `server_tag` resolve `5e06f16d51ff`; `ensure_server_tree` extraiu a árvore nova e conferiu o sha256 |
+    | `.env.example` | sem mudança | as mesmas 21 chaves do servidor |
+    | `LEIA-ME.md` | **mudou** | o aviso do fechamento automático no fluxo 3 (Task 3) |
+
+  - **Servidor só leitura:** `status --porcelain` vazio antes e depois. O `worktree list` tem os mesmos caminhos e branches do início; só o `roadmap/m6-operacao-fechamento` avançou (`a295c85` → `ba79642`), pelo orquestrador do servidor. Nada foi criado por esta sessão.
+  - **Pedidos:** `docs/pedidos-servidor.md` sem mudança; PF-01 e PF-02 continuam abertos.
+  - **Pendente (usuário, Windows, regra 7):** o `roteiro-m2.md` com o pacote novo.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  1. **R4, sem memória o M3 não começa:** se o notebook não tivesse memória para o ambiente, a E03 não contaria como concluída para o M3, porque a spec põe o `smokeTest` como condição para o M3 começar e a regra 7 só cobre o que o usuário executa no Windows. Não foi acionada (10,8 GiB livres, `smokeTest` verde). Custo se errado: o M3 esperaria memória livre no notebook.
+  2. **R6, Menores estacionados:** os três Menores da revisão final ficaram sem correção (abaixo). Custo se errado: um teste de caracterização aceita qualquer exceção, e duas fixtures mudam juntas.
+- **Notas para a próxima etapa:**
+  - **M3 E01:** a base desta etapa ainda não foi validada no Windows (regra 7, item 3 da lista).
+  - **M5 E02 (fachada do `oneOf`):** o `sdk` entrega corpo array, `null` ou primitivo sem erro, e a fachada precisa tratá-los como `IncompatibleResponse`; um completo que traga `restricted` decodifica também como resumo, então a escolha é pelo `fullName` (ADR 0010, passo 2), nunca pela ordem; o `ETag` pode faltar; o `JsonElement` do ramo completo traz dados pessoais e nunca vai a log (design §6.2). Ver `SdkOneOfAttackTest`.
+  - **Menores estacionados:** `emptyBodyFailsToDecodeInsteadOfBecomingAnObject` (`SdkOneOfAttackTest`) só confere que houve falha, não o tipo; as fixtures de reserva estão copiadas em `ReservationDetailNoShowLabelTest` e `ReservationDetailNoShowAtaqueTest`; o `./gradlew ktlintCheck detekt` não roda o `detektTest`, que só o `build` pega (vale pedir `build` antes do commit nos briefs).
+  - **Ambiente local:** `zeny-front` no ar em `5e06f16d51ff`, recriado em 2026-11-16 às 02:20 UTC e semeado pelo `smokeTest`. Pela regra 5, ele é fechado sozinho às 03:00 (hora do hotel) do dia seguinte; recrie antes de usá-lo num roteiro. `.server/5e06f16d51ff…/` criado; a imagem `zeny-hotel-manager:57eb5fac5b8a` continua no Docker. As ondas paralelas não foram usadas (R1: um Gradle por vez).
 
 ---
 
@@ -543,3 +584,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-13 — E02 executada pelo `claude --agent orquestrador`: pin e contrato em `57eb5fac5b8a` (335 operações), SDK regenerado, 24 mensagens de erro novas no `core`, `tools/server-env/` revisto (sem mudança, com testes de regressão para `docker/gate/`), `zeny-front` no ar e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando a parada humana (roteiro do M1 no Windows).
 - 2026-11-13 — o usuário decidiu acumular a validação no Windows até voltar a ter acesso a ele (regra 7 do README). A E02 fica `#em-andamento`, aguardando o Windows, e conta como concluída para dependências; o M2 pode começar (`claude --agent orquestrador`).
 - 2026-11-15 — análise da rodada 3 (`claude --agent arquiteto`, `development-roadmap` em modo atualização) contra a `main` do servidor em `5e06f16d51ff`: 131 commits à frente, pré-voo aditivo (código 11), com 3 `warning` de `oneOf`. Entra a E03, a etapa mecânica, com a caracterização do primeiro `oneOf` no SDK, os rótulos do no-show e o aviso do fechamento automático nos roteiros. Decisão no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md). A M6 E08 sai de `#bloqueada`. A regra 5 do README foi revista, porque a data operacional passa a avançar sozinha às 03:00. A M3 E04, a M3 E05, a M5 E02 e a M7 E10 ganharam notas. PF-01 e PF-02 continuam abertos, e nenhuma captura "atende PF-NN" foi achada.
+- 2026-11-16 — E03 executada pelo `claude --agent orquestrador`: pin e contrato em `5e06f16d51ff`, o primeiro `oneOf` caracterizado como `HttpResponseTyped<JsonElement>` (o ADR 0010 não muda), rótulos do no-show no detalhe da reserva, aviso do fechamento automático no `LEIA-ME` e nos roteiros, `zeny-front` recriado e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando o Windows (regra 7, item 3 da lista), e o M3 pode começar.
