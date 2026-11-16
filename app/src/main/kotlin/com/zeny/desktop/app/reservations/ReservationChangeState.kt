@@ -223,12 +223,13 @@ class ReservationChangeState(
     val canConfirm: Boolean
         get() = !closed && loaded != null && !loading && !busy && done == null
 
-    private var loaded: Loaded? = null
+    // `loaded` e `closed` são estado observável: `canConfirm` os lê, e o Compose só recompõe o que leu estado.
+    private var loaded by mutableStateOf<Loaded?>(null)
     private var loadJob: Job? = null
     private var optionsJob: Job? = null
     private var generation = 0
     private var optionsGeneration = 0
-    private var closed = false
+    private var closed by mutableStateOf(false)
 
     private val locked: Boolean get() = closed || loading || busy || done != null
     private val stayLocked: Boolean get() = locked || inHouse

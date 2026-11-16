@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.reservations
 
+import androidx.compose.runtime.snapshots.Snapshot
 import com.zeny.desktop.app.reception.ReceptionText
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.error.FieldError
@@ -237,6 +238,49 @@ class ReservationChangeStateTest {
             assertNull(state.notice)
             assertTrue(state.options.isEmpty())
             assertNull(state.option)
+        }
+
+    /**
+     * O Compose só recompõe o que leu estado observável: o que `canConfirm` lê antes da carga tem de mudar quando
+     * ela termina. Lido fora de um snapshot, o valor certo esconderia a falta de assinatura.
+     */
+    @Test
+    fun canConfirmIsObservable() =
+        runTest {
+            val state = state(source())
+            val read = mutableSetOf<Any>()
+            Snapshot.takeSnapshot(readObserver = { read += it }).run { enter { assertFalse(state.canConfirm) } }
+            val written = mutableSetOf<Any>()
+            val handle = Snapshot.registerApplyObserver { changed, _ -> written.addAll(changed) }
+            try {
+                state.start()
+                runCurrent()
+                Snapshot.sendApplyNotifications()
+            } finally {
+                handle.dispose()
+            }
+
+            assertTrue(state.canConfirm)
+            assertTrue(read.any { it in written }, "nada do que canConfirm lia antes da carga mudou")
+        }
+
+    @Test
+    fun canConfirmIsObservableAfterClose() =
+        runTest {
+            val state = started(source())
+            val read = mutableSetOf<Any>()
+            Snapshot.takeSnapshot(readObserver = { read += it }).run { enter { assertTrue(state.canConfirm) } }
+            val written = mutableSetOf<Any>()
+            val handle = Snapshot.registerApplyObserver { changed, _ -> written.addAll(changed) }
+            try {
+                state.close()
+                Snapshot.sendApplyNotifications()
+            } finally {
+                handle.dispose()
+            }
+
+            assertFalse(state.canConfirm)
+            assertTrue(read.any { it in written }, "nada do que canConfirm lia mudou com o close")
         }
 
     @Test
