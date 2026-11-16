@@ -6,6 +6,7 @@ import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
+import com.zeny.desktop.app.reservations.AvailabilitySource
 import com.zeny.desktop.app.reservations.ReservationSearchSource
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.app.rooms.RoomsSource
@@ -37,6 +38,7 @@ import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.realtime.RealtimeStatus
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.model.AvailabilityResponse
 import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
@@ -98,6 +100,9 @@ interface ServerConnection : AutoCloseable {
 
     /** A busca de reservas; `null` quando a conexão não a oferece. */
     fun reservationSearchSource(): ReservationSearchSource? = null
+
+    /** A disponibilidade e a cotação; `null` quando a conexão não as oferece. */
+    fun availabilitySource(): AvailabilitySource? = null
 
     /** A ficha de registro em PDF; `null` quando a conexão não a oferece. */
     fun registrationCards(): RegistrationCards? = null
@@ -324,6 +329,29 @@ class CoreConnection(
 
     /** A busca de reservas sobre `core.hotel`, `core.reservations`, `core.guests` e `core.rooms`. */
     override fun reservationSearchSource(): ReservationSearchSource = reservationSearch
+
+    private val availability =
+        object : AvailabilitySource {
+            override suspend fun permissions(): Set<String> = core.account.me().permissions
+
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun availability(
+                from: BusinessDate,
+                to: BusinessDate,
+            ): AvailabilityResponse = core.reservations.availability(from, to)
+
+            override suspend fun quote(
+                arrival: BusinessDate,
+                departure: BusinessDate,
+                adults: Int,
+                childAges: List<Int>,
+            ): QuoteResponse =
+                core.reservations.quoteStay(arrival, departure, adults, childAges, includeUnavailable = true)
+        }
+
+    /** A disponibilidade e a cotação sobre `core.account`, `core.hotel` e `core.reservations`. */
+    override fun availabilitySource(): AvailabilitySource = availability
 
     private val registrationCards = RegistrationCards { id -> core.documents.registrationCard(id) }
 
