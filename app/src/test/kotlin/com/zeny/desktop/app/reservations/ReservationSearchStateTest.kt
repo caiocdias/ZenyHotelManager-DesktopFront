@@ -537,6 +537,72 @@ class ReservationSearchStateTest {
         }
 
     @Test
+    fun userSearchWhileDayHeldIsNotReplaced() =
+        runTest {
+            val source =
+                source().withReservations(2).apply { documentHolders["CPF" to CPF] = setOf(guestId(2)) }
+            val gate = source.hold(FakeReservationSearchSource.Op.BUSINESS_DAY)
+            val state = state(source)
+            state.start()
+            runCurrent()
+
+            state.name = "a"
+            state.documentNumber = CPF
+            state.searchByDocument()
+            runCurrent()
+            gate.complete(Unit)
+            runCurrent()
+
+            assertEquals(0, source.searchCalls.size)
+            assertEquals(1, source.documentCalls.size)
+            assertEquals("CPF ***4725", state.searchedDocument)
+            assertNull(state.fieldError)
+            assertEquals(listOf("R-2"), state.codes())
+            assertEquals(BusinessDay(today, null), state.day)
+            assertEquals("", state.fromText)
+            assertEquals("", state.toText)
+        }
+
+    @Test
+    fun retryAfterDayFailureStillLoadsDefaultPeriod() =
+        runTest {
+            val source =
+                source().withReservations(1).apply {
+                    failures[FakeReservationSearchSource.Op.BUSINESS_DAY] = problem(503, "X")
+                }
+            val state = started(source)
+            assertNotNull(state.error)
+
+            source.failures.remove(FakeReservationSearchSource.Op.BUSINESS_DAY)
+            state.start()
+            runCurrent()
+
+            assertNull(state.error)
+            assertEquals(ReservationFilter(from = today, to = inThirtyDays), source.searchCalls.single().filter)
+            assertEquals(listOf("R-1"), state.codes())
+        }
+
+    @Test
+    fun closeWithPageHeldReadsNoHolderNorRoomTypes() =
+        runTest {
+            val source = source().withReservations(1)
+            val gate = source.hold(FakeReservationSearchSource.Op.SEARCH)
+            val state = started(source)
+            // A página presa é a de uma recarga da tela (fora do escopo do estado): o `close()` não a cancela.
+            backgroundScope.launch { state.table.reload() }
+            runCurrent()
+            assertEquals(2, source.searchCalls.size)
+
+            state.close()
+            gate.complete(Unit)
+            runCurrent()
+
+            assertTrue(source.holderCalls.isEmpty())
+            assertEquals(0, source.roomTypesCalls)
+            assertTrue(state.table.rows.isEmpty())
+        }
+
+    @Test
     fun closeDiscardsLateResultAndQuery() =
         runTest {
             val source =

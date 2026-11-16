@@ -134,7 +134,10 @@ class ReservationSearchState(
     var day by mutableStateOf<BusinessDay?>(null)
         private set
 
-    /** Lê a data operacional, põe o período padrão (dela até 30 dias depois) e busca. */
+    /**
+     * Lê a data operacional e, se nenhuma busca foi enviada ainda, põe o período padrão (dela até 30 dias depois) e
+     * busca. Também é o "Tentar de novo" de quando a data falhou.
+     */
     fun start() {
         if (closed) return
         ownScope.launch {
@@ -150,6 +153,8 @@ class ReservationSearchState(
                 }
             error = null
             day = read
+            // A busca que o usuário já enviou (com a data presa) vale: a carga inicial não a substitui.
+            if (current != null) return@launch
             fromText = DateInput.format(read.date)
             toText = DateInput.format(BusinessDate(read.date.value.plusDays(DEFAULT_PERIOD_DAYS)))
             search()
@@ -289,6 +294,8 @@ class ReservationSearchState(
                 is Query.Filtered -> source.search(query.filter, cursor, limit)
                 is Query.ByDocument -> source.searchByDocument(query.document, query.statuses, cursor, limit)
             }
+        // Fechado durante a página: nem titulares nem tipos de UH saem à rede.
+        if (closed) return Page(emptyList(), null)
         val rows =
             lookups.withLock {
                 val types = roomTypeNames ?: readRoomTypeNames().also { roomTypeNames = it }
