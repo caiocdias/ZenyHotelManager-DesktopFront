@@ -164,7 +164,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
 | E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #em-andamento | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
-| E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #pendente | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
+| E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #em-andamento | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
 
 ---
 
@@ -416,7 +416,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) — #pendente
+## E03 — Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) — #em-andamento
 
 **Objetivo:** o front passa a apontar para a `main` do servidor em `5e06f16d51ff9913f0da09df8f62639996cd6c52`. O pin e a cópia do contrato são trocados e o SDK é regenerado. O tipo que o ogen gera para o primeiro `oneOf` do contrato fica caracterizado por teste. As telas existentes ganham os rótulos dos valores novos de enum, e os roteiros e o `LEIA-ME` passam a avisar que a data operacional avança sozinha. Ao fim, o `smokeTest` passa contra o servidor novo, e o M3 pode começar.
 
