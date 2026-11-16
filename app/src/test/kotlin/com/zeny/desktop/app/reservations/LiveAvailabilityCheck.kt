@@ -3,17 +3,10 @@ package com.zeny.desktop.app.reservations
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.toAwtImage
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
-import com.zeny.desktop.app.reception.ReceptionText
 import com.zeny.desktop.app.session.CoreConnection
 import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.config.LocalSettings
@@ -47,7 +40,6 @@ private const val ARRIVAL_OFFSET_DAYS = 7L
 private const val DEPARTURE_OFFSET_DAYS = 9L
 private const val TWO_ADULTS = "2"
 private const val TOO_MANY_ADULTS = "4"
-private const val NO_DAY = "—"
 private val ROOM_TYPE_NAMES = setOf("Standard", "Luxo", "Suíte")
 
 /**
@@ -57,6 +49,10 @@ private val ROOM_TYPE_NAMES = setOf("Standard", "Luxo", "Suíte")
  * `build/live/availability.png`. Comando, só num subshell:
  * `(set -a; . <arquivo>; set +a; ZENY_LIVE_AVAILABILITY=1 ./gradlew :app:test --tests '*LiveAvailabilityCheck*'
  * --rerun --max-workers=2)`
+ *
+ * As leituras e comparações ficam em `LiveAvailabilityReaders.kt`, provadas sem rede pela
+ * `LiveAvailabilityReadersTest`.
+ * As chamadas da tela ao servidor são medidas na fonte (`RecordingSource`), não pelo que a tela mostra.
  */
 @OptIn(ExperimentalTestApi::class)
 class LiveAvailabilityCheck {
@@ -77,7 +73,7 @@ class LiveAvailabilityCheck {
     @Test
     fun calendarMatchesApi() =
         withViewer { core, connection ->
-            val source = connection.availabilitySource()
+            val source = RecordingSource(connection.availabilitySource())
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 lateinit var calendar: AvailabilityState
                 setContent {
@@ -87,22 +83,33 @@ class LiveAvailabilityCheck {
                     ZenyTheme { AvailabilityScreen(calendar, quote) }
                 }
                 try {
+                    val today = runBlocking { core.hotel.businessDay().date }
+                    val window = "${today.toApi()}..${BusinessDate(today.value.plusDays(WINDOW_DAYS - 1L)).toApi()}"
                     val started = System.nanoTime()
                     runOnUiThread { calendar.start() }
-                    waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !calendar.loading && calendar.from != null }
+                    waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !calendar.loading }
                     val millis = (System.nanoTime() - started) / NANOS_PER_MILLI
                     println("LiveAvailabilityCheck: a carga do calendário (H2) levou $millis ms")
                     assertNull(calendar.error, "a carga do calendário falhou: ${calendar.error}")
-                    assertTrue(
-                        millis <= H2_LIMIT_MILLIS,
-                        "H2: a carga do calendário levou $millis ms, acima de $H2_LIMIT_MILLIS ms: paginar por semana",
-                    )
+                    // A medida na fonte: uma leitura do dia operacional e uma da janela de 30 datas, nada mais.
+                    assertEquals(1, source.calls("businessDay").size, "leituras do dia operacional na carga")
+                    assertEquals(listOf(window), source.calls("availability").map { it.request }, "janela da carga")
                     assertShowsApi(core, calendar)
                     runOnUiThread { calendar.reload() }
                     waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !calendar.loading }
                     assertNull(calendar.error, "a recarga do calendário falhou: ${calendar.error}")
+                    assertEquals(
+                        listOf(window, window),
+                        source.calls("availability").map { it.request },
+                        "o reload() não foi ao servidor com a mesma janela",
+                    )
                     assertShowsApi(core, calendar)
                     println("LiveAvailabilityCheck: o calendário bate com a API, na carga e depois do reload()")
+                    // O teto vale por último: um estouro não esconde se o calendário bate ou não com a API.
+                    assertTrue(
+                        millis <= H2_LIMIT_MILLIS,
+                        "H2: a carga do calendário levou $millis ms, acima de $H2_LIMIT_MILLIS ms: paginar por semana",
+                    )
                 } finally {
                     calendar.close()
                 }
@@ -112,7 +119,7 @@ class LiveAvailabilityCheck {
     @Test
     fun quoteMatchesApi() =
         withViewer { core, connection ->
-            val source = connection.availabilitySource()
+            val source = RecordingSource(connection.availabilitySource())
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 lateinit var calendar: AvailabilityState
                 lateinit var quote: QuoteState
@@ -126,21 +133,17 @@ class LiveAvailabilityCheck {
                     val (arrival, departure) = stayDates(core)
                     quoteStay(calendar, quote, arrival, departure, TWO_ADULTS)
                     assertNull(quote.error, "a cotação falhou: ${quote.error}")
+                    assertEquals(
+                        listOf("${arrival.toApi()}..${departure.toApi()} adults=2 children=[]"),
+                        source.calls("quote").map { it.request },
+                        "o pedido de cotação que a tela fez",
+                    )
                     val api = runBlocking { core.reservations.quoteStay(arrival, departure, 2, emptyList(), true) }
                     assertTrue(api.offers.isNotEmpty(), "pré-condição do ambiente: a API não devolveu oferta")
-                    assertEquals(api.offers.size, quote.offers.size, "o número de ofertas não bate com a API")
-                    val texts = api.offers.indices.map { nodeText("quote-offer-$it") }
-                    api.offers.forEachIndexed { index, offer ->
-                        assertTrue(texts[index].contains(ReceptionText.money(offer.total)), "oferta $index sem o total")
-                        offer.nights.forEach {
-                            assertTrue(
-                                texts[index].contains(ReceptionText.money(it.total)),
-                                "oferta $index sem o valor da noite ${it.date}",
-                            )
-                        }
-                    }
-                    onAllNodesWithTag("quote-offer-${api.offers.size}").assertCountEquals(0)
+                    assertOffersMatch(quote.offers, api)
+                    val texts = quote.offers.indices.map { nodeText("quote-offer-$it") }
                     assertTrue(texts.any { it.contains("Café da manhã") }, "nenhuma oferta mostra Café da manhã")
+                    assertNoRawCode(api, emptySet())
                     println("LiveAvailabilityCheck: ${api.offers.size} oferta(s) batem com a API")
                 } finally {
                     calendar.close()
@@ -152,7 +155,7 @@ class LiveAvailabilityCheck {
     @Test
     fun refusalInPortuguese() =
         withViewer { core, connection ->
-            val source = connection.availabilitySource()
+            val source = RecordingSource(connection.availabilitySource())
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 lateinit var calendar: AvailabilityState
                 lateinit var quote: QuoteState
@@ -166,23 +169,31 @@ class LiveAvailabilityCheck {
                     val (arrival, departure) = stayDates(core)
                     quoteStay(calendar, quote, arrival, departure, TOO_MANY_ADULTS)
                     assertNull(quote.error, "a cotação falhou: ${quote.error}")
-                    assertTrue(quote.unavailable.isNotEmpty(), "$TOO_MANY_ADULTS adultos: a cotação não recusou nada")
-                    val unavailable = quote.unavailable.indices.map { nodeText("quote-unavailable-$it") }
+                    assertEquals(
+                        listOf("${arrival.toApi()}..${departure.toApi()} adults=4 children=[]"),
+                        source.calls("quote").map { it.request },
+                        "o pedido de cotação que a tela fez",
+                    )
+                    val api = runBlocking { core.reservations.quoteStay(arrival, departure, 4, emptyList(), true) }
+                    assertTrue(api.refused().isNotEmpty(), "$TOO_MANY_ADULTS adultos: a API não recusou nada")
+                    assertEquals(api.refused().size, quote.unavailable.size, "o número de recusas não bate com a API")
+                    val unavailable = assertRefusalsShown(api, calendar.rows.associate { it.roomTypeId to it.name })
                     for (name in listOf("Standard", "Luxo")) {
                         assertTrue(
-                            unavailable.any { it.contains(name) && it.contains("recebe até 3 adulto(s)") },
+                            unavailable.any { it.startsWith("$name ·") && it.contains("recebe até 3 adulto(s)") },
                             "$name não aparece em Indisponíveis com \"recebe até 3 adulto(s)\": $unavailable",
                         )
                     }
-                    val screen = screenTexts()
-                    assertTrue(screen.any { it == "Indisponíveis" }, "a tela não mostra Indisponíveis")
-                    assertTrue(
-                        screen.none { it.contains("OCCUPANCY_EXCEEDS_ROOM_TYPE") },
-                        "há nó com o código OCCUPANCY_EXCEEDS_ROOM_TYPE",
-                    )
+                    assertTrue(allTexts().any { it == "Indisponíveis" }, "a tela não mostra Indisponíveis")
+                    assertNoRawCode(api, setOf("OCCUPANCY_EXCEEDS_ROOM_TYPE"))
+                    val firstCell =
+                        "availability-cell-${calendar.rows.first().roomTypeId}-${calendar.dates.first().toApi()}"
+                    assertTrue(nodeText(firstCell).isNotEmpty(), "a captura sairia sem o calendário")
                     val file = File("build/live/availability.png")
                     file.parentFile.mkdirs()
-                    ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", file)
+                    val image = onRoot().captureToImage().toAwtImage()
+                    assertTrue(ImageIO.write(image, "png", file), "não gravou a captura")
+                    assertTrue(file.length() > 0, "a captura saiu vazia")
                     println("LiveAvailabilityCheck: ${unavailable.size} recusa(s) com $TOO_MANY_ADULTS adultos")
                 } finally {
                     calendar.close()
@@ -207,7 +218,8 @@ class LiveAvailabilityCheck {
         adults: String,
     ) {
         runOnUiThread { calendar.start() }
-        waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !calendar.loading && calendar.rows.isNotEmpty() }
+        waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !calendar.loading }
+        assertNull(calendar.error, "o calendário falhou antes da cotação: ${calendar.error}")
         assertEquals(ROOM_TYPE_NAMES, calendar.rows.map { it.name }.toSet(), "os tipos de UH do calendário")
         runOnUiThread {
             quote.arrivalText = DateInput.format(arrival)
@@ -227,43 +239,11 @@ class LiveAvailabilityCheck {
         core: ZenyCore,
         calendar: AvailabilityState,
     ) {
+        waitForIdle()
         val first = checkNotNull(calendar.from)
         val last = BusinessDate(first.value.plusDays(WINDOW_DAYS - 1L))
-        assertEquals(calendar.businessDay, first, "o calendário não começa na data operacional")
-        assertEquals(WINDOW_DAYS, calendar.dates.size, "o calendário não tem $WINDOW_DAYS datas")
-        assertEquals(ROOM_TYPE_NAMES, calendar.rows.map { it.name }.toSet(), "os tipos de UH do calendário")
-        assertEquals(ROOM_TYPE_NAMES.size, calendar.rows.size, "o calendário não tem ${ROOM_TYPE_NAMES.size} linhas")
-        waitForIdle()
         val api = runBlocking { core.reservations.availability(first, last) }
-        assertEquals(calendar.rows.size, api.roomTypes.size, "o número de tipos de UH não bate com a API")
-        var checked = 0
-        api.roomTypes.forEach { type ->
-            val byDate = type.days.associateBy { it.date }
-            calendar.dates.forEach { date ->
-                val expected = byDate[date.toApi()]?.available?.toString() ?: NO_DAY
-                val shown = nodeText("availability-cell-${type.roomTypeId}-${date.toApi()}")
-                assertEquals(expected, shown, "${type.name} em ${date.toApi()}: a célula não bate com a API")
-                checked++
-            }
-        }
-        assertEquals(ROOM_TYPE_NAMES.size * WINDOW_DAYS, checked, "células conferidas")
-    }
-
-    private fun ComposeUiTest.nodeText(tag: String): String =
-        onNodeWithTag(tag)
-            .fetchSemanticsNode()
-            .config
-            .getOrNull(SemanticsProperties.Text)
-            .orEmpty()
-            .joinToString(" ") { it.text }
-
-    private fun ComposeUiTest.screenTexts(): List<String> {
-        fun texts(node: SemanticsNode): List<String> =
-            node.config
-                .getOrNull(SemanticsProperties.Text)
-                .orEmpty()
-                .map { it.text } + node.children.flatMap(::texts)
-        return texts(onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        assertCalendarShows(calendar, api, WINDOW_DAYS, ROOM_TYPE_NAMES)
     }
 
     private fun withViewer(block: (ZenyCore, CoreConnection) -> Unit) {
