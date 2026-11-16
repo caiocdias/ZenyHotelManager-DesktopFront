@@ -3,6 +3,7 @@ package com.zeny.desktop.app.reception
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
@@ -232,17 +233,23 @@ class LiveTracesCheck {
         text: String,
     ): TraceRow {
         runOnUiThread { list.refresh() }
-        waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
-            (!list.table.loading && list.table.rows.isNotEmpty()) || list.table.error != null
-        }
+        // Quem pede a linha pode ter acabado de trocar o filtro: a lista parada logo depois da troca ainda é a
+        // anterior (a recarga é assíncrona). Parada e vazia de resultado não prova ausência; só a linha achada,
+        // um erro da carga ou o fim do tempo encerram a espera.
         var found: TraceRow? = null
-        waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
-            found = list.table.rows.firstOrNull { it.text == text }
-            if (found == null && list.table.hasMore && !list.table.loading) runBlocking { list.table.loadMore() }
-            found != null || (!list.table.hasMore && !list.table.loading)
+        try {
+            waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
+                found = list.table.rows.firstOrNull { it.text == text }
+                val idleWithMore = list.table.hasMore && !list.table.loading && list.table.error == null
+                if (found == null && idleWithMore) runBlocking { list.table.loadMore() }
+                found != null || list.table.error != null
+            }
+        } catch (_: ComposeTimeoutException) {
+            // cai no fail abaixo, com o estado em que a lista ficou
         }
         return found ?: fail(
-            "o recado da rodada não está na lista (${list.table.rows.size} linhas, filtro ${list.statusFilter})",
+            "o recado da rodada não está na lista (${list.table.rows.size} linhas, filtro ${list.statusFilter}, " +
+                "carregando ${list.table.loading}, mais ${list.table.hasMore}, erro ${list.table.error != null})",
         )
     }
 
