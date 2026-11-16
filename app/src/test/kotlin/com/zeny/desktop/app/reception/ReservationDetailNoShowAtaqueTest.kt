@@ -129,7 +129,7 @@ private fun noShowEntryC() =
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReservationDetailNoShowAtaqueTest {
-    private suspend fun TestScope.open(
+    private fun TestScope.open(
         assignments: List<RoomAssignmentResponse>,
         history: List<ReservationHistoryResponse>,
     ): ReservationDetailView {
