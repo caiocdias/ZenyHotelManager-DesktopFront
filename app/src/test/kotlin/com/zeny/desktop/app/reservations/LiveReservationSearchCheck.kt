@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Assumptions.assumeTrue
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.PrintStream
+import java.net.URLEncoder
 import java.util.UUID
 import java.util.logging.Handler
 import java.util.logging.LogRecord
@@ -35,7 +36,6 @@ import javax.imageio.ImageIO
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -44,7 +44,10 @@ import kotlin.test.fail
 private const val WIDTH = 1280
 private const val HEIGHT = 800
 private const val LOAD_TIMEOUT_MILLIS = 60_000L
+
+// O teto do `limit` do servidor nas listas por cursor é 200 (`PageParams.MAX_LIMIT`, `@Max`); acima, 400.
 private const val PAGE_LIMIT = 200
+private const val MIN_PAGES = 2
 private const val SMALL_PAGE = 3
 private const val IN_HOUSE = "IN_HOUSE"
 private const val IN_HOUSE_LABEL = "Hospedada"
@@ -52,7 +55,9 @@ private const val G1_HOLDER = "Hóspede Demonstração Um"
 private const val G1_CPF_BASE = "202600101"
 private const val CPF_FIRST_WEIGHT = 10
 private const val CPF_MODULUS = 11
-private val ELEVEN_DIGITS = Regex("""\d{11}""")
+private const val NEED_SEED =
+    "pré-condição do ambiente: o seed pós-fechamento não deixou hospedados suficientes no dia operacional"
+private const val CONTROL_MARKER = "zeny-live-control-7f3a"
 
 /**
  * Verificação da busca de reservas contra um servidor real (o ambiente `zeny-front`), com a Recepcionista, pelo
@@ -114,9 +119,10 @@ class LiveReservationSearchCheck {
     fun periodAndStatusFilter() =
         withViewer { core, connection ->
             val expected = inHouseCodes(core)
-            val shown = filteredRows(connection, pageSize = PAGE_LIMIT)
+            assertTrue(expected.isNotEmpty(), "$NEED_SEED: a lista do dia veio sem hospedados")
+            val shown = filteredRows(connection, pageSize = PAGE_LIMIT).rows
             println("LiveReservationSearchCheck: filtro por período e situação: ${shown.size} linhas")
-            assertTrue(shown.isNotEmpty(), "sem hospedados no período")
+            assertTrue(shown.isNotEmpty(), "a busca por período e situação não achou linha, mas a lista do dia tem")
             assertTrue(shown.all { it.status == IN_HOUSE_LABEL }, "há linha que não está Hospedada")
             assertEquals(
                 expected.toSet(),
@@ -129,8 +135,14 @@ class LiveReservationSearchCheck {
     fun pagesDoNotRepeat() =
         withViewer { core, connection ->
             val expected = inHouseCodes(core)
-            val ids = filteredRows(connection, pageSize = SMALL_PAGE).map { it.id }
-            println("LiveReservationSearchCheck: páginas de $SMALL_PAGE: ${ids.size} linhas")
+            assertTrue(
+                expected.size > SMALL_PAGE,
+                "$NEED_SEED: precisa de mais de $SMALL_PAGE (para 2 páginas), a lista do dia tem ${expected.size}",
+            )
+            val loaded = filteredRows(connection, pageSize = SMALL_PAGE)
+            val ids = loaded.rows.map { it.id }
+            println("LiveReservationSearchCheck: páginas de $SMALL_PAGE: ${ids.size} linhas em ${loaded.pages} páginas")
+            assertTrue(loaded.pages >= MIN_PAGES, "só ${loaded.pages} página carregada: a paginação não foi exercida")
             assertEquals(ids.size, ids.toSet().size, "há reserva repetida entre as páginas")
             assertEquals(expected.size, ids.size, "o total não bate com os hospedados do dia")
         }
@@ -153,11 +165,12 @@ class LiveReservationSearchCheck {
                     searchByDocument(search, cpf)
                     waitForIdle()
                     assertNull(search.table.error, "a busca falhou: ${search.table.error?.userMessage}")
+                    assertTrue(search.table.rows.isNotEmpty(), "busca pelo documento do G1 não achou reservas")
                     assertTrue(search.table.rows.any { it.holder == G1_HOLDER }, "nenhuma reserva do titular G1")
                     assertEquals(masked, search.searchedDocument, "máscara inesperada")
                     val texts = screenTexts()
                     assertTrue(texts.any { it.contains(masked) }, "a tela não mostra $masked")
-                    assertTrue(texts.none { ELEVEN_DIGITS.containsMatchIn(it) }, "há nó com 11 dígitos")
+                    assertTrue(texts.none { it.contains(cpf) }, "há nó com os 11 dígitos do CPF do G1")
                     val file = File("build/live/reservation-search.png")
                     file.parentFile.mkdirs()
                     ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", file)
@@ -175,6 +188,10 @@ class LiveReservationSearchCheck {
             val source = connection.reservationSearchSource()
             val captured = Captured()
             captured.start()
+            // Controle positivo: uma linha conhecida por cada caminho capturado.
+            Logger.getLogger("zeny.live.control").warning("jul $CONTROL_MARKER")
+            println("stdout $CONTROL_MARKER")
+            System.err.println("stderr $CONTROL_MARKER")
             val ran =
                 runCatching {
                     runDesktopComposeUiTest(WIDTH, HEIGHT) {
@@ -205,8 +222,21 @@ class LiveReservationSearchCheck {
                 }
             val text = captured.stop()
             ran.getOrThrow()
-            assertFalse(text.contains(cpf), "o CPF buscado apareceu em log ou na saída")
-            assertFalse(text.contains(G1_HOLDER, ignoreCase = true), "o nome buscado apareceu em log ou na saída")
+            for (path in listOf("jul", "stdout", "stderr")) {
+                assertTrue(text.contains("$path $CONTROL_MARKER"), "a captura não pegou a linha de controle de $path")
+            }
+            val encoded = URLEncoder.encode(G1_HOLDER, Charsets.UTF_8)
+            val nameForms = listOf(G1_HOLDER, encoded, encoded.replace("+", "%20"))
+            val formatted = "${cpf.take(3)}.${cpf.substring(3, 6)}.${cpf.substring(6, 9)}-${cpf.takeLast(2)}"
+            val cpfForms = listOf(cpf, formatted)
+            assertTrue(
+                nameForms.none { text.contains(it, ignoreCase = true) },
+                "o nome buscado apareceu em log ou na saída (puro ou codificado para URL)",
+            )
+            assertTrue(
+                cpfForms.none { text.contains(it) },
+                "o CPF buscado apareceu em log ou na saída (puro ou formatado)",
+            )
             println("LiveReservationSearchCheck: nem o nome nem o CPF buscados aparecem no JUL, em stdout ou em stderr")
         }
 
@@ -221,8 +251,9 @@ class LiveReservationSearchCheck {
             search.documentNumber = cpf
             search.searchByDocument()
         }
+        // Sem exigir linhas: um resultado vazio termina a espera e o teste falha com a mensagem certa, não no timeout.
         waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
-            search.searchedDocument != null && !search.table.loading && search.table.rows.isNotEmpty()
+            search.searchedDocument != null && !search.table.loading
         }
     }
 
@@ -271,9 +302,11 @@ class LiveReservationSearchCheck {
     private fun filteredRows(
         connection: CoreConnection,
         pageSize: Int,
-    ): List<ReservationRow> {
+    ): Loaded {
         val source = connection.reservationSearchSource()
         var rows = emptyList<ReservationRow>()
+        // Os tamanhos distintos da tabela com a carga parada: cada página nova com linhas a faz crescer.
+        val sizes = linkedSetOf<Int>()
         runDesktopComposeUiTest(WIDTH, HEIGHT) {
             lateinit var search: ReservationSearchState
             lateinit var scope: CoroutineScope
@@ -293,6 +326,7 @@ class LiveReservationSearchCheck {
                     search.search()
                 }
                 waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
+                    if (!search.table.loading) sizes += search.table.rows.size
                     when {
                         search.table.error != null -> {
                             true
@@ -318,8 +352,13 @@ class LiveReservationSearchCheck {
                 search.close()
             }
         }
-        return rows
+        return Loaded(rows, sizes.count { it > 0 })
     }
+
+    private class Loaded(
+        val rows: List<ReservationRow>,
+        val pages: Int,
+    )
 
     private fun withViewer(block: (ZenyCore, CoreConnection) -> Unit) {
         val url = ServerUrl.parse(env("ZENY_LIVE_URL")) ?: fail("ZENY_LIVE_URL inválida")
