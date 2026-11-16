@@ -187,7 +187,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Busca de reservas | #pendente | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
+| E01 | Busca de reservas | #em-andamento | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
 | E02 | Disponibilidade e cotação | #pendente | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #pendente | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
@@ -195,7 +195,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Busca de reservas — #pendente
+## E01 — Busca de reservas — #em-andamento
 
 **Objetivo:** a área Reservas lista as reservas com filtros por período, situação e titular, com paginação por cursor e busca por documento. Um clique abre o detalhe criado no M2.
 
