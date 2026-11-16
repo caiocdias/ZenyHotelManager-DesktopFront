@@ -85,6 +85,10 @@ class QuoteState(
     var unavailable by mutableStateOf<List<QuoteUnavailableResponse>>(emptyList())
         private set
 
+    /** A estadia que produziu [offers] (não a que está digitada agora); nula sem resultado, e limpa junto com ele. */
+    var quotedStay by mutableStateOf<QuotedStay?>(null)
+        private set
+
     /** Verdadeiro depois de uma resposta, mesmo sem ofertas. */
     var quoted by mutableStateOf(false)
         private set
@@ -133,6 +137,7 @@ class QuoteState(
                     if (mine != generation) return@launch
                     offers = response.offers
                     unavailable = response.unavailableList()
+                    quotedStay = QuotedStay(stay.arrival, stay.departure, stay.adults, stay.childAges)
                     quoted = true
                     loading = false
                 } catch (
@@ -168,6 +173,7 @@ class QuoteState(
     private fun clearOutcome() {
         offers = emptyList()
         unavailable = emptyList()
+        quotedStay = null
         quoted = false
         error = null
         validation = null

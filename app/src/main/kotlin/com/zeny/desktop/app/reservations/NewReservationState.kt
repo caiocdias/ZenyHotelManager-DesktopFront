@@ -99,7 +99,7 @@ class NewReservationState(
     private val guests: ReceptionSource,
     scope: CoroutineScope,
     val offer: QuoteOfferResponse,
-    private val stay: QuotedStay,
+    val stay: QuotedStay,
     permissions: Set<String>,
     private val approve: suspend (ApprovableAction<BookingResponse>) -> ApiResponse<BookingResponse>?,
     private val onChanged: () -> Unit,

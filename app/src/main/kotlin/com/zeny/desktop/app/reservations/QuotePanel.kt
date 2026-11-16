@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,18 +42,21 @@ private fun isFormField(name: String) = name in formFields || childAgeField.matc
  *   não tem aparecem acima do resultado. O `error` genérico só aparece quando não há `fieldErrors`.
  * - Os valores são os decimais do servidor formatados por [ReceptionText.money]; nada é somado aqui.
  * - [roomTypeNames] dá o nome do tipo de UH pelo id, para as combinações indisponíveis.
+ * - [onReserve] (nulo = sem botão) recebe a oferta escolhida e a estadia **cotada** ([QuoteState.quotedStay]), não a
+ *   que está digitada agora.
  */
 @Composable
 fun QuotePanel(
     quote: QuoteState,
     roomTypeNames: Map<String, String>,
     modifier: Modifier = Modifier,
+    onReserve: ((QuoteOfferResponse, QuotedStay) -> Unit)? = null,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Form(quote)
         Messages(quote)
         if (quote.loading) LoadingState()
-        if (quote.quoted) Result(quote, roomTypeNames)
+        if (quote.quoted) Result(quote, roomTypeNames, onReserve)
     }
 }
 
@@ -134,12 +138,16 @@ private fun Messages(quote: QuoteState) {
 private fun Result(
     quote: QuoteState,
     roomTypeNames: Map<String, String>,
+    onReserve: ((QuoteOfferResponse, QuotedStay) -> Unit)?,
 ) {
     if (quote.offers.isEmpty() && quote.unavailable.isEmpty()) {
         Text(NO_COMBINATION, style = MaterialTheme.typography.bodyMedium)
         return
     }
-    quote.offers.forEachIndexed { index, offer -> Offer(index, offer) }
+    val stay = quote.quotedStay
+    quote.offers.forEachIndexed { index, offer ->
+        Offer(index, offer, if (onReserve != null && stay != null) ({ onReserve(offer, stay) }) else null)
+    }
     if (quote.unavailable.isNotEmpty()) {
         Text("Indisponíveis", style = MaterialTheme.typography.titleMedium)
         quote.unavailable.forEachIndexed { index, item -> Unavailable(index, item, quote.offers, roomTypeNames) }
@@ -150,16 +158,25 @@ private fun Result(
 private fun Offer(
     index: Int,
     offer: QuoteOfferResponse,
+    onReserve: (() -> Unit)?,
 ) {
     val title = "${offer.roomTypeName} · ${offer.ratePlanName} · ${AvailabilityText.mealPlan(offer.mealPlan)}"
-    Column(
-        Modifier.testTag("quote-offer-$index").semantics(mergeDescendants = true) {},
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        Text(title, style = MaterialTheme.typography.titleSmall)
-        Text(AvailabilityText.units(offer.availableUnits), style = MaterialTheme.typography.bodyMedium)
-        Text("Total ${ReceptionText.money(offer.total)}", style = MaterialTheme.typography.titleMedium)
-        offer.nights.forEach { Text(nightLine(it), Modifier.padding(start = 8.dp)) }
+    // O botão fica fora do nó mesclado: o texto da oferta continua um bloco só e o botão é achado à parte.
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(
+            Modifier.testTag("quote-offer-$index").semantics(mergeDescendants = true) {},
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(AvailabilityText.units(offer.availableUnits), style = MaterialTheme.typography.bodyMedium)
+            Text("Total ${ReceptionText.money(offer.total)}", style = MaterialTheme.typography.titleMedium)
+            offer.nights.forEach { Text(nightLine(it), Modifier.padding(start = 8.dp)) }
+        }
+        if (onReserve != null) {
+            OutlinedButton(onClick = onReserve, modifier = Modifier.testTag("quote-reserve-$index")) {
+                Text("Reservar")
+            }
+        }
     }
 }
 
