@@ -17,9 +17,12 @@ import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.facade.DayList
+import com.zeny.desktop.core.facade.ReservationFilter
+import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.design.theme.ZenyTheme
+import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -29,6 +32,7 @@ import java.io.File
 import java.io.PrintStream
 import java.net.URLEncoder
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -155,6 +159,15 @@ class LiveReservationSearchCheck {
             val ids = loaded.rows.map { it.id }
             println("LiveReservationSearchCheck: páginas de $SMALL_PAGE: ${ids.size} linhas em ${loaded.pages} páginas")
             assertTrue(loaded.pages >= MIN_PAGES, "só ${loaded.pages} página carregada: a paginação não foi exercida")
+            assertTrue(
+                loaded.calls.all { it.limit == SMALL_PAGE },
+                "há chamada com limit diferente de $SMALL_PAGE: ${loaded.calls.map { it.limit }}",
+            )
+            assertNull(loaded.calls.first().cursor, "a 1ª chamada da busca veio com cursor")
+            assertTrue(
+                loaded.calls.drop(1).all { it.cursor != null },
+                "há chamada depois da 1ª sem cursor: a paginação não seguiu o cursor",
+            )
             assertEquals(ids.size, ids.toSet().size, "há reserva repetida entre as páginas")
             assertEquals(expected.size, ids.size, "o total não bate com os hospedados do dia")
         }
@@ -324,10 +337,10 @@ class LiveReservationSearchCheck {
         connection: CoreConnection,
         pageSize: Int,
     ): Loaded {
-        val source = connection.reservationSearchSource()
+        // O `DataTable` pede a página seguinte sozinho, antes da 1ª observação estável: as páginas se contam nas
+        // chamadas à fonte, não nos tamanhos da tabela.
+        val source = RecordingSource(connection.reservationSearchSource())
         var rows = emptyList<ReservationRow>()
-        // Os tamanhos distintos da tabela com a carga parada: cada página nova com linhas a faz crescer.
-        val sizes = linkedSetOf<Int>()
         runDesktopComposeUiTest(WIDTH, HEIGHT) {
             lateinit var search: ReservationSearchState
             lateinit var scope: CoroutineScope
@@ -344,10 +357,11 @@ class LiveReservationSearchCheck {
                     search.fromText = day
                     search.toText = day
                     search.statuses = setOf(IN_HOUSE)
+                    // O `start()` já buscou o período padrão: só contam as chamadas da busca filtrada.
+                    source.calls.clear()
                     search.search()
                 }
                 waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
-                    if (!search.table.loading) sizes += search.table.rows.size
                     when {
                         search.table.error != null -> {
                             true
@@ -373,13 +387,36 @@ class LiveReservationSearchCheck {
                 search.close()
             }
         }
-        return Loaded(rows, sizes.count { it > 0 })
+        val pages = source.calls.filter { it.rows > 0 }
+        return Loaded(rows, pages.size, pages)
     }
 
     private class Loaded(
         val rows: List<ReservationRow>,
         val pages: Int,
+        val calls: List<SearchCall>,
     )
+
+    /** Uma chamada a `search`: o cursor e o `limit` recebidos e as linhas devolvidas. */
+    private class SearchCall(
+        val cursor: String?,
+        val limit: Int,
+        val rows: Int,
+    )
+
+    /** Delega à fonte real e registra cada `search`; o resto passa direto. */
+    private class RecordingSource(
+        private val inner: ReservationSearchSource,
+    ) : ReservationSearchSource by inner {
+        val calls: MutableList<SearchCall> = CopyOnWriteArrayList()
+
+        override suspend fun search(
+            filter: ReservationFilter,
+            cursor: String?,
+            limit: Int,
+        ): Page<ReservationListItemResponse> =
+            inner.search(filter, cursor, limit).also { calls += SearchCall(cursor, limit, it.items.size) }
+    }
 
     private fun withViewer(block: (ZenyCore, CoreConnection) -> Unit) {
         val url = ServerUrl.parse(env("ZENY_LIVE_URL")) ?: fail("ZENY_LIVE_URL inválida")
