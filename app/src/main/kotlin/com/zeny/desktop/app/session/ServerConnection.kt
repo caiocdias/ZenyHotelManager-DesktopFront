@@ -6,6 +6,7 @@ import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
+import com.zeny.desktop.app.reservations.ReservationSearchSource
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.app.rooms.RoomsSource
 import com.zeny.desktop.app.traces.RoomOption
@@ -18,10 +19,12 @@ import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
+import com.zeny.desktop.core.facade.DocumentQuery
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
+import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
 import com.zeny.desktop.core.facade.TraceChange
@@ -92,6 +95,9 @@ interface ServerConnection : AutoCloseable {
 
     /** Os recados; `null` quando a conexão não os oferece. */
     fun tracesSource(): TracesSource? = null
+
+    /** A busca de reservas; `null` quando a conexão não a oferece. */
+    fun reservationSearchSource(): ReservationSearchSource? = null
 
     /** A ficha de registro em PDF; `null` quando a conexão não a oferece. */
     fun registrationCards(): RegistrationCards? = null
@@ -293,6 +299,31 @@ class CoreConnection(
 
     /** Os recados sobre `core.traces`, `core.reservations`, `core.rooms`, `core.account` e `core.hotel`. */
     override fun tracesSource(): TracesSource = traces
+
+    private val reservationSearch =
+        object : ReservationSearchSource {
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun search(
+                filter: ReservationFilter,
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.reservations.search(filter, cursor, limit)
+
+            override suspend fun searchByDocument(
+                query: DocumentQuery,
+                statuses: Set<String>,
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.reservations.searchByDocument(query, statuses, cursor, limit)
+
+            override suspend fun holder(guestId: String): HolderSummary = core.guests.guest(guestId).toHolderSummary()
+
+            override suspend fun roomTypes(): List<RoomTypeResponse> = core.rooms.roomTypes()
+        }
+
+    /** A busca de reservas sobre `core.hotel`, `core.reservations`, `core.guests` e `core.rooms`. */
+    override fun reservationSearchSource(): ReservationSearchSource = reservationSearch
 
     private val registrationCards = RegistrationCards { id -> core.documents.registrationCard(id) }
 
