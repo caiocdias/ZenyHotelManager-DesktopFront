@@ -30,6 +30,7 @@ import java.io.PrintStream
 import java.net.URLEncoder
 import java.util.UUID
 import java.util.logging.Handler
+import java.util.logging.Level
 import java.util.logging.LogRecord
 import java.util.logging.Logger
 import javax.imageio.ImageIO
@@ -48,6 +49,7 @@ private const val LOAD_TIMEOUT_MILLIS = 60_000L
 // O teto do `limit` do servidor nas listas por cursor é 200 (`PageParams.MAX_LIMIT`, `@Max`); acima, 400.
 private const val PAGE_LIMIT = 200
 private const val MIN_PAGES = 2
+private const val MAX_CAUSES = 20
 private const val SMALL_PAGE = 3
 private const val IN_HOUSE = "IN_HOUSE"
 private const val IN_HOUSE_LABEL = "Hospedada"
@@ -83,11 +85,19 @@ class LiveReservationSearchCheck {
         private val root = Logger.getLogger("")
         private val oldOut = System.out
         private val oldErr = System.err
+        private val oldLevel = root.level
         private val handler =
             object : Handler() {
                 override fun publish(record: LogRecord) {
                     records.append(record.message).append(' ').append(record.parameters?.joinToString(" ").orEmpty())
-                    record.thrown?.let { records.append(' ').append(it.toString()) }
+                    // A cadeia inteira de causas: a mensagem e o `toString()` de cada uma.
+                    generateSequence(record.thrown) { it.cause }.take(MAX_CAUSES).forEach {
+                        records
+                            .append(' ')
+                            .append(it.message)
+                            .append(' ')
+                            .append(it.toString())
+                    }
                     records.append('\n')
                 }
 
@@ -99,11 +109,13 @@ class LiveReservationSearchCheck {
         fun start() {
             System.setOut(PrintStream(out, true, Charsets.UTF_8))
             System.setErr(PrintStream(err, true, Charsets.UTF_8))
+            root.level = Level.ALL
             root.addHandler(handler)
         }
 
         fun stop(): String {
             root.removeHandler(handler)
+            root.level = oldLevel
             System.setOut(oldOut)
             System.setErr(oldErr)
             return out.toString(Charsets.UTF_8) + err.toString(Charsets.UTF_8) + records
@@ -187,13 +199,15 @@ class LiveReservationSearchCheck {
             val cpf = fictitiousCpf()
             val source = connection.reservationSearchSource()
             val captured = Captured()
-            captured.start()
-            // Controle positivo: uma linha conhecida por cada caminho capturado.
-            Logger.getLogger("zeny.live.control").warning("jul $CONTROL_MARKER")
-            println("stdout $CONTROL_MARKER")
-            System.err.println("stderr $CONTROL_MARKER")
+            // Tudo, inclusive o `start()` e o controle, dentro do `runCatching`: o `stop()` abaixo sempre roda
+            // e devolve as streams e o nível do JUL raiz.
             val ran =
                 runCatching {
+                    captured.start()
+                    // Controle positivo: uma linha conhecida por cada caminho capturado.
+                    Logger.getLogger("zeny.live.control").warning("jul $CONTROL_MARKER")
+                    println("stdout $CONTROL_MARKER")
+                    System.err.println("stderr $CONTROL_MARKER")
                     runDesktopComposeUiTest(WIDTH, HEIGHT) {
                         lateinit var search: ReservationSearchState
                         setContent {
@@ -206,13 +220,20 @@ class LiveReservationSearchCheck {
                             waitUntil(
                                 timeoutMillis = LOAD_TIMEOUT_MILLIS,
                             ) { search.day != null && !search.table.loading }
+                            // O período padrão do `start()` (hoje a +30 dias) pode não alcançar o G1: sem período,
+                            // a busca por nome acha o G1 em qualquer data.
                             runOnUiThread {
+                                search.fromText = ""
+                                search.toText = ""
                                 search.name = G1_HOLDER
                                 search.search()
                             }
-                            waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
-                                !search.table.loading && search.table.rows.isNotEmpty()
-                            }
+                            waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !search.table.loading }
+                            assertNull(
+                                search.table.error,
+                                "a busca por nome falhou: ${search.table.error?.userMessage}",
+                            )
+                            assertTrue(search.table.rows.isNotEmpty(), "busca por nome do G1 não achou reservas")
                             searchByDocument(search, cpf)
                             waitForIdle()
                         } finally {

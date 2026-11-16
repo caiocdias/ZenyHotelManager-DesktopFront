@@ -45,6 +45,13 @@ assert_contains "$kt" 'val text = captured.stop() ran.getOrThrow()' \
   "o stop() roda antes de relançar a falha (System.out, System.err e o JUL raiz voltam em qualquer caso)"
 assert_contains "$kt" 'System.setOut(oldOut) System.setErr(oldErr)' "stop() devolve System.out e System.err"
 assert_contains "$kt" 'root.removeHandler(handler)' "stop() tira o handler do JUL raiz"
+assert_contains "$kt" 'root.level = Level.ALL' "a captura põe o JUL raiz em ALL"
+assert_contains "$kt" 'root.level = oldLevel' "stop() restaura o nível do JUL raiz"
+assert_contains "$kt" 'generateSequence(record.thrown) { it.cause }' "o handler percorre a cadeia de causas"
+assert_contains "$kt" 'runCatching { captured.start()' "captured.start() e o controle ficam dentro do runCatching"
+assert_contains "$kt" 'search.fromText = "" search.toText = "" search.name = G1_HOLDER' \
+  "a busca por nome limpa o período (o do start() pode não alcançar o G1)"
+assert_contains "$kt" 'busca por nome do G1 não achou reservas' "busca por nome vazia falha com mensagem clara"
 
 # --- 5. O CPF do G1 segue a regra de FictitiousDocuments (pesos 10 e 11, módulo 11, resto < 2 vira 0) --------
 assert_contains "$kt" 'private const val G1_CPF_BASE = "202600101"' "base do G1 igual à do DemoCatalog (2026001 + 01)"
