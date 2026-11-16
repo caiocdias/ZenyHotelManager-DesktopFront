@@ -726,7 +726,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-15):** `#em-andamento`, **Aguardando o Windows** (regra 7 do `docs/roadmaps/README.md`). Tudo o que dá para verificar no notebook foi verificado; falta só o usuário executar o `roteiro-m2.md` do pacote no Windows e aprovar. A base (M0 E02) também ainda não foi validada no Windows: a mesma execução a fecha (entrada 1 das "Validações acumuladas no Windows").
+- **Estado (2026-11-15):** `#em-andamento`, **Aguardando o Windows** (regra 7 do `docs/roadmaps/README.md`). Tudo o que dá para verificar no notebook foi verificado; falta só o usuário executar o `roteiro-m2.md` do pacote no Windows e aprovar. A base (M0 E02) também ainda não foi validada no Windows: a mesma execução a fecha (entrada 1 das "Validações acumuladas no Windows"). Por decisão do usuário (2026-11-15), essa execução fica para o gate do M3, que acumula o roteiro do M2; o M3 começa sem esperar o Windows.
 - **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md), com 7 tarefas em série (todas de risco alto) e a verificação do gate pelo orquestrador. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (6 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2. A Task 7 é um adendo da execução, aprovado com notas na revisão do adendo (rodada 0): a execução do roteiro no notebook achou um defeito da E05 (abaixo).
 - **Commits:** `aae75c3..8390605` na branch `roadmap/m2-recepcao-do-dia` (com o merge `e288efb` do lote anterior no meio), com o trailer `Soul:`.
   - Task 1, porta de recados no seed (`TraceGateway`, `SdkTraceGateway`): `1c11fe4`, `77c0118` (o testador restaurou e corrigiu os testes de ataque revertidos em `c49bb6e` no lote anterior).
@@ -755,7 +755,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **A segunda janela do passo 18 entra como `gerente`:** o servidor encerra a sessão anterior do mesmo usuário no mesmo dispositivo, e as duas janelas compartilham o dispositivo.
   - **Fica para depois** (Menores triados pela revisão final): mutantes antigos que as travas não pegam (senha literal na descrição da folha, ternário do PowerShell 7, `If-None-Match`); o `tests/run.sh` ficou mais lento com os mutantes do roteiro (um `rc=124` sob carga reprova de forma visível); `roomNumber` em branco daria "UH "; o falso `FakeTraces` com os dois filtros nulos; a lista de recados numa janela baixa mostra menos linhas (rolar).
 - **Notas para a próxima etapa:**
-  - **Gate no Windows:** executar o `roteiro-m2.md` do pacote mais recente, do zero, com `docker load` de `images/zeny-server-images.tar` antes; a aprovação fecha a M0 E02 e esta etapa `#concluida`; uma reprovação reabre esta etapa com uma rodada de correção.
+  - **Gate no Windows (adiado para o fim do M3, decisão do usuário em 2026-11-15):** no gate do M3, executar o roteiro do M3 (que acumula este) do pacote mais recente, do zero, com `docker load` de `images/zeny-server-images.tar` antes; a aprovação fecha a M0 E02 e esta etapa `#concluida`; uma reprovação reabre esta etapa com uma rodada de correção.
   - **Verificação ao vivo dos recados:** rode o seed antes; o `LiveTracesCheck` agora espera a carga do filtro de fato.
 
 ---
