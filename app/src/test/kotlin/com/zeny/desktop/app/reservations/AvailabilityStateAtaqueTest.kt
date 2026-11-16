@@ -529,4 +529,18 @@ class AvailabilityStateAtaqueTest {
             runCurrent()
             assertFalse(state.loading)
         }
+
+    @Test
+    fun dayOutsideWindowDoesNotAppearInCells() =
+        runTest {
+            val fake = source()
+            fake.availability =
+                resp(type(stdId, "Standard", day("2026-11-16"), day("2025-01-01"), day("2027-06-01")))
+            val state = started(fake)
+            val cells = state.rows.single().cells
+            assertTrue(
+                state.dates.containsAll(cells.keys),
+                "células fora da janela: ${cells.keys - state.dates.toSet()}",
+            )
+        }
 }

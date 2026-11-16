@@ -23,6 +23,12 @@ data class CalendarRow(
     val cells: Map<BusinessDate, AvailabilityDayResponse>,
 )
 
+/** As [days] datas que começam em [first], em ordem. */
+private fun windowOf(
+    first: BusinessDate,
+    days: Int,
+): Set<BusinessDate> = (0 until days).mapTo(LinkedHashSet()) { BusinessDate(first.value.plusDays(it.toLong())) }
+
 /**
  * Estado do calendário de disponibilidade: uma janela de [days] datas a partir de [from], uma linha por tipo de UH.
  *
@@ -68,7 +74,7 @@ class AvailabilityState(
     val dates: List<BusinessDate>
         get() {
             val first = from ?: return emptyList()
-            return (0 until days).map { BusinessDate(first.value.plusDays(it.toLong())) }
+            return windowOf(first, days).toList()
         }
 
     val selectedDay: AvailabilityDayResponse?
@@ -140,7 +146,7 @@ class AvailabilityState(
                     val last = BusinessDate(first.value.plusDays(days.toLong() - 1))
                     val response = source.availability(first, last)
                     if (mine != generation) return@launch
-                    rows = response.roomTypes.map { it.toRow() }
+                    rows = response.roomTypes.map { it.toRow(windowOf(first, days)) }
                     loading = false
                     dropSelectionOutsideWindow()
                 } catch (
@@ -163,11 +169,12 @@ class AvailabilityState(
         val (typeId, date) = selected ?: return
         if (date !in dates || rows.none { it.roomTypeId == typeId }) selected = null
     }
-
-    private fun RoomTypeAvailabilityResponse.toRow() =
-        CalendarRow(
-            roomTypeId = roomTypeId.toString(),
-            name = name,
-            cells = days.associateBy { BusinessDate.parse(it.date) },
-        )
 }
+
+/** A linha do tipo, só com os dias da janela [window]: o que o servidor devolve fora dela não aparece. */
+private fun RoomTypeAvailabilityResponse.toRow(window: Set<BusinessDate>) =
+    CalendarRow(
+        roomTypeId = roomTypeId.toString(),
+        name = name,
+        cells = days.associateBy { BusinessDate.parse(it.date) }.filterKeys { it in window },
+    )
