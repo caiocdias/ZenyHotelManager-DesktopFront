@@ -330,14 +330,62 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - Lentidão (H2). Paginar por semana.
 
-**Evidências e handoff:**
+**Evidências e handoff** (parcial: o lote parou a pedido do usuário com a etapa `#em-andamento`):
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e02.md`, com 9 tarefas, todas `Risco: alto`.
+  - Revisão de arquitetura: aprovado com notas, em 2 rodadas, no opus.
+  - A rodada 0 bloqueou por 7 Importantes:
+    - aba visível sem a permissão;
+    - motivo falso do ruling 2;
+    - critério 3 sem restrição real;
+    - cancelamento com `If-Match`;
+    - `externalId` fixo;
+    - molde de opt-in inexistente;
+    - total igual à soma das noites.
+  - A rodada 1 bloqueou por 2 Importantes:
+    - validação em `quoteStay` quebraria 4 testes;
+    - códigos de recusa no `ErrorCatalog` sobreporiam o `detail` do walk-in.
+- **Commits:** `454cc56..d26f9dd` na `roadmap/m3-reservas`, em série. Plano: `ac558f4`, `48a222a`, `5239cde` e `70c49e9`.
+
+  | Task | Entrega | Commits | Observação |
+  |---|---|---|---|
+  | 1 | `availability` e `quoteStay(includeUnavailable)` na fachada; `ErrorCatalog.isShowableDetail` | `70c49e9..eb717c9` | |
+  | 2 | Porta `AvailabilitySource`, adaptador, `AvailabilityText` e fake | `eb717c9..cd502bd` | 1 rodada de correção: mensagem igual ao código em outra caixa chegava crua |
+  | 3 | `AvailabilityState` | `cd502bd..4b84767` | 1 rodada de correção: dias fora da janela ficavam nas células |
+  | 4 | `QuoteState` | `4b84767..bf4bb90` | |
+  | 5 | `CalendarPanel`, mais a sobrecarga `ErrorState(message)` no `design` | `bf4bb90..231901c` | |
+  | 6 | `QuotePanel` e `AvailabilityScreen` | `231901c..ecc9d9b` | |
+  | 7 | Aba "Disponibilidade e cotação" na área Reservas, só com `reservations.availability.read` | `ecc9d9b..1e65a58` | 1 rodada de correção: a permissão da sessão anterior valia na sessão nova |
+  | 8 | `LiveAvailabilityCheck`, só leitura, com travas estáticas e de mutação | `1e65a58..d26f9dd` | 1 rodada de correção: travas frágeis ao ktlint |
+
+  Cada tarefa passou por desenvolvedor, testador, verificação de integridade e revisão (`revisor-seguranca`), e todas foram aprovadas. Os apontamentos `DEV_TESTE_DO_TESTADOR` das Tasks 2, 3 e 7 foram julgados justificados: o teste vermelho do testador foi colado sem mudança.
+- **Falta para fechar:**
+  1. **Task 9** (`LiveAvailabilityBookingCheck`, no `demo-seed`): ficou pela metade, sem commit e sem revisão. Os dois arquivos estão guardados no workspace do SDD em `.superpowers/sdd/2026-11-16-m3-reservas-e02/task-9-wip/`, que é ignorado pelo git e fica só no worktree `roadmap-m3-reservas`. Retome a partir deles ou refaça pelo brief.
+  2. Revisão final da etapa (sem testador de etapa: todas as tarefas são `Risco: alto`): scanner, suíte isolada, integridade `--base 454cc56` e `code-reviewer.md` no opus.
+  3. As duas verificações ao vivo, que o usuário roda, porque o verificador da sessão recusa *sourcing*:
+     - `ZENY_LIVE_AVAILABILITY=1 … :app:test --tests '*LiveAvailabilityCheck*'`, com a Recepcionista;
+     - `ZENY_SEED_LIVE_AVAILABILITY=1 … :demo-seed:test --tests '*LiveAvailabilityBookingCheck*'`, com `.server/seed-secrets.env`.
+  4. Inspecionar a captura `app/build/live/availability.png` e conferir que a aba não fica dentro de outra rolagem vertical.
+- **Revisão final:** ainda não feita.
+- **Critérios verificados:** ainda nenhum ao vivo. Os 3 critérios têm cobertura com o fake (`reloadShowsNewCounts`, `offerShowsServerTotalsAndNights`, `unavailableShowsReasonsInPortuguese`) e verificação ao vivo escrita, mas não executada. O gate deste HEAD está verde (ver o relatório do lote).
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **Inventário pela disponibilidade.** O detalhe da célula usa os contadores do `GET /availability`, e o `room-type-inventory` não é chamado, porque os contadores são os mesmos, com uma chamada por tipo.
+  2. **Calendário sem plano.** Decisão de escopo: as restrições do plano aparecem como recusa na cotação. O seletor de plano custaria uma fachada `listRatePlans` e mostraria um plano por vez.
+  3. **Verificação ao vivo no `demo-seed`.** Ela escreve e desfaz na demo:
+     - uma reserva `DEMO-E02-<uuid>` criada e cancelada, que fica como "Cancelada" na busca;
+     - uma `minStay = 2` gravada e retirada em d+25.
+  4. **`ErrorState(message: String)` no `design`.** A sobrecarga ficou fora da lista de arquivos da Task 5. A versão com `ApiError` delega a ela.
+  5. **Erros de campo.** Com `fieldErrors`, a cotação não repete o erro genérico, e a chave de campo desconhecida aparece acima do resultado.
+- **Notas para a próxima etapa (dívidas menores, todas no ledger):**
+  - `runCatching` engole `CancellationException` na leitura da permissão da aba (`AppRoot.kt`). Falha fechada; corrigir na onda final da E02.
+  - Enter cota mesmo com `loading`, e a última cotação vence.
+  - Sem indicador de carga quando o calendário já tem linhas.
+  - O fallback de "Indisponíveis" mostra o código técnico do tipo ou do plano.
+  - Data malformada no motivo aparece como "—".
+  - Mensagem de servidor de uma palavra sem acento cai no texto de reserva.
+  - Helpers de teste duplicados entre os arquivos do desenvolvedor e do testador.
+  - As travas `.sh` da verificação ao vivo dependem de `perl`.
+  - E03: a duplicação com o `DayPanelState` segue da E01.
 
 ---
 
