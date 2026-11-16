@@ -25,7 +25,13 @@ O que continua valendo:
 
 **Fechamento.** No lugar da "revisão limpa", a etapa exige suíte verde, gate verde e a evidência de cada critério de aceite. Ela pode fechar `#concluida`, e o handoff registra "revisão de segurança adiada (ADR 0011)" e o intervalo de commits da etapa.
 
-**Dívida de revisão.** Quando o usuário revogar esta decisão, a primeira execução do orquestrador despacha a `revisor-seguranca` com o prompt `code-reviewer.md` sobre `a300a23..HEAD` da principal, com o scanner e a `check_test_integrity.py --base a300a23`. Os achados viram etapa de correção no roadmap.
+**Como rodar.** Cada roadmap tem um "Prompt acelerado" logo abaixo do "Prompt de execução". O processo completo continua disponível pelo prompt de execução.
+
+**Dívida de revisão.** Tudo o que for feito por esse modo fica marcado para voltar depois, em dois lugares:
+- no handoff da etapa, com a linha `Revisão de segurança: adiada (ADR 0011)`;
+- na lista "Revisões de segurança adiadas" de `docs/roadmaps/README.md` (regra 8).
+
+O usuário paga a dívida num marco final de análise do projeto. Esse marco despacha a `revisor-seguranca` com o prompt `code-reviewer.md` sobre `a300a23..HEAD` da principal, com o scanner e a `check_test_integrity.py --base a300a23`, e usa a lista para focar nas etapas marcadas. Os achados viram etapas de correção.
 
 ## Alternativas descartadas
 
