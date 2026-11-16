@@ -56,6 +56,7 @@ object ReceptionText {
                 "UNDO_CHECK_IN" to "Check-in desfeito",
                 "CHECK_OUT" to "Check-out",
                 "ROOM_MOVE" to "Troca de UH",
+                "NO_SHOW" to "Não compareceu",
             ),
         )
     private val fieldLabels =
@@ -97,6 +98,7 @@ object ReceptionText {
                 "RESERVATION_CHANGED" to "Reserva alterada",
                 "CHECKED_OUT" to "Check-out",
                 "ROOM_MOVED" to "Troca de UH",
+                "RESERVATION_NO_SHOW" to "Não compareceu",
             ),
         )
     private val planCategories =

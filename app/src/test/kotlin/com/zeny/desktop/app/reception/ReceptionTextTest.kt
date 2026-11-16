@@ -33,6 +33,7 @@ class ReceptionTextTest {
                 "UNDO_CHECK_IN" to "Check-in desfeito",
                 "CHECK_OUT" to "Check-out",
                 "ROOM_MOVE" to "Troca de UH",
+                "NO_SHOW" to "Não compareceu",
             )
         expected.forEach { (k, v) -> assertEquals(v, ReceptionText.historyKind(k)) }
         assertEquals("Outro (NEW)", ReceptionText.historyKind("NEW"))
@@ -93,6 +94,7 @@ class ReceptionTextTest {
         assertEquals("Reserva alterada", ReceptionText.releaseReason("RESERVATION_CHANGED"))
         assertEquals("Check-out", ReceptionText.releaseReason("CHECKED_OUT"))
         assertEquals("Troca de UH", ReceptionText.releaseReason("ROOM_MOVED"))
+        assertEquals("Não compareceu", ReceptionText.releaseReason("RESERVATION_NO_SHOW"))
         assertEquals("Outro (ROOM_MOVE)", ReceptionText.releaseReason("ROOM_MOVE"))
     }
 
