@@ -225,7 +225,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
-| E02 | Disponibilidade e cotação | #em-andamento | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
+| E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #pendente | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
@@ -327,7 +327,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 ---
 
-## E02 — Disponibilidade e cotação — #em-andamento
+## E02 — Disponibilidade e cotação — #concluida
 
 **Objetivo:** um calendário mostra, por tipo de UH, a disponibilidade dos próximos dias. Escolhendo período, tipo e ocupação, o usuário vê a cotação por plano, com o total e o preço por noite vindos do servidor.
 
@@ -348,9 +348,9 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, o calendário de 30 dias mostra a disponibilidade por tipo. Uma reserva criada em outro cliente reduz a disponibilidade depois de recarregar.
-- [ ] A cotação mostra os planos com os valores formatados em BRL, iguais aos devolvidos pela API (conferidos por `curl`).
-- [ ] Uma cotação que fere uma restrição mostra o motivo em pt-BR.
+- [x] Contra o seed, o calendário de 30 dias mostra a disponibilidade por tipo. Uma reserva criada em outro cliente reduz a disponibilidade depois de recarregar.
+- [x] A cotação mostra os planos com os valores formatados em BRL, iguais aos devolvidos pela API (conferidos por `curl`).
+- [x] Uma cotação que fere uma restrição mostra o motivo em pt-BR.
 
 **Validação obrigatória:**
 
@@ -367,9 +367,9 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 - Lentidão (H2). Paginar por semana.
 
-**Evidências e handoff** (parcial: o lote parou a pedido do usuário com a etapa `#em-andamento`):
+**Evidências e handoff:**
 
-- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e02.md`, com 9 tarefas, todas `Risco: alto`.
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e02.md`, com 9 tarefas. As Tasks 1–8 rodaram como `Risco: alto`, no processo completo; a Task 9 e o fechamento, no processo acelerado (ADR 0011).
   - Revisão de arquitetura: aprovado com notas, em 2 rodadas, no opus.
   - A rodada 0 bloqueou por 7 Importantes:
     - aba visível sem a permissão;
@@ -382,7 +382,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
   - A rodada 1 bloqueou por 2 Importantes:
     - validação em `quoteStay` quebraria 4 testes;
     - códigos de recusa no `ErrorCatalog` sobreporiam o `detail` do walk-in.
-- **Commits:** `454cc56..d26f9dd` na `roadmap/m3-reservas`, em série. Plano: `ac558f4`, `48a222a`, `5239cde` e `70c49e9`.
+- **Commits:** `b6aafa9..2ad4b09` na `roadmap/m3-reservas`, em série. Plano: `ac558f4`, `48a222a`, `5239cde` e `70c49e9`. O intervalo inclui o merge da `main` (`141b5ba`), que trouxe o ADR 0011 e só toca documentos.
 
   | Task | Entrega | Commits | Observação |
   |---|---|---|---|
@@ -394,17 +394,25 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
   | 6 | `QuotePanel` e `AvailabilityScreen` | `231901c..ecc9d9b` | |
   | 7 | Aba "Disponibilidade e cotação" na área Reservas, só com `reservations.availability.read` | `ecc9d9b..1e65a58` | 1 rodada de correção: a permissão da sessão anterior valia na sessão nova |
   | 8 | `LiveAvailabilityCheck`, só leitura, com travas estáticas e de mutação | `1e65a58..d26f9dd` | 1 rodada de correção: travas frágeis ao ktlint |
+  | 9 | `LiveAvailabilityBookingCheck` no `demo-seed`, que escreve e desfaz, com a trava estática | `141b5ba..006c8d8` | Processo acelerado: sem testador por tarefa e sem revisão |
+  | Etapa | Testador de etapa: trava `test_live_seed_availability_limpeza_ataque.sh` | `006c8d8..2ad4b09` | Sem defeito; a trava da Task 9 deixava passar 14 de 19 mutantes, e a nova mata 18 |
 
-  Cada tarefa passou por desenvolvedor, testador, verificação de integridade e revisão (`revisor-seguranca`), e todas foram aprovadas. Os apontamentos `DEV_TESTE_DO_TESTADOR` das Tasks 2, 3 e 7 foram julgados justificados: o teste vermelho do testador foi colado sem mudança.
-- **Falta para fechar:**
-  1. **Task 9** (`LiveAvailabilityBookingCheck`, no `demo-seed`): ficou pela metade, sem commit e sem revisão. Os dois arquivos estão guardados no workspace do SDD em `.superpowers/sdd/2026-11-16-m3-reservas-e02/task-9-wip/`, que é ignorado pelo git e fica só no worktree `roadmap-m3-reservas`. Retome a partir deles ou refaça pelo brief.
-  2. Revisão final da etapa (sem testador de etapa: todas as tarefas são `Risco: alto`): scanner, suíte isolada, integridade `--base 454cc56` e `code-reviewer.md` no opus.
-  3. As duas verificações ao vivo, que o usuário roda, porque o verificador da sessão recusa *sourcing*:
-     - `ZENY_LIVE_AVAILABILITY=1 … :app:test --tests '*LiveAvailabilityCheck*'`, com a Recepcionista;
-     - `ZENY_SEED_LIVE_AVAILABILITY=1 … :demo-seed:test --tests '*LiveAvailabilityBookingCheck*'`, com `.server/seed-secrets.env`.
-  4. Inspecionar a captura `app/build/live/availability.png` e conferir que a aba não fica dentro de outra rolagem vertical.
-- **Revisão final:** ainda não feita.
-- **Critérios verificados:** ainda nenhum ao vivo. Os 3 critérios têm cobertura com o fake (`reloadShowsNewCounts`, `offerShowsServerTotalsAndNights`, `unavailableShowsReasonsInPortuguese`) e verificação ao vivo escrita, mas não executada. O gate deste HEAD está verde (ver o relatório do lote).
+  As Tasks 1–8 passaram por desenvolvedor, testador, verificação de integridade e revisão (`revisor-seguranca`), e todas foram aprovadas. Os apontamentos `DEV_TESTE_DO_TESTADOR` das Tasks 2, 3 e 7 foram julgados justificados: o teste vermelho do testador foi colado sem mudança.
+- **Revisão final:** não feita, pelo processo acelerado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `b6aafa9..2ad4b09`, integridade exit 1.** As Tasks 1–8 tiveram revisão por tarefa; faltam a da Task 9, a do testador de etapa e a revisão final do intervalo.
+- **Fechamento** (HEAD `2ad4b09`, 2026-11-16):
+  - **Gate:** `./gradlew build --max-workers=2` → BUILD SUCCESSFUL; os XML somam 4314 testes, 0 falhas, 0 erros e 43 pulados (opt-ins ao vivo). `bash tests/run.sh` → 53 arquivos, 0 falhas, 0 com casos pulados.
+  - **Integridade** (`check_test_integrity.py --base b6aafa9`): exit 1.
+    - `MERGE_IGNORADO`: o merge da `main` (`141b5ba`), só de documentos.
+    - 3 `DEV_TESTE_DO_TESTADOR` (`cd502bd`, `4b84767` e `1e65a58`): o teste vermelho do testador colado sem mudança pelo desenvolvedor nas Tasks 2, 3 e 7. A revisora os julgou justificados em cada tarefa.
+    - Por tarefa, a Task 9 deu exit 0 (`--base 141b5ba`).
+- **Critérios verificados**, ao vivo no `zeny-front`, pelo orquestrador, com as credenciais só no ambiente do subshell:
+  1. **Calendário e outro cliente.** `LiveAvailabilityCheck.calendarMatchesApi` passou: o calendário de 30 dias traz os três tipos com os números da API. `LiveAvailabilityBookingCheck.otherClientBookingReducesAvailability` passou: a reserva criada pelo `demo-seed` baixou a STD em d+20 de `a0` para `a0 - 1`, e o cancelamento a devolveu.
+  2. **Cotação em BRL.** `LiveAvailabilityCheck.quoteMatchesApi` passou: o total e cada noite da tela são os decimais da API formatados. A captura mostra "Total R$ 2.040,00" com duas noites de R$ 1.020,00.
+  3. **Restrição em pt-BR.** `LiveAvailabilityBookingCheck.minStayRestrictionRefusesInPortuguese` passou: com `minStay = 2` em d+25, a cotação de 1 noite recusa o `BALCAO` com "exige ao menos 2 noite(s)", e a restrição foi retirada. `LiveAvailabilityCheck.refusalInPortuguese` passou com a recusa de ocupação.
+  - As duas verificações: 3/3 e 2/2, nenhuma pulada.
+  - Build, teste e lint: verdes (gate acima).
+  - Inspeção manual: captura `app/build/live/availability.png` inspecionada. A aba não fica dentro de outra rolagem vertical: só a `AvailabilityScreen` rola (nenhum `verticalScroll` na casca, no `AppRoot` nem no `AppScaffold`).
 - **Decisões para o usuário**, já tomadas e revisáveis:
   1. **Inventário pela disponibilidade.** O detalhe da célula usa os contadores do `GET /availability`, e o `room-type-inventory` não é chamado, porque os contadores são os mesmos, com uma chamada por tipo.
   2. **Calendário sem plano.** Decisão de escopo: as restrições do plano aparecem como recusa na cotação. O seletor de plano custaria uma fachada `listRatePlans` e mostraria um plano por vez.
@@ -413,8 +421,15 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
      - uma `minStay = 2` gravada e retirada em d+25.
   4. **`ErrorState(message: String)` no `design`.** A sobrecarga ficou fora da lista de arquivos da Task 5. A versão com `ApiError` delega a ela.
   5. **Erros de campo.** Com `fieldErrors`, a cotação não repete o erro genérico, e a chave de campo desconhecida aparece acima do resultado.
+  6. **Task 9 no processo acelerado.** Ela partiu do trabalho interrompido guardado no workspace e rodou como `Risco: normal`, sem testador por tarefa e sem revisão. O testador de etapa a atacou.
+  7. **Verificação ao vivo pelo orquestrador.** Nesta sessão o subshell com as credenciais foi permitido, então o orquestrador rodou as duas verificações. A senha não foi para a linha de comando nem para a saída.
 - **Notas para a próxima etapa (dívidas menores, todas no ledger):**
-  - `runCatching` engole `CancellationException` na leitura da permissão da aba (`AppRoot.kt`). Falha fechada; corrigir na onda final da E02.
+  - `runCatching` engole `CancellationException` na leitura da permissão da aba (`AppRoot.kt`). Falha fechada; a correção entrou no plano da E03 (fiação da área).
+  - `LiveAvailabilityBookingCheck`, do testador de etapa, tudo de baixa severidade:
+    - se a data operacional virar durante o teste, a restrição de d+25 fica na demo;
+    - uma resposta perdida na criação deixa uma reserva `DEMO-E02-` sem cancelar;
+    - a conta `a0 - 1` supõe que ninguém mais reserva a STD em d+20 durante o teste;
+    - a exceção do `finally` pode mascarar a do corpo (melhoria: `addSuppressed`).
   - Enter cota mesmo com `loading`, e a última cotação vence.
   - Sem indicador de carga quando o calendário já tem linhas.
   - O fallback de "Indisponíveis" mostra o código técnico do tipo ou do plano.
