@@ -222,6 +222,17 @@ for word in "**Salvar como…**" "**Imprimir**" "Microsoft Print to PDF" "Cancel
   assert_contains "$card" "$word" "ficha: cita $word"
 done
 assert_eq "" "$(names_in "$card" | grep -vxF -f <(printf '%s\n' "$ci_names"))" "ficha: é a da reserva do check-in"
+# A janela do nome do arquivo do Microsoft Print to PDF também pode abrir atrás: defeito conhecido e linha de Erros comuns.
+win_txt='a janela que pede o nome do arquivo do Microsoft Print to PDF'
+assert_contains "$card" "$win_txt pode abrir atrás da janela do app" "ficha: defeito conhecido da janela do nome do arquivo"
+assert_contains "$card" "Alt+Tab ou clique no ícone do Java na barra de tarefas" "ficha: a saída da janela do nome do arquivo"
+assert_contains "$(awk '/Defeitos conhecidos/ {on = 1} on' <<<"$card" | head -6)" "$win_txt" "ficha: a janela do nome do arquivo está entre os defeitos aceitos"
+win_row="$(grep -E "^\| No passo ${n_card:-x}, .*nome do arquivo.* \|" "$rot")"
+assert_eq "1" "$(grep -c . <<<"$win_row")" "Erros comuns: uma linha da janela do nome do arquivo no passo $n_card"
+# (o texto "Microsoft Print to PDF" fica só no passo da ficha: o passo é achado por ele, inclusive no teste dos mutantes)
+assert_contains "$win_row" "janela que pede o nome do arquivo da impressão em PDF (passo ${n_card}.6)" "Erros comuns: cita a janela do nome do arquivo, com o passo ${n_card}.6"
+assert_contains "$win_row" "Alt+Tab" "Erros comuns: a saída da janela do nome do arquivo é o Alt+Tab"
+assert_contains "$win_row" "barra de tarefas" "Erros comuns: ou a barra de tarefas"
 
 walkin="$(step "${n_walkin:-x}")"
 wk_names="$(names_in "$walkin")"
@@ -245,6 +256,10 @@ un_names="$(names_in "$undo")"
 [[ -n "$un_names" ]] || _assert_fail "desfazer: cita o titular"
 assert_eq "" "$(grep -vxF -f <(printf '%s\n' "$ci_names") <<<"$un_names")" "desfazer: só o check-in feito no roteiro (A3/A4)"
 assert_contains "$undo" "passo $n_checkin" "desfazer: remete ao check-in do passo $n_checkin"
+undo_extra="A caução e o early lançados ficam na conta: libere e estorne pela conta da reserva."
+assert_contains "$undo" "\"$undo_extra\"" "desfazer: cita a linha da caução e do early no diálogo"
+assert_contains "$(cat "$ROOT/app/src/main/kotlin/com/zeny/desktop/app/reception/StayActionDialogs.kt")" "Text(\"$undo_extra\")" \
+  "desfazer: a linha da caução e do early existe verbatim no código do diálogo"
 # A aprovação: login gerente e o PIN do item certo da folha; a tentativa errada sem dígitos, gastando uma tentativa.
 rows="$(rc_folha_rows "$rot")"
 i_ger="$(rc_folha_item "$rows" 'login `gerente`')"

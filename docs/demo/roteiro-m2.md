@@ -515,7 +515,8 @@ Os rótulos de motivo da viagem e de meio de transporte podem sair como "(códig
 **Defeitos conhecidos, aceitos no gate (não é reprovação):**
 
 - com a escala de tela do Windows em 125% ou 150% (Configurações > Sistema > Tela > Escala), o "100%" do visualizador mostra a página menor que a folha real;
-- o diálogo de impressão pode abrir atrás da janela do app: se, depois de clicar em **Imprimir**, nada aparecer, use Alt+Tab ou clique no ícone do Java na barra de tarefas.
+- o diálogo de impressão pode abrir atrás da janela do app: se, depois de clicar em **Imprimir**, nada aparecer, use Alt+Tab ou clique no ícone do Java na barra de tarefas;
+- a janela que pede o nome do arquivo do Microsoft Print to PDF pode abrir atrás da janela do app: se, depois de clicar em **Imprimir**, o Windows não pedir o nome do arquivo, use Alt+Tab ou clique no ícone do Java na barra de tarefas. Isso não é reprovação.
 
 **13.1. Salvar como… e cancelar.** Clique em **Salvar como…**.
 
@@ -537,7 +538,7 @@ Os rótulos de motivo da viagem e de meio de transporte podem sair como "(códig
 
 **Resultado esperado:** abre o diálogo de impressão do Windows (se não aparecer, veja os defeitos conhecidos acima). Clique em **Cancelar**: o diálogo fecha e o visualizador não mostra mensagem nenhuma.
 
-**13.6. Imprimir para PDF.** Clique em **Imprimir**, escolha a impressora "Microsoft Print to PDF" e clique em **Imprimir** (ou **OK**). O Windows pede o nome do arquivo: salve na pasta Documentos como `ficha-impressa.pdf`.
+**13.6. Imprimir para PDF.** Clique em **Imprimir**, escolha a impressora "Microsoft Print to PDF" e clique em **Imprimir** (ou **OK**). O Windows pede o nome do arquivo (se a janela não aparecer, veja os defeitos conhecidos acima): salve na pasta Documentos como `ficha-impressa.pdf`.
 
 **Resultado esperado:** o visualizador mostra "Enviado para a impressora.". Abra o `ficha-impressa.pdf` (dois cliques): é a mesma ficha, numa folha inteira. Feche o leitor e clique em **Fechar** no visualizador. Os dois PDFs têm só dados fictícios; apague-os quando quiser.
 
@@ -589,7 +590,7 @@ O check-in do passo 12 foi feito por engano. Desfazer um check-in só vale na me
 
 Na aba **Hospedados**, clique na linha de "Hóspede Demonstração Três" (a UH do passo 12) e, no detalhe, em **Desfazer check-in**.
 
-**Resultado esperado:** abre o diálogo "Desfazer check-in", com "Desfazer o check-in da reserva R-…? A reserva volta a confirmada e a UH fica vaga." e os botões "Fechar" e "Desfazer".
+**Resultado esperado:** abre o diálogo "Desfazer check-in", com "Desfazer o check-in da reserva R-…? A reserva volta a confirmada e a UH fica vaga.", a linha "A caução e o early lançados ficam na conta: libere e estorne pela conta da reserva." e os botões "Fechar" e "Desfazer".
 
 Clique em **Desfazer**.
 
@@ -750,4 +751,5 @@ Nas janelas dos usuários e no PIN, use os valores da folha, com o novo no lugar
 | No app, o login recusa a senha | A senha não é a da folha para aquele login. | Confira o item da folha; erros seguidos bloqueiam o usuário. Se esqueceu, veja "Esqueci uma senha". |
 | No app, ao aprovar: `A conta do aprovador está bloqueada. Aguarde e tente de novo.` | O PIN do `gerente` foi errado 3 vezes seguidas. | Espere alguns minutos (o bloqueio vai de 1 minuto até 1 hora) e aprove com o PIN da folha. |
 | No passo 13, depois de clicar em **Imprimir**, nada aparece | O diálogo de impressão abriu atrás da janela do app (defeito conhecido). | Use Alt+Tab ou clique no ícone do Java na barra de tarefas. |
+| No passo 13, depois de **Imprimir**, o Windows não pede o nome do arquivo | A janela que pede o nome do arquivo da impressão em PDF (passo 13.6) abriu atrás da janela do app (defeito conhecido). | Use Alt+Tab ou clique no ícone do Java na barra de tarefas. |
 | No passo 18, a primeira janela mostra `Sua sessão foi encerrada. Entre novamente.` | A segunda janela entrou com o mesmo usuário da primeira. | Feche a segunda janela, entre de novo na primeira com `recepcao` e repita o passo 18 com `gerente` na segunda. |
