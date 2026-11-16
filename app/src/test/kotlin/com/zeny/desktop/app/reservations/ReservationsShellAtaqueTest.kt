@@ -43,6 +43,8 @@ import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
 private const val DOC = "52998224725"
+private const val DOC2 = "11144477735"
+private const val H2 = "30000000-0000-0000-0000-000000000002"
 private const val HOLDER_ID = "30000000-0000-0000-0000-000000000001"
 
 private fun shellDetailFor(item: ReservationListItemResponse) =
@@ -312,6 +314,107 @@ class ReservationsShellAtaqueTest {
 
             onNodeWithText("R-1").assertExists()
             onNodeWithText("Ana Fictícia").assertExists()
+            assertEquals(2, search.holderCalls.size, "uma leitura de titular por sessão, sem repetição")
+            assertEquals(2, search.businessDayCalls)
+        }
+
+    private fun twoHolderSource() =
+        search().apply {
+            reservations +=
+                searchItemOf(code = "R-2", arrival = "2026-01-10", departure = "2026-01-12", holderGuestId = H2)
+            holders[H2] = HolderSummary("Bia Fictícia", null)
+            documentHolders["CPF" to DOC2] = setOf(H2)
+        }
+
+    private fun ComposeUiTest.submitHeldDocumentSearch(source: FakeReservationSearchSource) =
+        source.hold(FakeReservationSearchSource.Op.SEARCH_BY_DOCUMENT).also {
+            onNodeWithTag("document-number").performTextInput(DOC2)
+            onNodeWithTag("document-submit").performClick()
+            waitForIdle()
+            assertEquals(1, source.documentCalls.size)
+        }
+
+    @Test
+    fun sessionSwitchCancelsInFlightDocumentSearch() =
+        runComposeUiTest {
+            val search = twoHolderSource()
+            val conn = Conn(search, receptionFor(search))
+            area(conn)
+            val gate = submitHeldDocumentSearch(search)
+
+            conn.state.value = SessionState.Active("u-2", "s-2", false)
+            waitForIdle()
+            gate.complete(Unit)
+            waitForIdle()
+
+            assertTrue(H2 !in search.holderCalls, "a consulta da sessão anterior seguiu viva depois do close()")
+        }
+
+    @Test
+    fun leavingAreaCancelsInFlightDocumentSearch() =
+        runComposeUiTest {
+            val search = twoHolderSource()
+            val conn = Conn(search, receptionFor(search))
+            var current by mutableStateOf(Area.RESERVATIONS)
+            setContent {
+                CompositionLocalProvider(LocalWindowInfo provides Window()) {
+                    ZenyTheme { AreaContent(current, conn) }
+                }
+            }
+            waitForIdle()
+            val gate = submitHeldDocumentSearch(search)
+
+            current = Area.GUESTS
+            waitForIdle()
+            gate.complete(Unit)
+            waitForIdle()
+
+            assertTrue(H2 !in search.holderCalls, "a consulta seguiu viva depois de sair da área")
+        }
+
+    @Test
+    fun sessionSwitchCancelsInFlightDetailLoad() =
+        runComposeUiTest {
+            val search = search()
+            val reception = receptionFor(search)
+            val conn = Conn(search, reception)
+            area(conn)
+            reception.holdReservation = true
+            onNodeWithText("R-1").performClick()
+            waitForIdle()
+            assertEquals(1, reception.reservationCalls.size)
+
+            conn.state.value = SessionState.Active("u-2", "s-2", false)
+            waitForIdle()
+            reception.heldReservations.forEach { it.second.complete(Unit) }
+            waitForIdle()
+
+            assertTrue(reception.holderCalls.isEmpty(), "o detalhe da sessão anterior seguiu vivo depois do close()")
+        }
+
+    @Test
+    fun leavingAreaCancelsInFlightDetailLoad() =
+        runComposeUiTest {
+            val search = search()
+            val reception = receptionFor(search)
+            val conn = Conn(search, reception)
+            var current by mutableStateOf(Area.RESERVATIONS)
+            setContent {
+                CompositionLocalProvider(LocalWindowInfo provides Window()) {
+                    ZenyTheme { AreaContent(current, conn) }
+                }
+            }
+            waitForIdle()
+            reception.holdReservation = true
+            onNodeWithText("R-1").performClick()
+            waitForIdle()
+
+            current = Area.GUESTS
+            waitForIdle()
+            reception.heldReservations.forEach { it.second.complete(Unit) }
+            waitForIdle()
+
+            assertTrue(reception.holderCalls.isEmpty(), "o detalhe seguiu vivo depois de sair da área")
         }
 
     @Test
