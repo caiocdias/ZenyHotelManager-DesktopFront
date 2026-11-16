@@ -18,8 +18,27 @@ import kotlinx.coroutines.launch
 private const val CARD_UNAVAILABLE = "REGISTRATION_CARD_UNAVAILABLE"
 private const val RESERVATION_NOT_FOUND = "RESERVATION_NOT_FOUND"
 private const val UNAVAILABLE_TEXT = "A ficha só existe para reservas confirmadas, hospedadas ou encerradas."
-private const val NOT_FOUND_TEXT = "A reserva não foi encontrada. Atualize o painel."
-private const val OPEN_ERROR_TEXT = "Não foi possível abrir a ficha."
+
+/** O que muda por documento: prefixo do título (com o travessão), prefixo do nome de arquivo e textos de erro. */
+enum class PdfKind(
+    val titlePrefix: String,
+    val filePrefix: String,
+    val openError: String,
+    val notFound: String,
+) {
+    REGISTRATION_CARD(
+        "Ficha de registro — ",
+        "ficha",
+        "Não foi possível abrir a ficha.",
+        "A reserva não foi encontrada. Atualize o painel.",
+    ),
+    CONFIRMATION(
+        "Confirmação da reserva — ",
+        "confirmacao",
+        "Não foi possível abrir a confirmação.",
+        "A reserva não foi encontrada. Refaça a busca.",
+    ),
+}
 
 /** O que o visualizador mostra: um documento já aberto (nunca vazio) e as ações de salvar e imprimir. */
 data class CardViewer(
@@ -28,10 +47,11 @@ data class CardViewer(
 )
 
 /**
- * Estado da ficha de registro de uma reserva. Cada download cria um [PdfDocumentState] novo (ele é de uso único),
- * aberto aqui antes de expor o [viewer]; PDF que não abre vira [error]. O [close] fecha o documento, descarta um
- * resultado tardio e fecha o documento tardio. Os bytes nunca saem daqui em [toString].
+ * Estado da ficha de registro de uma reserva (ou, com [PdfKind.CONFIRMATION], da confirmação). Cada download cria um
+ * [PdfDocumentState] novo (ele é de uso único), aberto aqui antes de expor o [viewer]; PDF que não abre vira [error].
+ * O [close] fecha o documento, descarta um resultado tardio e fecha o documento tardio. Os bytes nunca saem daqui em [toString].
  */
+@Suppress("LongParameterList") // assinatura fixada pelo plano (o `kind` entra por último, com padrão)
 class RegistrationCardState(
     private val source: RegistrationCards,
     scope: CoroutineScope,
@@ -39,11 +59,12 @@ class RegistrationCardState(
     private val reservationCode: String,
     private val newDocument: (ByteArray, CoroutineScope) -> PdfDocumentState,
     private val newActions: (bytes: ByteArray, suggestedName: String) -> PdfActions,
+    private val kind: PdfKind = PdfKind.REGISTRATION_CARD,
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
 
-    val title: String = "Ficha de registro — $reservationCode"
+    val title: String = "${kind.titlePrefix}$reservationCode"
 
     var loading by mutableStateOf(false)
         private set
@@ -99,11 +120,11 @@ class RegistrationCardState(
             val opened = document.open()
             currentCoroutineContext().ensureActive()
             if (opened) {
-                val name = suggestedPdfName(fileName, "ficha-$reservationCode.pdf")
+                val name = suggestedPdfName(fileName, "${kind.filePrefix}-$reservationCode.pdf")
                 viewer = CardViewer(document, newActions(bytes, name))
                 shown = true
             } else {
-                error = OPEN_ERROR_TEXT
+                error = kind.openError
             }
         } finally {
             if (!shown) document.close()
@@ -113,7 +134,7 @@ class RegistrationCardState(
     private fun failureText(failure: ApiError): String =
         when {
             failure is ApiError.Problem && failure.code == CARD_UNAVAILABLE -> UNAVAILABLE_TEXT
-            failure is ApiError.Problem && failure.code == RESERVATION_NOT_FOUND -> NOT_FOUND_TEXT
+            failure is ApiError.Problem && failure.code == RESERVATION_NOT_FOUND -> kind.notFound
             else -> errorMessage(failure)
         }
 
