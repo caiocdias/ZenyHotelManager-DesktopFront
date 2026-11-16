@@ -35,3 +35,7 @@ Kotlin, Compose Multiplatform e Gradle 9.8.1 (wrapper). Versões só em `gradle/
 ## Decisões do usuário
 
 As decisões são tomadas por entrevista, com uma opção recomendada. Elas ficam registradas em `docs/adr/`; consulte lá em vez de copiar aqui. ADR em estado de proposta espera a decisão do usuário.
+
+## Processo acelerado (até segunda ordem)
+
+Por decisão do usuário, o orquestrador segue o [ADR 0011](docs/adr/0011-processo-acelerado-ate-a-demo.md). Toda tarefa entra como `Risco: normal`, e o testador roda uma vez por etapa. Os planos são escritos para ondas paralelas de até 3 tarefas. A `revisor-seguranca` e o scanner ficam fora até a revogação. Nesse período, a etapa fecha com suíte verde, gate verde e a evidência de cada critério de aceite. A revisão adiada cobre `a300a23..HEAD`.

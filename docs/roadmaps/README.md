@@ -60,6 +60,24 @@ O gate de cada marco é um dia de trabalho (o usuário faz um gate por dia). Se 
    - Quando o usuário voltar ao Windows, ele executa a lista na ordem, com o pacote mais recente:
      - cada aprovação fecha a etapa `#concluida`;
      - uma reprovação reabre a etapa com uma rodada de correção, antes de qualquer etapa nova.
+8. **Processo acelerado (temporário).** O usuário decidiu em 2026-11-16 ([ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md)) que, até segunda ordem, as etapas podem rodar pelo "Prompt acelerado" de cada roadmap. Nesse modo:
+   - toda tarefa é `Risco: normal`, e o testador roda uma vez por etapa;
+   - os planos são escritos para ondas paralelas de até 3 tarefas;
+   - a `revisor-seguranca` e o scanner não rodam.
+
+   A etapa fecha `#concluida` com suíte verde, gate verde e a evidência de cada critério de aceite. O handoff dela traz a linha `Revisão de segurança: adiada (ADR 0011)`, e ela entra na lista "Revisões de segurança adiadas" abaixo. Essa lista é o escopo do marco final de análise do projeto, que o usuário vai executar.
+
+## Revisões de segurança adiadas
+
+Etapas executadas pela regra 8 sem a `revisor-seguranca`, na ordem em que fecharam. Cada entrada traz:
+- a etapa;
+- o intervalo de commits na branch do roadmap, `<MERGE_BASE da etapa>..<HEAD no fechamento>`. Os SHAs se preservam no merge na `main`;
+- a saída da `check_test_integrity.py --base <MERGE_BASE>` (exit e apontamentos);
+- os achados estacionados no ledger.
+
+O marco final de análise do projeto paga a lista inteira. A revisão final cobre `a300a23..HEAD` da `main`, com o scanner. Os achados viram etapas de correção.
+
+Nenhuma ainda.
 
 ## Validações acumuladas no Windows
 
@@ -88,3 +106,4 @@ Estão no design, §10:
 - 2026-11-15 — por decisão do usuário, a validação no Windows (regra 7) fica para o fim do M3: a lista acumulada é executada no gate do M3, e o M3 começa sem esperar o Windows (`claude --agent orquestrador`).
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`), contra o servidor em `5e06f16d51ff`. Entra a M0 E03 (sincronização), que vem antes da M3 E01 (regra 3). A M6 E08 sai de `#bloqueada`, porque as etapas do fechamento (M6 E11 do servidor) chegaram. A regra 5 foi revista para o fechamento automático das 03:00. O tratamento do primeiro `oneOf` do contrato ficou no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md), decidido pelo usuário em entrevista. Notas novas na M3 E04, na M3 E05, na M5 E02 e na M7 E10.
 - 2026-11-16 — a M0 E03 entra na lista "Validações acumuladas no Windows" (item 3), aguardando o Windows pela regra 7; o M3 pode começar (`claude --agent orquestrador`).
+- 2026-11-16 — regra 8 (processo acelerado) e a lista "Revisões de segurança adiadas", por decisão do usuário ([ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md)). Cada roadmap ganhou um "Prompt acelerado" logo abaixo do "Prompt de execução" (`claude --agent arquiteto`).
