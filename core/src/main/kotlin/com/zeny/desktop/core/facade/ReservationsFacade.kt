@@ -11,6 +11,7 @@ import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.client.FrontdeskApi
 import com.zeny.desktop.sdk.client.ReservationsApi
+import com.zeny.desktop.sdk.model.AvailabilityResponse
 import com.zeny.desktop.sdk.model.CheckInGuestRequest
 import com.zeny.desktop.sdk.model.CheckInRequest
 import com.zeny.desktop.sdk.model.CheckInResponse
@@ -32,10 +33,12 @@ import com.zeny.desktop.sdk.model.WalkInRequest
 import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpResponseTyped
+import java.time.temporal.ChronoUnit
 import kotlin.uuid.Uuid
 
 /** Maior página que o contrato aceita: o histórico vem inteiro, com o mínimo de idas ao servidor. */
 private const val HISTORY_PAGE_SIZE = 200
+private const val MAX_AVAILABILITY_DAYS = 366L
 
 /** As listas do dia da recepção. */
 enum class DayList { ARRIVALS, DEPARTURES, IN_HOUSE }
@@ -322,13 +325,15 @@ class ReservationsFacade internal constructor(
 
     /**
      * A cotação da estadia no canal `DIRECT`, a resposta como veio (ofertas na ordem do servidor, vazia não é erro).
-     * Sem crianças, `childAges` não vai; sem filtro de tipo, de tarifa nem de indisponíveis.
+     * Sem crianças, `childAges` não vai; sem filtro de tipo nem de tarifa. Com `includeUnavailable`, as combinações
+     * recusadas vêm com os motivos; sem ele, o parâmetro não vai.
      */
     suspend fun quoteStay(
         arrival: BusinessDate,
         departure: BusinessDate,
         adults: Int,
         childAges: List<Int>,
+        includeUnavailable: Boolean = false,
     ): QuoteResponse =
         executor
             .execute { call ->
@@ -338,9 +343,26 @@ class ReservationsFacade internal constructor(
                     adults = adults,
                     childAges = childAges.takeIf { it.isNotEmpty() }?.joinToString(","),
                     channel = QuoteStayParamChannel.DIRECT,
+                    includeUnavailable = true.takeIf { includeUnavailable },
                     block = call.headers,
                 )
             }.value
+
+    /**
+     * A disponibilidade de `from` a `to` (inclusive), sem filtro de tipo nem de tarifa. `to` antes de `from` ou mais
+     * de 366 dias (contando as duas pontas) lança `IllegalArgumentException` antes da rede.
+     */
+    suspend fun availability(
+        from: BusinessDate,
+        to: BusinessDate,
+    ): AvailabilityResponse {
+        val days = ChronoUnit.DAYS.between(from.value, to.value) + 1
+        require(days in 1..MAX_AVAILABILITY_DAYS) { "período de disponibilidade inválido" }
+        return executor
+            .execute { call ->
+                reservations.getAvailabilityCalendar(from = from.toApi(), to = to.toApi(), block = call.headers)
+            }.value
+    }
 
     /**
      * Os ids das UHs com alocação em reservas `PROVISIONAL` ou `CONFIRMED` que tocam de `from` a `to` (inclusive),

@@ -416,10 +416,10 @@ object ErrorCatalog {
         status: Int,
         code: String?,
         detail: String?,
-    ): String = code?.let(::message) ?: detail?.takeIf(::isShowable) ?: GENERIC_MESSAGE
+    ): String = code?.let(::message) ?: detail?.takeIf(::isShowableDetail) ?: GENERIC_MESSAGE
 
     /** Detalhe em texto de pessoa: não vazio, sem JSON cru e sem código cru. */
-    private fun isShowable(detail: String): Boolean {
+    fun isShowableDetail(detail: String): Boolean {
         val text = detail.trim()
         return text.isNotEmpty() && !text.startsWith("{") && !text.startsWith("[") && !bareIdentifier.matches(text)
     }
