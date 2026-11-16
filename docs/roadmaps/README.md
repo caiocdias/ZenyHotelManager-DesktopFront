@@ -13,10 +13,10 @@ O servidor de referência é o commit fixado em `api/server-pin.properties` ([AD
 | M0 | [Sincronização com o servidor](roadmap-m0-sincronizacao.md) | 1 por rodada | Commit fixado, contrato copiado, pré-voo de defasagem, ambiente do servidor e pacote do Windows. Repete-se a cada avanço do servidor | — |
 | M1 | [Fundação e mapa de UHs](roadmap-m1-fundacao.md) | 7 | Projeto Gradle, SDK gerado, núcleo HTTP e sessão, design system, login com endereço do servidor, menu por permissão, aprovação de superior, tempo real, `demo-seed` e mapa de UHs ao vivo | M0 E01 |
 | M2 | [Recepção do dia](roadmap-m2-recepcao-do-dia.md) | 7 | Painel do dia, check-in com alocação, ficha de registro em PDF (visualizador e impressão local), walk-in, troca de UH, desfazer check-in e recados | M1 e M0 E02 |
-| M3 | [Reservas](roadmap-m3-reservas.md) | 5 | Busca, disponibilidade e cotação, nova reserva e alteração com a confirmação em PDF, cancelar e reativar, pendências | M2 |
+| M3 | [Reservas](roadmap-m3-reservas.md) | 5 | Busca, disponibilidade e cotação, nova reserva e alteração com a confirmação em PDF, cancelar e reativar, pendências | M2 e M0 E03 |
 | M4 | [Contas, caixa e check-out](roadmap-m4-contas-caixa-checkout.md) | 5 | Conta da hospedagem com extrato em PDF, turno de caixa, pagamentos e cauções, check-out | M3 |
 | M5 | [Hóspedes e empresas](roadmap-m5-hospedes-empresas.md) | 5 | Perfil completo (com a descrição do gênero da FNRH), documentos com trilha, duplicados e mesclagem, LGPD, empresas | M4 |
-| M6 | [Governança e operação](roadmap-m6-governanca-operacao.md) | 8 | Status de governança, OOO/OOS, checklists, notificações, escala do dia e fechamento do dia (bloqueado até o servidor ter as etapas do fechamento) | M5 |
+| M6 | [Governança e operação](roadmap-m6-governanca-operacao.md) | 8 | Status de governança, OOO/OOS, checklists, notificações, escala do dia e fechamento do dia (desbloqueado pela rodada 3 do M0) | M5 |
 | M7 | [Gestão e cadastros](roadmap-m7-gestao-cadastros.md) | 12 | UHs, tarifas, bloqueios, usuários e roles, hotel, financeiro, modelos de checklist, pessoal, FNRH com a fila de envio, auditoria, impressoras e agentes de impressão | M6 |
 
 ```mermaid
@@ -40,7 +40,12 @@ O gate de cada marco é um dia de trabalho (o usuário faz um gate por dia). Se 
    - a análise, feita por `claude --agent arquiteto` com `development-roadmap` em modo atualização, que acrescenta etapas e atualiza `docs/pedidos-servidor.md`;
    - a etapa mecânica, executada pelo orquestrador.
 4. **O repositório do servidor é só leitura.** Nenhuma sessão do front escreve em `/home/caio/repos/ZenyHotelManager`, nem com worktree, checkout ou arquivo novo. O que faltar na API vira pedido `PF-NN` pelo brain ([ADR 0005](../adr/0005-pedidos-ao-servidor-pelo-brain.md)). Até 17/11, nenhuma etapa depende de pedido.
-5. **Recriar a demo.** O roteiro de cada gate começa pela recriação: `down -v`, `up -d` e `demo-seed`. A data operacional só avança no M6 do servidor, então "hoje" é o dia da recriação.
+5. **Recriar a demo.** O roteiro de cada gate começa pela recriação: `down -v`, `up -d` e `demo-seed`. Num banco novo, a data operacional é o dia da recriação. Desde o servidor em `5e06f16d51ff` (M0 E03), ela avança sozinha: o servidor fecha o dia às 03:00 do dia seguinte, o horário padrão do fechamento (`endOfDayTime`). Nesse fechamento:
+   - as chegadas confirmadas sem check-in viram no-show, com multa;
+   - as diárias são lançadas;
+   - a data passa ao dia seguinte.
+
+   Por isso, a recriação vale só para o dia em que é feita. Recrie no mesmo dia do roteiro ou da demo, depois das 03:00, e nunca deixe um ambiente recriado na véspera para usar no dia seguinte. O seed não muda o horário do fechamento. Esse horário é a última hora possível antes da demo; um horário depois do meio-dia fecharia no mesmo dia. O fechamento manual só entra num roteiro a partir do M6 (E08), por último ou seguido de nova recriação.
 6. **Push e deploy ficam com o usuário.** A execução commita na branch `roadmap/<slug>` e, no fim do lote, faz merge local na `main`.
 7. **Validação no Windows acumulada (temporária).** O usuário decidiu em 2026-11-13 que, enquanto estiver sem acesso ao Windows (até domingo, 2026-11-15, pelo menos), o lote não para por isso. Em 2026-11-15 ele estendeu a regra: a validação no Windows fica para o fim do M3, no gate dele (M3 E05), que executa a lista acumulada de uma vez. A regra vale até ele mesmo tirá-la deste README. Enquanto ela valer:
    - Uma etapa com `Revisão humana: sim` cuja **única** pendência é o usuário executar algo no Windows não para o lote. Isso cobre roteiro de gate, pacote e readiness lá. O orquestrador:
@@ -80,3 +85,4 @@ Estão no design, §10:
 - 2026-11-13 — regra 7 e a lista "Validações acumuladas no Windows", por decisão do usuário: sem acesso ao Windows até 2026-11-15 pelo menos, a validação lá é acumulada e não para o lote. A M0 E02 é a primeira da lista (`claude --agent orquestrador`).
 - 2026-11-15 — a M2 E06 (gate do M2) entra na lista "Validações acumuladas no Windows", e a entrada 1 passa a pedir o `roteiro-m2.md`, que acumula o do M1 (`claude --agent orquestrador`).
 - 2026-11-15 — por decisão do usuário, a validação no Windows (regra 7) fica para o fim do M3: a lista acumulada é executada no gate do M3, e o M3 começa sem esperar o Windows (`claude --agent orquestrador`).
+- 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`), contra o servidor em `5e06f16d51ff`. Entra a M0 E03 (sincronização), que vem antes da M3 E01 (regra 3). A M6 E08 sai de `#bloqueada`, porque as etapas do fechamento (M6 E11 do servidor) chegaram. A regra 5 foi revista para o fechamento automático das 03:00. O tratamento do primeiro `oneOf` do contrato ficou no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md), decidido pelo usuário em entrevista. Notas novas na M3 E04, na M3 E05, na M5 E02 e na M7 E10.

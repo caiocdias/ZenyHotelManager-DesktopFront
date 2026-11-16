@@ -1,6 +1,6 @@
 # Roadmap — M7 Gestão e cadastros
 
-> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-13
+> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-15
 
 > **Pré-requisito:** a etapa E07 ("Gate do marco M6") de `docs/roadmaps/roadmap-m6-governanca-operacao.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -691,7 +691,7 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** não
 
-**Notas para o plano:** a nota `ZenyHotelManager - Módulo fnrh` traz o saneamento, os domínios e a semântica da desativação do CPF solicitante. As submissões não trazem dado de hóspede além de ids e do código da reserva, e os erros dos dados sensíveis vêm neutros (`person.sensitiveData`, decisão E08 (e) do servidor). A tela orienta a abrir o perfil (M5 E01) e não tenta adivinhar o campo. Ao ligar a integração, sai todo o acumulado (nota da M5 E08 do servidor): a tela de configuração avisa isso antes de gravar a credencial.
+**Notas para o plano:** a nota `ZenyHotelManager - Módulo fnrh` traz o saneamento, os domínios e a semântica da desativação do CPF solicitante. As submissões não trazem dado de hóspede além de ids e do código da reserva, e os erros dos dados sensíveis vêm neutros (`person.sensitiveData`, decisão E08 (e) do servidor). A tela orienta a abrir o perfil (M5 E01) e não tenta adivinhar o campo. Ao ligar a integração, sai todo o acumulado (nota da M5 E08 do servidor): a tela de configuração avisa isso antes de gravar a credencial. Desde o pin `5e06f16d51ff` (M0 E03; M6 E14 do servidor), o no-show do fechamento do dia também vai à fila. A tela dá rótulo pt-BR próprio à operação `NO_SHOW` e à falha `REMOTE_NO_SHOW` de `FnrhSubmissionResponse`, que são `x-extensible-enum`.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -821,3 +821,4 @@ Todo usuário vê e revoga as próprias sessões.
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E10 ganha a fila de envio à FNRH (lista, `retry` e `dismiss`) e a limpeza da credencial. Ficou registrada a ruling de não adotar o WireMock da FNRH no `zeny-front` por ora. Entra a E12 (impressoras, agentes e fila de impressão, com "Enviar à impressora do hotel" nas telas de documento; [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E11 passa a depender dela e a separar na cobertura as rotas do agente de impressão. O fechamento do dia saiu de "Fora de escopo" e foi para a M6 E08. O marco tem 12 etapas, no limite de referência. Nenhuma tag mudou.
+- 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A E10 ganhou a nota do no-show na fila da FNRH (`NO_SHOW` e `REMOTE_NO_SHOW`). Nenhuma tag mudou.

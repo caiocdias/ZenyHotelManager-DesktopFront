@@ -1,6 +1,6 @@
 # Roadmap — M6 Governança e operação
 
-> Arquivo: `docs/roadmaps/roadmap-m6-governanca-operacao.md` · branch de execução: `roadmap/m6-governanca-operacao` · criado em 2026-11-10 · última revisão 2026-11-13
+> Arquivo: `docs/roadmaps/roadmap-m6-governanca-operacao.md` · branch de execução: `roadmap/m6-governanca-operacao` · criado em 2026-11-10 · última revisão 2026-11-15
 
 > **Pré-requisito:** a etapa E05 ("Gate do marco M5") de `docs/roadmaps/roadmap-m5-hospedes-empresas.md` está `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3). O M6 do servidor (`housekeeping`, `maintenance`, fechamento) pode já ter avançado nessa altura, e a rodada do M0 decide se este marco ganha etapas.
 
@@ -47,7 +47,17 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
     - ações: `POST /api/v1/end-of-day/runs` e `POST /api/v1/end-of-day/runs/{id}/resume`, com `Idempotency-Key` e `endofday.runs.execute` ou aprovação de superior (ações `endofday.run.start` e `endofday.run.resume`); respondem `201`/`200` com a execução no estado em que estiver (`RUNNING`, `FAILED` ou `COMPLETED`);
     - tópico SSE `end-of-day`, com o evento `endofday.run`;
     - avisos `notifications.end-of-day-pending` no painel.
-    - **No pin `57eb5fac5b8a` o motor não tem etapas** (a M6 E11 do servidor está `#pendente`): o disparo manual responde `409 END_OF_DAY_NOT_CONFIGURED`, o automático registra `NO_STEPS` e a data operacional não avança. Ver o bloqueio da E08.
+    - **No pin `57eb5fac5b8a` o motor não tem etapas** (a M6 E11 do servidor está `#pendente`): o disparo manual responde `409 END_OF_DAY_NOT_CONFIGURED`, o automático registra `NO_STEPS` e a data operacional não avança.
+    - **Desde o pin `5e06f16d51ff` (M0 E03), o motor tem as 8 etapas da M6 E11 do servidor**, nesta ordem:
+      - `no-show` (as confirmadas com chegada pendente viram `NO_SHOW`, com a multa da política copiada na reserva, e a UH é solta);
+      - `pending-departures` (a saída pendente vira pendência, sem check-out automático);
+      - `room-charges` (diárias, pacotes e taxas, uma vez por reserva e noite);
+      - `block-release` e `provisional-expiry`;
+      - `card-pre-authorizations` (`NOT_APPLICABLE` até o M7 do servidor);
+      - `occupied-rooms-dirty`;
+      - `advance-business-date`, por último.
+
+      O automático fecha a data às 03:00 do dia seguinte, o `endOfDayTime` padrão (regra 5 do README). Snapshot e PDFs do fechamento (M6 E13 do servidor) continuam pendentes.
 - **Regras do servidor:**
   - OOO com aprovação de superior, refletido na disponibilidade e na marca de realocação;
   - OOO recusado em UH ocupada;
@@ -69,7 +79,7 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
 - relatórios de checklist;
 - notificações e preferências;
 - escala do dia (consulta);
-- fechamento do dia (E08, `#bloqueada` até o servidor ter as etapas do fechamento);
+- fechamento do dia (E08, desbloqueada pela rodada 3 do M0: as etapas do fechamento estão no pin `5e06f16d51ff`);
 - seed ampliado;
 - roteiro do M6.
 
@@ -102,7 +112,7 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
 |---|---|---|---|
 | H1 | Pelo desktop, o seed consegue criar modelos de checklist publicados e uma rotina, usando a API de modelos que o front só ganha no M7 | O roteiro do M6 usa uma execução avulsa de um modelo criado por `curl` | E03 |
 | H2 | Alguma operação do contrato já dispara notificações para o painel (por exemplo, a diferença de caixa do M4) | O roteiro mostra o painel vazio e o contador zerado; a demonstração fica para depois | E05 |
-| H3 | Na rodada do M0 que vier antes deste marco, o servidor já terá a M6 E11 dele (as etapas do fechamento e o avanço da data) | A E08 continua `#bloqueada`, e essa análise do M0 decide entre esperar ou tirar a E08 das dependências do gate, registrando no histórico | E08 |
+| H3 | Na rodada do M0 que vier antes deste marco, o servidor já terá a M6 E11 dele (as etapas do fechamento e o avanço da data) | A E08 continua `#bloqueada`, e essa análise do M0 decide entre esperar ou tirar a E08 das dependências do gate, registrando no histórico | E08 — **confirmada (2026-11-15)** pela análise da rodada 3 do M0: a `main` do servidor em `5e06f16d51ff` tem a M6 E11 dele `#concluida`, e a M0 E03 fixa esse commit. A E08 passou a `#pendente` |
 
 ## Definição global de pronto
 
@@ -203,7 +213,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E04 | Relatórios de checklist | #pendente | E03 | Conformidade por modelo, itens mais reprovados e histórico por local |
 | E05 | Notificações | #pendente | — | Painel, contador ao vivo, marcar como lida e preferências |
 | E06 | Escala do dia | #pendente | — | Consulta da escala, dos turnos e de quem está trabalhando hoje |
-| E08 | Fechamento do dia | #bloqueada | — | Execuções do fechamento com etapas e pendências, disparo manual com aprovação, retomada e andamento ao vivo |
+| E08 | Fechamento do dia | #pendente | — | Execuções do fechamento com etapas e pendências, disparo manual com aprovação, retomada e andamento ao vivo |
 | E07 | Gate do marco M6 | #pendente | E02, E04, E05, E06, E08 | Seed ampliado, roteiro do M6 e definição de pronto verificada |
 
 ---
@@ -482,7 +492,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E08 — Fechamento do dia — #bloqueada
+## E08 — Fechamento do dia — #pendente
 
 **Objetivo:** o gerente acompanha e opera o fechamento do dia pelo app:
 
@@ -495,7 +505,7 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 
 **Por que agora:** o fechamento é o que faz a data andar e lança as diárias. É a rotina da operação noturna, e a tela fecha o M6.
 
-**Dependências:** nenhuma dentro deste roadmap (exige o gate do M5 e o desbloqueio abaixo).
+**Dependências:** nenhuma dentro deste roadmap. Exige o gate do M5 e o servidor fixado em `5e06f16d51ff` ou depois (M0 E03).
 
 **Escopo:**
 
@@ -517,6 +527,7 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 - [ ] Como Recepcionista, sem `endofday.runs.execute`, o disparo abre o diálogo de aprovação. Aprovado pelo Gerente, executa uma vez só (mesma `Idempotency-Key`).
 - [ ] Um disparo que responde `RUNNING` continua atualizando pela tela, via `end-of-day`, até o estado final, sem reenviar o `POST`.
 - [ ] A saída pendente do seed aparece como pendência da execução, com o texto do servidor e sem dado pessoal além do que ele manda.
+- [ ] Depois do fechamento, uma chegada confirmada do seed que não fez check-in aparece no detalhe da reserva como "Não compareceu", com a linha de no-show no histórico, ou, se o servidor recusou a multa, como pendência da execução.
 - [ ] Teste do *state holder*: `409 END_OF_DAY_RUN_EXISTS` sem `runId` relê a execução da data, e um `status` desconhecido aparece como "Outro (VALOR)".
 
 **Validação obrigatória:**
@@ -531,17 +542,19 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 - O fechamento muda a data operacional do ambiente. O roteiro do gate precisa deixá-lo por último ou recriar o ambiente depois (regra 5 de `docs/roadmaps/README.md`).
 - Decisões do servidor, M6 E10 dele: uma execução por data; `201` síncrono com espera de até 30 s (`zeny.endofday.manual-wait`); `FAILED` só sai por retomada manual; o automático age só até 24 h depois do horário devido.
 - A repetição com a mesma `Idempotency-Key` devolve a resposta guardada, que pode ser `RUNNING`. O estado atual vem do `GET` ou do tópico, nunca da repetição.
+- A rodada 3 do M0 revisou o escopo diante da M6 E11 do servidor. A E11 não mudou o contrato do fechamento: nenhuma operação nova e nenhum código de erro novo, e `kind` e `stepName` das pendências são texto livre (`EndOfDayIssueResponse`), mostrados como o servidor manda. As etapas e a ordem estão em "Contexto confirmado".
+- Decisões do servidor, M6 E11 dele, que a tela precisa mostrar sem esconder:
+  - se o servidor recusa a multa de no-show (conta encerrada ou código `MULTA-NOSHOW` desativado), o no-show inteiro não acontece, e a reserva vira pendência a cada fechamento;
+  - uma etapa que falha não avisa as pendências que gravou: elas aparecem só no `GET …/issues`;
+  - o avanço que esgota o prazo fica `FAILED` até a retomada manual.
+- O seed do M2 põe todas as chegadas e os day use na data operacional. Logo, um fechamento logo depois do seed gera no-shows e pendências de saída: é o material dos critérios, não defeito.
 
-**Bloqueios:**
-
-- **Causa:** no servidor fixado (`57eb5fac5b8a`), o motor do fechamento (M6 E10 do servidor) existe, mas não tem nenhuma etapa registrada. As etapas de negócio e o avanço da data são da M6 E11 do servidor, `#pendente`.
-- **Evidência:** o contrato descreve `409 END_OF_DAY_NOT_CONFIGURED` para "nenhuma etapa registrada". O handoff da M6 E10 do servidor prova esse `409` e o `NO_STEPS` do gatilho pela API. O índice do roadmap `roadmap-m6-operacao-fechamento.md` do servidor mostra a E11 `#pendente` em 2026-11-13.
-- **Impacto:** a tela não teria uma execução real para mostrar, e os critérios de aceite não se verificam. O gate E07 depende desta etapa.
-- **Ação de desbloqueio:** uma rodada do M0 que fixe um commit do servidor com a M6 E11 dele `#concluida`. Essa análise registra o novo pin em H3 e troca a tag para `#pendente`. Se o M6 do front começar sem isso, a análise do M0 decide, por entrevista, entre esperar e tirar a E08 das dependências do gate.
+**Bloqueios:** Nenhum bloqueio conhecido. O bloqueio registrado na rodada 2 do M0 (motor sem etapas no pin `57eb5fac5b8a`) caiu na rodada 3: a M6 E11 do servidor está em `5e06f16d51ff`, fixado pela M0 E03 (H3 e histórico).
 
 **Riscos e mitigação:**
 
-- A M6 E11 do servidor muda o contrato do fechamento (pendências novas, códigos novos). A rodada do M0 que desbloquear revê o escopo desta etapa.
+- Se o M6 do front começar antes da M0 E03 ser integrada, o servidor fixado ainda não tem as etapas. A regra 3 do README impede isso: a E03 vem antes do M3.
+- A M6 E13 do servidor (snapshot e PDFs) pode entrar com etapas novas antes do avanço (`daily-statistics` e `end-of-day-reports`, segundo o handoff da E11 dele). A tela mostra as etapas como o servidor as lista, sem uma lista fixa no app.
 
 **Evidências e handoff:**
 
@@ -608,3 +621,4 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). Entra a E08 (fechamento do dia), que nasce `#bloqueada`: o motor do servidor ainda não tem etapas, porque a M6 E11 dele está pendente. O gate E07 passa a depender dela. Nasce a H3. A E05 ganha a nota dos tipos de notificação novos (`integration-failure` e `end-of-day-pending`). Nenhuma tag existente mudou.
+- 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A E08 sai de `#bloqueada` para `#pendente`, porque a M6 E11 do servidor (as 8 etapas do fechamento e o avanço da data) está no commit que a M0 E03 fixa. A H3 foi confirmada, e o escopo da E08 foi revisto: o contrato do fechamento não mudou. Entraram um critério de no-show e notas com as decisões da E11 do servidor.

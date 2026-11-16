@@ -173,6 +173,7 @@ dependencies {
 - **Interceptação e repetição na E02.** O `core` é dono do único `HttpClient` e instala nele o que a E02 precisar.
   - O refresh no `401` com `code` `UNAUTHENTICATED`, por plugin do Ktor (`HttpSend.intercept` ou `createClientPlugin`), repete a mesma requisição com o novo `Authorization`.
   - O atributo `ogenAuthAttr` de cada requisição diz se a operação exige `bearerAuth`. Em `login` e `refreshTokens` ele é `emptyList()`, e o token não vai.
+    - *Atualização de 2026-11-15 (rodada 3 do M0, pendência R4 da M0 E02):* desde o pin `57eb5fac5b8a`, o contrato tem um segundo esquema de segurança. Nas 5 rotas `/api/v1/print-agents/me/*`, o `ogenAuthAttr` é `printAgentToken`, não `bearerAuth`, e "não vazio" deixou de significar "token do usuário". O `core` atual põe o `Bearer` em qualquer `ogenAuthAttr` não vazio. Esse defeito está caracterizado por teste e registrado na M7 E12, e ninguém chama essas rotas no desktop (ADR 0009). A regra correta é tratar como sessão de usuário só o requisito `bearerAuth` e falhar fechado em qualquer outro.
   - O reenvio após o `403 APPROVAL_REQUIRED` refaz a chamada gerada com o token no `block`. A camada HTTP também pode fazer o reenvio, com `request.headers["X-Approval-Token"] = token` no `HttpRequestBuilder`.
   - **A `Idempotency-Key` da repetição após aprovação foi decidida pelo usuário em 2026-11-11 (decisão D2 do roadmap M1):** nova chave, como diz o contrato (por exemplo, `cancelReservation`: "repita com o `X-Approval-Token` e **outra** `Idempotency-Key`"); o reenvio por falha de rede mantém a chave. Isso substitui o "reaproveitada após a aprovação" do design §6.2.
   - O mecanismo serve às duas regras. O parâmetro `idempotencyKey` gerado, ou `headers["Idempotency-Key"] = …` no `block` ou no `HttpRequestBuilder`, envia a mesma chave ou uma nova, sempre uma vez só.
@@ -183,6 +184,7 @@ dependencies {
   - O `core` traduz a falha numa mensagem amigável de versão incompatível, sem JSON cru.
   - O front roda contra o servidor fixado ([ADR 0002](0002-servidor-fixado-e-contrato-copiado.md)), e valor novo de enum fechado só chega com outro contrato. Ele entra pela sincronização (M0), que regenera o `sdk`.
   - O `x-extensible-enum` é `String` e recebe o tratamento "Outro (VALOR)" do design §6.2.
+- **`oneOf` sem discriminador** (desde o servidor em `5e06f16d51ff`): segundo a ARCHITECTURE §7 do servidor, o ogen entrega a resposta como `JsonElement`. Quem escolhe o ramo é o `core`, conforme o [ADR 0010](0010-resposta-que-varia-com-a-permissao.md). A M0 E03 caracteriza o tipo gerado.
 - **Dinheiro e datas.** Dinheiro, `date` e `date-time` ficam `String` no `sdk`, exatos na leitura e na escrita. O `core` converte dinheiro para `BigDecimal(String)`, sem `Double`. Data de negócio e instante seguem o design §6.2. Os oito `type: number` sem formato (quantidades) saem `Double`.
 - **Kotlin Multiplatform (ADR 0001).** A porta fica aberta.
   - O código gerado não tem nenhuma referência `java.*`. Ele usa `kotlin.uuid.Uuid`, `String`, `Option` e kotlinx.serialization, e o ogen suporta KMP.

@@ -44,5 +44,5 @@ Restrição do design §6.2: nenhum dado de hóspede em log nem em cache de disc
 - Entra uma dependência nova de renderização de PDF. O catálogo e os lockfiles mudam no mesmo commit (`CLAUDE.md`, "Stack e comandos").
 - O componente de visualização e impressão é do `design`, e o download é uma fachada do `core` (ADR 0008). As features não tocam no `sdk`.
 - Há dois caminhos de impressão. O local não deixa trilha no servidor, o que tem o mesmo efeito de baixar o PDF (D-E11-10). O da fila deixa.
-- Os rótulos de motivo de viagem e meio de transporte da ficha saem como "(código FNRH)" até a M6 E15 do servidor. O conteúdo do PDF é do servidor, e o front não o corrige.
+- Os rótulos de motivo de viagem e meio de transporte da ficha saem como "(código FNRH)" até a M6 E15 do servidor. O conteúdo do PDF é do servidor, e o front não o corrige. *Atualização de 2026-11-15 (rodada 3 do M0):* a M6 E15 do servidor está em `5e06f16d51ff`. A ficha passa a mostrar o rótulo do catálogo de domínios da FNRH, e "(código FNRH)" só aparece quando o código está fora do catálogo. Vale a partir da M0 E03.
 - As rotas `/api/v1/print-agents/me/*` (esquema `printAgentToken`) são do agente de impressão e ficam fora do desktop na tabela de cobertura do M7.

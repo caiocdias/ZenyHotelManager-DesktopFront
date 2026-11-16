@@ -1,8 +1,8 @@
 # Roadmap — M3 Reservas
 
-> Arquivo: `docs/roadmaps/roadmap-m3-reservas.md` · branch de execução: `roadmap/m3-reservas` · criado em 2026-11-10 · última revisão 2026-11-13
+> Arquivo: `docs/roadmaps/roadmap-m3-reservas.md` · branch de execução: `roadmap/m3-reservas` · criado em 2026-11-10 · última revisão 2026-11-15
 
-> **Pré-requisito:** etapa E06 ("Gate do marco M2") de `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` marcada `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
+> **Pré-requisito:** etapa E06 ("Gate do marco M2") de `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` marcada `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3). A rodada 3 já foi analisada: a etapa E03 de `docs/roadmaps/roadmap-m0-sincronizacao.md` (servidor em `5e06f16d51ff`) precisa estar integrada na `main` antes da E01 deste marco. Pela regra 7, ela pode estar "Aguardando o Windows".
 
 ## Como usar
 
@@ -377,7 +377,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- Desde o pin `5e06f16d51ff` (M0 E03), o fechamento do dia do servidor marca o no-show. As reservas de `expected-no-shows` viram `NO_SHOW` às 03:00 do dia seguinte (regra 5 do README), e o `reactivate` também vale para elas, não só para a cancelada.
+- O seed não cria no-show. Para isso, teria de disparar um fechamento, que avança a data e desalinha o roteiro. A reativação de um no-show fica coberta por teste do *state holder*, e a lista de no-shows previstos usa as chegadas confirmadas do seed na data operacional.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -427,7 +430,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** sim. Gate do marco e nova build de demo.
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- Desde o pin `5e06f16d51ff` (M0 E03), o servidor fecha o dia sozinho às 03:00 do dia seguinte à recriação (regra 5 do README). O início do `roteiro-m3.md` herda o aviso que a M0 E03 pôs nos roteiros anteriores: recriar no mesmo dia da execução, depois das 03:00. A lista acumulada do Windows (regra 7), executada neste gate, segue a mesma regra.
+- As reservas futuras do seed ficam depois da data operacional, e nenhuma pode depender de um fechamento para aparecer como o roteiro descreve.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -448,3 +454,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`): a E03 ganha a confirmação da reserva em PDF, no visualizador da M2 E07 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)). A impressão pela fila do servidor fica com a M7 E12. Nenhuma tag mudou.
+- 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`): o fechamento do dia do servidor marca o no-show e avança a data às 03:00. A E04 ganhou a nota da reativação de no-show, e a E05 a da recriação no mesmo dia. O marco passa a exigir a M0 E03 antes da E01 (regra 3). Nenhuma tag mudou.

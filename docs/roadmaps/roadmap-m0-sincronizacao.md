@@ -1,6 +1,6 @@
 # Roadmap — M0 Sincronização com o servidor
 
-> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-13
+> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-15
 
 ## Como usar
 
@@ -164,6 +164,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
 | E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #em-andamento | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
+| E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #pendente | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
 
 ---
 
@@ -415,6 +416,123 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E03 — Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) — #pendente
+
+**Objetivo:** o front passa a apontar para a `main` do servidor em `5e06f16d51ff9913f0da09df8f62639996cd6c52`. O pin e a cópia do contrato são trocados e o SDK é regenerado. O tipo que o ogen gera para o primeiro `oneOf` do contrato fica caracterizado por teste. As telas existentes ganham os rótulos dos valores novos de enum, e os roteiros e o `LEIA-ME` passam a avisar que a data operacional avança sozinha. Ao fim, o `smokeTest` passa contra o servidor novo, e o M3 pode começar.
+
+**Por que agora:** a regra 3 de `docs/roadmaps/README.md` manda sincronizar antes do M3. O servidor novo traz as etapas do fechamento do dia, que desbloqueiam a M6 E08, e os rótulos da FNRH na ficha da M2 E07.
+
+**Dependências:** E02. Pela regra 7 do README, a E02, aguardando o Windows, conta como concluída.
+
+**Contexto (análise de 2026-11-15, `claude --agent arquiteto`):**
+
+- **Pré-voo de 2026-11-15:** aditivo (código 11). O pin `57eb5fac5b8a` está 131 commits atrás da `main` (`git rev-list --count`), e não há `ERR` em `/api/v1`. O oasdiff dá 3 `warning` `response-body-wrapped-in-one-of-original-preserved`, um em cada operação da linha seguinte.
+- **Contrato**, pelo diff de `git show <commit>:api/openapi.yaml` entre os dois commits:
+  - 335 operações nos dois. Nenhuma operação entrou ou saiu.
+  - Um schema novo, `GuestWriteSummaryResponse` `{id, restricted}`.
+  - A resposta `200` de `restrictGuest`, `liftGuestRestriction` e `mergeGuests` passou a ser `oneOf: [GuestResponse, GuestWriteSummaryResponse]`, sem discriminador. É o primeiro `oneOf` do contrato. A regra é do servidor (ARCHITECTURE §7 dele, M6 E17), e o tratamento no front está no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md).
+  - Valores novos de `x-extensible-enum`:
+    - `ReservationHistoryResponse.kind`: `NO_SHOW`;
+    - `RoomAssignmentResponse.releaseReason`: `RESERVATION_NO_SHOW`;
+    - `FnrhSubmissionResponse.operation`: `NO_SHOW`;
+    - `FnrhSubmissionResponse.lastFailure`: `REMOTE_NO_SHOW`.
+  - Mudaram só descrições:
+    - a ficha de registro mostra o rótulo do catálogo de domínios da FNRH no motivo da viagem e no meio de transporte (M6 E15 do servidor);
+    - `GuestResponse.genderDescription`.
+  - Nenhum código de erro novo apareceu no diff.
+- **Servidor**, de `57eb5fac5b8a` a `5e06f16d51ff`:
+  - entraram as M6 E11, E14, E15, E16 e E17 dele;
+  - a E11 traz as 8 etapas do fechamento do dia: `no-show`, `pending-departures`, `room-charges`, `block-release`, `provisional-expiry`, `card-pre-authorizations` (`NOT_APPLICABLE`), `occupied-rooms-dirty` e `advance-business-date`;
+  - a E18 dele (cursor, rollback, datas estritas) **não** está neste pin.
+- **`docker/` do servidor:** `git diff 57eb5fac5b8a 5e06f16d51ff -- docker/` vazio. O `application.yaml` só ganhou `zeny.endofday.trigger.wait`, com padrão (`PT5S`). Não há variável de ambiente nova.
+- **Fechamento automático:**
+  - O `EndOfDayTriggerJob` roda a cada minuto.
+  - Num banco novo, a data operacional é a de hoje, no fuso do hotel (`BusinessDay.start`).
+  - O horário padrão do fechamento (`endOfDayTime`) é 03:00. Antes do meio-dia, o fechamento vence no dia seguinte (`EndOfDaySchedule.dueAt`). O gatilho só age até 24 h depois do vencimento.
+  - Por isso, um ambiente que fica no ar até as 03:00 do dia seguinte ao da criação é fechado sozinho:
+    - as chegadas confirmadas sem check-in viram `NO_SHOW`, com a multa da política;
+    - as diárias são lançadas;
+    - as saídas pendentes viram pendências;
+    - a data avança.
+  - A regra 5 do README foi revista nesta análise.
+- **Pedidos ao servidor:** PF-01 e PF-02 continuam abertos. Nenhuma captura do brain e nenhum documento do servidor (`main` e branches de roadmap) cita "atende PF-NN".
+
+**Escopo:**
+
+- **Pin e contrato:** `api/server-pin.properties` e `api/openapi.yaml` em `5e06f16d51ff`, pelo mecanismo da E01.
+- **SDK:** regenerar e compilar o contrato inteiro (ADR 0007, item 1). O teste de cobertura continua amarrando as 335 operações. Um teste de caracterização no `sdk` fixa o tipo gerado para a resposta de `restrictGuest`, `liftGuestRestriction` e `mergeGuests`. Ele prova que os dois ramos chegam íntegros pelo cliente gerado: um `GuestResponse` completo e um resumo `{id, restricted}`. O `core` não muda por causa do `oneOf`: a fachada é da M5 E02 (ADR 0010).
+- **Rótulos nas telas existentes:** `NO_SHOW` no histórico da reserva e `RESERVATION_NO_SHOW` na alocação solta, no detalhe da reserva da M2 E01, com texto pt-BR próprio em vez de "Outro (VALOR)". Os dois valores da FNRH ficam para a tela dela (M7 E10).
+- **Conserto:** o que quebrar em `core`, `app`, `demo-seed` e nos testes. Nada de funcionalidade nova.
+- **Revisão de `tools/server-env/`:** confirmar, arquivo por arquivo, que o override, os scripts e o `.env.example` continuam valendo com `docker/` igual, e registrar o resultado no handoff.
+- **Fechamento automático na demo:**
+  - o fluxo 3 do `LEIA-ME` ("Parar e recriar a demo") e o início de `docs/demo/roteiro-m1.md` e `docs/demo/roteiro-m2.md` avisam que a recriação vale para o dia em que é feita e que o servidor fecha o dia sozinho às 03:00 do dia seguinte. Esse aviso segue a regra 5 revista;
+  - no passo da ficha do `roteiro-m2.md`, o "(código FNRH)" passa a ser a exceção (código fora do catálogo), não o esperado.
+- **Ambiente e pacote:** subir `zeny-front` em `5e06f16d51ff` do zero (`down.sh -v` antes) e regenerar `build/demo-package/`.
+- **Verificação:** o `smokeTest` contra o servidor novo.
+- **Pedidos:** `docs/pedidos-servidor.md` sem mudança de estado.
+
+**Fora de escopo:**
+
+- telas de restrição e mesclagem, com a fachada do `oneOf` (M5 E02, ADR 0010);
+- a tela do fechamento do dia (M6 E08, desbloqueada por esta rodada);
+- a fila de envio à FNRH e os rótulos dela (M7 E10);
+- mudar o `endOfDayTime` no `demo-seed`. A análise manteve o padrão de 03:00 (ver a regra 5);
+- disparar um fechamento manual (`POST /api/v1/end-of-day/runs`) no ambiente da etapa;
+- qualquer escrita no repositório do servidor.
+
+**Critérios de aceite:**
+
+- [ ] `api/server-pin.properties` tem `commit=5e06f16d51ff9913f0da09df8f62639996cd6c52`, e `sha256sum api/openapi.yaml` é igual a `contract_sha256` e ao hash de `git -C <servidor> show 5e06f16d51ff:api/openapi.yaml`.
+- [ ] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `5e06f16d51ff`. Se ela tiver andado, a saída vai para o handoff e o pin fica em `5e06f16d51ff`.
+- [ ] O SDK compila as 335 operações, e o teste de cobertura do SDK amarra os 335 `operationId` a métodos gerados.
+- [ ] Um teste do `sdk` caracteriza o tipo de resposta gerado para `restrictGuest`, `liftGuestRestriction` e `mergeGuests`, e os dois corpos (completo e resumo) passam pelo cliente gerado sem perda. O tipo encontrado fica registrado no handoff e no ADR 0010, se divergir de `JsonElement`.
+- [ ] No detalhe da reserva, `NO_SHOW` (histórico) e `RESERVATION_NO_SHOW` (alocação) têm rótulo pt-BR próprio, e um teste prova que nenhum dos dois cai em "Outro (…)".
+- [ ] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde.
+- [ ] `zeny-front` sobe do zero em `5e06f16d51ff` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele.
+- [ ] O fluxo 3 do `LEIA-ME` e o início dos dois roteiros avisam do fechamento automático às 03:00, e o passo da ficha do `roteiro-m2.md` trata "(código FNRH)" como exceção.
+- [ ] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
+- [ ] O usuário executou o `roteiro-m2.md` no Windows com o pacote regenerado e aprovou. Pela regra 7 do README, essa validação é acumulada para o gate do M3.
+- [ ] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`).
+
+**Validação obrigatória:**
+
+- `tools/server-drift.sh` → "igual" (ou o registro da defasagem nova).
+- `./gradlew build` + `bash tests/run.sh` → verdes; `./gradlew ktlintCheck detekt` → verde.
+- `./gradlew smokeTest -PserverUrl=…` contra `zeny-front` em `5e06f16d51ff` → verde.
+- Roteiro do M2 executado pelo usuário no Windows (acumulado, regra 7).
+
+**Revisão humana:** sim. Troca o servidor da build de demo, e só o usuário executa o roteiro acumulado. Pela regra 7, a parada no Windows não segura o lote: a etapa fica "Aguardando o Windows" e entra na lista acumulada.
+
+**Notas para o plano:**
+
+- É a primeira vez que o ogen vê um `oneOf`. Segundo a ARCHITECTURE §7 do servidor, ele gera `JsonElement`, mas o front ainda não provou isso. Se a geração ou a compilação falhar por causa do `oneOf`, pare e relate: trocar de gerador, excluir operação ou escrever código à mão no `sdk` é decisão de arquitetura (ADR 0007, critério 1).
+- Ninguém no `core` nem no `demo-seed` chama hoje as três operações. A troca do tipo de resposta não deve quebrar a compilação. Se quebrar, o conserto mínimo vale, e a fachada tipada fica com a M5 E02.
+- O catálogo de erros do `core` não deve mudar, porque o diff não trouxe código novo. Se o teste que conta os códigos do contrato mudar, registre no handoff.
+- **Recrie do zero.** O `zeny-front` do notebook está em `57eb5fac5b8a`, com dados de 2026-11-13. Reaproveitar os volumes deixaria a data operacional antiga: o gatilho não age depois da janela de 24 h e só avisa `END_OF_DAY_PENDING`. Por isso, `down.sh -v` antes do `up.sh`.
+- Não dispare o fechamento manual nesta etapa. Ele avança a data e desalinha o seed do roteiro. Quem exercita o fechamento é a M6 E08.
+- A redação dos rótulos novos segue a dos existentes em `ReceptionText` (por exemplo, a situação `NO_SHOW` já é "Não compareceu").
+- Um Gradle por vez no notebook: o orquestrador do servidor está ativo (`roadmap/m5-recepcao-fnrh` e `roadmap/m6-operacao-fechamento`), e o gate dele já foi morto por falta de memória com o Gradle do front rodando junto.
+- Na lista "Validações acumuladas no Windows" do README, esta etapa entra com a mesma execução do `roteiro-m2.md` das entradas 1 e 2, com o pacote desta etapa.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- O ogen gera para o `oneOf` algo diferente do `JsonElement` anunciado. O teste de caracterização registra o tipo real, e o ADR 0010 ajusta o passo 1 da decisão.
+- A `main` do servidor anda de novo durante a etapa (a E18 dele está em curso). O pin fica em `5e06f16d51ff`, que foi o analisado, e a próxima rodada trata o resto.
+- O ambiente da demo atravessa as 03:00 sem recriação, e o roteiro encontra no-shows e a data avançada. O aviso nos roteiros e no `LEIA-ME` cobre isso.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`), com a rodada 1. As rodadas seguintes entram como etapas novas, pelo `development-roadmap` em modo atualização.
@@ -424,3 +542,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-13 — análise da rodada 2 (`claude --agent arquiteto`, `development-roadmap` em modo atualização), contra a `main` do servidor em `57eb5fac5b8a` (271 commits à frente; pré-voo aditivo, código 11). Entra a E02, a etapa mecânica, com a revisão de `tools/server-env/` diante de `docker/gate/` no escopo. As capacidades novas foram distribuídas: M2 E07, M3 E03, M4 E02, M5 E01, M6 E08, M7 E10 e M7 E12. Decisões no [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md). Nenhum `PF-NN` existia, nenhum foi aberto, e nenhuma captura "atende PF-NN" foi achada.
 - 2026-11-13 — E02 executada pelo `claude --agent orquestrador`: pin e contrato em `57eb5fac5b8a` (335 operações), SDK regenerado, 24 mensagens de erro novas no `core`, `tools/server-env/` revisto (sem mudança, com testes de regressão para `docker/gate/`), `zeny-front` no ar e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando a parada humana (roteiro do M1 no Windows).
 - 2026-11-13 — o usuário decidiu acumular a validação no Windows até voltar a ter acesso a ele (regra 7 do README). A E02 fica `#em-andamento`, aguardando o Windows, e conta como concluída para dependências; o M2 pode começar (`claude --agent orquestrador`).
+- 2026-11-15 — análise da rodada 3 (`claude --agent arquiteto`, `development-roadmap` em modo atualização) contra a `main` do servidor em `5e06f16d51ff`: 131 commits à frente, pré-voo aditivo (código 11), com 3 `warning` de `oneOf`. Entra a E03, a etapa mecânica, com a caracterização do primeiro `oneOf` no SDK, os rótulos do no-show e o aviso do fechamento automático nos roteiros. Decisão no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md). A M6 E08 sai de `#bloqueada`. A regra 5 do README foi revista, porque a data operacional passa a avançar sozinha às 03:00. A M3 E04, a M3 E05, a M5 E02 e a M7 E10 ganharam notas. PF-01 e PF-02 continuam abertos, e nenhuma captura "atende PF-NN" foi achada.

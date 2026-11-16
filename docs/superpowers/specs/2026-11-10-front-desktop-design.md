@@ -31,7 +31,7 @@ Depois da demo, o front acompanha o servidor conforme ele avança.
 - PDV, tela de produção, agente de impressão e TEF. O TEF depende da Q-13 e da Q-05 do servidor, e a JVM deixa o caminho aberto.
 - Instalador nativo assinado (`.msi`/`.deb`) e atualização automática.
 - Compartilhar código com o app mobile. Fica a porta aberta: `sdk` e `core` em módulos Gradle separados (§6.1) podem virar Kotlin Multiplatform depois.
-- Funcionalidades que o servidor ainda não tem (avanço da data operacional, FNRH em produção, impressão, fiscal). *Atualização de 2026-11-13 (rodada 2 do M0):* em `57eb5fac5b8a`, o servidor já gera documentos em PDF e tem a fila de impressão, que entram nos marcos pelo [ADR 0009](../../adr/0009-documentos-pdf-e-impressao.md). O agente de impressão continua fora do desktop.
+- Funcionalidades que o servidor ainda não tem (avanço da data operacional, FNRH em produção, impressão, fiscal). *Atualização de 2026-11-13 (rodada 2 do M0):* em `57eb5fac5b8a`, o servidor já gera documentos em PDF e tem a fila de impressão, que entram nos marcos pelo [ADR 0009](../../adr/0009-documentos-pdf-e-impressao.md). O agente de impressão continua fora do desktop. *Atualização de 2026-11-15 (rodada 3 do M0):* em `5e06f16d51ff`, o servidor já avança a data operacional (fechamento do dia, M6 E11 dele), que entra na M6 E08 do front e muda a §7.2.
 
 **Anti-objetivos** (falharia mesmo "funcionando")
 
@@ -265,7 +265,7 @@ O `demo-seed` entra no M1 e é ampliado por cada marco que precisa de dados novo
 
 As senhas dos usuários da demo vêm de argumento ou variável de ambiente e nunca são versionadas.
 
-**A data mostrada como "hoje".** A data operacional só avança no M6 do servidor, e fica presa ao dia em que o ambiente foi criado. Por isso, **na manhã de 17/11 a demo é recriada:** `down -v`, `up -d` e `demo-seed` (chamada do arquiteto). Os dados criados à mão nos ensaios são descartáveis. Requisitos que isso cria:
+**A data mostrada como "hoje".** A data operacional só avança no M6 do servidor, e fica presa ao dia em que o ambiente foi criado. Por isso, **na manhã de 17/11 a demo é recriada:** `down -v`, `up -d` e `demo-seed` (chamada do arquiteto). Os dados criados à mão nos ensaios são descartáveis. *Atualização de 2026-11-15 (rodada 3 do M0):* desde o servidor em `5e06f16d51ff`, a data operacional avança sozinha. O fechamento automático roda às 03:00 do dia seguinte à criação (o `endOfDayTime` padrão), com no-show das chegadas não feitas e lançamento das diárias. A recriação continua na manhã da demo, depois das 03:00, e nunca na véspera (regra 5 de `docs/roadmaps/README.md`). Requisitos que isso cria:
 
 - o `demo-seed` roda em **menos de 2 minutos**;
 - o `demo-seed` também é um JAR executável, que roda no Windows (`java -jar demo-seed.jar --server http://localhost:8088 …`);
