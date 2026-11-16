@@ -12,13 +12,21 @@ GRADLE="app/build.gradle.kts"
 copia="$(mktemp -d)"
 trap 'rm -rf "$copia"' EXIT
 
+# Igual ao da trava: o código ativo numa linha, em formato estável. As mutações são escritas nesse formato.
+codigo_ativo() {
+  perl -0pe 's{/\*.*?\*/}{ }gs' "$1" 2>/dev/null | sed -E 's@^\s*//.*$@@; s@\s//\s.*$@@' | tr '\n' ' ' | tr -s ' ' |
+    sed -E 's/\( /(/g; s/ \)/)/g; s/,\)/)/g; s/ \.([A-Za-z])/.\1/g'
+}
+
 nova_copia() {
   rm -rf "${copia:?}"/*
   mkdir -p "$copia/tests/lib" "$copia/$D"
   cp "$ROOT"/tests/lib/* "$copia/tests/lib/"
   cp "$ROOT/tests/test_live_availability_ataque.sh" "$copia/tests/"
-  cp "$ROOT/$CHECK" "$ROOT/$READERS" "$ROOT/$D/LiveAvailabilityReadersTest.kt" "$copia/$D/"
-  cp "$ROOT/$GRADLE" "$copia/app/"
+  cp "$ROOT/$D/LiveAvailabilityReadersTest.kt" "$copia/$D/"
+  codigo_ativo "$ROOT/$CHECK" >"$copia/$CHECK"
+  codigo_ativo "$ROOT/$READERS" >"$copia/$READERS"
+  codigo_ativo "$ROOT/$GRADLE" >"$copia/$GRADLE"
 }
 
 # troca ARQUIVO ANTIGO NOVO: troca a primeira ocorrência literal; falha se o trecho não existe (mutação inútil).
@@ -64,7 +72,7 @@ muta "escreve: check-in" "$CHECK" 'assertIs<SessionState.Active>' 'core.reservat
 # Tempo, janela e reload.
 muta "teto H2 afrouxado" "$CHECK" 'H2_LIMIT_MILLIS = 10_000L' 'H2_LIMIT_MILLIS = 100_000L'
 muta "teto H2 não afirmado" "$CHECK" 'millis <= H2_LIMIT_MILLIS' 'true'
-muta "tempo medido fora da carga" "$CHECK" $'val started = System.nanoTime()\n                    runOnUiThread { calendar.start() }' $'runOnUiThread { calendar.start() }\n                    val started = System.nanoTime()'
+muta "tempo medido fora da carga" "$CHECK" 'val started = System.nanoTime() runOnUiThread { calendar.start() }' 'runOnUiThread { calendar.start() } val started = System.nanoTime()'
 muta "janela diferente de 30" "$CHECK" 'WINDOW_DAYS = 30' 'WINDOW_DAYS = 7'
 muta "linhas do calendário" "$CHECK" 'setOf("Standard", "Luxo", "Suíte")' 'setOf("Standard", "Luxo")'
 muta "reload não chamado" "$CHECK" 'runOnUiThread { calendar.reload() }' 'runOnUiThread { }'
@@ -107,5 +115,15 @@ muta "descrições não lidas" "$READERS" 'SemanticsProperties.ContentDescriptio
 muta "árvore não mesclada não lida" "$READERS" 'onRoot(useUnmergedTree = true)' 'onRoot()'
 muta "formato de código cru" "$READERS" 'rawCode.find(text) == null' 'true'
 muta "decorator não repassa a leitura" "$READERS" 'delegate.availability(from, to)' 'AvailabilityResponse(from = "", roomTypes = emptyList(), to = "")'
+
+# Segredo: a senha numa variável que chega ao println, println de argumento não literal, template fora da lista.
+muta "senha numa variável impressa" "$CHECK" 'assertIs<SessionState.Active>' 'val p = env("ZENY_LIVE_VIEWER_PASSWORD") println(p) assertIs<SessionState.Active>'
+muta "println de argumento não literal" "$CHECK" 'assertIs<SessionState.Active>' 'println(connection.toString()) assertIs<SessionState.Active>'
+muta "println com template fora da lista" "$CHECK" '${api.offers.size} oferta(s)' '${connection} oferta(s)'
+muta "saída direta no System.out" "$CHECK" 'assertIs<SessionState.Active>' 'System.out.write(1) assertIs<SessionState.Active>'
+
+# Comentários não valem: a garantia só em bloco/KDoc é a garantia removida.
+muta "opt-in só em bloco de comentário" "$CHECK" 'System.getenv("ZENY_LIVE_AVAILABILITY") == "1"' 'true /* System.getenv("ZENY_LIVE_AVAILABILITY") == "1" */'
+muta "afirmação só em KDoc" "$READERS" 'assertTrue(numeric > 0' '/** assertTrue(numeric > 0 */ assertTrue(true'
 
 finish

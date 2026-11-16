@@ -5,7 +5,12 @@
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
 
-codigo_ativo() { sed -E 's@^\s*//.*$@@; s@\s//\s.*$@@' "$1" 2>/dev/null | tr '\n' ' ' | tr -s ' '; }
+# Só código ativo, num formato estável diante do ktlint: sem blocos /* */ nem KDoc, sem //, numa linha, sem espaço
+# depois de "(" nem antes de ")", sem vírgula final antes de ")" e sem espaço antes do ponto de uma cadeia quebrada.
+codigo_ativo() {
+  perl -0pe 's{/\*.*?\*/}{ }gs' "$1" 2>/dev/null | sed -E 's@^\s*//.*$@@; s@\s//\s.*$@@' | tr '\n' ' ' | tr -s ' ' |
+    sed -E 's/\( /(/g; s/ \)/)/g; s/,\)/)/g; s/ \.([A-Za-z])/.\1/g'
+}
 
 DIR="$ROOT/app/src/test/kotlin/com/zeny/desktop/app/reservations"
 KT="$DIR/LiveAvailabilityCheck.kt"
@@ -29,7 +34,7 @@ assert_contains "$bloco" 'liveAvailability.orNull != "1"' "app/build.gradle.kts:
 assert_contains "$bloco" 'liveSearch.orNull != "1"' "app/build.gradle.kts: o upToDateWhen manteve o ZENY_LIVE_SEARCH"
 
 # --- 2. Gating: sem opt-in pula (antes de cada teste); com opt-in exige as três variáveis -------------------
-assert_contains "$kt" '@BeforeTest fun requireOptIn() { assumeTrue( System.getenv("ZENY_LIVE_AVAILABILITY") == "1",' \
+assert_contains "$kt" '@BeforeTest fun requireOptIn() { assumeTrue(System.getenv("ZENY_LIVE_AVAILABILITY") == "1"' \
   "sem ZENY_LIVE_AVAILABILITY=1 cada teste pula (assumeTrue no @BeforeTest)"
 for v in ZENY_LIVE_URL ZENY_LIVE_VIEWER_LOGIN ZENY_LIVE_VIEWER_PASSWORD; do
   assert_contains "$kt" "env(\"$v\")" "a verificação exige $v (falha se faltar)"
@@ -46,6 +51,16 @@ assert_not_contains "$tudo" '${env(' "nenhum valor de env() interpolado em texto
 assert_not_contains "$tudo" 'System.getenv("ZENY_LIVE_VIEWER' "a senha e o login só passam por env()"
 assert_not_contains "$tudo" 'PASSWORD}' "nenhuma interpolação da senha"
 assert_not_contains "$tudo" 'e.printStackTrace' "sem printStackTrace"
+# A senha entra num único lugar (o login) e nenhuma variável a carrega até uma saída.
+n="$(grep -oF 'env("ZENY_LIVE_VIEWER_PASSWORD")' <<<"$tudo" | wc -l)"
+assert_eq "1" "$n" "a senha é lida uma só vez, direto no login"
+# Todo println tem um literal como argumento; os únicos $ permitidos são contagens e o tempo medido.
+total="$(grep -oF 'println(' <<<"$tudo" | wc -l)"
+literais="$(grep -oE 'println\("[^"$]*(\$(\{(api\.offers\.size|unavailable\.size)\}|millis|TOO_MANY_ADULTS)[^"$]*)*"\)' <<<"$tudo" | wc -l)"
+assert_eq "$total" "$literais" "todo println é literal, só com contagens e tempo em templates"
+assert_not_contains "$tudo" 'System.out' "nenhuma saída direta fora do println"
+assert_not_contains "$tudo" 'System.err' "nenhuma saída de erro direta"
+assert_not_contains "$tudo" ' print(' "nenhum print sem quebra"
 
 # --- 3. Só lê: nenhuma chamada de escrita do servidor ---------------------------------------------------------
 assert_not_contains "$tudo" '.checkIn(' "não faz check-in"
