@@ -13,6 +13,8 @@ object AvailabilityText {
     private val locale = Locale.forLanguageTag("pt-BR")
     private const val DEFAULT_REFUSAL = "Esta combinação não está disponível para essa estadia."
 
+    private val rawIdentifier = Regex("^[A-Za-z0-9_]+$")
+
     private val mealPlans =
         mapOf(
             "ROOM_ONLY" to "Só hospedagem",
@@ -58,13 +60,18 @@ object AvailabilityText {
 
     /** A mensagem do servidor, quando é texto de pessoa; senão o texto em português do código, com as datas. */
     fun refusal(reason: QuoteRefusalResponse): String {
-        if (ErrorCatalog.isShowableDetail(reason.message) && reason.message.trim() != reason.code) {
-            return reason.message
-        }
+        val message = reason.message.trim()
+        if (ErrorCatalog.isShowableDetail(message) && !isRawCode(message, reason.code)) return message
         val base = refusals[reason.code] ?: ErrorCatalog.message(reason.code) ?: DEFAULT_REFUSAL
         val dates = reason.dates.joinToString(", ") { ReceptionText.date(it) }
         return if (dates.isEmpty()) base else "$base ($dates)"
     }
+
+    // Identificador cru (letras, dígitos e `_`, sem espaço) em qualquer caixa, ou o próprio código sem caixa.
+    private fun isRawCode(
+        message: String,
+        code: String,
+    ) = message.equals(code.trim(), ignoreCase = true) || rawIdentifier.matches(message)
 
     fun inventory(day: AvailabilityDayResponse): String =
         "Total ${day.total} · Vendidas ${day.sold} · Bloqueadas ${day.blocked} · Fora de ordem ${day.outOfOrder} · " +

@@ -128,4 +128,10 @@ class AvailabilityTextAtaqueTest {
         val text = AvailabilityText.refusal(refusal("ROOM_TYPE_UNAVAILABLE", "ROOM_TYPE_UNAVAILABLE"))
         assertEquals("Não há UH disponível deste tipo em todas as noites.", text)
     }
+
+    @Test
+    fun refusalMessageThatIsTheCodeInAnotherCaseIsNotShown() {
+        val text = AvailabilityText.refusal(refusal("MIN_STAY_NOT_MET", "min_stay_not_met"))
+        assertFalse("min_stay_not_met" in text, text)
+    }
 }
