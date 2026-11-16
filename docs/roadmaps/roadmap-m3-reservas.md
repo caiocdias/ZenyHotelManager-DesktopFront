@@ -187,7 +187,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Busca de reservas | #em-andamento | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
+| E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
 | E02 | Disponibilidade e cotação | #pendente | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #pendente | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
@@ -195,7 +195,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Busca de reservas — #em-andamento
+## E01 — Busca de reservas — #concluida
 
 **Objetivo:** a área Reservas lista as reservas com filtros por período, situação e titular, com paginação por cursor e busca por documento. Um clique abre o detalhe criado no M2.
 
@@ -214,9 +214,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, filtrar por período e situação devolve o esperado, e a página seguinte carrega sem repetir linhas.
-- [ ] A busca por documento de um hóspede do seed encontra as reservas dele, com o documento mascarado na tela.
-- [ ] O termo buscado não aparece em log.
+- [x] Contra o seed, filtrar por período e situação devolve o esperado, e a página seguinte carrega sem repetir linhas.
+- [x] A busca por documento de um hóspede do seed encontra as reservas dele, com o documento mascarado na tela.
+- [x] O termo buscado não aparece em log.
 
 **Validação obrigatória:**
 
@@ -233,12 +233,60 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e01.md`, com 7 tarefas, todas `Risco: alto`.
+  - **Revisão de arquitetura:** aprovado com notas, em 1 rodada, no opus. A rodada 0 bloqueou por 5 Importantes, todos incorporados ao plano.
+- **Commits:** `a300a23..2958f15` na `roadmap/m3-reservas`, em série.
+  - Task 1, fachada `search`/`searchByDocument`: `49beab0..537f25a`.
+  - Task 2, `ReservationRow` e `HolderNames`: `537f25a..1c5b5b2`.
+  - Task 3, porta, adaptador e fake: `1c5b5b2..d447a9f`.
+  - Task 4, estado da busca: `d447a9f..737aa58`, com 1 rodada de correção. A carga inicial sobrescrevia a busca do usuário.
+  - Task 5, tela e `ReservationDetailPanel` extraído da Recepção: `737aa58..47e6ab4`, mais o teste do undo do documento.
+  - Task 6, área Reservas na casca: `47e6ab4..331af8f`, mais os testes que pegam a remoção do `close()`.
+  - Task 7, `LiveReservationSearchCheck`: `331af8f..3e87aec`, com 1 rodada de correção. A busca por nome herdava o período padrão.
+  - Onda final: `5aefe60`.
+  - Correção da medição ao vivo: `2958f15`.
+- **Revisão final** (revisor-seguranca, opus, `code-reviewer.md`): com correções, 0 Critical e 1 Important.
+  - O Important era o país emissor que sobrava ao trocar de Passaporte para CPF.
+  - Também ficaram para corrigir dois KDoc adiados das tarefas.
+  - A onda única foi `5aefe60`, e a re-revisão a aprovou como pronta para merge.
+  - Evidências:
+    - `osv-scanner --recursive --no-ignore ./`: 6 lockfiles, "No issues found";
+    - `./gradlew test --rerun --max-workers=2`, isolado: 4088 testes, 0 falhas, 38 pulados por opt-in ao vivo;
+    - `bash tests/run.sh`: 49 arquivos, 0 falhas;
+    - `check_test_integrity.py --base a300a23`: `SEM_SOUL` no `58b35b7` (abertura da etapa, só roadmap) e 4 `ASSERCAO_REMOVIDA`. Estes são ajustes mandados na Task 6, de mesma força.
+- **Verificação ao vivo:**
+  - Na 1ª execução, a `pagesDoNotRepeat` falhou por medição. O `DataTable` pede a página seguinte sozinho perto do fim, e o teste contava páginas pelos tamanhos da tabela.
+  - A correção `2958f15` conta as chamadas à fonte. Ela é só de teste, com integridade exit 0, e a re-revisão a aprovou com 2 Minor.
+  - A 2ª execução, no `zeny-front` e no HEAD `2958f15`, passou 4/4, sem nenhum pulado.
+- **Critérios verificados:**
+  - Período, situação e paginação: `periodAndStatusFilter` deu 5 linhas Hospedada, iguais à lista do dia. `pagesDoNotRepeat` em páginas de 3 deu 5 linhas em 2 páginas, com `limit=3` em toda chamada, sem repetição e com o total certo.
+  - Documento mascarado: `documentSearchFindsHolder` achou a reserva do G1. A captura mostra "Reservas do documento CPF ***0146" com o campo do número vazio.
+  - Termo fora do log: `termNotInLogs` não encontrou o nome nem o CPF no JUL, em stdout ou em stderr. Somam-se os testes unitários de `toString`, de causa trocada e de undo.
+  - Build, teste e lint: verdes.
+  - Inspeção manual: captura `app/build/live/reservation-search.png` inspecionada.
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **Demo sem recriar.** O classificador negou `down -v`, e a E01 só lê. A verificação ao vivo rodou no `zeny-front` depois do fechamento das 03:00, com A1–A4 em no-show e S1/S2 com saída vencida.
+  2. **Duplicação com o `DayPanelState`.** Colunas, `readRoomTypeNames` e trava ficam como dívida para a E03: `reservationColumns()` e um leitor de página compartilhado em `ReservationRows.kt`.
+  3. **Execução ao vivo pelo usuário.** O verificador do worktree isolado recusa `. arquivo` com as credenciais. A senha não foi para a linha de comando.
+- **Notas para a próxima etapa:**
+  - **Candidatos M2.**
+    - `GuestPickerState.kt:112` tem o mesmo defeito do país que sobra ao trocar o tipo.
+    - `GuestsFacade.searchByName` põe o nome na URL, e a causa de `ApiError.Network` pode trazê-lo. Revisão de arquitetura, nota 3.
+  - **Seed.** `pagesDoNotRepeat` exige mais de 3 hospedados não vencidos, e hoje há 5. H1 e H2 vencem em d+2 e d+3. Recrie a demo antes de repetir a verificação depois disso.
+  - **Teste instável.** `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes` falhou uma vez na Task 1, rodando junto com outro Gradle. Passou na execução isolada.
+  - **Undo.** A prova do undo do documento usa `performTextInput`. Falta a checagem manual com teclado físico no `:app:run`: digitar um CPF, buscar e apertar Ctrl+Z.
+  - **Máscara.** Um número curto, de 5 a 7 caracteres, mostra 4 caracteres, como a regra do plano manda. Sugestão: mostrar 2 abaixo de 8.
+  - **Ambiente desta sessão.**
+    - Ondas paralelas continuam inviáveis.
+    - O verificador recusa sourcing de arquivo, então a verificação ao vivo precisa ser rodada pelo usuário.
+    - O verificador leu `osv-scanner scan source` como o builtin `source`; use `osv-scanner --recursive --no-ignore ./`.
+  - **Dívidas menores.** Estão no ledger, triadas na revisão final:
+    - os asserts frouxos `startTwice` (≤2) e `holderReads` (1..3);
+    - o `rowClickWithoutDetailDoesNothing`, que é tautológico;
+    - o teste que fixa o país entre Passaporte e Documento estrangeiro;
+    - a troca de causa assimétrica em `ReservationsFacade`;
+    - na verificação ao vivo, as asserções de `limit` e cursor ignoram a chamada final vazia;
+    - o período padrão pode correr com o `clear()` e daria um vermelho falso. Isso é mais estrito, não mais fraco.
 
 ---
 
