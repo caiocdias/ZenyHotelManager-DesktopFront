@@ -93,6 +93,8 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 |---|---|---|---|
 | H1 | `POST /api/v1/bookings` cria tanto a reserva individual quanto a agrupadora, e a alteração do hospedado (estender ou reduzir) é `PUT /api/v1/reservations/{id}`. **Confirmada na E03** (2026-11-16): a tela cria a individual, e o `PUT` estende e reduz o hospedado. O `PUT` não troca titular nem hóspedes (handoff da E03) | A tela de nova reserva ou a de alteração precisa de outro fluxo; registrar no handoff | E03 |
 | H2 | `GET /api/v1/availability` responde rápido o bastante para um calendário de 30 dias por tipo de UH | Calendário paginado por semana | E02 |
+| D1 | **Decidida pelo usuário em 2026-11-17** (entrevista do fim do lote, pela opção recomendada): abrir um pedido **não bloqueante** ao servidor (`PF-NN`, ADR 0005) de uma operação para trocar o titular e os hóspedes de uma reserva antes do check-in. O pedido ainda não foi aberto | Sem o pedido, titular e hóspedes só mudam criando outra reserva; nenhuma etapa depende dele | E03 |
+| D2 | **Decidida pelo usuário em 2026-11-17** (entrevista do fim do lote, pela opção recomendada): abrir um pedido **não bloqueante** ao servidor (`PF-NN`, ADR 0005) de uma prévia da multa de cancelamento (valor devido agora e prazo). O pedido ainda não foi aberto | Sem o pedido, o diálogo mostra os termos da política antes e o valor lançado depois; nenhuma etapa depende dele | E04 |
 
 ## Definição global de pronto
 
@@ -523,7 +525,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
   - Build, teste e lint: verdes (gate acima).
   - Inspeção manual: capturas `app/build/live/new-reservation.png`, `reservation-change.png` e `reservation-confirmation.png` inspecionadas.
 - **Decisões para o usuário**, já tomadas e revisáveis:
-  1. **Titular e hóspedes não mudam na alteração.** O objetivo da etapa cita "hóspede", mas o `PUT /reservations/{id}` não troca o titular nem os hóspedes, e o contrato não tem outra operação para isso antes do check-in. A tela altera datas, ocupação, tipo, plano, segmento e pedidos. Abrir um pedido `PF-NN` não bloqueante ao servidor é pergunta da entrevista do fim do lote.
+  1. **Titular e hóspedes não mudam na alteração.** O objetivo da etapa cita "hóspede", mas o `PUT /reservations/{id}` não troca o titular nem os hóspedes, e o contrato não tem outra operação para isso antes do check-in. A tela altera datas, ocupação, tipo, plano, segmento e pedidos. **O usuário decidiu em 2026-11-17 abrir um pedido `PF-NN` não bloqueante ao servidor** (decisão D1); o pedido ainda não foi aberto.
   2. **Só a reserva individual (H1).** A tela cria uma reserva (uma UH) por vez. A agrupadora com várias UHs vira etapa nova, se o usuário quiser.
   3. **Desconto como "diária negociada", só na criação.** O mesmo valor vai em todas as noites, e o servidor decide se é desconto e se pede aprovação. Na alteração, as noites novas entram pelo preço calculado.
   4. **Alteração por recotação.** Para trocar o tipo ou o plano, "Ver opções" cota a estadia digitada e lista as ofertas. Exige `reservations.availability.read` e não oferece plano de um tipo esgotado.
@@ -634,7 +636,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
   - Build, teste e lint: verdes (gate acima).
   - Inspeção manual: capturas `app/build/live/reservation-cancel.png` e `pending.png` inspecionadas.
 - **Decisões para o usuário**, já tomadas e revisáveis:
-  1. **"A multa mostrada antes de confirmar" são os termos da política.** O contrato não tem prévia da multa, e o front não calcula preço nem prazo. O diálogo mostra os termos copiados na reserva e, depois de cancelar, a multa que o servidor lançou. Pedir ao servidor uma prévia (`PF-NN`, não bloqueante) é pergunta da entrevista do fim do lote.
+  1. **"A multa mostrada antes de confirmar" são os termos da política.** O contrato não tem prévia da multa, e o front não calcula preço nem prazo. O diálogo mostra os termos copiados na reserva e, depois de cancelar, a multa que o servidor lançou. **O usuário decidiu em 2026-11-17 pedir ao servidor uma prévia da multa** (`PF-NN`, não bloqueante; decisão D2); o pedido ainda não foi aberto.
   2. **Isenção oferecida.** O diálogo tem "Isentar a multa", que passa pela aprovação quando o servidor pede. A isenção não foi verificada ao vivo.
   3. **Aba própria de pendências, com todas as garantias.** A lista de garantias vai das vencidas até 730 dias à frente. O padrão do servidor (só as que vencem em 12 h) esconderia a pré-reserva recém-criada.
   4. **Seed por um seeder próprio.** O `PendingSeeder` cria a política "Garantia por cartão (demo)", o plano "Tarifa garantida" (só no canal do site e só Standard, para a cotação do app não ganhar ofertas gêmeas), a pré-reserva `DEMO-PEND-P1` e a reserva `DEMO-PEND-R1` (UH 208, que entra em fora de ordem de d+5 a d+7). O titular das duas é o Hóspede Doze. O relatório impresso do seed não mudou.
@@ -723,6 +725,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
   Nada disso foi conferido nem revisado: o próximo orquestrador retoma a partir deles ou refaz pelo brief.
 - **Falta para fechar:**
+  0. Fora do plano da etapa, e sem bloquear nada: abrir os dois pedidos ao servidor que o usuário decidiu em 2026-11-17 (decisões D1 e D2), em `docs/pedidos-servidor.md` e no brain, conforme o ADR 0005.
   1. As Tasks 2 a 6, pelo plano. Podem correr em paralelo a 2, a 3 e a 5; depois a 4; por último a 6.
   2. O testador de etapa, que escreve as travas do roteiro novo (`tests/test_roteiro_m3_ataque.sh`) e ajusta os laços de `tests/test_fechamento_automatico_ataque.sh`.
   3. A verificação do gate, na ordem do plano: clone limpo; recriar a demo do notebook (`tools/server-env/down.sh -v` e `up.sh`, no mesmo dia da verificação e depois das 03:00); seed duas vezes, com o tempo; `smokeTest`; as verificações ao vivo do M2 e do M3; pacote e `save-images.sh`.
@@ -747,3 +750,4 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`): a E03 ganha a confirmação da reserva em PDF, no visualizador da M2 E07 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)). A impressão pela fila do servidor fica com a M7 E12. Nenhuma tag mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`): o fechamento do dia do servidor marca o no-show e avança a data às 03:00. A E04 ganhou a nota da reativação de no-show, e a E05 a da recriação no mesmo dia. O marco passa a exigir a M0 E03 antes da E01 (regra 3). Nenhuma tag mudou.
+- 2026-11-17 — fim do lote do processo acelerado (`claude --agent orquestrador`): E02, E03 e E04 `#concluida`, com a revisão de segurança adiada (ADR 0011); E05 `#em-andamento`, parada a pedido do usuário. O usuário decidiu em entrevista abrir dois pedidos não bloqueantes ao servidor (D1 e D2 em "Hipóteses e decisões em aberto").
