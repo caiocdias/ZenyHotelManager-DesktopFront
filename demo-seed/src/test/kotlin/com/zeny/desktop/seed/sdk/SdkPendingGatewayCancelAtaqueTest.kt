@@ -82,6 +82,7 @@ class SdkPendingGatewayCancelAtaqueTest {
         runTest {
             val error = cancelFailure(HttpStatusCode.BadGateway, "<html>$ECHO</html>", "text/html")
             assertClean(error)
+            assertEquals(502, assertIs<ApiError.Unexpected>(error, "corpo que não é JSON vira Unexpected").status)
         }
 
     @Test
@@ -124,7 +125,7 @@ class SdkPendingGatewayCancelAtaqueTest {
         }
 
     @Test
-    fun networkFailureDoesNotCarryRequestData() =
+    fun networkFailureIsNotRetriedAndMessageIsTheUserMessage() =
         runTest {
             val gateway = gateway { throw IOException("falha ao enviar $ECHO") }
             val error = assertFailsWith<ApiError.Network> { gateway.cancelReservation(RES, "GUEST_REQUEST") }
@@ -158,6 +159,7 @@ class SdkPendingGatewayCancelAtaqueTest {
         runTest {
             val error = cancelFailure(HttpStatusCode.Unauthorized, """{"code":"X","status":401,"detail":"$ECHO"}""")
             assertClean(error)
+            assertIs<ApiError.SessionEnded>(error, "o 401 é o fim de sessão tipado")
         }
 
     @Test

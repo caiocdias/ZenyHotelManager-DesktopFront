@@ -25,7 +25,10 @@ private val FUTURE_CONFIRMED = listOf("DEMO-FUT-F1", "DEMO-FUT-F2")
 private const val CANCELLED_ID = "DEMO-FUT-C1"
 
 /**
- * Verificação ao vivo das reservas do seed (M3 E05). Só lê: não cria nem altera nada. Só roda com
+ * Verificação ao vivo das reservas do seed (M3 E05). Só lê reservas: não cria nem altera nenhuma. A entrada do
+ * administrador (`AdminSignIn.open`) não é só leitura: num servidor novo, com a senha inicial ainda vigente, ela
+ * troca a senha do administrador, e uma senha errada conta para o bloqueio da conta. Por isso roda depois do seed,
+ * com a senha já definida. Só roda com
  * `ZENY_SEED_SERVER` e `ZENY_SEED_LIVE_RESERVATIONS=1` (sem elas, pula). Credenciais só do ambiente (nunca
  * impressas). Vale **logo depois do seed**: depois da demo, a `DEMO-FUT-C1` reativada e as futuras alteradas a
  * reprovam de propósito. Comando, só nesse subshell:

@@ -87,5 +87,23 @@ obtido="$(grep -oE '\$\{[^}]*\}|\$[A-Za-z_][A-Za-z_0-9]*' <<<"$kt" | sort -u)"
 assert_eq "$(sort -u <<<"$esperado")" "$obtido" "as únicas interpolações são as conhecidas e seguras"
 assert_not_contains "$kt" 'adminLogin' "o login do Administrador não é tocado"
 assert_not_contains "$kt" 'Secret' "nenhum Secret é tocado"
+# Lista fechada também para a config: as listas acima não pegam uma mensagem sem `$`, como
+# `fail(config.managerPin.value)`. Toda ocorrência de `config.` tem de ser `config.server`, e são exatamente duas
+# (a abertura da sessão do administrador, nos dois testes).
+config_violacoes() {
+  local texto="$1" total servidor
+  total="$(grep -oF 'config.' <<<"$texto" | wc -l)"
+  servidor="$(grep -oF 'config.server' <<<"$texto" | wc -l)"
+  [[ "$total" == "$servidor" ]] || echo "proibido: config. além de config.server"
+  [[ "$servidor" == 2 ]] || echo "falta: config.server exatamente duas vezes (achou $servidor)"
+}
+assert_diferente() { [[ "$1" != "$2" ]] || _assert_fail "$3"; }
+assert_eq "" "$(config_violacoes "$kt")" "toda ocorrência de config. é config.server, e são duas"
+# Mutantes: cada um tem de reprovar a regra.
+assert_diferente "" "$(config_violacoes "$kt fail(config.managerPin.value)")" \
+  "mutante: fail(config.managerPin.value) sem interpolação é detectado"
+assert_diferente "" "$(config_violacoes "${kt/config.server/config.managerPin.value}")" \
+  "mutante: config.server trocado por config.managerPin.value é detectado"
+assert_diferente "" "$(config_violacoes "${kt/config.server/x}")" "mutante: uma config.server a menos é detectado"
 
 finish

@@ -32,7 +32,10 @@ violacoes() {
     "sem ZENY_LIVE_BOOKING=1 cada teste pula (assumeTrue no @BeforeTest)"
   [[ "$(grep -oE 'assumeTrue\(' <<<"$kt" | wc -l)" == 1 ]] || echo "proibido: assumeTrue além do opt-in (pular em vez de falhar)"
   nao_tem 'assumeFalse(' "assumeFalse (pular em vez de falhar)"
+  nao_tem 'assumeThat(' "assumeThat (pular em vez de falhar)"
   nao_tem '@Disabled' "teste desligado"
+  nao_tem '@Ignore' "teste ignorado"
+  nao_tem 'abort(' "abort (pular em vez de falhar)"
   [[ "$(grep -oE '@Test' <<<"$kt" | wc -l)" == 3 ]] || echo "falta: as três verificações"
 
   # 2. Credenciais: só pelo env(), que falha citando só o nome; nada delas sai.
@@ -111,6 +114,11 @@ muta() {
 muta "opt-in removido" 'System.getenv("ZENY_LIVE_BOOKING") == "1"' 'true'
 muta "opt-in fora das entradas" 'inputs.property("zenyLiveBooking"' 'inputs.property("zenyLiveOutro"' gradle
 muta "opt-in fora do upToDateWhen" 'liveBooking.orNull != "1"' 'true' gradle
+muta "assumeThat no lugar de falhar" 'fail("NEED_SEED: nenhum hospedado aceitou' 'assumeThat(false) fail("NEED_SEED: nenhum hospedado aceitou'
+muta "assumeFalse no lugar de falhar" 'fail("NEED_SEED: nenhum hospedado aceitou' 'assumeFalse(true) fail("NEED_SEED: nenhum hospedado aceitou'
+muta "teste desligado com @Disabled" '@BeforeTest fun requireOptIn()' '@Disabled @BeforeTest fun requireOptIn()'
+muta "teste desligado com @Ignore" '@BeforeTest fun requireOptIn()' '@Ignore @BeforeTest fun requireOptIn()'
+muta "abort no lugar de falhar" 'fail("NEED_SEED: nenhum hospedado aceitou' 'abort("NEED_SEED: nenhum hospedado aceitou'
 muta "senha não exigida" 'env("ZENY_LIVE_VIEWER_PASSWORD")' '"x"'
 muta "PIN não exigido" 'env("ZENY_LIVE_APPROVER_PIN")' '"1234"'
 muta "PIN impresso" 'runOnUiThread { screen.approvals.confirm() }' \

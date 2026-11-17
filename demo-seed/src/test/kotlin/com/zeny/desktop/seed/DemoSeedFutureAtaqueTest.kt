@@ -190,5 +190,9 @@ class DemoSeedFutureAtaqueTest {
             val future = FakeFutureGateway()
             assertEquals(1, execute { context(pendingFake(), future) })
             assertTrue(future.calls.isEmpty())
+            assertEquals(
+                "Hóspede de exemplo das reservas futuras não encontrado; o demo-seed não as cria sem ele.",
+                lines.single(),
+            )
         }
 }
