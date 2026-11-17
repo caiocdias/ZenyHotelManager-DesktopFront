@@ -31,6 +31,7 @@ import com.zeny.desktop.sdk.model.GuaranteeTermsResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.ReservationResponse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.IOException
@@ -102,12 +103,18 @@ private class ScriptedReception(
     var answer: Set<String>,
 ) : ReceptionSource by fake {
     var calls = 0
+    var cancelledReads = 0
     var gate: CompletableDeferred<Unit>? = null
     var failure: Exception? = null
 
     override suspend fun permissions(): Set<String> {
         calls++
-        gate?.await()
+        try {
+            gate?.await()
+        } catch (e: CancellationException) {
+            cancelledReads++
+            throw e
+        }
         failure?.let { throw it }
         return answer
     }
@@ -332,7 +339,7 @@ class ReservationsPermissionsAtaqueTest {
         }
 
     @Test
-    fun retryGrantedWithoutManageBringsNoActionAndWithoutAvailabilityReadNoTab() =
+    fun retryGrantedWithAvailabilityReadButWithoutManageBringsTheTabAndNoAction() =
         runComposeUiTest {
             val fake = fakeReception()
             val reception = ScriptedReception(fake, setOf(PREAD, PAVAIL)).apply { failure = IOException("fora") }
@@ -530,5 +537,25 @@ class ReservationsPermissionsAtaqueTest {
             openR1()
             assertNoWrite()
             assertEquals(2, reception.calls)
+        }
+
+    @Test
+    fun theHeldReadOfSessionAIsCancelledWhenTheSessionChangesToBAndNeverLeaksIntoB() =
+        runComposeUiTest {
+            val fake = fakeReception()
+            val reception = ScriptedReception(fake, ALL).apply { gate = CompletableDeferred() }
+            val conn = conn(reception, availability(), fake)
+            area(conn)
+            assertEquals(1, reception.calls)
+            assertEquals(0, reception.cancelledReads)
+
+            reception.gate = CompletableDeferred()
+            conn.state.value = SessionState.Active("u-1", "s-2", false)
+            waitForIdle()
+
+            assertEquals(2, reception.calls)
+            assertEquals(1, reception.cancelledReads, "a leitura presa da sessão A foi cancelada na troca")
+            openR1()
+            assertNoWrite()
         }
 }

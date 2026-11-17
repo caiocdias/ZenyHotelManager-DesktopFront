@@ -8,6 +8,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -435,7 +436,7 @@ class PendingListsRefreshAllAtaqueTest {
             val (guarantee, deposit) = state.dues()
             assertTrue(guarantee != RA_DASH, "garantia sem instante")
             assertFalse(deposit.endsWith("em $RA_DASH"), "depósito sem instante")
-            assertTrue(source.businessDayCalls <= failedReads + 2, "no máximo uma leitura por lista que usa o fuso")
+            assertEquals(failedReads + 1, source.businessDayCalls, "uma leitura só, a que deu certo")
             state.assertSettled(PendingList.GUARANTEES, "G-1")
         }
 
@@ -559,5 +560,25 @@ class PendingListsRefreshAllAtaqueTest {
             assertFalse(error.message.orEmpty().contains("Maria"))
             assertFalse(error.message.orEmpty().contains("Hóspede"))
             assertEquals(listOf("G-1"), state.codes(PendingList.GUARANTEES))
+        }
+
+    @Test
+    fun aHolderFailureWhoseMessageCarriesTheNameAndDocumentDoesNotLeakIntoTheListError() =
+        runTest {
+            val source = source()
+            source.put(PendingList.GUARANTEES, "G-1", guest = 1)
+            val state = started(source)
+            source.guarantees[0] = pendingGuaranteeOf(code = "G-1", holderGuestId = raGuest(3))
+            val leaking = IOException("falha ao ler Maria da Silva CPF 123.456.789-00")
+            source.holderFailures[raGuest(3)] = ApiError.Network(leaking)
+
+            state.refreshAll()
+            runCurrent()
+
+            val error = assertNotNull(state.table(PendingList.GUARANTEES).error)
+            listOf(error.message.orEmpty(), error.toString()).forEach {
+                assertFalse(it.contains("Maria"), "nome na mensagem: $it")
+                assertFalse(it.contains("123.456"), "documento na mensagem: $it")
+            }
         }
 }
