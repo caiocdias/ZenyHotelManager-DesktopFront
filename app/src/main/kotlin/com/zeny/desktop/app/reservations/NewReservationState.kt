@@ -202,7 +202,14 @@ class NewReservationState(
         val current = currentIntent()
         ownScope.launch {
             try {
-                approve(source.createBooking(input, current))?.let { finish(it.value) }
+                val approved = approve(source.createBooking(input, current))
+                if (approved == null) {
+                    // Aprovação cancelada: o servidor respondeu APPROVAL_REQUIRED, nada foi feito sob a chave.
+                    // Destrava as entradas e mantém a intenção (a chave não muda).
+                    unconfirmed = false
+                } else {
+                    finish(approved.value)
+                }
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
