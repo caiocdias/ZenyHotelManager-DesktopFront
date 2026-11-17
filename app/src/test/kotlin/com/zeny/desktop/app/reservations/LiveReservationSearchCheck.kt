@@ -17,6 +17,7 @@ import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.facade.DayList
+import com.zeny.desktop.core.facade.DocumentQuery
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.session.SessionState
@@ -34,6 +35,7 @@ import java.io.PrintStream
 import java.net.URLEncoder
 import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.logging.Handler
 import java.util.logging.Level
 import java.util.logging.LogRecord
@@ -155,7 +157,10 @@ class LiveReservationSearchCheck {
             val shown = filteredRows(connection, pageSize = PAGE_LIMIT).rows
             println("LiveReservationSearchCheck: filtro por período e situação: ${shown.size} linhas")
             assertTrue(shown.isNotEmpty(), "a busca por período e situação não achou linha, mas a lista do dia tem")
-            assertTrue(shown.all { it.status == IN_HOUSE_LABEL }, "há linha que não está Hospedada")
+            // O rótulo leva os alertas depois da situação ("Hospedada · Day use"): a situação é o que vem antes deles.
+            val others =
+                shown.map { it.status }.filterNot { it == IN_HOUSE_LABEL || it.startsWith("$IN_HOUSE_LABEL · ") }
+            assertTrue(others.isEmpty(), "há linha que não está Hospedada: $others")
             assertEquals(
                 expected.toSet(),
                 shown.map { it.code }.toSet(),
@@ -234,8 +239,11 @@ class LiveReservationSearchCheck {
             val codes = SEED_STATUS_LABELS.keys.associateWith { seedCode(source, it) }
             val cpf = fictitiousCpf(G12_CPF_BASE)
             val masked = "CPF ***${cpf.takeLast(4)}"
-            withSearchScreen(connection, PAGE_LIMIT) { search ->
+            withSearchScreen(connection, PAGE_LIMIT) { search, recording ->
                 searchByDocument(search, cpf)
+                // A busca por documento tem de ter terminado na fonte: `!loading` pode ser o do período padrão.
+                waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { recording.documentCalls.get() > 0 }
+                waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !search.table.loading }
                 waitForIdle()
                 assertNull(search.table.error, "a busca falhou: ${search.table.error?.userMessage}")
                 assertEquals(masked, search.searchedDocument, "máscara inesperada")
@@ -271,7 +279,7 @@ class LiveReservationSearchCheck {
                 fail("$NEED_DEMO_SEED: a $externalId (${seed.code}) está ${seed.status}, esperava $CANCELLED")
             }
             val cancelledLabel = checkNotNull(SEED_STATUS_LABELS[externalId])
-            withSearchScreen(connection, PAGE_LIMIT) { search ->
+            withSearchScreen(connection, PAGE_LIMIT) { search, recording ->
                 runOnUiThread { search.start() }
                 waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { search.day != null && !search.table.loading }
                 runOnUiThread {
@@ -281,7 +289,12 @@ class LiveReservationSearchCheck {
                     search.fromText = DateInput.format(BusinessDate(day.plusDays(CANCELLED_FROM_DAYS)))
                     search.toText = DateInput.format(BusinessDate(day.plusDays(CANCELLED_TO_DAYS)))
                     search.statuses = setOf(CANCELLED)
+                    recording.calls.clear()
                     search.search()
+                }
+                // A busca filtrada tem de ter terminado na fonte: `!loading` pode ser o do período padrão.
+                waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) {
+                    recording.calls.any { it.statuses == setOf(CANCELLED) }
                 }
                 waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !search.table.loading }
                 waitForIdle()
@@ -406,9 +419,9 @@ class LiveReservationSearchCheck {
     private fun withSearchScreen(
         connection: CoreConnection,
         pageSize: Int,
-        block: ComposeUiTest.(ReservationSearchState) -> Unit,
+        block: ComposeUiTest.(ReservationSearchState, RecordingSource) -> Unit,
     ) {
-        val source = connection.reservationSearchSource()
+        val source = RecordingSource(connection.reservationSearchSource())
         runDesktopComposeUiTest(WIDTH, HEIGHT) {
             lateinit var search: ReservationSearchState
             setContent {
@@ -418,7 +431,7 @@ class LiveReservationSearchCheck {
                 ZenyTheme { ReservationsScreen(search, detail) }
             }
             try {
-                block(search)
+                block(search, source)
             } finally {
                 search.close()
             }
@@ -550,6 +563,7 @@ class LiveReservationSearchCheck {
         val cursor: String?,
         val limit: Int,
         val rows: Int,
+        val statuses: Set<String>,
     )
 
     /** Delega à fonte real e registra cada `search`; o resto passa direto. */
@@ -558,12 +572,25 @@ class LiveReservationSearchCheck {
     ) : ReservationSearchSource by inner {
         val calls: MutableList<SearchCall> = CopyOnWriteArrayList()
 
+        /** Quantas buscas por documento já terminaram. */
+        val documentCalls = AtomicInteger()
+
         override suspend fun search(
             filter: ReservationFilter,
             cursor: String?,
             limit: Int,
         ): Page<ReservationListItemResponse> =
-            inner.search(filter, cursor, limit).also { calls += SearchCall(cursor, limit, it.items.size) }
+            inner.search(filter, cursor, limit).also {
+                calls += SearchCall(cursor, limit, it.items.size, filter.statuses)
+            }
+
+        override suspend fun searchByDocument(
+            document: DocumentQuery,
+            statuses: Set<String>,
+            cursor: String?,
+            limit: Int,
+        ): Page<ReservationListItemResponse> =
+            inner.searchByDocument(document, statuses, cursor, limit).also { documentCalls.incrementAndGet() }
     }
 
     private fun withViewer(block: (ZenyCore, CoreConnection) -> Unit) {
