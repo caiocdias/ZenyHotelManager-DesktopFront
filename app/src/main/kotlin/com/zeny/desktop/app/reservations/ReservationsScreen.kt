@@ -14,6 +14,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -24,8 +27,10 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.reception.COUNTRY_REQUIRED
+import com.zeny.desktop.app.reception.DetailActions
 import com.zeny.desktop.app.reception.GUEST_DOCUMENT_TYPES
 import com.zeny.desktop.app.reception.ReceptionText
+import com.zeny.desktop.app.reception.RegistrationCardState
 import com.zeny.desktop.app.reception.ReservationDetailPanel
 import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.core.facade.RESERVATION_STATUSES
@@ -36,16 +41,29 @@ import com.zeny.desktop.design.table.DataTable
 
 private const val EMPTY_RESULT = "Nenhuma reserva encontrada."
 
+/** As ações da área Reservas numa sessão; cada fábrica é nula sem a porta. */
+class ReservationsActions(
+    val permissions: Set<String>,
+    val change: ((reservationId: String) -> ReservationChangeState)?,
+    val confirm: ((reservationId: String) -> ReservationConfirmState)?,
+    val confirmation: ((reservationId: String, code: String) -> RegistrationCardState)?,
+)
+
 /**
- * A busca de reservas: os filtros, a busca por documento, a lista paginada e, ao lado, o detalhe somente leitura da
- * reserva escolhida (se [detail] houver). Quem compõe a tela inicia o [search]; a tabela só entra com a data
- * operacional. O documento buscado só aparece mascarado.
+ * A busca de reservas: os filtros, a busca por documento, a lista paginada e, ao lado, o detalhe da reserva escolhida
+ * (se [detail] houver). Quem compõe a tela inicia o [search]; a tabela só entra com a data operacional. O documento
+ * buscado só aparece mascarado. Com [actions], o detalhe oferece "Alterar", "Confirmar reserva" e "Confirmação (PDF)",
+ * conforme a reserva e as permissões; sem elas, o detalhe é somente leitura.
  */
 @Composable
 fun ReservationsScreen(
     search: ReservationSearchState,
     detail: ReservationDetailState?,
+    actions: ReservationsActions? = null,
 ) {
+    // A fábrica é uma lambda nova a cada recomposição da área: o holder dos diálogos abertos não pode depender dela.
+    val currentActions by rememberUpdatedState(actions)
+    val dialogs = detail?.let { remember(it) { ReservationDialogs(it) { currentActions } } }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             Text("Reservas", style = MaterialTheme.typography.titleLarge)
@@ -53,17 +71,19 @@ fun ReservationsScreen(
         }
         val error = search.error
         when {
-            search.day != null -> Content(search, detail)
+            search.day != null -> Content(search, detail, dialogs)
             error != null -> ErrorState(error, onRetry = search::start)
             else -> LoadingState()
         }
     }
+    dialogs?.Show()
 }
 
 @Composable
 private fun Content(
     search: ReservationSearchState,
     detail: ReservationDetailState?,
+    dialogs: ReservationDialogs?,
 ) {
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Filters(search)
@@ -83,7 +103,9 @@ private fun Content(
                     emptyMessage = EMPTY_RESULT,
                 )
             }
-            if (detail?.openId != null) ReservationDetailPanel(detail)
+            if (detail?.openId != null) {
+                ReservationDetailPanel(detail, dialogs?.detailActions() ?: DetailActions())
+            }
         }
     }
 }
