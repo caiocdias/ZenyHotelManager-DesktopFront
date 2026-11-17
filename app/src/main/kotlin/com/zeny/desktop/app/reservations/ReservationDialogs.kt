@@ -17,6 +17,8 @@ private const val MANAGE = "reservations.reservations.manage"
 private const val READ = "reservations.reservations.read"
 private val CHANGEABLE_STATUSES = setOf("PROVISIONAL", "CONFIRMED", "IN_HOUSE")
 private val NO_CONFIRMATION_STATUSES = setOf("CANCELLED", "NO_SHOW")
+private val CANCELLABLE_STATUSES = setOf("PROVISIONAL", "CONFIRMED")
+private val REACTIVABLE_STATUSES = setOf("CANCELLED", "NO_SHOW")
 
 /** Um diálogo aberto e a reserva do detalhe em que abriu: trocar de reserva o fecha. */
 private class Opened<T>(
@@ -26,10 +28,35 @@ private class Opened<T>(
 )
 
 /**
- * Os botões "Alterar", "Confirmar reserva" e "Confirmação (PDF)" do detalhe da busca e os diálogos que eles abrem. Os
- * botões dependem da reserva aberta, das permissões e da fábrica da ação; o servidor continua decidindo. Cada diálogo
- * é da reserva que estava aberta ao pedir: trocar de reserva, fechar o detalhe ou sair da composição (área, sessão) o
- * fecha. Fechar um diálogo relê o detalhe: uma recusa definitiva deixa o diálogo aberto sem avisar a tela de fundo.
+ * Desenha o diálogo [opened] enquanto ele é da reserva aberta ([ownerId]); ao sair da composição ou trocar de reserva,
+ * encerra o estado com [close] e se solta com [release].
+ */
+@Composable
+private fun <T> Hosted(
+    opened: Opened<T>?,
+    ownerId: String?,
+    release: (Opened<T>) -> Unit,
+    close: (T) -> Unit,
+    content: @Composable (Opened<T>) -> Unit,
+) {
+    val shown = opened?.takeIf { it.ownerId == ownerId }
+    DisposableEffect(shown) {
+        onDispose {
+            shown?.let {
+                close(it.state)
+                release(it)
+            }
+        }
+    }
+    shown?.let { content(it) }
+}
+
+/**
+ * Os botões "Alterar", "Confirmar reserva", "Confirmação (PDF)", "Cancelar reserva" e "Reativar" do detalhe da reserva
+ * (da busca ou das pendências) e os diálogos que eles abrem. Os botões dependem da reserva aberta, das permissões e da
+ * fábrica da ação; o servidor continua decidindo. Cada diálogo é da reserva que estava aberta ao pedir: trocar de
+ * reserva, fechar o detalhe ou sair da composição (área, sessão) o fecha. Fechar um diálogo relê o detalhe: uma recusa
+ * definitiva deixa o diálogo aberto sem avisar a tela de fundo.
  */
 @Stable
 internal class ReservationDialogs(
@@ -38,6 +65,8 @@ internal class ReservationDialogs(
 ) {
     private var change by mutableStateOf<Opened<ReservationChangeState>?>(null)
     private var confirm by mutableStateOf<Opened<ReservationConfirmState>?>(null)
+    private var cancel by mutableStateOf<Opened<ReservationCancelState>?>(null)
+    private var reactivate by mutableStateOf<Opened<ReservationReactivateState>?>(null)
     private val card = RegistrationCardUi(detail) { actions()?.confirmation }
 
     /** Os botões da reserva aberta no detalhe; nenhum sem ações, sem reserva carregada ou sem a permissão. */
@@ -67,6 +96,14 @@ internal class ReservationDialogs(
                 current.confirmation
                     ?.takeIf { READ in current.permissions && status !in NO_CONFIRMATION_STATUSES }
                     ?.let { { card.open(CardTarget(id, reservation.code)) } },
+            onCancel =
+                current.cancel
+                    ?.takeIf { manage && status in CANCELLABLE_STATUSES }
+                    ?.let { make -> { openCancel(make, id, reservation.code) } },
+            onReactivate =
+                current.reactivate
+                    ?.takeIf { manage && status in REACTIVABLE_STATUSES }
+                    ?.let { make -> { openReactivate(make, id, reservation.code) } },
         )
     }
 
@@ -88,54 +125,70 @@ internal class ReservationDialogs(
         confirm = Opened(detail.openId, make(id), code)
     }
 
-    @Composable
-    fun Show() {
-        ShowChange()
-        ShowConfirm()
-        card.Show()
+    private fun openCancel(
+        make: (String) -> ReservationCancelState,
+        id: String,
+        code: String,
+    ) {
+        cancel?.state?.close()
+        cancel = Opened(detail.openId, make(id), code)
+    }
+
+    private fun openReactivate(
+        make: (String, String) -> ReservationReactivateState,
+        id: String,
+        code: String,
+    ) {
+        reactivate?.state?.close()
+        reactivate = Opened(detail.openId, make(id, code), code)
     }
 
     @Composable
-    private fun ShowChange() {
-        val shown = change?.takeIf { it.ownerId == detail.openId }
-        DisposableEffect(shown) {
-            onDispose {
-                shown?.state?.close()
-                if (change === shown) change = null
-            }
-        }
-        shown?.let {
+    fun Show() {
+        Hosted(change, detail.openId, { if (change === it) change = null }, ReservationChangeState::close) {
             ReservationChangeDialog(it.state) {
                 change = null
                 detail.reload()
             }
         }
+        Hosted(confirm, detail.openId, { if (confirm === it) confirm = null }, ReservationConfirmState::close) {
+            ShowConfirm(it)
+        }
+        Hosted(cancel, detail.openId, { if (cancel === it) cancel = null }, ReservationCancelState::close) {
+            ReservationCancelDialog(it.state) {
+                cancel = null
+                detail.reload()
+            }
+        }
+        Hosted(
+            reactivate,
+            detail.openId,
+            { if (reactivate === it) reactivate = null },
+            ReservationReactivateState::close,
+        ) {
+            ReservationReactivateDialog(it.state) {
+                reactivate = null
+                detail.reload()
+            }
+        }
+        card.Show()
     }
 
     @Composable
-    private fun ShowConfirm() {
-        val shown = confirm?.takeIf { it.ownerId == detail.openId }
-        DisposableEffect(shown) {
-            onDispose {
-                shown?.state?.close()
-                if (confirm === shown) confirm = null
-            }
-        }
-        shown?.let { open ->
-            val current = actions()
-            val canOpenPdf = current?.confirmation != null && current.permissions.contains(READ)
-            ReservationConfirmDialog(
-                open.state,
-                onConfirmation =
-                    if (canOpenPdf) {
-                        { showConfirmation(open) }
-                    } else {
-                        null
-                    },
-            ) {
-                confirm = null
-                detail.reload()
-            }
+    private fun ShowConfirm(open: Opened<ReservationConfirmState>) {
+        val current = actions()
+        val canOpenPdf = current?.confirmation != null && current.permissions.contains(READ)
+        ReservationConfirmDialog(
+            open.state,
+            onConfirmation =
+                if (canOpenPdf) {
+                    { showConfirmation(open) }
+                } else {
+                    null
+                },
+        ) {
+            confirm = null
+            detail.reload()
         }
     }
 

@@ -47,6 +47,8 @@ class ReservationsActions(
     val change: ((reservationId: String) -> ReservationChangeState)?,
     val confirm: ((reservationId: String) -> ReservationConfirmState)?,
     val confirmation: ((reservationId: String, code: String) -> RegistrationCardState)?,
+    val cancel: ((reservationId: String) -> ReservationCancelState)? = null,
+    val reactivate: ((reservationId: String, code: String) -> ReservationReactivateState)? = null,
 )
 
 /**

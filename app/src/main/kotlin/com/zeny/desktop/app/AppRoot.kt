@@ -51,10 +51,15 @@ import com.zeny.desktop.app.reservations.AvailabilityScreen
 import com.zeny.desktop.app.reservations.AvailabilitySource
 import com.zeny.desktop.app.reservations.AvailabilityState
 import com.zeny.desktop.app.reservations.NewReservationState
+import com.zeny.desktop.app.reservations.PendingListsState
+import com.zeny.desktop.app.reservations.PendingSource
+import com.zeny.desktop.app.reservations.PendingTab
 import com.zeny.desktop.app.reservations.QuoteState
 import com.zeny.desktop.app.reservations.QuotedStay
+import com.zeny.desktop.app.reservations.ReservationCancelState
 import com.zeny.desktop.app.reservations.ReservationChangeState
 import com.zeny.desktop.app.reservations.ReservationConfirmState
+import com.zeny.desktop.app.reservations.ReservationReactivateState
 import com.zeny.desktop.app.reservations.ReservationSearchState
 import com.zeny.desktop.app.reservations.ReservationsActions
 import com.zeny.desktop.app.reservations.ReservationsScreen
@@ -302,9 +307,9 @@ private fun ReservationsArea(connection: ServerConnection) {
 }
 
 /**
- * A busca e, com as portas e as permissões, as ações do detalhe e a aba de disponibilidade e cotação com a nova
- * reserva.
- * Sem a porta da Recepção ou sem a leitura das permissões não há ação alguma.
+ * A busca e, com as portas e as permissões, as ações do detalhe, a aba de disponibilidade e cotação com a nova reserva
+ * e a aba das pendências. Sem a porta da Recepção ou sem a leitura das permissões não há ação alguma; a aba das
+ * pendências só pede a porta delas. Sem nenhuma aba, a área é só a busca.
  */
 @Composable
 private fun ReservationsContent(
@@ -316,6 +321,7 @@ private fun ReservationsContent(
 ) {
     val receptionSource = remember(connection) { connection.receptionSource() }
     val availability = reservationsAvailability(connection.availabilitySource(), sessionId, scope)
+    val pending = reservationsPending(remember(connection) { connection.pendingSource() }, sessionId, scope)
     val permissions = receptionPermissions(receptionSource, sessionId)
     val approval = LocalApprovalCoordinatorOrNull.current
     val frame = LocalWindowFrame.current
@@ -324,6 +330,12 @@ private fun ReservationsContent(
         detail?.reload()
         scope.launch { search.table.refresh() }
     }
+    // O que muda com o cancelamento e a reativação: o detalhe, a busca, o calendário e a lista de pendências aberta.
+    val refreshAfterLifecycle: () -> Unit = {
+        refreshDetailAndTable()
+        availability?.calendar?.reload()
+        pending?.refresh()
+    }
     val actions =
         permissions?.let {
             ReservationsActions(
@@ -331,17 +343,23 @@ private fun ReservationsContent(
                 change = changeFactory(connection, scope, approval, it, refreshDetailAndTable),
                 confirm = confirmFactory(connection, scope, refreshDetailAndTable),
                 confirmation = confirmation,
+                cancel = cancelFactory(connection, scope, approval, refreshAfterLifecycle),
+                reactivate = reactivateFactory(connection, scope, approval, refreshAfterLifecycle),
             )
         }
-    if (availability == null) {
+    if (availability == null && pending == null) {
         ReservationsScreen(search, detail, actions)
     } else {
         val newReservation =
-            newReservationFactory(connection, receptionSource, scope, approval, permissions) {
-                availability.calendar.reload()
-                refreshDetailAndTable()
+            availability?.let {
+                newReservationFactory(connection, receptionSource, scope, approval, permissions) {
+                    it.calendar.reload()
+                    refreshDetailAndTable()
+                }
             }
-        ReservationsTabs(availability, newReservation, confirmation) { ReservationsScreen(search, detail, actions) }
+        ReservationsTabs(availability, pending, newReservation, confirmation, detail, actions) {
+            ReservationsScreen(search, detail, actions)
+        }
     }
 }
 
@@ -382,6 +400,23 @@ private fun reservationsAvailability(
         }
     }
     return availability
+}
+
+/**
+ * As pendências da área Reservas, ou nulas sem a porta da conexão. O estado nasce com a chave `(source, sessionId)` e
+ * fecha ao sair da área; quem o inicia é a aba, ao ser aberta. Não depende da porta da Recepção nem de permissão lida
+ * aqui: o menu da área já exige `reservations.reservations.read`.
+ */
+@Composable
+private fun reservationsPending(
+    source: PendingSource?,
+    sessionId: String,
+    scope: CoroutineScope,
+): PendingListsState? {
+    if (source == null) return null
+    val pending = remember(source, sessionId) { PendingListsState(source, scope, Clock.systemUTC()::instant) }
+    DisposableEffect(pending) { onDispose { pending.close() } }
+    return pending
 }
 
 /** A leitura de permissões da [sessionId] na [source] que a produziu. */
@@ -435,6 +470,30 @@ private fun confirmFactory(
     return { id -> ReservationConfirmState(source, scope, id, onChanged) }
 }
 
+/** O cancelamento da reserva do detalhe, ou nulo sem a porta; a aprovação (da isenção da multa) é a da sessão. */
+private fun cancelFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    onChanged: () -> Unit,
+): ((String) -> ReservationCancelState)? {
+    val source = connection.reservationCancelSource() ?: return null
+    return { id -> ReservationCancelState(source, scope, id, { approveAction(approval, it) }, onChanged) }
+}
+
+/** A reativação da reserva do detalhe, ou nula sem a porta; a aprovação é a do coordenador da sessão. */
+private fun reactivateFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    onChanged: () -> Unit,
+): ((String, String) -> ReservationReactivateState)? {
+    val source = connection.reservationReactivateSource() ?: return null
+    return { id, code ->
+        ReservationReactivateState(source, scope, id, code, { approveAction(approval, it) }, onChanged)
+    }
+}
+
 /**
  * A nova reserva a partir de uma oferta da cotação. Só existe com `reservations.reservations.manage`, com a porta da
  * criação e com a da Recepção (a busca de titular); senão, nula.
@@ -470,31 +529,45 @@ private enum class ReservationsTab(
 ) {
     SEARCH("Busca"),
     AVAILABILITY("Disponibilidade e cotação"),
+    PENDING("Pendências"),
 }
 
-/** A busca fica composta fora das abas só no estado: o conteúdo é recriado, mas os estados vivem acima. */
+/**
+ * As abas da área: "Busca", "Disponibilidade e cotação" (com a disponibilidade) e "Pendências" (com a porta delas).
+ * A busca fica composta fora das abas só no estado: o conteúdo é recriado, mas os estados vivem acima. A aba das
+ * pendências inicia o estado ao ser aberta e usa o mesmo detalhe e as mesmas ações da busca.
+ */
 @Composable
+@Suppress("LongParameterList") // os estados e as fábricas da área, já resolvidos por quem a compõe
 private fun ReservationsTabs(
-    availability: ReservationsAvailability,
+    availability: ReservationsAvailability?,
+    pending: PendingListsState?,
     newReservation: ((QuoteOfferResponse, QuotedStay) -> NewReservationState)?,
     confirmation: ((reservationId: String, code: String) -> RegistrationCardState)?,
+    detail: ReservationDetailState?,
+    actions: ReservationsActions?,
     search: @Composable () -> Unit,
 ) {
-    var tab by remember { mutableStateOf(ReservationsTab.SEARCH) }
+    var selected by remember { mutableStateOf(ReservationsTab.SEARCH) }
+    val tabs =
+        ReservationsTab.entries.filter {
+            when (it) {
+                ReservationsTab.SEARCH -> true
+                ReservationsTab.AVAILABILITY -> availability != null
+                ReservationsTab.PENDING -> pending != null
+            }
+        }
+    val tab = selected.takeIf { it in tabs } ?: ReservationsTab.SEARCH
     val reserve = rememberNewReservationHost(newReservation, confirmation)
     Column(Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = tab.ordinal) {
-            ReservationsTab.entries.forEach {
-                Tab(selected = tab == it, onClick = { tab = it }, text = { Text(it.label) })
+        PrimaryTabRow(selectedTabIndex = tabs.indexOf(tab)) {
+            tabs.forEach {
+                Tab(selected = tab == it, onClick = { selected = it }, text = { Text(it.label) })
             }
         }
         Box(Modifier.weight(1f)) {
-            when (tab) {
-                ReservationsTab.SEARCH -> {
-                    search()
-                }
-
-                ReservationsTab.AVAILABILITY -> {
+            when {
+                tab == ReservationsTab.AVAILABILITY && availability != null -> {
                     LaunchedEffect(availability) { availability.calendar.start() }
                     AvailabilityScreen(
                         availability.calendar,
@@ -502,6 +575,15 @@ private fun ReservationsTabs(
                         Modifier.fillMaxSize().padding(16.dp),
                         onReserve = if (newReservation != null) reserve::open else null,
                     )
+                }
+
+                tab == ReservationsTab.PENDING && pending != null -> {
+                    LaunchedEffect(pending) { pending.start() }
+                    PendingTab(pending, detail, actions, Modifier.padding(16.dp))
+                }
+
+                else -> {
+                    search()
                 }
             }
         }
