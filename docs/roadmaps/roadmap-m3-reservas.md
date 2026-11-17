@@ -796,12 +796,46 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+**Estado em 2026-11-17: parada a pedido do usuário, antes da revisão final das correções.** O usuário pediu o pacote para validar no Windows o que já funciona. A etapa segue `#em-andamento`; nenhum critério de aceite foi marcado, porque a etapa só fecha com a revisão final limpa. O código das correções está inteiro na branch, com revisão por tarefa limpa e o gate verde.
+
+- Plano: `docs/superpowers/plans/2026-11-17-m3-reservas-e06.md` (8 tarefas, 3 ondas). Revisão de arquitetura: **aprovado com notas**, 1 rodada (`revisor-arquitetura`, fable); a rodada 0 bloqueou por 1 Importante.
+- Parecer da revisão adiada (fase 1): `revisor-seguranca`, prompt `code-reviewer.md`, modelo fable, sobre `a300a23..3a50e5c`, em três despachos de escopos disjuntos (A = E03, B = E04, C = o resto e o transversal; ruling do orquestrador, porque o diff sem revisão somava ~890 KB). **0 Críticos, 2 Importantes, 27 Menores.**
+  - `A-I1`: a falha na leitura das permissões da área Reservas sumia com as ações, sem aviso nem nova tentativa.
+  - `B-I1`: depois de uma ação na aba "Pendências", só a lista selecionada recarregava.
+  - Os 2 avisos e os 18 apontamentos de `check_test_integrity.py --base a300a23` no HEAD `3a50e5c` foram justificados um a um pela Revisão C.
+- Commits (`3a50e5c..a800b25` na `roadmap/m3-reservas`):
+  - `3a50e5c` a tag; `6bb8902`, `9632c27`, `f727fc6` o plano e a revisão dele;
+  - Task 1 (estado da leitura das permissões e o aviso, `A-I1`): `780f7ce`, `2f661ba`, `ebf1cf1`, `21cca96`;
+  - Task 2 (fixtures dos ataques, testador): `9d14474`;
+  - Task 3 (recarga do cancelamento e rótulo da reativação): `7800e5b`;
+  - Task 4 (a área Reservas lê as permissões uma vez e deixa repetir, `A-I1`): `01cc06f`, `8299ed3`;
+  - Task 5 (um total só, erro da chegada, contorno redundante): `ba075e9`;
+  - Task 6 (aprovação cancelada depois de resultado desconhecido): `03542f0`;
+  - Task 7 (as quatro listas de pendências recarregam, `B-I1`): `78e527e`, `e5badaa`;
+  - Task 8 (nomes de teste e travas, testador): `6c84bd5`;
+  - testador de etapa: `3dfe727`, `a800b25` (15 mutantes de produção, 15 mortos; nenhum teste vermelho).
+- Revisão por tarefa: as 8 limpas (a Task 1 depois de 2 rodadas). **Revisão final das correções: não feita.** Foi despachada sobre `f727fc6..a800b25` e interrompida pelo orquestrador minutos depois, na parada, sem parecer. Os testes do testador de etapa (`3dfe727`, `a800b25`) ainda não foram lidos por uma revisora.
+- Evidência no HEAD de código `a800b25`:
+  - gate do projeto: `BUILD SUCCESSFUL in 6m 8s`; 4892 testes, 0 falhas, 0 erros, 55 pulados; `tests/run.sh`: 60 arquivos, 0 falhas;
+  - scanner (`osv-scanner scan source -r --no-ignore .`): 6 lockfiles (131, 190, 194, 194, 361 e 359 pacotes), `No issues found`;
+  - `check_test_integrity.py --base f727fc6`: exit 1, 5 apontamentos (2 `ASSERCAO_REMOVIDA` em `ReservationsLifecycleTest.kt`, da Task 7, já justificados na revisão da tarefa; 3 `SKIP_ADICIONADO` em `tests/test_live_booking_ataque.sh`, da Task 8). Com `--base a300a23`: exit 1, 21 apontamentos, os 18 já julgados mais esses 3. **Falta o parecer da revisão final** sobre os 3 novos e sobre o apontamento do testador de etapa (`--base 6c84bd5`: 1 `ASSERCAO_REMOVIDA` em `PendingListsRefreshAllAtaqueTest.kt`, limite trocado por um mais apertado);
+  - demo do notebook recriada às 11:50 (`down.sh -v` e `up.sh`, readiness `{"status":"UP"}`): seed em 8,8 s no banco novo e 2,3 s na segunda vez, sem criar nada; `smokeTest` 1 teste, 0 falhas; verificações ao vivo, todas com 0 falhas: `LiveSeedReservationsCheck` 3, `LiveReceptionCheck` 2, `LiveRegistrationCardCheck` 3, `LiveReservationSearchCheck` 6, `LiveAvailabilityCheck` 3, `LiveCheckInCheck` 2, `LiveStayActionsCheck` 2, `LiveWalkInCheck` 3, `LiveTracesCheck` 3, `LiveAvailabilityBookingCheck` 2, `LiveBookingFlowCheck` 3, `LiveReservationLifecycleCheck` 3, `LivePreReservationConfirmCheck` 1; terceiro seed depois das escritas: exit 0, nenhuma reserva criada.
+- Pacote: gerado de novo em 2026-11-17 11:51, do HEAD `a800b25`, em `build/demo-package/` do checkout principal (`VERSAO.txt`: `front_commit=a800b25bc2d399dc446f5dbf9bc88b2ddec00165`, `front_dirty=false`), com `images/zeny-server-images.tar`, os três roteiros e sem `.env`. **É este o pacote da lista "Validações acumuladas no Windows".** Ele traz as correções desta etapa, que ainda não passaram pela revisão final.
+- Critérios verificados: nenhum marcado. Têm evidência parcial o 1 e o 2 (o parecer e as saídas acima), o 3 (os commits de `A-I1` e `B-I1`), o 4 (a tabela "Destino dos achados que este plano não corrige" do plano), o 6 e o 7 (gate e pacote no HEAD `a800b25`). O 5 (marca de paga no README) espera o fechamento.
+- **O que falta para fechar, nesta ordem:**
+  1. se a validação no Windows trouxer correção, ela entra antes da revisão final, pelo ciclo normal;
+  2. a revisão final (`revisor-seguranca`, modelo mais capaz, `code-reviewer.md`) sobre `f727fc6..HEAD`, com o gate, o scanner e a verificação mecânica no HEAD revisado; no máximo uma onda de correção;
+  3. se o código mudar depois de `a800b25`: o gate, a demo recriada com o seed, o `smokeTest` e as verificações ao vivo, e o pacote de novo;
+  4. o handoff completo (a justificativa de cada apontamento e de cada aviso, a tabela de destinos com os estacionados), a marca de paga em cada entrada de "Revisões de segurança adiadas" do README, a marca na "Definição global de pronto" e a tag `#concluida`.
+- Workspace do plano, preservado e fora do git: `.superpowers/sdd/2026-11-17-m3-reservas-e06/` no worktree `.claude/worktrees/roadmap-m3-reservas`. O ledger `progress.md` tem cada despacho, ruling e menor adiado; `contexto-revisao-final-e06.md` e `final-ledger-extrato.md` são o pacote pronto da revisão final, válido enquanto o HEAD de código for `a800b25`. Os modelos de despacho estão em `.superpowers/sdd/contrato-*.md`.
+- Itens que o testador de etapa deixou para a revisão final julgar: a condição `unconfirmed` do Esc em `NewReservationDialog.kt` ficou sem teste (o Esc não chega ao diálogo nos ambientes de teste); o cancelamento troca a `Idempotency-Key` quando o motivo, a observação ou a isenção mudam, ao contrário do que o brief da Task 6 dizia; a resposta de criação sem reserva deixa a tela em "resultado desconhecido", com saída só por "Cancelar".
+- Decisões para o usuário (arquitetura; esperam a entrevista, que não foi feita por causa da parada; a primeira opção de cada uma é a recomendada):
+  1. **`C-M1` — a linha de "Indisponíveis" da cotação mostra o código do plano ("Standard · GARANTIDA").** Aceitar e abrir o pedido não bloqueante `PF-05` (`ratePlanName` e `roomTypeName` em `unavailable[]`); ou criar no `core` uma fachada de planos só para traduzir o código (antecipa o M7).
+  2. **`A-M10`/`B-M7` — a regra do "resultado desconhecido" está copiada em 8 estados, com 3 variantes.** Extrair uma função única no `core` como primeira tarefa da M4 E01, antes da primeira escrita de dinheiro, levando junto o `B-M2a` e o `WalkInState`; ou manter as cópias e corrigir caso a caso.
+  3. **Uma fonte de permissões por sessão.** As áreas consumirem as permissões já lidas pelo `ShellState`, decidido com o arquiteto antes do M4; ou manter uma leitura por área, como a Task 4 deixou.
+  4. **Prévia do novo total antes de salvar a alteração de uma reserva** (a Revisão A pôs de lado: pede operação nova no servidor). Abrir pedido não bloqueante ao servidor; ou aceitar a tela como está.
+- Notas para a execução no Windows, além das da E05: o "Reprovação" da linha 770 do `roteiro-m3.md` compara com o total da oferta, que depois da criação só aparece na aba da cotação, atrás do diálogo. Novidades visíveis desta etapa: o aviso "Não foi possível ler as suas permissões…" com o botão "Tentar de novo" quando a leitura falha; as quatro listas de "Pendências" recarregam depois de uma ação; um só "Total" no diálogo de nova reserva.
+- Notas para a próxima etapa: a conferência do achado `C-M6` vale para todo despacho (antes de mandar o desenvolvedor a um arquivo de teste, `git log --format=%B -- <arquivo> | grep -c '^Soul: testador'`); a verificação rápida não roda `detektMain` nem `detektTest`, peça os dois por tarefa de Kotlin; no worktree o scanner precisa do `--no-ignore`.
 
 ---
 
@@ -813,3 +847,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-17 — fim do lote do processo acelerado (`claude --agent orquestrador`): E02, E03 e E04 `#concluida`, com a revisão de segurança adiada (ADR 0011); E05 `#em-andamento`, parada a pedido do usuário. O usuário decidiu em entrevista abrir dois pedidos não bloqueantes ao servidor (D1 e D2 em "Hipóteses e decisões em aberto").
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E05, iniciada no processo acelerado, não foi reescrita: o handoff dela registra que o restante segue o processo normal, e o trecho já commitado (`830f296..920dcd2`) entrou na lista "Revisões de segurança adiadas" do README. Por decisão do usuário em entrevista, a dívida de revisão é paga antes do M4: entra a E06. Nenhuma tag mudou.
 - 2026-11-17 — lote do processo normal (`claude --agent orquestrador`): a E05 foi retomada pelo ciclo do ADR 0012 e fica `#em-andamento`, **Aguardando o Windows** (regra 7), com a revisão final limpa (0 Críticos, 0 Importantes). Os pedidos `PF-03` e `PF-04` foram abertos (D1 e D2).
+- 2026-11-17 — parada do lote a pedido do usuário, para validar no Windows (`claude --agent orquestrador`): a E06 fica `#em-andamento`, com a revisão adiada feita (0 Críticos, 2 Importantes, 27 Menores), as 8 tarefas de correção integradas e o gate verde em `a800b25`; falta a revisão final das correções. O pacote de `build/demo-package/` passou a ser o de `a800b25`. Nenhuma tag mudou.
