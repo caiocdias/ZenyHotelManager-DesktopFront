@@ -10,7 +10,7 @@ trap 'chmod -R u+rwx "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
 make_fake_server "$tmp/server"
 srv="$tmp/server"
 export ZENY_SERVER_REPO="$srv"
-sgit() { git -C "$srv" -c user.name=T -c user.email=t@e -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+sgit() { git -C "$srv" -c user.name=T -c user.email=t@e -c commit.gpgsign=false -c core.hooksPath=/dev/null -c core.autocrlf=false "$@"; }
 same() { cmp -s "$1" "$2" || assert_eq "iguais" "diferentes" "$3"; }
 
 # fresh NAME : front falso novo com pin de C1 gravado; define $f.

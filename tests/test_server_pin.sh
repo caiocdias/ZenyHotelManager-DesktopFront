@@ -48,7 +48,7 @@ assert_exit 2 "REF começando com hífen" -- pin --foo
 same "$tmp/pin.bak" "$front/api/server-pin.properties" "pin intacto após REF com hífen"
 
 # Commit sem api/openapi.yaml: exit 2, nada alterado
-sgit() { git -C "$srv" -c user.name=T -c user.email=t@e -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"; }
+sgit() { git -C "$srv" -c user.name=T -c user.email=t@e -c commit.gpgsign=false -c core.hooksPath=/dev/null -c core.autocrlf=false "$@"; }
 sgit rm -q api/openapi.yaml
 sgit commit -q -m "sem contrato"
 assert_exit 2 "commit sem contrato" -- pin HEAD

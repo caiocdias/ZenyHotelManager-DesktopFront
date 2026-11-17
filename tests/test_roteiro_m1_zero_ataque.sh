@@ -203,8 +203,9 @@ assert_eq "$n_genenv" "$(step_with 'ZENY_STORAGE_PUBLIC_ENDPOINT')" "roteiro: a 
 # =============================================================================================================
 # 7. Ordem do fluxo do zero
 # =============================================================================================================
-ln_code() { awk -F'\t' -v p="$1" 'index($2, p) == 1 {print $1; exit}' <<<"$rot_ps_n"; }
-ln_code_after() { awk -F'\t' -v p="$1" -v a="$2" '$1 > a && index($2, p) == 1 {print $1; exit}' <<<"$rot_ps_n"; }
+# O prefixo vai por ENVIRON: `awk -v` interpreta escapes (`\d`), e gawk e mawk divergem nisso.
+ln_code() { P="$1" awk -F'\t' 'index($2, ENVIRON["P"]) == 1 {print $1; exit}' <<<"$rot_ps_n"; }
+ln_code_after() { P="$1" awk -F'\t' -v a="$2" '$1 > a && index($2, ENVIRON["P"]) == 1 {print $1; exit}' <<<"$rot_ps_n"; }
 o_ls="$(ln_code "$check_ls")"
 o_vol="$(ln_code "$check_vol")"
 o_down="$(ln_code "$cleanup")"
