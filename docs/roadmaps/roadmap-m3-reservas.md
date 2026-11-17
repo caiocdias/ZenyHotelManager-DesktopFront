@@ -227,7 +227,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 | E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
 | E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
-| E04 | Cancelar, reativar e pendências | #em-andamento | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
+| E04 | Cancelar, reativar e pendências | #concluida | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
 
 ---
@@ -552,7 +552,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 ---
 
-## E04 — Cancelar, reativar e pendências — #em-andamento
+## E04 — Cancelar, reativar e pendências — #concluida
 
 **Objetivo:** o usuário cancela uma reserva, vendo antes a multa da política, e reativa uma cancelada com aprovação do gerente. Também acompanha as quatro listas de pendências e abre a reserva a partir delas.
 
@@ -573,9 +573,9 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Cancelar uma reserva do seed com política de multa: a multa é mostrada antes de confirmar, e a reserva vira cancelada.
-- [ ] Reativar como Recepcionista abre o diálogo de aprovação. Com o Gerente, a reserva volta.
-- [ ] As quatro listas carregam contra o seed, e o seed tem ao menos um item em cada uma que o servidor permitir criar.
+- [x] Cancelar uma reserva do seed com política de multa: a multa é mostrada antes de confirmar, e a reserva vira cancelada.
+- [x] Reativar como Recepcionista abre o diálogo de aprovação. Com o Gerente, a reserva volta.
+- [x] As quatro listas carregam contra o seed, e o seed tem ao menos um item em cada uma que o servidor permitir criar.
 
 **Validação obrigatória:**
 
@@ -597,12 +597,65 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e04.md`, com 13 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 2 rodadas, no fable. Ela correu adiantada, sobre o rascunho, enquanto a E03 terminava.
+    - A rodada 0 bloqueou por 1 Crítico (a pré-reserva do seed não entraria na lista de garantias na janela padrão do servidor) e 7 Importantes.
+    - A rodada 1 bloqueou por 3 Importantes, criados pela correção do seed.
+- **Commits:** `fc7a0b3..72e4316` na `roadmap/m3-reservas`. As tarefas rodaram em ondas, com até 3 ativas ao mesmo tempo, cada uma no seu worktree.
+
+  | Task | Entrega | Commit | Observação |
+  |---|---|---|---|
+  | 1 | `BookingsFacade.cancelReservation` e `reactivateReservation` | `b642503` | |
+  | 2 | `PendingFacade` (as quatro listas) | `d038f97` | |
+  | 3 | Seed: `PendingSeeder` e a porta `PendingGateway` | `56b9736` | |
+  | 4 | Seed: `SdkPendingGateway` e a ligação no `DemoSeed` | `4273c7b` | |
+  | 5 | `ReservationCancelState` | `4a769ba` | |
+  | 6 | `ReservationReactivateState` e o diálogo | `a0c72b2` | |
+  | 7 | `PendingListsState` e `PendingText` | `4b6ba10` | |
+  | 8 | `ReservationCancelDialog` | `489bae1` | |
+  | 9 | `PendingPanel` | `31e9ece` | |
+  | 10 | Portas no `CoreConnection` e botões "Cancelar reserva" e "Reativar" | `3a90bde` | |
+  | 11 | `PendingTab` (as listas com o detalhe ao lado) | `275c84d` | |
+  | 12 | Fiação na área Reservas e a aba "Pendências" | `629cd09`, `72e4316` | 1 rodada de correção: confirmar ou alterar passa a recarregar a lista de pendências |
+  | 13 | `LiveReservationLifecycleCheck` e o opt-in `ZENY_LIVE_LIFECYCLE` | `325f658` | |
+  | Etapa | Testador de etapa: 23 testes e a trava `test_live_lifecycle_ataque.sh` | `81164ed`, `1ea3473`, `e222c43` | Sem defeito |
+
+  A verificação de integridade por tarefa deu exit 0 em todas.
+- **Revisão final:** não feita, pelo processo acelerado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `fc7a0b3..72e4316`, integridade exit 1.**
+- **Fechamento** (HEAD `72e4316`, 2026-11-17):
+  - **Gate:** `./gradlew build --max-workers=2` → BUILD SUCCESSFUL; os XML somam 4696 testes, 0 falhas, 0 erros e 49 pulados (opt-ins ao vivo). `bash tests/run.sh` → 55 arquivos, 0 falhas, 0 com casos pulados. A suíte também rodou verde depois de cada onda integrada.
+  - **Integridade** (`check_test_integrity.py --base fc7a0b3`): exit 1, com 2 apontamentos `SKIP_ADICIONADO` em `tests/test_live_lifecycle_ataque.sh`. São falsos positivos: as linhas `nao_tem '@Disabled'` e `nao_tem '@Ignore'` são a trava que **proíbe** desligar a verificação ao vivo.
+- **Critérios verificados**, ao vivo no `zeny-front`, pelo orquestrador, com as credenciais só no ambiente do subshell. `LiveReservationLifecycleCheck` passou 3/3, nenhuma pulada, no `325f658` e de novo no HEAD final `72e4316`.
+  1. **Cancelar com a multa** (`cancelAndReactivate`): numa reserva com a chegada no dia, o diálogo mostrou os termos da política antes de confirmar ("Cancelamento sem multa até 24 h antes do check-in; depois, multa de 1 diária(s)."). Cancelada, a reserva ficou `CANCELLED`, com a multa de R$ 320,00 lançada na conta (lançamento conferido), e a tela disse "Multa lançada na conta: R$ 320,00.".
+  2. **Reativar com a aprovação** (`cancelAndReactivate`): como Recepcionista, a reativação abriu a pendência de `reservations.reservations.reactivate`; aprovada pelo Gerente do seed, a reserva voltou a `CONFIRMED`. Ela apareceu em "No-shows previstos", e o segundo cancelamento não cobrou multa de novo.
+  3. **Pendências** (`pendingListsLoad`): as quatro listas carregaram sem erro. "Garantias pendentes" trouxe a pré-reserva do seed (`DEMO-PEND-P1`), e "Realocação necessária", a `DEMO-PEND-R1`, exatamente uma de cada. A linha da pré-reserva abriu o detalhe ao lado. "Depósitos em falta" fica vazia: o item exige operações de `billing`, do M4.
+  - **Seed:** rodado duas vezes contra o `zeny-front`, em 3,9 s e 3,6 s, sem falha e com a saída impressa inalterada.
+  - Build, teste e lint: verdes (gate acima).
+  - Inspeção manual: capturas `app/build/live/reservation-cancel.png` e `pending.png` inspecionadas.
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **"A multa mostrada antes de confirmar" são os termos da política.** O contrato não tem prévia da multa, e o front não calcula preço nem prazo. O diálogo mostra os termos copiados na reserva e, depois de cancelar, a multa que o servidor lançou. Pedir ao servidor uma prévia (`PF-NN`, não bloqueante) é pergunta da entrevista do fim do lote.
+  2. **Isenção oferecida.** O diálogo tem "Isentar a multa", que passa pela aprovação quando o servidor pede. A isenção não foi verificada ao vivo.
+  3. **Aba própria de pendências, com todas as garantias.** A lista de garantias vai das vencidas até 730 dias à frente. O padrão do servidor (só as que vencem em 12 h) esconderia a pré-reserva recém-criada.
+  4. **Seed por um seeder próprio.** O `PendingSeeder` cria a política "Garantia por cartão (demo)", o plano "Tarifa garantida" (só no canal do site e só Standard, para a cotação do app não ganhar ofertas gêmeas), a pré-reserva `DEMO-PEND-P1` e a reserva `DEMO-PEND-R1` (UH 208, que entra em fora de ordem de d+5 a d+7). O titular das duas é o Hóspede Doze. O relatório impresso do seed não mudou.
+  5. **A verificação ao vivo escreve na demo.** Ela deixa uma reserva cancelada do G1, marcada "ENSAIO E04", e cancelou as duas "ENSAIO E03" da etapa anterior.
+  6. **Ondas de até 3.** O limite passou a ser medido a cada despacho: 3 tarefas ativas com 9 GB livres e a outra trilha parada; senão, 2.
+- **Notas para a próxima etapa:**
+  - **Para a E05:**
+    - o relatório do seed não lista as pendências; a decisão sobre a linha "pendências" está no plano da E05;
+    - o passo 14 do `roteiro-m2.md` (walk-in) diz que o Hóspede Doze "não tem reserva", o que deixou de ser verdade com o seed desta etapa. O roteiro do M3 corrige a frase;
+    - avisos para o roteiro do M3: depósitos sem item, a pré-reserva some em 48 h, e a multa só aparece em reserva com a chegada próxima.
+  - **Observações do testador de etapa**, de gravidade baixa:
+    - se o seed rodar de novo em outro dia operacional sem recriar a demo, ele abre um segundo fora de ordem na UH 208, fora da estadia da `R1`;
+    - no cancelamento e na reativação, uma falha local que não chega à rede aparece como resultado desconhecido (hoje inalcançável pela tela);
+    - o botão da reativação não vira "Tentar de novo" com resultado desconhecido, ao contrário do cancelamento.
+  - **Sem teste direto:** a guarda do Esc dos diálogos de cancelar e de reativar (o harness não entrega a tecla ao diálogo); a mesma trava está coberta pelo botão.
+  - **Dívidas menores:**
+    - criar uma reserva nova pela cotação não recarrega a lista de pendências aberta;
+    - o `createBooking` repete a lógica do ajudante novo de execução aprovável na `BookingsFacade`;
+    - o tratamento do cursor está duplicado entre a `PendingFacade` e a `ReservationsFacade`;
+    - o `PendingSeeder` não tem a espera de inventário do `BookingSeeder`; a primeira execução num banco novo acontece no gate (E05).
+  - **Teste instável:** `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes` (core) falhou uma vez, num gate com três builds em paralelo, e passou na repetição.
 
 ---
 

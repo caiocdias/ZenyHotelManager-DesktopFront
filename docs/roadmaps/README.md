@@ -87,6 +87,11 @@ O marco final de análise do projeto paga a lista inteira. A revisão final cobr
    - Integridade (`--base 5cbac31`): exit 1. Um `SKIP_ADICIONADO` em `tests/test_live_booking_ataque.sh` (`87f03cb`), falso positivo: a linha `nao_tem '@Disabled'` é a trava que proíbe desligar a verificação ao vivo.
    - Nenhuma tarefa teve revisão de código. O testador de etapa atacou o intervalo inteiro, sem defeito.
    - Achados estacionados: as observações do testador e as dívidas das "Notas para a próxima etapa" da E03, no roadmap do M3.
+3. **M3 E04 — Cancelar, reativar e pendências.**
+   - Commits: `fc7a0b3..72e4316` na `roadmap/m3-reservas`.
+   - Integridade (`--base fc7a0b3`): exit 1. Dois `SKIP_ADICIONADO` em `tests/test_live_lifecycle_ataque.sh`, falsos positivos: as linhas `nao_tem '@Disabled'` e `nao_tem '@Ignore'` são a trava que proíbe desligar a verificação ao vivo.
+   - Nenhuma tarefa teve revisão de código. O testador de etapa atacou o intervalo inteiro, sem defeito.
+   - Achados estacionados: as observações do testador e as dívidas das "Notas para a próxima etapa" da E04, no roadmap do M3.
 
 ## Validações acumuladas no Windows
 
@@ -118,3 +123,4 @@ Estão no design, §10:
 - 2026-11-16 — regra 8 (processo acelerado) e a lista "Revisões de segurança adiadas", por decisão do usuário ([ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md)). Cada roadmap ganhou um "Prompt acelerado" logo abaixo do "Prompt de execução" (`claude --agent arquiteto`).
 - 2026-11-16 — a M3 E02 entra na lista "Revisões de segurança adiadas" (`claude --agent orquestrador`).
 - 2026-11-16 — a M3 E03 entra na lista "Revisões de segurança adiadas" (`claude --agent orquestrador`).
+- 2026-11-17 — a M3 E04 entra na lista "Revisões de segurança adiadas" (`claude --agent orquestrador`).
