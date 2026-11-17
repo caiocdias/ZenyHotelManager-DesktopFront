@@ -8,6 +8,7 @@ import com.zeny.desktop.core.facade.BookingsFacade
 import com.zeny.desktop.core.facade.DocumentsFacade
 import com.zeny.desktop.core.facade.GuestsFacade
 import com.zeny.desktop.core.facade.HotelFacade
+import com.zeny.desktop.core.facade.PendingFacade
 import com.zeny.desktop.core.facade.RatesFacade
 import com.zeny.desktop.core.facade.ReservationsFacade
 import com.zeny.desktop.core.facade.RoomsFacade
@@ -84,6 +85,7 @@ class ZenyCore internal constructor(
     val rooms: RoomsFacade = RoomsFacade(sdkApis.rooms, sdkExecutor)
     val reservations: ReservationsFacade = ReservationsFacade(sdkApis.reservations, sdkApis.frontdesk, sdkExecutor)
     val bookings: BookingsFacade = BookingsFacade(sdkApis.reservations, sdkExecutor)
+    val pending: PendingFacade = PendingFacade(sdkApis.reservations, sdkExecutor)
     val guests: GuestsFacade = GuestsFacade(sdkApis.guests, sdkExecutor)
     val rates: RatesFacade = RatesFacade(sdkApis.rates, sdkExecutor)
     val traces: TracesFacade = TracesFacade(sdkApis.frontdesk, sdkApis.staff, sdkExecutor)
