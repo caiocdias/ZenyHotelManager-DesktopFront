@@ -20,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
@@ -100,7 +101,9 @@ class SdkPendingGatewayCancelAtaqueTest {
                 """.trimMargin()
             val error = cancelFailure(HttpStatusCode.Forbidden, body)
             assertClean(error)
-            (error as? ApiError.ApprovalRequired)?.let { assertEquals(null, it.detail) }
+            val approval = assertIs<ApiError.ApprovalRequired>(error, "o 403 APPROVAL_REQUIRED continua tipado")
+            assertEquals(null, approval.detail)
+            assertEquals("reservation.cancel", approval.action)
         }
 
     @Test
@@ -109,7 +112,8 @@ class SdkPendingGatewayCancelAtaqueTest {
             val error =
                 cancelFailure(HttpStatusCode.PreconditionFailed, """{"code":"STALE","status":412,"detail":"$ECHO"}""")
             assertClean(error)
-            (error as? ApiError.PreconditionFailed)?.let { assertEquals(null, it.detail) }
+            val stale = assertIs<ApiError.PreconditionFailed>(error, "o 412 continua tipado")
+            assertEquals(null, stale.detail)
         }
 
     @Test
@@ -126,6 +130,27 @@ class SdkPendingGatewayCancelAtaqueTest {
             val error = assertFailsWith<ApiError.Network> { gateway.cancelReservation(RES, "GUEST_REQUEST") }
             assertEquals(1, requests.size, "sem repetição às cegas")
             assertEquals(error.userMessage, error.message)
+        }
+
+    @Test
+    fun networkFailureCauseCarriesNoRequestBodyKeyOrToken() =
+        runTest {
+            var sentKey = ""
+            val gateway =
+                gateway { request ->
+                    sentKey = request.headers["Idempotency-Key"].orEmpty()
+                    throw IOException("Connection reset")
+                }
+            val error = assertFailsWith<ApiError.Network> { gateway.cancelReservation(RES, "GUEST_REQUEST") }
+            assertTrue(sentKey.isNotBlank())
+            val texts = everyText(error)
+            assertTrue(texts.any { "Connection reset" in it }, "a causa é a falha da rede: $texts")
+            texts.forEach {
+                assertFalse(sentKey in it, "a chave de idempotência não sobe no erro: $it")
+                assertFalse("GUEST_REQUEST" in it, "o corpo do pedido não sobe no erro: $it")
+                assertFalse("waivePenalty" in it, it)
+                assertFalse("Bearer" in it, it)
+            }
         }
 
     @Test

@@ -148,6 +148,26 @@ class DemoSeedFutureAtaqueTest {
             assertTrue(session!!.signedOut)
         }
 
+    /** Testador de etapa: a recusa do cancelamento da `C1` (depois de criadas as três) sai como a da criação. */
+    @Test
+    fun futureCancelRefusalPrintsOneLineWithoutGuestDataAndClosesSession() =
+        runTest {
+            val inner = futureFake()
+            val future =
+                object : FutureGateway by inner {
+                    override suspend fun cancelReservation(
+                        reservationId: String,
+                        reason: String,
+                    ) = throw ApiError.Problem(422, "ZZ_UNKNOWN", SECRET_ECHO, emptyList())
+                }
+            assertEquals(1, execute { context(pendingFake(), future) })
+            assertEquals(3, inner.reservationSpecs.size, "a recusa vem depois das três criações")
+            assertEquals(1, lines.size, "uma linha só, sem o relatório: $lines")
+            assertEquals("Falha: o servidor recusou a operação (HTTP 422).", lines.single())
+            assertTrue(assertNotNull(session).closed)
+            assertTrue(session!!.signedOut)
+        }
+
     @Test
     fun futureGenericFailurePrintsNoMessage() =
         runTest {
