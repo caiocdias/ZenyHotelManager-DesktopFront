@@ -10,7 +10,9 @@ import com.zeny.desktop.seed.config.FakeConfigGateway
 import com.zeny.desktop.seed.data.DemoCatalog
 import com.zeny.desktop.seed.data.SeedReport
 import com.zeny.desktop.seed.frontdesk.FakeTraces
+import com.zeny.desktop.seed.pending.FakeFutureGateway
 import com.zeny.desktop.seed.pending.FakePendingGateway
+import com.zeny.desktop.seed.pending.FutureGateway
 import com.zeny.desktop.seed.pending.PendingGateway
 import com.zeny.desktop.seed.people.FakeIam
 import kotlinx.coroutines.test.runTest
@@ -47,6 +49,7 @@ class DemoSeedTest {
     private val traces = FakeTraces()
     private var adminSession: FakeIam.FakeSession? = null
     private var pending: PendingGateway? = null
+    private var future: FutureGateway? = null
     private val lines = mutableListOf<String>()
 
     /** Os ids do falso de configuração são determinísticos: um falso descartável dá o `SeededConfig` esperado. */
@@ -58,7 +61,7 @@ class DemoSeedTest {
     ): AdminContext {
         val session = iam.open().also { adminSession = it }
         session.signIn("admin", config.adminNewPassword ?: config.adminPassword)
-        return AdminContext(session, { date }, configGateway, iam, bookings, traces, iam, pending)
+        return AdminContext(session, { date }, configGateway, iam, bookings, traces, iam, pending, future)
     }
 
     private val ticks = longArrayOf(1_000_000_000L, 2_500_000_000L)
@@ -218,6 +221,58 @@ class DemoSeedTest {
             val recados = lines.indexOfFirst { it.startsWith("recados") }
             assertTrue(recados >= 0, lines.toString())
             assertTrue(lines[recados + 1].startsWith("Concluído"), lines.toString())
+        }
+
+    /** Delega ao falso e anota quantas escritas das pendências já existiam quando o seeder das futuras começou. */
+    private class ObservedFuture(
+        private val inner: FakeFutureGateway,
+        private val pendingWrites: () -> Int,
+    ) : FutureGateway by inner {
+        var pendingWritesWhenFirstRead: Int? = null
+
+        override suspend fun guestId(cpf: String): String? {
+            if (pendingWritesWhenFirstRead == null) pendingWritesWhenFirstRead = pendingWrites()
+            return inner.guestId(cpf)
+        }
+    }
+
+    @Test
+    fun seedRunsFutureAfterPendingWhenPortIsPresent() =
+        runTest {
+            val holderCpf = data.guests.first { it.key == "G12" }.cpf
+            val fakePending =
+                FakePendingGateway().apply {
+                    cancellationPolicies[data.cancellationPolicy.name] = "cp-1"
+                    guests[holderCpf] = "guest-12"
+                }
+            val fakeFuture = FakeFutureGateway().apply { guests[holderCpf] = "guest-12" }
+            val observed = ObservedFuture(fakeFuture) { fakePending.calls.size }
+            pending = fakePending
+            future = observed
+            readyAdmin()
+            assertEquals(0, execute())
+
+            assertTrue(fakePending.calls.isNotEmpty(), "as pendências são semeadas")
+            assertEquals(
+                fakePending.calls.size,
+                observed.pendingWritesWhenFirstRead,
+                "o seeder das futuras roda depois das pendências",
+            )
+            assertEquals(
+                listOf("DEMO-FUT-F1", "DEMO-FUT-F2", "DEMO-FUT-C1"),
+                fakeFuture.reservationSpecs.map { it.externalId },
+            )
+
+            pending =
+                FakePendingGateway().apply {
+                    cancellationPolicies[data.cancellationPolicy.name] = "cp-1"
+                    guests[holderCpf] = "guest-12"
+                }
+            future = null
+            val without = DemoSeedTest().also { it.readyAdmin() }
+            without.pending = pending
+            assertEquals(0, without.execute())
+            assertEquals(without.lines, lines, "a saída impressa é a mesma de sem a porta")
         }
 
     private fun cli(args: List<String>): Triple<Int, String, String> {

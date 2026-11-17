@@ -12,10 +12,12 @@ import com.zeny.desktop.sdk.model.OpenOutOfOrderRequest
 import com.zeny.desktop.sdk.model.PriceValuesRequest
 import com.zeny.desktop.sdk.model.RatePlanCreateRequest
 import com.zeny.desktop.sdk.model.RatePriceUpdateRequest
+import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.ReservationRequest
 import com.zeny.desktop.sdk.model.RoomAssignRequest
 import com.zeny.desktop.sdk.model.StayGuestRequest
+import com.zeny.desktop.seed.pending.FutureGateway
 import com.zeny.desktop.seed.pending.PendingGateway
 import com.zeny.desktop.seed.pending.PendingPlanSpec
 import com.zeny.desktop.seed.pending.PendingPriceSpec
@@ -28,9 +30,10 @@ import java.time.LocalDate
 import kotlin.uuid.Uuid
 
 /**
- * Pendências de reservas sobre o `sdk`: política de garantia por cartão, plano só no site, preços por período,
- * reservas por `externalId` e a UH fora de ordem. Só `createBooking` exige `Idempotency-Key`: cada chamada cria a
- * sua `Intent` (chave nova), como o `SdkBookingGateway`. O CPF vai só no corpo, e o erro dessa busca sai sem ele.
+ * Pendências e reservas futuras sobre o `sdk`: política de garantia por cartão, plano só no site, preços por período,
+ * reservas por `externalId`, a UH fora de ordem e o cancelamento. `createBooking` e `cancelReservation` exigem
+ * `Idempotency-Key`: cada chamada cria a sua `Intent` (chave nova), como o `SdkBookingGateway`.
+ * O CPF vai só no corpo, e o erro dessa busca sai sem ele.
  *
  * Os nomes e códigos são comparados sem diferenciar maiúsculas, porque o servidor os trata assim.
  */
@@ -38,7 +41,8 @@ import kotlin.uuid.Uuid
 @Suppress("TooManyFunctions") // porta que espelha as operações do contrato usadas pelo seeder
 class SdkPendingGateway(
     private val seed: SeedCore,
-) : PendingGateway {
+) : PendingGateway,
+    FutureGateway {
     private val executor get() = seed.executor
     private val rates get() = seed.apis.rates
     private val guestsApi get() = seed.apis.guests
@@ -199,6 +203,32 @@ class SdkPendingGateway(
         val request =
             RoomAssignRequest(roomId = Uuid.parse(roomId), reason = Option.Some(RoomAssignRequest.Reason.INITIAL))
         executor.execute { reservationsApi.assignReservationRoom(Uuid.parse(reservationId), request, it.headers) }
+    }
+
+    /**
+     * Cancela sem isentar a multa, com chave própria. O `detail` do servidor pode ecoar dado do hóspede: numa
+     * recusa só o status e o código sobem.
+     */
+    @Suppress("SwallowedException") // o erro original traz o detail do servidor, descartado de propósito
+    override suspend fun cancelReservation(
+        reservationId: String,
+        reason: String,
+    ) {
+        val request =
+            ReservationCancelRequest(reason = ReservationCancelRequest.Reason.fromSerial(reason), waivePenalty = false)
+        try {
+            executor.execute(Intent()) {
+                reservationsApi.cancelReservation(
+                    Uuid.parse(reservationId),
+                    it.requireIdempotencyKey(),
+                    null,
+                    request,
+                    it.headers,
+                )
+            }
+        } catch (e: ApiError.Problem) {
+            throw ApiError.Problem(e.status, e.code, null, emptyList())
+        }
     }
 
     /** `false` só no `409 OUT_OF_ORDER_OVERLAP` (período já aberto); qualquer outra recusa sobe. */

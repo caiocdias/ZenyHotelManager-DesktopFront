@@ -11,6 +11,8 @@ import com.zeny.desktop.seed.data.DemoRole
 import com.zeny.desktop.seed.data.SeedReport
 import com.zeny.desktop.seed.frontdesk.TraceGateway
 import com.zeny.desktop.seed.frontdesk.TraceSeeder
+import com.zeny.desktop.seed.pending.FutureGateway
+import com.zeny.desktop.seed.pending.FutureSeeder
 import com.zeny.desktop.seed.pending.PendingGateway
 import com.zeny.desktop.seed.pending.PendingSeeder
 import com.zeny.desktop.seed.people.AdminSignIn
@@ -39,6 +41,7 @@ data class AdminContext(
     val traces: TraceGateway,
     val sessions: SessionFactory<SessionPort>,
     val pending: PendingGateway? = null,
+    val future: FutureGateway? = null,
 )
 
 /** O programa: abre o administrador, semeia configuração, usuários e reservas e imprime o relatório. */
@@ -55,6 +58,7 @@ object DemoSeed {
         val factory = SdkSessionFactory(config.server)
         val session = AdminSignIn(factory).open(config)
         val seed = session.seed
+        val pending = SdkPendingGateway(seed)
         return AdminContext(
             session = session,
             businessDate = {
@@ -67,7 +71,8 @@ object DemoSeed {
             bookings = SdkBookingGateway(seed),
             traces = SdkTraceGateway(seed),
             sessions = factory,
-            pending = SdkPendingGateway(seed),
+            pending = pending,
+            future = pending,
         )
     }
 
@@ -131,6 +136,7 @@ object DemoSeed {
             BookingSeeder(admin.bookings, report).seed(data, seeded)
             TraceSeeder(admin.traces, admin.bookings, report).seed(seeded, admin.businessDate())
             admin.pending?.let { PendingSeeder(it).seed(data, seeded, admin.businessDate()) }
+            admin.future?.let { FutureSeeder(it).seed(data, seeded, admin.businessDate()) }
             return report
         } finally {
             admin.session.shutDown()
