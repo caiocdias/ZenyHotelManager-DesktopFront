@@ -9,6 +9,7 @@ import com.zeny.desktop.sdk.client.ReservationsApi
 import com.zeny.desktop.sdk.model.BookingRequest
 import com.zeny.desktop.sdk.model.BookingResponse
 import com.zeny.desktop.sdk.model.NightlyRateRequest
+import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import com.zeny.desktop.sdk.model.ReservationChangeRequest
 import com.zeny.desktop.sdk.model.ReservationConfirmRequest
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
@@ -67,9 +68,32 @@ data class ReservationChangeInput(
             "roomTypeId=$roomTypeId, ratePlanId=$ratePlanId, segment=$segment, nightlyRates=$nightlyRates)"
 }
 
+/** `run(null)` tenta sem token; `run(token)` repete com o token e chave nova (decisão D2). */
+private fun <T : Any> approvable(
+    executor: ApiExecutor,
+    intent: Intent,
+    call: suspend (CallOptions) -> HttpResponseTyped<T>,
+): ApprovableAction<T> =
+    ApprovableAction { token ->
+        if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
+    }
+
 /**
- * Criar, ler, alterar e confirmar reservas. Um id que não é UUID, uma origem, um segmento ou uma garantia fora do
- * contrato lançam `IllegalArgumentException` antes da rede, sem o valor na mensagem.
+ * O pedido de cancelamento. `reason` é o texto do enum do contrato; `EXPIRED` é do servidor e é recusado antes da
+ * rede, como qualquer valor fora do enum. `notes` nulo ou em branco não vai. O `toString` não mostra `notes`: é texto
+ * livre.
+ */
+data class CancelInput(
+    val reason: String,
+    val waivePenalty: Boolean,
+    val notes: String?,
+) {
+    override fun toString(): String = "CancelInput(reason=$reason, waivePenalty=$waivePenalty)"
+}
+
+/**
+ * Criar, ler, alterar, confirmar, cancelar e reativar reservas. Um id que não é UUID, uma origem, um segmento, um
+ * motivo ou uma garantia fora do contrato lançam `IllegalArgumentException` antes da rede, sem o valor na mensagem.
  */
 class BookingsFacade internal constructor(
     private val reservations: ReservationsApi,
@@ -132,6 +156,51 @@ class BookingsFacade internal constructor(
             .execute(intent) {
                 reservations.confirmReservation(reservationId, it.requireIdempotencyKey(), request, it.headers)
             }.value
+    }
+
+    /**
+     * Cancela a reserva, sem `If-Match`. O servidor lança a multa conforme a política copiada na reserva; com
+     * `waivePenalty` pode pedir aprovação (`run(null)` tenta sem token, `run(token)` repete com chave nova).
+     */
+    fun cancelReservation(
+        id: String,
+        input: CancelInput,
+        intent: Intent,
+    ): ApprovableAction<ReservationDetailResponse> {
+        val reservationId = idOf(id, "reserva")
+        val request = cancelRequestOf(input)
+        return approvable(executor, intent) {
+            reservations.cancelReservation(
+                reservationId,
+                it.requireIdempotencyKey(),
+                reservationCancelRequest = request,
+                block = it.headers,
+            )
+        }
+    }
+
+    /** Reativa a reserva cancelada ou em no-show, sem corpo; é ação sensível e pode pedir aprovação. */
+    fun reactivateReservation(
+        id: String,
+        intent: Intent,
+    ): ApprovableAction<ReservationDetailResponse> {
+        val reservationId = idOf(id, "reserva")
+        return approvable(executor, intent) {
+            reservations.reactivateReservation(reservationId, it.requireIdempotencyKey(), block = it.headers)
+        }
+    }
+
+    private fun cancelRequestOf(input: CancelInput): ReservationCancelRequest {
+        val reason =
+            ReservationCancelRequest.Reason
+                .fromSerialOrNull(input.reason)
+                ?.takeIf { it != ReservationCancelRequest.Reason.EXPIRED }
+                ?: throw IllegalArgumentException("motivo inválido")
+        return ReservationCancelRequest(
+            notes = input.notes?.takeIf { it.isNotBlank() }?.let { Option.Some(it) } ?: Option.Undefined,
+            reason = reason,
+            waivePenalty = input.waivePenalty,
+        )
     }
 
     private fun bookingRequestOf(input: BookingInput): BookingRequest {
