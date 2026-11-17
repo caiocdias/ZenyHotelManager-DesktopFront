@@ -123,7 +123,11 @@ for b in $(sed -E 's/PowerShell 5\.1//g' "$rot" | grep -oE '(^|[^0-9.v:$])[0-9]{
 done
 assert_contains "$(step "$last_step")" "### Erros comuns" "os Erros comuns ficam no último passo ($last_step)"
 assert_contains "$rot_text" "\"Erros comuns\", no passo $last_step" "a remissão a Erros comuns aponta o passo $last_step"
-assert_eq "" "$(grep -noE '[A-Za-z0-9_./-]+\.md' "$rot" | grep -vE ':(roteiro-m[12]|LEIA-ME)\.md$')" "roteiro não remete a outro .md"
+assert_eq "" "$(grep -noE '[A-Za-z0-9_./-]+\.md' "$rot" | grep -vE ':(roteiro-m[123]|LEIA-ME)\.md$')" "roteiro não remete a outro .md"
+# O M3 entra na lista do pacote (M3 E05 Task 4): quem cita um roteiro-mN.md precisa que ele exista em docs/demo.
+for n in $(grep -oE 'roteiro-m[0-9]+\.md' "$rot" | sort -u); do
+  assert_eq "1" "$([[ -s "$ROOT/docs/demo/$n" ]] && echo 1 || echo 0)" "roteiro cita $n e ele existe (não vazio) em docs/demo"
+done
 assert_eq "" "$(grep -nE 'README' "$rot")" "roteiro não remete ao README"
 # O conteúdo do pacote nos passos 0 e 1 é o mesmo do roteiro do M1 (que o teste do pacote confere com o package.sh).
 names_of() { grep -oE '`[^`]+`' <<<"$1" | tr -d '`' | grep -vE '^(demo-package|\.env|\.example)$' | sort -u; }

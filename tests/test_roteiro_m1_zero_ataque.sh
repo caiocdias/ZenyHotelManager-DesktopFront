@@ -150,7 +150,11 @@ list0="$(names_of "$(grep -F 'Ela tem as pastas' "$rot" | sed 's/ Você não pre
 list1="$(names_of "$(grep -F 'a lista tem `app`' "$rot" | sed 's/ Não pode ter.*//')")"
 [[ -n "$list0" ]] || _assert_fail "passo 0 lista o conteúdo do pacote"
 assert_eq "$list0" "$list1" "o Get-ChildItem do passo 1 espera o mesmo conteúdo que o passo 0 lista"
-assert_eq "" "$(grep -noE '[A-Za-z0-9_./-]+\.md' "$rot" | grep -vE ':(roteiro-m[12]|LEIA-ME)\.md$')" "roteiro não remete a outro .md"
+assert_eq "" "$(grep -noE '[A-Za-z0-9_./-]+\.md' "$rot" | grep -vE ':(roteiro-m[123]|LEIA-ME)\.md$')" "roteiro não remete a outro .md"
+# O M3 entra na lista do pacote (M3 E05 Task 4): quem cita um roteiro-mN.md precisa que ele exista em docs/demo.
+for n in $(grep -oE 'roteiro-m[0-9]+\.md' "$rot" | sort -u); do
+  assert_eq "1" "$([[ -s "$ROOT/docs/demo/$n" ]] && echo 1 || echo 0)" "roteiro cita $n e ele existe (não vazio) em docs/demo"
+done
 assert_eq "" "$(grep -nE 'README|images[\\/]LEIA-ME' "$rot")" "roteiro não remete ao README nem ao LEIA-ME das imagens"
 # Remissões a passos e blocos existem.
 for n in $(grep -oE 'passos? [0-9]+((, | e | a )[0-9]+)*' "$rot" | grep -oE '[0-9]+' | sort -un); do
