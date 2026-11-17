@@ -227,7 +227,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 | E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
 | E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
-| E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
+| E04 | Cancelar, reativar e pendências | #em-andamento | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
 
 ---
@@ -552,7 +552,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 ---
 
-## E04 — Cancelar, reativar e pendências — #pendente
+## E04 — Cancelar, reativar e pendências — #em-andamento
 
 **Objetivo:** o usuário cancela uma reserva, vendo antes a multa da política, e reativa uma cancelada com aprovação do gerente. Também acompanha as quatro listas de pendências e abre a reserva a partir delas.
 
