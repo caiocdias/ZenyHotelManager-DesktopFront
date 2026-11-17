@@ -336,7 +336,7 @@ private fun ReservationsContent(
         detail?.reload()
         scope.launch { search.table.refresh() }
     }
-    // Depois de confirmar: o detalhe, a busca e a lista de pendências aberta (a disponibilidade não muda).
+    // Depois de confirmar: o detalhe, a busca e as quatro listas de pendências (a disponibilidade não muda).
     val refreshAfterConfirm: () -> Unit = {
         refreshDetailAndTable()
         pending?.refresh()
@@ -444,9 +444,9 @@ private fun reservationsAvailability(
 }
 
 /**
- * As pendências da sessão: o [state] e se a aba já o iniciou. [refresh] só recarrega depois do [start]: sem a aba
- * aberta, nada é lido (a entrada na aba carrega as quatro listas de qualquer modo). A marca é só deste guarda; a tela
- * não a lê.
+ * As pendências da sessão: o [state] e se a aba já o iniciou. [refresh] recarrega as quatro listas, porque a reserva
+ * de uma ação pode estar em mais de uma, e só depois do [start]: sem a aba aberta, nada é lido (a entrada na aba
+ * carrega as quatro listas de qualquer modo). A marca é só deste guarda; a tela não a lê.
  */
 private class ReservationsPending(
     val state: PendingListsState,
@@ -459,7 +459,7 @@ private class ReservationsPending(
     }
 
     fun refresh() {
-        if (started) state.refresh()
+        if (started) state.refreshAll()
     }
 }
 

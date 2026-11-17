@@ -89,7 +89,9 @@ data class PendingRow(
  * tem uma página só).
  *
  * - [start] carrega as quatro listas, juntas; a falha de uma fica na tabela dela e não toca as outras. [select] só
- *   troca a lista mostrada; [refresh] recarrega só a selecionada.
+ *   troca a lista mostrada; [refresh] recarrega só a selecionada (o botão "Atualizar"); [refreshAll] recarrega as
+ *   quatro (depois de uma ação: a mesma reserva pode estar em mais de uma lista). Cada recarga passa pela geração
+ *   da [TableState] da lista: a resposta de uma carga anterior nunca entra na recarregada.
  * - Garantias: pede todas, das vencidas até 730 dias à frente (`to = now() + 730 dias`, calculado a cada primeira
  *   página): o padrão do servidor esconderia a pré-reserva recém-criada.
  * - Titulares: um cache só, lido por [HolderNames] (`403` e `404` viram "—"). Ele não aceita chamadas em paralelo,
@@ -154,6 +156,12 @@ class PendingListsState(
         if (closed) return
         val list = selected
         launchLoad { table(list).refresh() }
+    }
+
+    /** Recarrega as quatro listas; as linhas de cada uma ficam até a primeira página nova chegar. */
+    fun refreshAll() {
+        if (closed) return
+        PendingList.entries.forEach { list -> launchLoad { table(list).refresh() } }
     }
 
     /** A área saiu de cena: cancela as cargas e não pede mais nada. */

@@ -4,6 +4,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -191,6 +192,10 @@ private class LifecycleSettings : LocalSettings {
     override var lastLogin: String? = null
     override val deviceId: String = "device-1"
 }
+
+/** As leituras de cada lista de pendências, na ordem do seletor. */
+private fun FakePendingSource.reads() =
+    listOf(guaranteeCalls.size, depositCalls, noShowCalls.size, reallocationCalls.size)
 
 /** Cancelar, reativar e as pendências na área Reservas, ligados pela área inteira. */
 @OptIn(ExperimentalTestApi::class)
@@ -419,12 +424,13 @@ class ReservationsLifecycleTest {
             assertTrue(hasTag(CANCEL_BUTTON))
             assertFalse(hasTag(REACTIVATE_BUTTON))
 
-            // Cancelar pela aba recarrega a lista selecionada, sem sair dela.
+            // Cancelar pela aba recarrega as quatro listas, sem sair da selecionada.
             click(CANCEL_BUTTON)
-            val reads = rig.pending.guaranteeCalls.size
+            val reads = rig.pending.reads()
             click("cancel-submit")
             onNodeWithTag("cancel-done").assertExists()
-            assertEquals(reads + 1, rig.pending.guaranteeCalls.size)
+            assertEquals(reads.map { it + 1 }, rig.pending.reads())
+            onNodeWithTag("pending-list-GUARANTEES").assertIsSelected()
         }
     }
 
@@ -443,16 +449,62 @@ class ReservationsLifecycleTest {
             open("G-1")
             click("open-reservation-confirm")
             onNodeWithTag("confirm-dialog").assertExists()
-            val pendingReads = rig.pending.guaranteeCalls.size
+            val pendingReads = rig.pending.reads()
             val searches = rig.search.searchCalls.size
             val calendars = rig.availability.availabilityCalls.size
 
             click("confirm-submit")
 
             assertEquals(1, rig.confirm.confirmCalls.size)
-            assertEquals(pendingReads + 1, rig.pending.guaranteeCalls.size)
+            assertEquals(pendingReads.map { it + 1 }, rig.pending.reads(), "as quatro listas, uma leitura cada")
             assertEquals(searches + 1, rig.search.searchCalls.size)
             assertEquals(calendars, rig.availability.availabilityCalls.size, "confirmar não muda a disponibilidade")
+        }
+    }
+
+    @Test
+    fun actionFromPendingTabReloadsTheOtherLists() {
+        val item = searchItemOf(code = "N-1", status = "CONFIRMED")
+        val rig = rig(item)
+        rig.pending.noShows += item
+        rig.pending.reallocations += reallocationOf(code = "N-1").copy(reservationId = item.id)
+        val row = "row-${item.id}"
+        shell(rig.connection(pending = true)) {
+            open("Reservas")
+            open(PENDING_TAB)
+            click("pending-list-REALLOCATION")
+            assertTrue(hasTag(row), "a reserva está na realocação")
+            click("pending-list-NO_SHOWS")
+            open("N-1")
+            click(CANCEL_BUTTON)
+            onNodeWithTag("cancel-dialog").assertExists()
+            // Feito o cancelamento, o servidor tira a reserva das duas listas; só a releitura o mostra.
+            rig.pending.noShows.clear()
+            rig.pending.reallocations.clear()
+
+            click("cancel-submit")
+            onNodeWithTag("cancel-done").assertExists()
+            click("cancel-close")
+            assertFalse(hasTag(row), "cancelada pela lista de no-shows")
+            click("pending-list-REALLOCATION")
+
+            assertFalse(hasTag(row), "a realocação ainda mostra a reserva cancelada")
+        }
+    }
+
+    @Test
+    fun refreshBeforeTheTabOpensReadsNothing() {
+        val item = searchItemOf(code = "R-1", status = "CONFIRMED")
+        val rig = rig(item)
+        shell(rig.connection(pending = true)) {
+            open("Reservas")
+            open("R-1")
+            click(CANCEL_BUTTON)
+            click("cancel-submit")
+            onNodeWithTag("cancel-done").assertExists()
+            assertEquals(1, rig.cancel.calls.size)
+
+            assertEquals(listOf(0, 0, 0, 0), rig.pending.reads(), "a aba Pendências nunca foi aberta")
         }
     }
 
