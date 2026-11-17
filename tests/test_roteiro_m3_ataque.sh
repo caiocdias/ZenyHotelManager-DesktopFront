@@ -328,7 +328,7 @@ assert_eq "" "$(awk '$4 == 0' <<<"$seed_res")" "nenhuma reserva do seed do M3 ch
 walkin="$(step "${n_walkin:-x}")"
 assert_contains "$walkin" "aparece \"$holder\"" "walk-in: o hóspede escolhido é o titular das reservas do M3"
 assert_eq "" "$(grep -E "^ +r\(\"[A-Z][0-9]+\", $holder_n, " "$catalog_kt")" "walk-in: o $holder_f não é titular de reserva do DemoCatalog"
-wk_type="$(grep -oE 'na oferta [A-ZÀ-Úa-zà-ú]+' <<<"$walkin" | head -1 | awk '{print $3}')"
+wk_type="$(grep -oE 'na oferta [[:alpha:]]+' <<<"$walkin" | head -1 | awk '{print $3}')"
 wk_nights="$(grep -oE 'data operacional mais [0-9]+ dias' <<<"$walkin" | head -1 | grep -oE '[0-9]+')"
 [[ -n "$wk_type" && -n "$wk_nights" ]] || _assert_fail "walk-in: li o tipo e as noites" "tipo: $wk_type; noites: $wk_nights"
 

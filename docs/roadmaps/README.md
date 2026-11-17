@@ -75,24 +75,28 @@ Etapas executadas pela regra 8 sem a `revisor-seguranca`, na ordem em que fechar
 - a saída da `check_test_integrity.py --base <MERGE_BASE>` (exit e apontamentos);
 - os achados estacionados no ledger.
 
-A M3 E06 paga a lista inteira, antes do M4 (ADR 0012). A revisão cobre `a300a23..HEAD`, com o scanner e a `check_test_integrity.py --base a300a23`. Os achados Críticos e Importantes são corrigidos nela.
+**Paga em 2026-11-17** pela M3 E06 (`#concluida`); o M4 pode começar. A M3 E06 pagou a lista inteira, antes do M4 (ADR 0012). A revisão cobre `a300a23..HEAD`, com o scanner e a `check_test_integrity.py --base a300a23`. Os achados Críticos e Importantes são corrigidos nela.
 
 1. **M3 E02 — Disponibilidade e cotação.**
+   - **Paga em 2026-11-17 pela M3 E06**: a revisão final das correções (`f727fc6..45c4ce4`) saiu com 0 Críticos, e os Importantes da revisão adiada (`A-I1`, `B-I1`) foram corrigidos. Os destinos estão no handoff da M3 E06.
    - Commits: `b6aafa9..2ad4b09` na `roadmap/m3-reservas`.
    - Integridade (`--base b6aafa9`): exit 1. `MERGE_IGNORADO` no merge da `main` (`141b5ba`, só documentos) e 3 `DEV_TESTE_DO_TESTADOR` (`cd502bd`, `4b84767`, `1e65a58`), já julgados justificados na revisão por tarefa.
    - Já revisado por tarefa (`revisor-seguranca`): Tasks 1–8, `70c49e9..d26f9dd`. Sem revisão: a Task 9 (`141b5ba..006c8d8`), o testador de etapa (`006c8d8..2ad4b09`) e a revisão final do intervalo.
    - Achados estacionados: as dívidas menores das "Notas para a próxima etapa" da E02, no roadmap do M3.
 2. **M3 E03 — Nova reserva e alteração.**
+   - **Paga em 2026-11-17 pela M3 E06**: a revisão final das correções (`f727fc6..45c4ce4`) saiu com 0 Críticos, e os Importantes da revisão adiada (`A-I1`, `B-I1`) foram corrigidos. Os destinos estão no handoff da M3 E06.
    - Commits: `5cbac31..87f03cb` na `roadmap/m3-reservas`.
    - Integridade (`--base 5cbac31`): exit 1. Um `SKIP_ADICIONADO` em `tests/test_live_booking_ataque.sh` (`87f03cb`), falso positivo: a linha `nao_tem '@Disabled'` é a trava que proíbe desligar a verificação ao vivo.
    - Nenhuma tarefa teve revisão de código. O testador de etapa atacou o intervalo inteiro, sem defeito.
    - Achados estacionados: as observações do testador e as dívidas das "Notas para a próxima etapa" da E03, no roadmap do M3.
 3. **M3 E04 — Cancelar, reativar e pendências.**
+   - **Paga em 2026-11-17 pela M3 E06**: a revisão final das correções (`f727fc6..45c4ce4`) saiu com 0 Críticos, e os Importantes da revisão adiada (`A-I1`, `B-I1`) foram corrigidos. Os destinos estão no handoff da M3 E06.
    - Commits: `fc7a0b3..72e4316` na `roadmap/m3-reservas`.
    - Integridade (`--base fc7a0b3`): exit 1. Dois `SKIP_ADICIONADO` em `tests/test_live_lifecycle_ataque.sh`, falsos positivos: as linhas `nao_tem '@Disabled'` e `nao_tem '@Ignore'` são a trava que proíbe desligar a verificação ao vivo.
    - Nenhuma tarefa teve revisão de código. O testador de etapa atacou o intervalo inteiro, sem defeito.
    - Achados estacionados: as observações do testador e as dívidas das "Notas para a próxima etapa" da E04, no roadmap do M3.
 4. **M3 E05 — Gate do marco M3 (só o trecho feito antes da revogação; a etapa segue `#em-andamento`).**
+   - **Paga em 2026-11-17 pela M3 E06**: a revisão final das correções (`f727fc6..45c4ce4`) saiu com 0 Críticos, e os Importantes da revisão adiada (`A-I1`, `B-I1`) foram corrigidos. Os destinos estão no handoff da M3 E06.
    - Commits: `830f296..920dcd2` na `roadmap/m3-reservas`.
    - Integridade (`--base 830f296 --head 920dcd2`): exit 0, nenhum apontamento.
    - Só a Task 1 tem código (`e8a1542..920dcd2`: o `FutureSeeder` e a porta `FutureGateway`, no `demo-seed`), e ela não teve revisão de código nem testador. Os outros dois commits do intervalo são documentos do orquestrador (a tag e o plano). O restante da etapa segue o processo normal (ADR 0012).
@@ -100,12 +104,14 @@ A M3 E06 paga a lista inteira, antes do M4 (ADR 0012). A revisão cobre `a300a23
 
 ## Validações acumuladas no Windows
 
-Pendentes da regra 7, na ordem em que entraram. Por decisão do usuário (2026-11-15), são executadas juntas no fim do M3, no gate dele, com o roteiro do M3 (que acumula o do M2 e o do M1) e o pacote mais recente:
+**Nenhuma pendente.** As quatro entradas abaixo foram aprovadas pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), numa execução só do `roteiro-m3.md` com o pacote de `a800b25` (o da entrada 4), e as etapas fecharam `#concluida`: M0 E02, M2 E06, M0 E03 e M3 E05. A regra 7 continua valendo até o usuário tirá-la deste README.
+
+Pendentes da regra 7, na ordem em que entraram (histórico). Por decisão do usuário (2026-11-15), são executadas juntas no fim do M3, no gate dele, com o roteiro do M3 (que acumula o do M2 e o do M1) e o pacote mais recente:
 
 1. **M0 E02** (servidor em `57eb5fac5b8a`): executar o `roteiro-m3.md` do pacote mais recente, do zero; ele acumula o do M2 e o do M1 (decisão da M3 E05). Para não construir a imagem no Windows, fazer antes o `docker load` de `images/zeny-server-images.tar`. A aprovação fecha a etapa `#concluida`.
 2. **M2 E06** (gate do M2): a mesma execução do `roteiro-m3.md` da entrada 1. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
 3. **M0 E03** (servidor em `5e06f16d51ff`): a mesma execução do `roteiro-m3.md` da entrada 1, com o pacote desta etapa ou um mais recente. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
-4. **M3 E05** (gate do M3): a mesma execução do `roteiro-m3.md` da entrada 1, com o pacote de `build/demo-package/` gerado em 2026-11-17 (`VERSAO.txt`: `front_commit=a800b25`, com as correções da M3 E06, que ainda esperam a revisão final) ou um mais recente. Este é o gate em que o usuário decidiu executar a lista inteira (decisão de 2026-11-15). As notas para a execução estão no handoff da M3 E05. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
+4. **M3 E05** (gate do M3): a mesma execução do `roteiro-m3.md` da entrada 1, com o pacote de `build/demo-package/` gerado em 2026-11-17 (`VERSAO.txt`: `front_commit=a800b25`, com as correções da M3 E06; a revisão final delas saiu limpa depois, sem mudar a produção) ou um mais recente. Este é o gate em que o usuário decidiu executar a lista inteira (decisão de 2026-11-15). As notas para a execução estão no handoff da M3 E05. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
 
 ## Pendências do usuário antes da primeira execução
 
@@ -133,3 +139,5 @@ Estão no design, §10:
 - 2026-11-17 — regra 8 encerrada: o processo acelerado foi revogado pelo [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), por decisão do usuário, depois da mudança das souls. Os roadmaps perderam o "Prompt acelerado". A M3 E05, iniciada no processo acelerado, segue o processo normal, e o trecho já commitado dela entrou na lista "Revisões de segurança adiadas" (item 4). Por entrevista, o usuário decidiu pagar a dívida antes do M4: entra a M3 E06, e o M4 passa a exigi-la. Notas de partes independentes, para as ondas dos planos, em etapas pendentes do M4 ao M7 (`claude --agent arquiteto`).
 - 2026-11-17 — a M3 E05 entra na lista "Validações acumuladas no Windows" (item 4), aguardando o Windows pela regra 7, e as entradas 1 a 3 passam a pedir o `roteiro-m3.md` (`claude --agent orquestrador`).
 - 2026-11-17 — o pacote da entrada 4 de "Validações acumuladas no Windows" passa a ser o de `a800b25`, gerado na M3 E06 com as correções da revisão adiada. A E06 segue `#em-andamento` (falta a revisão final), e a lista "Revisões de segurança adiadas" ainda não tem a marca de paga (`claude --agent orquestrador`).
+- 2026-11-17 — o usuário aprovou a execução no Windows do `roteiro-m3.md` com o pacote de `a800b25`: as quatro entradas de "Validações acumuladas no Windows" fecharam `#concluida` (M0 E02, M2 E06, M0 E03 e M3 E05), e a lista ficou sem pendência (`claude --agent orquestrador`).
+- 2026-11-17 — a M3 E06 fecha `#concluida`: a lista "Revisões de segurança adiadas" está paga, e o M3 está concluído. O servidor continua em `5e06f16d51ff` (local e remoto), então não há rodada do M0 antes do M4, e o próximo orquestrador começa pela M4 E01 (`claude --agent orquestrador`).

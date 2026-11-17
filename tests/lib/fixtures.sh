@@ -10,7 +10,7 @@ _fgit() {
   local dir="$1"
   shift
   git -C "$dir" -c user.name=Teste -c user.email=teste@example.com \
-    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null -c core.autocrlf=false "$@"
 }
 
 # $1 = com things (0|1), $2 = com meta/version (0|1)

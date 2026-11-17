@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.AppController
@@ -43,6 +44,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import androidx.compose.ui.test.hasText as withText
 
 private const val MANAGE = "reservations.reservations.manage"
 private const val READ = "reservations.reservations.read"
@@ -280,6 +282,12 @@ class ReservationsLifecycleTest {
         waitForIdle()
     }
 
+    /** Rola a tabela até a linha (com o detalhe aberto, ela pode sair da área visível) e a abre. */
+    private fun ComposeUiTest.openRow(code: String) {
+        onNodeWithTag("table-list").performScrollToNode(withText(code))
+        open(code)
+    }
+
     private fun shell(
         connection: LifecycleConnection,
         after: ComposeUiTest.() -> Unit,
@@ -339,7 +347,7 @@ class ReservationsLifecycleTest {
             open("Reservas")
             open("R-1")
             assertFalse(hasTag(CANCEL_BUTTON))
-            open("R-2")
+            openRow("R-2")
             assertFalse(hasTag(REACTIVATE_BUTTON))
         }
     }

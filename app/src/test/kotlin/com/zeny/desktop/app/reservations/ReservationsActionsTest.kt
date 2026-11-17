@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.AppController
@@ -50,6 +51,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
+import androidx.compose.ui.test.hasText as withText
 
 private const val MANAGE = "reservations.reservations.manage"
 private const val READ = "reservations.reservations.read"
@@ -516,8 +518,7 @@ class ReservationsActionsTest {
         shell(ActionsConnection(rig.reception, rig.search, change = FakeReservationChangeSource())) {
             openReservation("R-1")
             assertTrue(hasTag(CHANGE_BUTTON))
-            onNodeWithText("R-2").performClick()
-            waitForIdle()
+            openRow("R-2")
             assertEquals(1, rig.reception.permissionsCalls)
         }
     }
@@ -804,6 +805,13 @@ class ReservationsActionsTest {
 
     private fun ComposeUiTest.open(label: String) {
         onNodeWithText(label).performClick()
+        waitForIdle()
+    }
+
+    /** Rola a tabela até a linha (com o detalhe aberto, ela pode sair da área visível) e a abre. */
+    private fun ComposeUiTest.openRow(code: String) {
+        onNodeWithTag("table-list").performScrollToNode(withText(code))
+        onNodeWithText(code).performClick()
         waitForIdle()
     }
 

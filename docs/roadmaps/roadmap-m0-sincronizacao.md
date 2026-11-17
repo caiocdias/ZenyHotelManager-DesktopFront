@@ -163,8 +163,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
-| E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #em-andamento | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
-| E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #em-andamento | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
+| E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #concluida | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
+| E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #concluida | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
 
 ---
 
@@ -283,7 +283,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) — #em-andamento
+## E02 — Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) — #concluida
 
 **Objetivo:** o front passa a apontar para a `main` do servidor em `57eb5fac5b8a18df01ed4f30e099ab1cd8dcb27b`. O pin e a cópia do contrato são trocados, o SDK é regenerado com as 335 operações e o que quebrar é consertado. `tools/server-env/` é revisto diante das mudanças de `docker/` do servidor. Ao fim, o `smokeTest` e o roteiro do M1 passam contra o servidor novo, e o M2 pode começar.
 
@@ -335,7 +335,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [x] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde. *(Em `d9d1c02`: 2032 testes, 0 falhas, 19 pulados; 36 arquivos, 0 falhas; lint verde.)*
 - [x] `zeny-front` sobe em `57eb5fac5b8a` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele. *(No notebook: `{"status":"UP"}` com `zeny-hotel-manager:57eb5fac5b8a`; `smokeTest` 1/1.)*
 - [x] A revisão de `tools/server-env/` está registrada no handoff, arquivo por arquivo, com o que mudou ou "sem mudança" e o motivo.
-- [ ] O usuário executou o roteiro do M1 contra o servidor novo, no Windows, com o pacote regenerado, e aprovou na parada da etapa.
+- [x] O usuário executou o roteiro do M1 contra o servidor novo, no Windows, com o pacote regenerado, e aprovou na parada da etapa. *(Pela regra 7: aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"); o roteiro do M3 acumula o do M1.)*
 - [x] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`). *(`status --porcelain` vazio antes e depois; o `worktree list` mudou só por sessões do servidor, ver o handoff.)*
 
 **Validação obrigatória:**
@@ -365,7 +365,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-13):** `#em-andamento`, **aguardando o Windows**. A implementação foi revisada e integrada na `main`, a verificação da etapa foi feita no notebook e o pacote foi regenerado. Falta o usuário executar o `roteiro-m1.md` no Windows com o pacote novo e aprovar; com isso a etapa fecha `#concluida`. O usuário decidiu acumular essa validação até voltar a ter o Windows (regra 7 do [README](README.md); item 1 de "Validações acumuladas no Windows"). Por essa regra, a etapa conta como concluída para dependências, e o M2 pode começar. Não retomar esta etapa antes da aprovação do usuário.
+- **Estado (2026-11-17):** `#concluida`. A validação no Windows foi aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"). Fechada pelo `claude --agent orquestrador` do lote que fechou o M3.
+- **Estado anterior (2026-11-13):** `#em-andamento`, **aguardando o Windows**. A implementação foi revisada e integrada na `main`, a verificação da etapa foi feita no notebook e o pacote foi regenerado. Falta o usuário executar o `roteiro-m1.md` no Windows com o pacote novo e aprovar; com isso a etapa fecha `#concluida`. O usuário decidiu acumular essa validação até voltar a ter o Windows (regra 7 do [README](README.md); item 1 de "Validações acumuladas no Windows"). Por essa regra, a etapa conta como concluída para dependências, e o M2 pode começar. Não retomar esta etapa antes da aprovação do usuário.
 - **Plano:** [`docs/superpowers/plans/2026-11-13-m0-sincronizacao-e02.md`](../superpowers/plans/2026-11-13-m0-sincronizacao-e02.md), 2 tasks. Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (4 Importantes: `Option` em `genderDescription`, `printAgentToken` × `AuthPlugin`/`ApiExecutor`, segredos no `compose config`, `smokeTest` sem caminho no fallback de memória) e aprovado com notas na rodada 1.
 - **Commits** na branch `roadmap/m0-sincronizacao` (cada um com o trailer `Soul:`):
   - documentação: `29cc674` (análise da rodada 2 trazida do checkout principal), `4145959` (início), `3796ab9`, `494b9a9`, `45b7d79` (plano e revisão);
@@ -416,7 +417,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) — #em-andamento
+## E03 — Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) — #concluida
 
 **Objetivo:** o front passa a apontar para a `main` do servidor em `5e06f16d51ff9913f0da09df8f62639996cd6c52`. O pin e a cópia do contrato são trocados e o SDK é regenerado. O tipo que o ogen gera para o primeiro `oneOf` do contrato fica caracterizado por teste. As telas existentes ganham os rótulos dos valores novos de enum, e os roteiros e o `LEIA-ME` passam a avisar que a data operacional avança sozinha. Ao fim, o `smokeTest` passa contra o servidor novo, e o M3 pode começar.
 
@@ -491,7 +492,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [x] `zeny-front` sobe do zero em `5e06f16d51ff` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele. *(No notebook: `down.sh -v`, `up.sh`, `{"status":"UP"}` com `zeny-hotel-manager:5e06f16d51ff`; `smokeTest` 1/1.)*
 - [x] O fluxo 3 do `LEIA-ME` e o início dos dois roteiros avisam do fechamento automático às 03:00, e o passo da ficha do `roteiro-m2.md` trata "(código FNRH)" como exceção. *(`tests/test_fechamento_automatico.sh` e o de ataque.)*
 - [x] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
-- [ ] O usuário executou o `roteiro-m2.md` no Windows com o pacote regenerado e aprovou. Pela regra 7 do README, essa validação é acumulada para o gate do M3.
+- [x] O usuário executou o `roteiro-m2.md` no Windows com o pacote regenerado e aprovou. Pela regra 7 do README, essa validação é acumulada para o gate do M3. *(aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"); o roteiro do M3 acumula o do M2.)*
 - [x] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`). *(`status --porcelain` vazio antes e depois; o `worktree list` mudou só pelo orquestrador do servidor, ver o handoff.)*
 
 **Validação obrigatória:**
@@ -524,7 +525,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-16):** `#em-andamento`, **aguardando o Windows**. A implementação foi revisada e integrada na `main`, a verificação da etapa foi feita no notebook e o pacote foi regenerado. Falta só o usuário executar o `roteiro-m2.md` no Windows com o pacote novo e aprovar; pela regra 7 do [README](README.md), a etapa entrou na lista "Validações acumuladas no Windows" (item 3), conta como concluída para dependências, e o M3 pode começar. Não retomar esta etapa antes da aprovação do usuário.
+- **Estado (2026-11-17):** `#concluida`. A validação no Windows foi aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"). Fechada pelo `claude --agent orquestrador` do lote que fechou o M3.
+- **Estado anterior (2026-11-16):** `#em-andamento`, **aguardando o Windows**. A implementação foi revisada e integrada na `main`, a verificação da etapa foi feita no notebook e o pacote foi regenerado. Falta só o usuário executar o `roteiro-m2.md` no Windows com o pacote novo e aprovar; pela regra 7 do [README](README.md), a etapa entrou na lista "Validações acumuladas no Windows" (item 3), conta como concluída para dependências, e o M3 pode começar. Não retomar esta etapa antes da aprovação do usuário.
 - **Pré-voo (início do lote, 2026-11-15):** aditivo (código 11), pin `57eb5fac5b8a` × `main` `5e06f16d51ff`, 3 `warning` de `oneOf`, 0 `error`.
 - **Plano:** [`docs/superpowers/plans/2026-11-15-m0-sincronizacao-e03.md`](../superpowers/plans/2026-11-15-m0-sincronizacao-e03.md), 3 tasks. Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (5 Importantes: o README do pin fora da Task 1, caminho para tipo diferente de `JsonElement`, segredos no `compose config`, memória e caminho de falha do ambiente, símbolo do teste de cobertura) e aprovado com notas na rodada 1.
 - **Commits** na branch `roadmap/m0-sincronizacao` (cada um com o trailer `Soul:`):
@@ -586,3 +588,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-15 — análise da rodada 3 (`claude --agent arquiteto`, `development-roadmap` em modo atualização) contra a `main` do servidor em `5e06f16d51ff`: 131 commits à frente, pré-voo aditivo (código 11), com 3 `warning` de `oneOf`. Entra a E03, a etapa mecânica, com a caracterização do primeiro `oneOf` no SDK, os rótulos do no-show e o aviso do fechamento automático nos roteiros. Decisão no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md). A M6 E08 sai de `#bloqueada`. A regra 5 do README foi revista, porque a data operacional passa a avançar sozinha às 03:00. A M3 E04, a M3 E05, a M5 E02 e a M7 E10 ganharam notas. PF-01 e PF-02 continuam abertos, e nenhuma captura "atende PF-NN" foi achada.
 - 2026-11-16 — E03 executada pelo `claude --agent orquestrador`: pin e contrato em `5e06f16d51ff`, o primeiro `oneOf` caracterizado como `HttpResponseTyped<JsonElement>` (o ADR 0010 não muda), rótulos do no-show no detalhe da reserva, aviso do fechamento automático no `LEIA-ME` e nos roteiros, `zeny-front` recriado e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando o Windows (regra 7, item 3 da lista), e o M3 pode começar.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. Nenhuma etapa mudou.
+- 2026-11-17 — E02 e E03 `#concluida`: o usuário aprovou a execução no Windows do `roteiro-m3.md` (entradas 1 e 3 da lista "Validações acumuladas no Windows" do README) (`claude --agent orquestrador`).
