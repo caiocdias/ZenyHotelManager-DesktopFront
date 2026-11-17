@@ -245,7 +245,7 @@ roteiro_check_no_secret_text "$roteiro"
 
 # LEIA-ME: remete ao roteiro para a demo; a seção 1 confere e limpa pelo projeto; a nota do endereço.
 leia_head="$(awk '/^## /{exit} {print}' "$leia_file" 2>/dev/null)"
-assert_contains "$leia_head" 'siga `roteiro-m2.md` do início ao fim' "LEIA-ME: no topo, manda seguir o roteiro atual (M2)"
+assert_contains "$leia_head" 'siga `roteiro-m3.md` do início ao fim' "LEIA-ME: no topo, manda seguir o roteiro atual (M3)"
 assert_contains "$leia_head" "referência de operação" "LEIA-ME: no topo, diz que é a referência de operação"
 leia_s1="$(awk '/^## 1\. /{on=1; print; next} on && /^## /{exit} on' "$leia_file" 2>/dev/null)"
 leia_s1_ps="$(awk '/^```powershell/{inb=1; next} /^```/{inb=0} inb' <<<"$leia_s1")"
@@ -300,6 +300,7 @@ assert_contains "$new_pw_note" "apaga a variável" "LEIA-ME: valor vazio no SetE
 # README: link do roteiro e os JARs gerados antes do package.sh.
 assert_contains "$readme_text" "(docs/demo/roteiro-m1.md)" "README liga o roteiro do M1"
 assert_contains "$readme_text" "(docs/demo/roteiro-m2.md)" "README liga o roteiro do M2"
+assert_contains "$readme_text" "(docs/demo/roteiro-m3.md)" "README liga o roteiro do M3"
 pkg_row="$(grep -F '`tools/server-env/package.sh`' "$readme" | head -1)"
 assert_contains "$pkg_row" ":demo-seed:seedJar" "linha do package.sh manda gerar os JARs"
 pre="${pkg_row%%\`tools/server-env/package.sh\`*}"
