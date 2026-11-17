@@ -228,7 +228,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 | E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #concluida | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
-| E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
+| E05 | Gate do marco M3 | #em-andamento | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
 
 ---
 
@@ -659,7 +659,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 ---
 
-## E05 — Gate do marco M3 — #pendente
+## E05 — Gate do marco M3 — #em-andamento
 
 **Objetivo:** entregar o M3 como build testável. O seed passa a ter reservas futuras, canceladas e pendentes. O roteiro do M3 fica escrito, e a definição de pronto é verificada num clone limpo e no Windows.
 
