@@ -298,6 +298,30 @@ class ReservationChangeDialogTest {
         }
 
     @Test
+    fun arrivalFieldErrorShowsOnTheReadOnlyField() =
+        runComposeUiTest {
+            val server = source(status = "IN_HOUSE")
+            server.changeOutcomes +=
+                ApiError.Problem(
+                    422,
+                    "STAY_INVALID",
+                    null,
+                    listOf(FieldError("arrival", "INVALID", "A chegada não pode mudar com o hóspede em casa.")),
+                )
+            dialog(server)
+
+            editRequests()
+            click("change-submit")
+
+            val message = "A chegada não pode mudar com o hóspede em casa."
+            val field = onNodeWithTag("change-arrival").getBoundsInRoot()
+            val shown = onNodeWithText(message).getBoundsInRoot()
+            assertTrue(shown.left >= field.left && shown.right <= field.right, "mensagem fora da coluna do campo")
+            assertTrue(shown.top >= field.top && shown.bottom <= field.bottom + 1.dp, "mensagem longe do campo")
+            onAllNodesWithText(message).assertCountEquals(1)
+        }
+
+    @Test
     fun validationIsShown() =
         runComposeUiTest {
             val server = source()

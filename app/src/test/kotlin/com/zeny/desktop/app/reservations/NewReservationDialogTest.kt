@@ -279,6 +279,21 @@ class NewReservationDialogTest {
         }
 
     @Test
+    fun offerTotalIsHiddenOnceTheReservationIsCreated() =
+        runComposeUiTest {
+            val state = dialog(source().apply { response = ndResponse(total = "3.00") })
+            choose(state)
+            val offerTotal = "Total ${ReceptionText.money("655.37")}"
+            onNodeWithTag("new-reservation-summary").assertTextContains(offerTotal, substring = true)
+            assertEquals(1, countOf("Total"))
+            submit()
+            val doneTotal = "Total ${ReceptionText.money("3.00")}"
+            onNodeWithTag("new-reservation-done").assertTextContains(doneTotal, substring = true)
+            assertEquals(1, countOf("Total"))
+            assertEquals(0, countOf(ReceptionText.money("655.37")))
+        }
+
+    @Test
     fun provisionalDoneShowsDeadlineAndGuarantee() =
         runComposeUiTest {
             val response = ndResponse("PROVISIONAL", provisionalUntil = "2026-11-14T15:00:00Z", guaranteeType = "CARD")
