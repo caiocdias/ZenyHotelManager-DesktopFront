@@ -10,6 +10,8 @@ import com.zeny.desktop.seed.config.FakeConfigGateway
 import com.zeny.desktop.seed.data.DemoCatalog
 import com.zeny.desktop.seed.data.SeedReport
 import com.zeny.desktop.seed.frontdesk.FakeTraces
+import com.zeny.desktop.seed.pending.FakePendingGateway
+import com.zeny.desktop.seed.pending.PendingGateway
 import com.zeny.desktop.seed.people.FakeIam
 import kotlinx.coroutines.test.runTest
 import java.io.ByteArrayOutputStream
@@ -44,6 +46,7 @@ class DemoSeedTest {
         )
     private val traces = FakeTraces()
     private var adminSession: FakeIam.FakeSession? = null
+    private var pending: PendingGateway? = null
     private val lines = mutableListOf<String>()
 
     /** Os ids do falso de configuração são determinísticos: um falso descartável dá o `SeededConfig` esperado. */
@@ -55,7 +58,7 @@ class DemoSeedTest {
     ): AdminContext {
         val session = iam.open().also { adminSession = it }
         session.signIn("admin", config.adminNewPassword ?: config.adminPassword)
-        return AdminContext(session, { date }, configGateway, iam, bookings, traces, iam)
+        return AdminContext(session, { date }, configGateway, iam, bookings, traces, iam, pending)
     }
 
     private val ticks = longArrayOf(1_000_000_000L, 2_500_000_000L)
@@ -168,6 +171,53 @@ class DemoSeedTest {
                 assertFalse(text.contains(it.fullName), "vazou nome")
             }
             data.companies.forEach { assertFalse(text.contains(it.cnpj), "vazou CNPJ") }
+        }
+
+    /** Delega ao falso e anota quantos recados já existiam quando o seeder de pendências começou a ler. */
+    private class ObservedPending(
+        private val inner: FakePendingGateway,
+        private val tracesSoFar: () -> Int,
+    ) : PendingGateway by inner {
+        var tracesWhenFirstRead: Int? = null
+
+        override suspend fun cancellationPolicyId(name: String): String? {
+            if (tracesWhenFirstRead == null) tracesWhenFirstRead = tracesSoFar()
+            return inner.cancellationPolicyId(name)
+        }
+    }
+
+    private fun readyAdmin() {
+        iam.users.getValue("admin").mustChange = false
+        iam.users.getValue("admin").password = "Nova-Admin-12345"
+    }
+
+    @Test
+    fun seedRunsPendingAfterTracesWhenPortIsPresent() =
+        runTest {
+            val fake =
+                FakePendingGateway().apply {
+                    cancellationPolicies[data.cancellationPolicy.name] = "cp-1"
+                    guests[data.guests.first { it.key == "G12" }.cpf] = "guest-12"
+                }
+            val observed = ObservedPending(fake) { traces.traces.size }
+            pending = observed
+            readyAdmin()
+            assertEquals(0, execute())
+
+            assertTrue(traces.traces.isNotEmpty(), "os recados são criados")
+            assertEquals(
+                traces.traces.size,
+                observed.tracesWhenFirstRead,
+                "o seeder de pendências roda depois dos recados",
+            )
+            assertTrue(fake.calls.any { it == "createReservation DEMO-PEND-R1" }, fake.calls.toString())
+
+            val without = DemoSeedTest().also { it.readyAdmin() }
+            assertEquals(0, without.execute())
+            assertEquals(without.lines, lines, "a saída impressa é a mesma de sem a porta")
+            val recados = lines.indexOfFirst { it.startsWith("recados") }
+            assertTrue(recados >= 0, lines.toString())
+            assertTrue(lines[recados + 1].startsWith("Concluído"), lines.toString())
         }
 
     private fun cli(args: List<String>): Triple<Int, String, String> {
