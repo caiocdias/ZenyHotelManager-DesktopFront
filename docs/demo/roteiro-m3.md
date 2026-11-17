@@ -700,7 +700,7 @@ No menu, clique em **Reservas**.
 
 **19.1. Filtrar por período e por situação.** Em **De**, apague a data e digite a data operacional; em **Até**, também a data operacional (por exemplo, `15/11/2026` nos dois). Clique na situação **Hospedada** e em **Buscar**.
 
-**Resultado esperado:** a tabela mostra só reservas "Hospedada", e são as mesmas da aba "Hospedados" da Recepção: o mesmo número de linhas e os mesmos titulares, inclusive "Hóspede Demonstração Cinco" na UH nova do passo 15 e "Hóspede Demonstração Doze", do walk-in do passo 14.
+**Resultado esperado:** a tabela mostra só reservas hospedadas: a situação de toda linha começa por "Hospedada", e algumas trazem um alerta depois, separado por " · " (por exemplo, "Hospedada · Day use"); isso não é reprovação. Elas são as mesmas da aba "Hospedados" da Recepção: o mesmo número de linhas e os mesmos titulares, inclusive "Hóspede Demonstração Cinco" na UH nova do passo 15 e "Hóspede Demonstração Doze", do walk-in do passo 14.
 
 Clique de novo em **Hospedada**, para desmarcar. Nenhuma situação pode ficar marcada para o 19.2: a busca por documento também filtra pelas situações marcadas.
 
@@ -723,7 +723,7 @@ A busca por documento não usa o período: as reservas do seed aparecem mesmo fo
 
 **Resultado esperado:** abre à direita o detalhe da reserva: o código (`R-` seguido do ano e de um número) e a situação "Cancelada"; "Titular", "Hóspede Demonstração Doze"; "Documento", o CPF mascarado; "Período", da chegada à saída, com "2 noites"; "Tipo", Standard; e as seções "Alocações" e "Histórico". No alto do detalhe, o botão "Reativar", que fica para o passo 25. Clique em **Fechar** no detalhe.
 
-**Reprovação:** os 11 dígitos do CPF aparecem em algum lugar da tela; a busca por documento não acha as seis reservas ou acha reserva de outro titular; o filtro "Hospedada" mostra outra situação ou deixa de fora um hospedado da Recepção; um UUID ou um código técnico na tela. Se a reserva com chegada mais 28 dias aparecer como "Confirmada", e não como "Cancelada", o seed foi interrompido no meio: veja "Rodar o seed de novo depois da demo", no passo 28.
+**Reprovação:** os 11 dígitos do CPF aparecem em algum lugar da tela; a busca por documento não acha as seis reservas ou acha reserva de outro titular; o filtro "Hospedada" mostra linha cuja situação não começa por "Hospedada" (um alerta depois de " · " é normal) ou deixa de fora um hospedado da Recepção; um UUID ou um código técnico na tela. Se a reserva com chegada mais 28 dias aparecer como "Confirmada", e não como "Cancelada", o seed foi interrompido no meio: veja "Rodar o seed de novo depois da demo", no passo 28.
 
 ## 20. Disponibilidade e cotação
 
