@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -53,6 +54,53 @@ class PendingListsStateTest {
     }
 
     private fun PendingListsState.codes(list: PendingList) = table(list).rows.map { it.code }
+
+    /** Põe no servidor uma linha da [list] com o [code]; o titular é um dos quatro do [source]. */
+    private fun FakePendingSource.add(
+        list: PendingList,
+        code: String,
+    ) {
+        when (list) {
+            PendingList.GUARANTEES -> guarantees += pendingGuaranteeOf(code = code, holderGuestId = guestId(1))
+            PendingList.DEPOSITS -> deposits += depositShortfallOf(code = code, holderGuestId = guestId(2))
+            PendingList.NO_SHOWS -> noShows += searchItemOf(code = code, holderGuestId = guestId(3))
+            PendingList.REALLOCATION -> reallocations += reallocationOf(code = code)
+        }
+    }
+
+    /** Troca tudo o que o servidor tem na [list] por uma linha só, com o [code]. */
+    private fun FakePendingSource.replace(
+        list: PendingList,
+        code: String,
+    ) {
+        when (list) {
+            PendingList.GUARANTEES -> guarantees.clear()
+            PendingList.DEPOSITS -> deposits.clear()
+            PendingList.NO_SHOWS -> noShows.clear()
+            PendingList.REALLOCATION -> reallocations.clear()
+        }
+        add(list, code)
+    }
+
+    private fun FakePendingSource.reads(list: PendingList) =
+        when (list) {
+            PendingList.GUARANTEES -> guaranteeCalls.size
+            PendingList.DEPOSITS -> depositCalls
+            PendingList.NO_SHOWS -> noShowCalls.size
+            PendingList.REALLOCATION -> reallocationCalls.size
+        }
+
+    private fun opOf(list: PendingList) =
+        when (list) {
+            PendingList.GUARANTEES -> FakePendingSource.Op.GUARANTEES
+            PendingList.DEPOSITS -> FakePendingSource.Op.DEPOSITS
+            PendingList.NO_SHOWS -> FakePendingSource.Op.NO_SHOWS
+            PendingList.REALLOCATION -> FakePendingSource.Op.REALLOCATION
+        }
+
+    /** Prende as próximas leituras das [lists]; as leituras já presas seguem nos portões antigos. */
+    private fun FakePendingSource.holdLists(lists: Collection<PendingList> = PendingList.entries) =
+        lists.map { hold(opOf(it)) }
 
     @Test
     fun eachListLoadsItsOwnPage() =
@@ -200,6 +248,185 @@ class PendingListsStateTest {
             assertEquals(1, source.guaranteeCalls.size)
             assertEquals(1, source.depositCalls)
             assertEquals(1, source.reallocationCalls.size)
+        }
+
+    @Test
+    fun refreshAllReloadsTheFourLists() =
+        runTest {
+            val source = source()
+            PendingList.entries.forEach { source.add(it, "${it.name}-1") }
+            val state = started(source)
+            PendingList.entries.forEach { source.add(it, "${it.name}-2") }
+            val gates = source.holdLists()
+
+            state.refreshAll()
+            runCurrent()
+
+            PendingList.entries.forEach { list ->
+                assertEquals(2, source.reads(list), "$list: uma leitura nova")
+                assertEquals(listOf("${list.name}-1"), state.codes(list), "$list: as linhas antigas ficam")
+            }
+            gates.forEach { it.complete(Unit) }
+            runCurrent()
+            PendingList.entries.forEach { list ->
+                assertEquals(listOf("${list.name}-1", "${list.name}-2"), state.codes(list))
+                assertNull(state.table(list).error)
+                assertFalse(state.table(list).loading)
+            }
+            assertEquals(source.holderCalls.distinct(), source.holderCalls, "o cache dos titulares é reusado")
+        }
+
+    @Test
+    fun refreshAllAfterCloseReadsNothing() =
+        runTest {
+            val source = source()
+            PendingList.entries.forEach { source.add(it, "${it.name}-1") }
+            val state = started(source)
+
+            state.close()
+            state.refreshAll()
+            runCurrent()
+
+            PendingList.entries.forEach { assertEquals(1, source.reads(it), "$it lida depois do close") }
+        }
+
+    @Test
+    fun refreshStillReloadsOnlyTheSelectedList() =
+        runTest {
+            val source = source()
+            PendingList.entries.forEach { source.add(it, "${it.name}-1") }
+            val state = started(source)
+            state.select(PendingList.DEPOSITS)
+            PendingList.entries.forEach { source.add(it, "${it.name}-2") }
+
+            state.refresh()
+            runCurrent()
+
+            assertEquals(listOf("DEPOSITS-1", "DEPOSITS-2"), state.codes(PendingList.DEPOSITS))
+            assertEquals(2, source.reads(PendingList.DEPOSITS))
+            (PendingList.entries - PendingList.DEPOSITS).forEach { list ->
+                assertEquals(1, source.reads(list), "$list não é a selecionada")
+                assertEquals(listOf("${list.name}-1"), state.codes(list))
+            }
+        }
+
+    @Test
+    fun refreshAllDuringStartKeepsOneResultPerList() =
+        runTest {
+            val source = source()
+            PendingList.entries.forEach { source.add(it, "${it.name}-1") }
+            val startGates = source.holdLists()
+            val state = state(source)
+            state.start()
+            runCurrent()
+            PendingList.entries.forEach { source.add(it, "${it.name}-2") }
+            val refreshGates = source.holdLists()
+            state.refreshAll()
+            runCurrent()
+
+            // A resposta do start chega primeiro, já com uma linha que nenhuma outra resposta traz.
+            PendingList.entries.forEach { source.add(it, "${it.name}-OLD") }
+            startGates.forEach { it.complete(Unit) }
+            runCurrent()
+            PendingList.entries.forEach { list ->
+                assertTrue(state.table(list).rows.isEmpty(), "$list aceitou a resposta do start")
+            }
+            PendingList.entries.forEach { source.replace(it, "${it.name}-1") }
+            PendingList.entries.forEach { source.add(it, "${it.name}-2") }
+            refreshGates.forEach { it.complete(Unit) }
+            runCurrent()
+
+            PendingList.entries.forEach { list ->
+                assertEquals(listOf("${list.name}-1", "${list.name}-2"), state.codes(list), "$list")
+                assertNull(state.table(list).error)
+                assertFalse(state.table(list).loading)
+                assertEquals(2, source.reads(list))
+            }
+        }
+
+    @Test
+    fun twoRefreshAllInARowKeepTheLastAnswer() =
+        runTest {
+            val source = source()
+            PendingList.entries.forEach { source.add(it, "${it.name}-1") }
+            val state = started(source)
+            val firstGates = source.holdLists()
+            state.refreshAll()
+            runCurrent()
+            val secondGates = source.holdLists()
+            state.refreshAll()
+            runCurrent()
+
+            PendingList.entries.forEach { source.add(it, "${it.name}-2") }
+            secondGates.forEach { it.complete(Unit) }
+            runCurrent()
+            PendingList.entries.forEach { list ->
+                assertEquals(listOf("${list.name}-1", "${list.name}-2"), state.codes(list), "$list")
+            }
+            // A resposta da primeira chamada chega por último e traria só uma linha velha.
+            PendingList.entries.forEach { source.replace(it, "${it.name}-OLD") }
+            firstGates.forEach { it.complete(Unit) }
+            runCurrent()
+
+            PendingList.entries.forEach { list ->
+                assertEquals(listOf("${list.name}-1", "${list.name}-2"), state.codes(list), "$list")
+                assertNull(state.table(list).error)
+                assertFalse(state.table(list).loading)
+                assertEquals(3, source.reads(list))
+            }
+        }
+
+    @Test
+    fun refreshAllWithLoadMoreInFlightDropsTheOldPage() =
+        runTest {
+            val paged = listOf(PendingList.GUARANTEES, PendingList.NO_SHOWS, PendingList.REALLOCATION)
+            val source = source()
+            paged.forEach { list -> (1..3).forEach { source.add(list, "${list.name}-$it") } }
+            val state = started(source, pageSize = 2)
+            val pageGates = source.holdLists(paged)
+            paged.forEach { list -> backgroundScope.launch { state.table(list).loadMore() } }
+            runCurrent()
+            val refreshGates = source.holdLists(paged)
+            state.refreshAll()
+            runCurrent()
+
+            refreshGates.forEach { it.complete(Unit) }
+            runCurrent()
+            // A página seguinte, pedida antes do refreshAll, chega depois da primeira página nova.
+            pageGates.forEach { it.complete(Unit) }
+            runCurrent()
+
+            paged.forEach { list ->
+                assertEquals(listOf("${list.name}-1", "${list.name}-2"), state.codes(list), "$list")
+                assertTrue(state.table(list).hasMore, "$list")
+                assertNull(state.table(list).error)
+            }
+            assertEquals(listOf(null, "2", null), source.guaranteeCalls.map { it.cursor })
+            assertEquals(listOf(null, "2", null), source.noShowCalls.map { it.cursor })
+            assertEquals(listOf(null, "2", null), source.reallocationCalls.map { it.cursor })
+            // A carga seguinte continua da primeira página nova.
+            loadMore(state, PendingList.NO_SHOWS)
+            assertEquals(listOf("NO_SHOWS-1", "NO_SHOWS-2", "NO_SHOWS-3"), state.codes(PendingList.NO_SHOWS))
+        }
+
+    @Test
+    fun refreshAllWithOneListFailingStillReloadsTheOthers() =
+        runTest {
+            val source = source()
+            PendingList.entries.forEach { source.add(it, "${it.name}-1") }
+            val state = started(source)
+            PendingList.entries.forEach { source.add(it, "${it.name}-2") }
+            source.failures[FakePendingSource.Op.DEPOSITS] = problem(500)
+
+            state.refreshAll()
+            runCurrent()
+
+            assertNotNull(state.table(PendingList.DEPOSITS).error)
+            assertEquals(listOf("DEPOSITS-1"), state.codes(PendingList.DEPOSITS), "a falha não esvazia a lista")
+            (PendingList.entries - PendingList.DEPOSITS).forEach { list ->
+                assertEquals(listOf("${list.name}-1", "${list.name}-2"), state.codes(list), "$list")
+                assertNull(state.table(list).error)
+            }
         }
 
     @Test

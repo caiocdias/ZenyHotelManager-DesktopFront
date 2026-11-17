@@ -18,7 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -47,6 +46,8 @@ import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.reception.RoomMoveState
 import com.zeny.desktop.app.reception.UndoCheckInState
 import com.zeny.desktop.app.reception.WalkInState
+import com.zeny.desktop.app.reservations.AreaPermissions
+import com.zeny.desktop.app.reservations.AreaPermissionsState
 import com.zeny.desktop.app.reservations.AvailabilityScreen
 import com.zeny.desktop.app.reservations.AvailabilitySource
 import com.zeny.desktop.app.reservations.AvailabilityState
@@ -54,6 +55,7 @@ import com.zeny.desktop.app.reservations.NewReservationState
 import com.zeny.desktop.app.reservations.PendingListsState
 import com.zeny.desktop.app.reservations.PendingSource
 import com.zeny.desktop.app.reservations.PendingTab
+import com.zeny.desktop.app.reservations.PermissionsNotice
 import com.zeny.desktop.app.reservations.QuoteState
 import com.zeny.desktop.app.reservations.QuotedStay
 import com.zeny.desktop.app.reservations.ReservationCancelState
@@ -84,7 +86,6 @@ import com.zeny.desktop.design.pdf.PdfActions
 import com.zeny.desktop.design.pdf.PdfDocumentState
 import com.zeny.desktop.design.pdf.SystemPrintDialog
 import com.zeny.desktop.sdk.model.QuoteOfferResponse
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -308,8 +309,10 @@ private fun ReservationsArea(connection: ServerConnection) {
 
 /**
  * A busca e, com as portas e as permissões, as ações do detalhe, a aba de disponibilidade e cotação com a nova reserva
- * e a aba das pendências. Sem a porta da Recepção ou sem a leitura das permissões não há ação alguma; a aba das
- * pendências só pede a porta delas. Sem nenhuma aba, a área é só a busca.
+ * e a aba das pendências. As permissões são lidas uma vez por sessão e só a leitura que deu certo vale: as ações pedem
+ * a porta da Recepção e a aba de disponibilidade, a porta dela e `reservations.availability.read`; a aba das pendências
+ * só pede a porta delas. Com a leitura que falhou, o aviso com "Tentar de novo" fica acima da área. Sem nenhuma aba, a
+ * área é só a busca.
  */
 @Composable
 private fun ReservationsContent(
@@ -320,9 +323,12 @@ private fun ReservationsContent(
     scope: CoroutineScope,
 ) {
     val receptionSource = remember(connection) { connection.receptionSource() }
-    val availability = reservationsAvailability(connection.availabilitySource(), sessionId, scope)
+    val availabilitySource = remember(connection) { connection.availabilitySource() }
+    val permissionsState = reservationsPermissions(connection, receptionSource, availabilitySource, sessionId, scope)
+    // Só a leitura que deu certo concede; carregando ou com falha, a área fica sem permissão alguma.
+    val permissions = (permissionsState?.value as? AreaPermissions.Granted)?.permissions
+    val availability = reservationsAvailability(availabilitySource, permissions, sessionId, scope)
     val pending = reservationsPending(remember(connection) { connection.pendingSource() }, sessionId, scope)
-    val permissions = receptionPermissions(receptionSource, sessionId)
     val approval = LocalApprovalCoordinatorOrNull.current
     val frame = LocalWindowFrame.current
     val confirmation = remember(connection, scope, frame) { confirmationCardFactory(connection, scope, frame) }
@@ -330,7 +336,7 @@ private fun ReservationsContent(
         detail?.reload()
         scope.launch { search.table.refresh() }
     }
-    // Depois de confirmar: o detalhe, a busca e a lista de pendências aberta (a disponibilidade não muda).
+    // Depois de confirmar: o detalhe, a busca e as quatro listas de pendências (a disponibilidade não muda).
     val refreshAfterConfirm: () -> Unit = {
         refreshDetailAndTable()
         pending?.refresh()
@@ -341,7 +347,7 @@ private fun ReservationsContent(
         availability?.calendar?.reload()
     }
     val actions =
-        permissions?.let {
+        permissions?.takeIf { receptionSource != null }?.let {
             ReservationsActions(
                 it,
                 change = changeFactory(connection, scope, approval, it, refreshAfterChange),
@@ -351,20 +357,55 @@ private fun ReservationsContent(
                 reactivate = reactivateFactory(connection, scope, approval, refreshAfterChange),
             )
         }
-    if (availability == null && pending == null) {
-        ReservationsScreen(search, detail, actions)
-    } else {
-        val newReservation =
-            availability?.let {
-                newReservationFactory(connection, receptionSource, scope, approval, permissions) {
-                    it.calendar.reload()
-                    refreshDetailAndTable()
+    Column(Modifier.fillMaxSize()) {
+        if (permissionsState?.value == AreaPermissions.Failed) PermissionsNotice(onRetry = permissionsState::retry)
+        Box(Modifier.weight(1f)) {
+            if (availability == null && pending == null) {
+                ReservationsScreen(search, detail, actions)
+            } else {
+                val newReservation =
+                    availability?.let {
+                        newReservationFactory(connection, receptionSource, scope, approval, permissions) {
+                            it.calendar.reload()
+                            refreshDetailAndTable()
+                        }
+                    }
+                ReservationsTabs(availability, pending, newReservation, confirmation, detail, actions) {
+                    ReservationsScreen(search, detail, actions)
                 }
             }
-        ReservationsTabs(availability, pending, newReservation, confirmation, detail, actions) {
-            ReservationsScreen(search, detail, actions)
         }
     }
+}
+
+/**
+ * A leitura das permissões efetivas da sessão para a área Reservas: na porta da Recepção e, sem ela, na de
+ * disponibilidade (as duas devolvem o mesmo conjunto); nula sem nenhuma das duas. Um estado por
+ * `(connection, sessionId)`, iniciado ao entrar e fechado ao sair: a leitura de uma sessão nunca vale na outra.
+ */
+@Composable
+private fun reservationsPermissions(
+    connection: ServerConnection,
+    reception: ReceptionSource?,
+    availability: AvailabilitySource?,
+    sessionId: String,
+    scope: CoroutineScope,
+): AreaPermissionsState? {
+    val state =
+        remember(connection, sessionId) {
+            val read: (suspend () -> Set<String>)? =
+                when {
+                    reception != null -> { -> reception.permissions() }
+                    availability != null -> { -> availability.permissions() }
+                    else -> null
+                }
+            read?.let { AreaPermissionsState(it, scope) }
+        }
+    DisposableEffect(state) {
+        state?.start()
+        onDispose { state?.close() }
+    }
+    return state
 }
 
 private const val AVAILABILITY_READ = "reservations.availability.read"
@@ -377,22 +418,18 @@ private class ReservationsAvailability(
 )
 
 /**
- * A disponibilidade e a cotação da área Reservas, ou nulo enquanto as permissões não foram lidas, se a leitura falhou,
- * se falta `reservations.availability.read` ou se a conexão não tem a porta. As permissões são lidas uma vez por
- * sessão; os dois estados nascem com a chave `(source, sessionId)` e fecham ao sair da área.
+ * A disponibilidade e a cotação da área Reservas, ou nulo sem as [permissions] concedidas da sessão (ainda não lidas
+ * ou com a leitura que falhou), se falta `reservations.availability.read` ou se a conexão não tem a porta. Os dois
+ * estados nascem com a chave `(source, sessionId)` e fecham ao sair da área.
  */
 @Composable
 private fun reservationsAvailability(
     source: AvailabilitySource?,
+    permissions: Set<String>?,
     sessionId: String,
     scope: CoroutineScope,
 ): ReservationsAvailability? {
-    // A leitura pertence à (source, sessionId) que a produziu: com a chave nova, o valor da sessão anterior não vale.
-    val granted by produceState<Pair<AvailabilitySource, String>?>(null, source, sessionId) {
-        val allowed = source != null && readOrNull { AVAILABILITY_READ in source.permissions() } == true
-        value = if (allowed) source to sessionId else null
-    }
-    if (source == null || granted != (source to sessionId)) return null
+    if (source == null || permissions == null || AVAILABILITY_READ !in permissions) return null
     val availability =
         remember(source, sessionId) {
             ReservationsAvailability(AvailabilityState(source, scope), QuoteState(source, scope))
@@ -407,9 +444,9 @@ private fun reservationsAvailability(
 }
 
 /**
- * As pendências da sessão: o [state] e se a aba já o iniciou. [refresh] só recarrega depois do [start]: sem a aba
- * aberta, nada é lido (a entrada na aba carrega as quatro listas de qualquer modo). A marca é só deste guarda; a tela
- * não a lê.
+ * As pendências da sessão: o [state] e se a aba já o iniciou. [refresh] recarrega as quatro listas, porque a reserva
+ * de uma ação pode estar em mais de uma, e só depois do [start]: sem a aba aberta, nada é lido (a entrada na aba
+ * carrega as quatro listas de qualquer modo). A marca é só deste guarda; a tela não a lê.
  */
 private class ReservationsPending(
     val state: PendingListsState,
@@ -422,7 +459,7 @@ private class ReservationsPending(
     }
 
     fun refresh() {
-        if (started) state.refresh()
+        if (started) state.refreshAll()
     }
 }
 
@@ -445,34 +482,6 @@ private fun reservationsPending(
     DisposableEffect(pending) { onDispose { pending.state.close() } }
     return pending
 }
-
-/** A leitura de permissões da [sessionId] na [source] que a produziu. */
-private class GrantedPermissions(
-    val source: ReceptionSource,
-    val sessionId: String,
-    val permissions: Set<String>,
-)
-
-/**
- * As permissões efetivas da sessão, lidas na porta da Recepção (a busca não as tem, e a disponibilidade pode faltar),
- * ou nulas enquanto não foram lidas, se a leitura falhou ou sem a porta. Lidas uma vez por `(source, sessionId)`: a
- * leitura da sessão anterior não vale na nova.
- */
-@Composable
-private fun receptionPermissions(
-    source: ReceptionSource?,
-    sessionId: String,
-): Set<String>? {
-    val read by produceState<GrantedPermissions?>(null, source, sessionId) {
-        value = source?.let { s -> readOrNull { s.permissions() }?.let { GrantedPermissions(s, sessionId, it) } }
-    }
-    val granted = read
-    return granted?.takeIf { it.source === source && it.sessionId == sessionId }?.permissions
-}
-
-/** O resultado de uma leitura, ou nulo se ela falhou; o cancelamento da coroutine nunca é engolido. */
-private suspend fun <T : Any> readOrNull(block: suspend () -> T): T? =
-    runCatching { block() }.onFailure { if (it is CancellationException) throw it }.getOrNull()
 
 /** A alteração de reserva do detalhe, ou nula sem a porta; a aprovação é a do coordenador da sessão. */
 private fun changeFactory(

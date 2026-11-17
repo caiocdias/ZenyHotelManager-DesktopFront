@@ -70,7 +70,7 @@ internal fun ReservationReactivateDialog(
                         onClick = state::confirm,
                         enabled = !state.busy,
                         modifier = Modifier.testTag("reactivate-submit"),
-                    ) { Text("Reativar") }
+                    ) { Text(if (state.unconfirmed) "Tentar de novo" else "Reativar") }
                 }
             }
         },

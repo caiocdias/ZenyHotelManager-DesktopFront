@@ -10,6 +10,10 @@ import com.zeny.desktop.sdk.model.QuoteResponse
  * calendário), o calendário de disponibilidade e a cotação da estadia, que já traz as ofertas recusadas e o motivo.
  */
 interface AvailabilitySource {
+    /**
+     * As permissões efetivas da sessão: o mesmo conjunto que `ReceptionSource.permissions` devolve (as duas portas
+     * leem a conta da sessão), por isso a área Reservas lê só uma delas.
+     */
     suspend fun permissions(): Set<String>
 
     suspend fun businessDay(): BusinessDay

@@ -254,7 +254,9 @@ class ReservationsAvailabilityTabAtaqueTest {
         runComposeUiTest {
             val search = search()
             val reception = receptionFor(search)
-            area(Conn(search, reception, availability()))
+            // Na produção as duas portas devolvem o mesmo conjunto (as permissões efetivas da sessão).
+            reception.permissions += READ
+            area(Conn(search, reception, availability(reception.permissions)))
             onNodeWithText("R-1").performClick()
             waitForIdle()
             onNodeWithTag("reservation-detail").assertExists()

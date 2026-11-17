@@ -413,6 +413,59 @@ class ReservationCancelStateTest {
         }
 
     @Test
+    fun cancelledApprovalAfterUnknownResultUnlocksTheForm() =
+        runTest {
+            val reference = source().apply { requiresApproval = rxApproval() }
+            approver.cancel = true
+            val referenceState = started(reference)
+            referenceState.waivePenalty = true
+            confirmNow(referenceState)
+            approver.cancel = false
+            confirmNow(referenceState)
+
+            val source = source().apply { outcomes += ApiError.Network(IOException("offline")) }
+            val state = started(source)
+            state.waivePenalty = true
+            confirmNow(state)
+            assertTrue(state.unconfirmed)
+            source.requiresApproval = rxApproval()
+            approver.cancel = true
+            confirmNow(state)
+
+            assertFalse(state.unconfirmed)
+            assertNull(state.error)
+            assertNull(state.done)
+            assertFalse(state.busy)
+            assertTrue(state.canConfirm)
+            approver.cancel = false
+            confirmNow(state)
+
+            val keys = tokenlessKeys(source)
+            assertEquals(3, keys.size)
+            assertEquals(1, keys.toSet().size)
+            assertSame(source.calls[0].intent, source.calls[2].intent)
+            assertEquals(1, tokenlessKeys(reference).toSet().size)
+            assertEquals(tokenlessKeys(reference).size, keys.size - 1)
+            assertEquals("Reserva R1 cancelada. Multa lançada na conta: R$ 320,00.", state.done)
+        }
+
+    @Test
+    fun inputsAcceptEditsAfterCancelledApprovalFollowingUnknownResult() =
+        runTest {
+            val source = source().apply { outcomes += ApiError.Network(IOException("offline")) }
+            val state = started(source)
+            state.waivePenalty = true
+            confirmNow(state)
+            source.requiresApproval = rxApproval()
+            approver.cancel = true
+            confirmNow(state)
+
+            state.notes = "Pedido do hóspede"
+
+            assertEquals("Pedido do hóspede", state.notes)
+        }
+
+    @Test
     fun unknownResultKeepsIntent() =
         runTest {
             val source = source().apply { outcomes += ApiError.Network(IOException("offline")) }

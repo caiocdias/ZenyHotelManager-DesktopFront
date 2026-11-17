@@ -54,8 +54,6 @@ internal fun ReservationChangeDialog(
 ) {
     LaunchedEffect(state) { state.start() }
     val done = state.done
-    // `canConfirm` lê `loaded`, que não é estado observável: sem ler `loading` antes, o botão nunca recompõe.
-    val canSubmit = !state.loading && state.canConfirm
     AlertDialog(
         onDismissRequest = {},
         modifier = Modifier.widthIn(max = DIALOG_WIDTH).testTag("change-dialog"),
@@ -85,7 +83,7 @@ internal fun ReservationChangeDialog(
                 if (done == null) {
                     Button(
                         onClick = state::confirm,
-                        enabled = canSubmit,
+                        enabled = state.canConfirm,
                         modifier = Modifier.testTag("change-submit"),
                     ) { Text("Salvar alteração") }
                 }
@@ -129,6 +127,8 @@ private fun StayFields(state: ReservationChangeState) {
                 label = { Text("Chegada") },
                 singleLine = true,
                 enabled = false,
+                isError = errors["arrival"] != null,
+                supportingText = errors["arrival"]?.let { { Text(it) } },
                 modifier = Modifier.testTag("change-arrival"),
             )
         } else {

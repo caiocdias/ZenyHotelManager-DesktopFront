@@ -656,6 +656,27 @@ roteiro_check_no_secret_text() {
   assert_eq "" "$(grep -nE '(^|[^.A-Za-z0-9_-])curl([[:space:]]|$)' <<<"$rot_ps_code")" "bloco PowerShell sem curl (alias), só curl.exe"
 }
 
+# roteiro_check_md_refs ROTEIRO : o roteiro só remete a LEIA-ME.md e a roteiro-mN.md; cada roteiro-mN.md citado é
+# arquivo regular não vazio em docs/demo e o package.sh o exige (um nome inventado ou fora do pacote reprova). Era a
+# lista m[123] repetida nos testes dos roteiros do M1 e do M2 (M3 E05, testador de etapa).
+roteiro_check_md_refs() {
+  local rot="$1" n f label="${1##*/}"
+  if [[ ! -s "$rot" ]]; then
+    _assert_fail "${label:-<vazio>}: o roteiro existe e não está vazio (sem ele, as remissões passariam no vazio)"
+    return
+  fi
+  assert_eq "" "$(grep -noE '[A-Za-z0-9_./-]+\.md' "$rot" | grep -vE ':(roteiro-m[0-9]+|LEIA-ME)\.md$')" \
+    "$label: não remete a outro .md"
+  for n in $(grep -oE 'roteiro-m[0-9]+\.md' "$rot" | sort -u); do
+    f="$ROOT/docs/demo/$n"
+    assert_eq "1" "$([[ -f "$f" && ! -L "$f" && -s "$f" ]] && echo 1 || echo 0)" \
+      "$label: cita $n e ele existe (arquivo regular, não vazio) em docs/demo"
+    grep -qF "\"\$root/docs/demo/$n\"" "$ROOT/tools/server-env/package.sh" &&
+      grep -E '^require_artifact ' "$ROOT/tools/server-env/package.sh" | grep -qF "docs/demo/$n" ||
+      _assert_fail "$label: cita $n e o package.sh o exige (\"\$root/docs/demo/$n\" e require_artifact)"
+  done
+}
+
 # roteiro_check_seed_secret_values ARQUIVO : nenhum valor de segredo do seed digitado numa linha (o PSReadLine do
 # 5.1 grava o histórico em texto puro). Vale para o roteiro e para o LEIA-ME. As asserções são só negativas:
 # sem o arquivo (caminho errado, vazio ou ""), elas passariam no vazio, então o arquivo tem de existir com texto.

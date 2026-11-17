@@ -54,8 +54,8 @@ class ReservationsActions(
 /**
  * A busca de reservas: os filtros, a busca por documento, a lista paginada e, ao lado, o detalhe da reserva escolhida
  * (se [detail] houver). Quem compõe a tela inicia o [search]; a tabela só entra com a data operacional. O documento
- * buscado só aparece mascarado. Com [actions], o detalhe oferece "Alterar", "Confirmar reserva" e "Confirmação (PDF)",
- * conforme a reserva e as permissões; sem elas, o detalhe é somente leitura.
+ * buscado só aparece mascarado. Com [actions], o detalhe oferece "Alterar", "Confirmar reserva", "Confirmação (PDF)",
+ * "Cancelar reserva" e "Reativar", conforme a reserva e as permissões; sem elas, o detalhe é somente leitura.
  */
 @Composable
 fun ReservationsScreen(

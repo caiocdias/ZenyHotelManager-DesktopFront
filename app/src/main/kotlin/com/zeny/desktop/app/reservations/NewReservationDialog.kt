@@ -62,8 +62,13 @@ internal fun NewReservationDialog(
                 Modifier.heightIn(max = DIALOG_MAX_BODY).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Summary(state)
-                if (done != null) Done(done) else Form(state)
+                if (done != null) {
+                    Summary(state, showTotal = false)
+                    Done(done)
+                } else {
+                    Summary(state, showTotal = true)
+                    Form(state)
+                }
             }
         },
         confirmButton = {
@@ -92,7 +97,10 @@ internal fun NewReservationDialog(
 }
 
 @Composable
-private fun Summary(state: NewReservationState) {
+private fun Summary(
+    state: NewReservationState,
+    showTotal: Boolean,
+) {
     val offer = state.offer
     val stay = state.stay
     Column(
@@ -104,7 +112,7 @@ private fun Summary(state: NewReservationState) {
             style = MaterialTheme.typography.titleSmall,
         )
         Text(ReceptionText.period(stay.arrival.toApi(), stay.departure.toApi(), dayUse = false))
-        Text("Total ${ReceptionText.money(offer.total)}", style = MaterialTheme.typography.titleMedium)
+        if (showTotal) Text("Total ${ReceptionText.money(offer.total)}", style = MaterialTheme.typography.titleMedium)
     }
 }
 

@@ -135,6 +135,40 @@ class ReservationReactivateStateTest {
         }
 
     @Test
+    fun cancelledApprovalAfterUnknownResultUnlocksTheForm() =
+        runTest {
+            val reference = raSource().apply { requiresApproval = raApproval() }
+            approver.cancel = true
+            val referenceState = state(reference)
+            confirmNow(referenceState)
+            approver.cancel = false
+            confirmNow(referenceState)
+
+            val source = raSource().apply { outcomes += ApiError.Network(IOException("offline")) }
+            val state = state(source)
+            confirmNow(state)
+            assertTrue(state.unconfirmed)
+            source.requiresApproval = raApproval()
+            approver.cancel = true
+            confirmNow(state)
+
+            assertFalse(state.unconfirmed)
+            assertNull(state.error)
+            assertNull(state.done)
+            assertFalse(state.busy)
+            approver.cancel = false
+            confirmNow(state)
+
+            val keys = tokenlessKeys(source)
+            assertEquals(3, keys.size)
+            assertEquals(1, keys.toSet().size)
+            assertSame(source.calls[0].intent, source.calls[2].intent)
+            assertEquals(1, tokenlessKeys(reference).toSet().size)
+            assertEquals(tokenlessKeys(reference).size, keys.size - 1)
+            assertEquals("Reserva R1 reativada.", state.done)
+        }
+
+    @Test
     fun unknownResultKeepsIntent() =
         runTest {
             val source = raSource().apply { outcomes += ApiError.Network(IOException("offline")) }
@@ -408,5 +442,17 @@ class ReservationReactivateDialogTest {
             state.confirm()
             waitForIdle()
             assertTrue(source.calls.isEmpty())
+        }
+
+    @Test
+    fun unconfirmedResultRenamesTheSubmitButton() =
+        runComposeUiTest {
+            val source = raSource().apply { outcomes += ApiError.Network(IOException("caiu")) }
+            dialog(source)
+
+            onNodeWithTag("reactivate-submit").assertTextEquals("Reativar")
+            click("reactivate-submit")
+
+            onNodeWithTag("reactivate-submit").assertTextEquals("Tentar de novo")
         }
 }

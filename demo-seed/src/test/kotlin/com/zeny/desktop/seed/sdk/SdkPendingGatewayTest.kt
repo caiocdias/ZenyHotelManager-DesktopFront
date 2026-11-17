@@ -389,4 +389,52 @@ class SdkPendingGatewayTest {
             assertFalse(P_CPF in requests.single().url.toString())
             assertEquals(P_CPF, body(0).getValue("number").jsonPrimitive.content)
         }
+
+    @Test
+    fun createsReservationWithPhoneOrigin() =
+        runTest {
+            val gateway = gateway { pendingReply(pendingBookingJson("CONFIRMED"), HttpStatusCode.Created) }
+            gateway.createReservation(pendingReservationSpec("PHONE"))
+            assertEquals("PHONE", body(0).getValue("origin").jsonPrimitive.content)
+        }
+
+    @Test
+    fun cancelSendsReasonNoWaiverAndOwnIdempotencyKey() =
+        runTest {
+            val gateway = gateway { pendingReply(pendingDetailJson("CANCELLED")) }
+            gateway.cancelReservation(P_RESERVATION, "GUEST_REQUEST")
+            gateway.cancelReservation(P_RESERVATION, "GUEST_REQUEST")
+            val request = requests.first()
+            assertEquals(HttpMethod.Post, request.method)
+            assertTrue(request.url.encodedPath.endsWith("/reservations/$P_RESERVATION/cancel"), request.url.toString())
+            val sent = body(0)
+            assertEquals("GUEST_REQUEST", sent.getValue("reason").jsonPrimitive.content)
+            assertEquals("false", sent.getValue("waivePenalty").jsonPrimitive.content)
+            val keys = requests.map { it.headers["Idempotency-Key"].orEmpty() }
+            assertTrue(keys.all { it.isNotBlank() }, keys.toString())
+            assertEquals(2, keys.toSet().size, "cada cancelamento leva a sua chave")
+        }
+
+    @Test
+    fun unknownCancelReasonFailsBeforeTheNetwork() =
+        runTest {
+            val gateway = gateway { error("não devia ir à rede") }
+            assertFailsWith<IllegalArgumentException> { gateway.cancelReservation(P_RESERVATION, "NADA") }
+            assertTrue(requests.isEmpty())
+        }
+
+    @Test
+    fun cancelRefusalPropagatesWithoutGuestData() =
+        runTest {
+            val echoed = pendingProblem(422, "RESERVATION_NOT_CANCELLABLE", "hóspede Fulano CPF $P_CPF")
+            val gateway = gateway { pendingReply(echoed, HttpStatusCode.UnprocessableEntity) }
+            val error = assertFailsWith<ApiError.Problem> { gateway.cancelReservation(P_RESERVATION, "GUEST_REQUEST") }
+            assertEquals("RESERVATION_NOT_CANCELLABLE", error.code)
+            assertEquals(422, error.status)
+            assertNull(error.detail)
+            listOf(error.detail.orEmpty(), error.userMessage, error.toString(), error.message.orEmpty()).forEach {
+                assertFalse(P_CPF in it, it)
+                assertFalse("Fulano" in it, it)
+            }
+        }
 }

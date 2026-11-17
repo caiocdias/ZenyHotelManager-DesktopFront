@@ -80,7 +80,14 @@ class ReservationReactivateState(
         val current = intent ?: Intent().also { intent = it }
         ownScope.launch {
             try {
-                approve(source.reactivateReservation(reservationId, current))?.let { finish() }
+                val approved = approve(source.reactivateReservation(reservationId, current))
+                if (approved == null) {
+                    // Aprovação cancelada: o servidor respondeu APPROVAL_REQUIRED, nada foi feito sob a chave.
+                    // Destrava as entradas e mantém a intenção (a chave não muda).
+                    unconfirmed = false
+                } else {
+                    finish()
+                }
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {

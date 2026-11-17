@@ -43,10 +43,18 @@ class ReservationsAvailabilityTabTest {
         override val deviceId: String = "device-1"
     }
 
+    /** As duas portas falsas devolvem o mesmo [permissions], como na produção (as permissões efetivas da sessão). */
     private class Fake(
         private val search: ReservationSearchSource,
-        private val availability: AvailabilitySource?,
+        private val availability: FakeAvailabilitySource?,
+        permissions: Set<String>,
     ) : ServerConnection {
+        private val reception = FakeReceptionSource().apply { this.permissions = permissions }
+
+        init {
+            availability?.permissions = permissions
+        }
+
         override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
 
         override suspend fun login(
@@ -79,7 +87,7 @@ class ReservationsAvailabilityTabTest {
             input: ApprovalInput,
         ): String = error("não usado")
 
-        override fun receptionSource(): ReceptionSource? = FakeReceptionSource()
+        override fun receptionSource(): ReceptionSource? = reception
 
         override fun reservationSearchSource(): ReservationSearchSource = search
 
@@ -94,9 +102,6 @@ class ReservationsAvailabilityTabTest {
             holders[HOLDER] = HolderSummary("Ana Fictícia", null)
             documentHolders["CPF" to DOCUMENT] = setOf(HOLDER)
         }
-
-    private fun availability(permissions: Set<String> = setOf(READ)) =
-        FakeAvailabilitySource().apply { this.permissions = permissions }
 
     private fun shell(
         fake: Fake,
@@ -121,8 +126,8 @@ class ReservationsAvailabilityTabTest {
 
     @Test
     fun availabilityTabShowsCalendar() {
-        val source = availability()
-        shell(Fake(search(), source)) {
+        val source = FakeAvailabilitySource()
+        shell(Fake(search(), source, setOf(READ))) {
             open("Reservas")
             open(TAB)
 
@@ -134,7 +139,7 @@ class ReservationsAvailabilityTabTest {
 
     @Test
     fun tabHiddenWithoutAvailabilityRead() {
-        shell(Fake(search(), availability(permissions = emptySet()))) {
+        shell(Fake(search(), FakeAvailabilitySource(), emptySet())) {
             open("Reservas")
 
             onNodeWithText(TAB).assertDoesNotExist()
@@ -145,8 +150,8 @@ class ReservationsAvailabilityTabTest {
 
     @Test
     fun availabilityNotLoadedUntilTabOpens() {
-        val source = availability()
-        shell(Fake(search(), source)) {
+        val source = FakeAvailabilitySource()
+        shell(Fake(search(), source, setOf(READ))) {
             open("Reservas")
 
             onNodeWithText(TAB).assertExists()
@@ -160,7 +165,7 @@ class ReservationsAvailabilityTabTest {
     @Test
     fun returningToSearchKeepsResults() {
         val search = search()
-        shell(Fake(search, availability())) {
+        shell(Fake(search, FakeAvailabilitySource(), setOf(READ))) {
             open("Reservas")
             onNodeWithText("R-1").assertExists()
             val searches = search.searchCalls.size
@@ -175,8 +180,8 @@ class ReservationsAvailabilityTabTest {
 
     @Test
     fun leavingAreaClosesBothStates() {
-        val source = availability()
-        shell(Fake(search(), source)) {
+        val source = FakeAvailabilitySource()
+        shell(Fake(search(), source, setOf(READ))) {
             open("Reservas")
             open(TAB)
             assertEquals(1, source.availabilityCalls.size)
@@ -193,7 +198,7 @@ class ReservationsAvailabilityTabTest {
 
     @Test
     fun nullSourceHidesTab() {
-        shell(Fake(search(), null)) {
+        shell(Fake(search(), null, setOf(READ))) {
             open("Reservas")
 
             onNodeWithText(TAB).assertDoesNotExist()
