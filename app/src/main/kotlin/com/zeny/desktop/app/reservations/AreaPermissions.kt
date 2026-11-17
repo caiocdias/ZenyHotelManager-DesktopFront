@@ -79,11 +79,13 @@ class AreaPermissionsState(
         ownScope.launch {
             val result =
                 try {
-                    AreaPermissions.Granted(read())
+                    // Cópia: a leitura não muda o que foi concedido depois.
+                    AreaPermissions.Granted(read().toSet())
                 } catch (
-                    @Suppress("TooGenericExceptionCaught") e: Exception,
+                    @Suppress("TooGenericExceptionCaught") e: Throwable,
                 ) {
-                    // O cancelamento sobe; qualquer outra falha é "sem leitura", nunca uma concessão vazia.
+                    // O cancelamento sobe; qualquer outra falha (até um Error) é "sem leitura", nunca uma concessão
+                    // vazia, e a área não fica travada em Loading.
                     if (e is CancellationException) throw e
                     AreaPermissions.Failed
                 }
