@@ -1,10 +1,16 @@
 package com.zeny.desktop.app.reservations
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.unit.dp
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.design.theme.ZenyTheme
 import kotlinx.coroutines.CompletableDeferred
@@ -162,6 +168,16 @@ class AreaPermissionsStateTest {
             setContent { ZenyTheme { PermissionsNotice(onRetry = { retries++ }) } }
             onNodeWithTag("permissions-notice").assertTextEquals(NOTICE_TEXT)
             onNodeWithTag("permissions-retry").assertTextEquals("Tentar de novo")
+            onNodeWithTag("permissions-retry").performClick()
+            assertEquals(1, retries)
+        }
+
+    @Test
+    fun retryButtonStaysReachableInANarrowArea() =
+        runComposeUiTest {
+            var retries = 0
+            setContent { ZenyTheme { Box(Modifier.width(520.dp)) { PermissionsNotice(onRetry = { retries++ }) } } }
+            onNodeWithTag("permissions-retry").assertIsDisplayed().assertWidthIsAtLeast(58.dp)
             onNodeWithTag("permissions-retry").performClick()
             assertEquals(1, retries)
         }

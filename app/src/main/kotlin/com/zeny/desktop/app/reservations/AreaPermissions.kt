@@ -108,7 +108,7 @@ fun PermissionsNotice(
         Text(
             NOTICE_TEXT,
             color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.testTag("permissions-notice"),
+            modifier = Modifier.weight(1f).testTag("permissions-notice"),
         )
         Button(onClick = onRetry, modifier = Modifier.testTag("permissions-retry")) { Text("Tentar de novo") }
     }
