@@ -453,6 +453,30 @@ for p in 'Carregar mais' 'página seguinte' 'próxima página' 'Próxima página
   assert_not_contains "$rot_text" "$p" "o roteiro não promete a página seguinte ($p)"
 done
 
+# 7.6 O filtro Hospedada (19.1): a situação começa pelo rótulo e pode trazer alertas depois de " · ", como a tabela
+# a monta (ReservationRows.statusText); o exemplo é um alerta que o seed de fato produz hoje (day use hospedado).
+rows_kt="$app_rec/ReservationRows.kt"
+status_fn="$(awk '/fun ReservationListItemResponse\.statusText\(\)/{on = 1} on {print} on && /joinToString/ {exit}' "$rows_kt")"
+status_sep="$(grep -oE 'joinToString\("[^"]+"\)' <<<"$status_fn" | sed -E 's/joinToString\("([^"]+)"\)/\1/')"
+alert_labels="$(grep -oE '^ +"[^"]+"\.takeIf' <<<"$status_fn" | sed -E 's/^ +"([^"]+)".*/\1/')"
+assert_contains "$status_fn" 'ReceptionText.status(status).label,' "código: a situação vem primeiro no rótulo da linha"
+[[ -n "$status_sep" && "$(grep -c . <<<"$alert_labels")" -ge 1 ]] || _assert_fail "li o separador e os alertas do statusText" "$status_fn"
+in_house="$(status_label IN_HOUSE)"
+s191="$(awk '/^\*\*19\.1\. /{on = 1} /^\*\*19\.2\. /{exit} on' <<<"$search")"
+assert_contains "$s191" "a situação de toda linha começa por \"$in_house\"" "19.1: a situação começa pelo rótulo"
+assert_contains "$s191" "separado por \"$status_sep\"" "19.1: o separador do alerta é o do statusText ($status_sep)"
+example="$(grep -oE "\\(por exemplo, \"$in_house$status_sep[^\"]+\"\\)" <<<"$s191" | sed -E "s/.*\"$in_house$status_sep([^\"]+)\".*/\\1/")"
+[[ -n "$example" ]] || _assert_fail "19.1: o exemplo de alerta é \"$in_house$status_sep<alerta>\""
+grep -qxF -- "$example" <<<"$alert_labels" || _assert_fail "19.1: o alerta do exemplo ($example) é um dos do statusText" "$alert_labels"
+if [[ "$example" == "Day use" ]]; then
+  assert_contains "$status_fn" '"Day use".takeIf { dayUse },' "código: Day use é o alerta da reserva de day use"
+  [[ -n "$(grep -E '^ +r\("[A-Z][0-9]+", [0-9]+, "[A-Z]+", 0, [0-9]+, "[0-9]{3}", true\)' "$catalog_kt")" ]] ||
+    _assert_fail "19.1: o seed tem um day use hospedado hoje (o exemplo aparece na demo)"
+fi
+assert_contains "$s191" "isso não é reprovação" "19.1: o alerta não é reprovação"
+assert_contains "$search" "o filtro \"$in_house\" mostra linha cuja situação não começa por \"$in_house\" (um alerta depois de \"$status_sep\" é normal)" \
+  "19: a reprovação do filtro admite o alerta"
+
 # =============================================================================================================
 # 8. Disponibilidade e cotação (20) contra o catálogo, o PendingSeeder e o código
 # =============================================================================================================
@@ -641,6 +665,7 @@ while IFS= read -r q; do
     *" R\$ …") grep -qF 'return "$day ${ReceptionText.money(night.total)}"' "$code_f" && continue ;;
     "Confirmação da reserva — R-…") grep -qF '"Confirmação da reserva — ",' "$code_f" && continue ;;
     "Reservas do documento $masked") continue ;; # conferido na seção 7.3
+    "$in_house$status_sep$example") continue ;;  # conferido na seção 7.6
     "Reserva R-… cancelada. Multa lançada na conta: R\$ ….")
       grep -qF 'done = if (penalty == null) text else "$text ${penaltyText(penalty.amount, penalty.waived)}".trimEnd()' "$code_f" &&
         tpl_in_code "Reserva R-… cancelada." && tpl_in_code "Multa lançada na conta: R\$ …." && continue ;;

@@ -66,6 +66,10 @@ mutants=(
   'estende-outro|/^\*\*23\.2\./s/O hóspede da UH 104/O hóspede da UH 103/|23.2'
   'rotulo-negrito|s/\*\*Salvar alteração\*\*/**Salvar alterações**/g|negrito'
   'rotulo-aspas|s/"Garantia exigida: Cartão"/"Garantia exigida: cartão"/|aspas'
+  'alerta-inventado|s/\(por exemplo, "Hospedada · Day use"\)/(por exemplo, "Hospedada · Atrasada")/|alerta'
+  'alerta-separador|s/separado por " · " \(por exemplo, "Hospedada · Day use"\)/separado por " - " (por exemplo, "Hospedada - Day use")/|separador'
+  'alerta-reprovacao|s/; isso não é reprovação\. Elas são as mesmas/. Elas são as mesmas/|alerta não é reprovação'
+  'filtro-igual-hospedada|s/o filtro "Hospedada" mostra linha cuja situação não começa por "Hospedada" \(um alerta depois de " · " é normal\)/o filtro "Hospedada" mostra outra situação/|admite o alerta'
   'origem-telefone|s/"Origem" \("Balcão" marcado\)/"Origem" ("Telefone" marcado)/|origem'
   'motivos-ordem|/^## 24\./,/^## 25\./s/"Decisão do hotel", "Reserva duplicada"/"Reserva duplicada", "Decisão do hotel"/|motivos'
   # No fim

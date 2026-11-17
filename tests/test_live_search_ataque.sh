@@ -32,7 +32,11 @@ assert_contains "$kt" '?: fail("defina $name para a verificação real")' "env()
 n="$(grep -oE 'System\.getenv\(' <<<"$kt" | wc -l)"
 assert_eq "2" "$n" "System.getenv só no opt-in e no env()"
 n="$(grep -oE '@Test' <<<"$kt" | wc -l)"
-assert_eq "4" "$n" "as quatro verificações do brief"
+# As quatro do brief da E01 e as duas do roteiro do M3 (M3 E05, Task 7: o 19.2 e o 25).
+assert_eq "6" "$n" "as quatro verificações do brief e as duas do roteiro do M3"
+for t in documentSearchFindsSeedReservationsOfGuestTwelve cancelledFilterFindsSeedCancelled; do
+  assert_contains "$kt" "@Test fun $t() =" "a verificação $t é um @Test"
+done
 
 # --- 3. Só lê: nenhuma chamada de escrita do servidor ---------------------------------------------------------
 assert_not_contains "$kt" '.checkIn(' "não faz check-in"
@@ -57,7 +61,11 @@ assert_contains "$kt" 'busca por nome do G1 não achou reservas' "busca por nome
 assert_contains "$kt" 'private const val G1_CPF_BASE = "202600101"' "base do G1 igual à do DemoCatalog (2026001 + 01)"
 assert_contains "$kt" 'private const val CPF_FIRST_WEIGHT = 10' "primeiro peso 10"
 assert_contains "$kt" 'private const val CPF_MODULUS = 11' "módulo 11"
-assert_contains "$kt" 'digit(G1_CPF_BASE + d1, CPF_FIRST_WEIGHT + 1)' "segundo dígito com peso 11 sobre a base + d1"
+# Desde a M3 E05 (Task 7), a base é parâmetro, com o G1 por padrão (o G12 é a mesma regra).
+assert_contains "$kt" 'private fun fictitiousCpf(baseDigits: String = G1_CPF_BASE): String' "a base padrão é a do G1"
+assert_contains "$kt" 'val d1 = digit(baseDigits, CPF_FIRST_WEIGHT)' "primeiro dígito com peso 10 sobre a base"
+assert_contains "$kt" 'digit(baseDigits + d1, CPF_FIRST_WEIGHT + 1)' "segundo dígito com peso 11 sobre a base + d1"
+assert_contains "$kt" 'return "$baseDigits$d1$d2"' "o CPF é a base e os dois dígitos"
 assert_contains "$kt" 'if (it < 2) 0 else CPF_MODULUS - it' "resto menor que 2 vira 0"
 assert_contains "$seed" 'val d1 = check(base9, 10)' "FictitiousDocuments: primeiro peso 10"
 assert_contains "$seed" 'val d2 = check(base9 + d1, 11)' "FictitiousDocuments: segundo peso 11"
@@ -80,7 +88,8 @@ assert_contains "$kt" 'expected.size > SMALL_PAGE' "pagesDoNotRepeat exige mais 
 assert_contains "$kt" 'loaded.pages >= MIN_PAGES' "pagesDoNotRepeat exige 2 páginas ou mais"
 assert_contains "$kt" 'ReservationSearchSource by inner' "a medição de páginas decora a fonte real (delega o resto)"
 assert_contains "$kt" 'RecordingSource(connection.reservationSearchSource())' "filteredRows mede pela fonte decorada"
-assert_contains "$kt" 'calls += SearchCall(cursor, limit, it.items.size)' "cada search registra cursor, limit e linhas"
+assert_contains "$kt" 'calls += SearchCall(cursor, limit, it.items.size, filter.statuses)' \
+  "cada search registra cursor, limit, linhas e as situações do filtro"
 assert_contains "$kt" 'source.calls.filter { it.rows > 0 }' "página = chamada que trouxe linhas"
 assert_contains "$kt" 'source.calls.clear() search.search()' "só contam as chamadas da busca filtrada, não as do start()"
 assert_contains "$kt" 'loaded.calls.all { it.limit == SMALL_PAGE }' "toda chamada com limit = SMALL_PAGE"
