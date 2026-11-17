@@ -24,6 +24,7 @@ import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.ProbeResult
+import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.theme.ZenyTheme
@@ -131,6 +132,8 @@ private class LifecycleConnection(
     val cancel: ReservationCancelSource? = null,
     val reactivate: ReservationReactivateSource? = null,
     val pending: PendingSource? = null,
+    val change: ReservationChangeSource? = null,
+    val confirm: ReservationConfirmSource? = null,
 ) : ServerConnection {
     override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
 
@@ -175,6 +178,10 @@ private class LifecycleConnection(
 
     override fun pendingSource(): PendingSource? = pending
 
+    override fun reservationChangeSource(): ReservationChangeSource? = change
+
+    override fun reservationConfirmSource(): ReservationConfirmSource? = confirm
+
     override fun close() = Unit
 }
 
@@ -188,6 +195,7 @@ private class LifecycleSettings : LocalSettings {
 @OptIn(ExperimentalTestApi::class)
 @Suppress("TooManyFunctions") // um teste por regra do brief
 class ReservationsLifecycleTest {
+    @Suppress("LongParameterList") // uma porta falsa por parâmetro
     private class Rig(
         val search: FakeReservationSearchSource,
         val reception: FakeReceptionSource,
@@ -195,6 +203,8 @@ class ReservationsLifecycleTest {
         val cancel: FakeReservationCancelSource,
         val reactivate: FakeReservationReactivateSource,
         val availability: FakeAvailabilitySource,
+        val change: FakeReservationChangeSource = FakeReservationChangeSource(),
+        val confirm: FakeReservationConfirmSource = FakeReservationConfirmSource(),
     )
 
     private fun rig(
@@ -228,12 +238,15 @@ class ReservationsLifecycleTest {
         return rig
     }
 
+    @Suppress("LongParameterList") // uma porta opcional por parâmetro
     private fun Rig.connection(
         reception: Boolean = true,
         availability: Boolean = false,
         cancel: Boolean = true,
         reactivate: Boolean = true,
         pending: Boolean = false,
+        change: Boolean = false,
+        confirm: Boolean = false,
     ) = LifecycleConnection(
         reception.takeIf { reception }?.let { this.reception },
         search,
@@ -241,6 +254,8 @@ class ReservationsLifecycleTest {
         this.cancel.takeIf { cancel },
         this.reactivate.takeIf { reactivate },
         this.pending.takeIf { pending },
+        this.change.takeIf { change },
+        this.confirm.takeIf { confirm },
     )
 
     private fun ComposeUiTest.hasTag(tag: String) = onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
@@ -342,7 +357,7 @@ class ReservationsLifecycleTest {
             assertEquals(detailReads + 1, rig.reception.reservationCalls.size)
             assertEquals(searches + 1, rig.search.searchCalls.size)
             assertEquals(calendars + 1, rig.availability.availabilityCalls.size)
-            assertEquals(pendingReads + 1, rig.pending.guaranteeCalls.size)
+            assertEquals(pendingReads, rig.pending.guaranteeCalls.size, "a aba nunca foi aberta")
             click("cancel-close")
             onNodeWithTag("cancel-dialog").assertDoesNotExist()
         }
@@ -407,6 +422,64 @@ class ReservationsLifecycleTest {
             click("cancel-submit")
             onNodeWithTag("cancel-done").assertExists()
             assertEquals(reads + 1, rig.pending.guaranteeCalls.size)
+        }
+    }
+
+    @Test
+    fun confirmFromPendingTabReloadsPendingList() {
+        val item = searchItemOf(code = "G-1", status = "PROVISIONAL")
+        val rig = rig(item)
+        val id = item.id
+        rig.pending.guarantees += pendingGuaranteeOf(code = "G-1", holderGuestId = item.holderGuestId.toString())
+        rig.pending.guarantees[0] = rig.pending.guarantees[0].copy(id = id)
+        rig.confirm.details[id.toString()] = confirmDetail(id)
+        rig.confirm.confirmResponse = confirmDetail(id, status = "CONFIRMED")
+        shell(rig.connection(availability = true, pending = true, confirm = true)) {
+            open("Reservas")
+            open(PENDING_TAB)
+            open("G-1")
+            click("open-reservation-confirm")
+            onNodeWithTag("confirm-dialog").assertExists()
+            val pendingReads = rig.pending.guaranteeCalls.size
+            val searches = rig.search.searchCalls.size
+            val calendars = rig.availability.availabilityCalls.size
+
+            click("confirm-submit")
+
+            assertEquals(1, rig.confirm.confirmCalls.size)
+            assertEquals(pendingReads + 1, rig.pending.guaranteeCalls.size)
+            assertEquals(searches + 1, rig.search.searchCalls.size)
+            assertEquals(calendars, rig.availability.availabilityCalls.size, "confirmar não muda a disponibilidade")
+        }
+    }
+
+    @Test
+    fun changeDoneReloadsCalendarAndPendingList() {
+        val item = searchItemOf(code = "G-1", status = "CONFIRMED")
+        val rig = rig(item)
+        val id = item.id.toString()
+        rig.pending.guarantees += pendingGuaranteeOf(code = "G-1", holderGuestId = item.holderGuestId.toString())
+        rig.pending.guarantees[0] = rig.pending.guarantees[0].copy(id = item.id)
+        rig.change.versions[id] = ReservationVersion(lcDetail(item), "\"v1\"")
+        rig.change.changeResponse = lcDetail(item)
+        shell(rig.connection(availability = true, pending = true, change = true)) {
+            open("Reservas")
+            open(PENDING_TAB)
+            open("G-1")
+            click("open-reservation-change")
+            onNodeWithTag("change-dialog").assertExists()
+            onNodeWithTag("change-requests").performTextInput("Andar alto")
+            val pendingReads = rig.pending.guaranteeCalls.size
+            val searches = rig.search.searchCalls.size
+            val calendars = rig.availability.availabilityCalls.size
+
+            click("change-submit")
+
+            onNodeWithTag("change-done").assertExists()
+            assertEquals(1, rig.change.changeCalls.size)
+            assertEquals(pendingReads + 1, rig.pending.guaranteeCalls.size)
+            assertEquals(searches + 1, rig.search.searchCalls.size)
+            assertEquals(calendars + 1, rig.availability.availabilityCalls.size)
         }
     }
 

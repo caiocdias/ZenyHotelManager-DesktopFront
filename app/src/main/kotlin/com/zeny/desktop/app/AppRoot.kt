@@ -330,21 +330,25 @@ private fun ReservationsContent(
         detail?.reload()
         scope.launch { search.table.refresh() }
     }
-    // O que muda com o cancelamento e a reativação: o detalhe, a busca, o calendário e a lista de pendências aberta.
-    val refreshAfterLifecycle: () -> Unit = {
+    // Depois de confirmar: o detalhe, a busca e a lista de pendências aberta (a disponibilidade não muda).
+    val refreshAfterConfirm: () -> Unit = {
         refreshDetailAndTable()
-        availability?.calendar?.reload()
         pending?.refresh()
+    }
+    // Depois de alterar, cancelar ou reativar: o mesmo e o calendário (a disponibilidade muda).
+    val refreshAfterChange: () -> Unit = {
+        refreshAfterConfirm()
+        availability?.calendar?.reload()
     }
     val actions =
         permissions?.let {
             ReservationsActions(
                 it,
-                change = changeFactory(connection, scope, approval, it, refreshDetailAndTable),
-                confirm = confirmFactory(connection, scope, refreshDetailAndTable),
+                change = changeFactory(connection, scope, approval, it, refreshAfterChange),
+                confirm = confirmFactory(connection, scope, refreshAfterConfirm),
                 confirmation = confirmation,
-                cancel = cancelFactory(connection, scope, approval, refreshAfterLifecycle),
-                reactivate = reactivateFactory(connection, scope, approval, refreshAfterLifecycle),
+                cancel = cancelFactory(connection, scope, approval, refreshAfterChange),
+                reactivate = reactivateFactory(connection, scope, approval, refreshAfterChange),
             )
         }
     if (availability == null && pending == null) {
@@ -403,6 +407,26 @@ private fun reservationsAvailability(
 }
 
 /**
+ * As pendências da sessão: o [state] e se a aba já o iniciou. [refresh] só recarrega depois do [start]: sem a aba
+ * aberta, nada é lido (a entrada na aba carrega as quatro listas de qualquer modo). A marca é só deste guarda; a tela
+ * não a lê.
+ */
+private class ReservationsPending(
+    val state: PendingListsState,
+) {
+    private var started = false
+
+    fun start() {
+        started = true
+        state.start()
+    }
+
+    fun refresh() {
+        if (started) state.refresh()
+    }
+}
+
+/**
  * As pendências da área Reservas, ou nulas sem a porta da conexão. O estado nasce com a chave `(source, sessionId)` e
  * fecha ao sair da área; quem o inicia é a aba, ao ser aberta. Não depende da porta da Recepção nem de permissão lida
  * aqui: o menu da área já exige `reservations.reservations.read`.
@@ -412,10 +436,13 @@ private fun reservationsPending(
     source: PendingSource?,
     sessionId: String,
     scope: CoroutineScope,
-): PendingListsState? {
+): ReservationsPending? {
     if (source == null) return null
-    val pending = remember(source, sessionId) { PendingListsState(source, scope, Clock.systemUTC()::instant) }
-    DisposableEffect(pending) { onDispose { pending.close() } }
+    val pending =
+        remember(source, sessionId) {
+            ReservationsPending(PendingListsState(source, scope, Clock.systemUTC()::instant))
+        }
+    DisposableEffect(pending) { onDispose { pending.state.close() } }
     return pending
 }
 
@@ -541,7 +568,7 @@ private enum class ReservationsTab(
 @Suppress("LongParameterList") // os estados e as fábricas da área, já resolvidos por quem a compõe
 private fun ReservationsTabs(
     availability: ReservationsAvailability?,
-    pending: PendingListsState?,
+    pending: ReservationsPending?,
     newReservation: ((QuoteOfferResponse, QuotedStay) -> NewReservationState)?,
     confirmation: ((reservationId: String, code: String) -> RegistrationCardState)?,
     detail: ReservationDetailState?,
@@ -579,7 +606,7 @@ private fun ReservationsTabs(
 
                 tab == ReservationsTab.PENDING && pending != null -> {
                     LaunchedEffect(pending) { pending.start() }
-                    PendingTab(pending, detail, actions, Modifier.padding(16.dp))
+                    PendingTab(pending.state, detail, actions, Modifier.padding(16.dp))
                 }
 
                 else -> {
