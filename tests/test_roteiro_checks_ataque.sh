@@ -86,6 +86,7 @@ roteiro_check_ps51_lines
 roteiro_check_prompt_blocks
 roteiro_check_no_secret_text
 roteiro_check_seed_secret_values
+roteiro_check_md_refs
 LISTA
 done
 
@@ -108,6 +109,7 @@ roteiro_check_ps51_lines "$r"
 roteiro_check_prompt_blocks "$r"
 roteiro_check_no_secret_text "$r"
 roteiro_check_seed_secret_values "$r"
+roteiro_check_md_refs "$r"
 echo "ASSERT_FAILS=$ASSERT_FAILS"
 DRV
 all_run() { timeout 100 bash "$allrun" "$ROOT" "$1" "$leia_f" "$readme_f" "$docs_test" </dev/null; }
@@ -155,5 +157,10 @@ kills seed-diferente-do-leia "LEIA-ME" "linha do seed diferente da do LEIA-ME"
 # (o nome da variável é montado aqui para o test_smoke_task.sh não achar um segredo literal neste arquivo)
 MUT='s/"Process"\)$/"Process"); $env:ZENY_SEED_ADMIN_'"PASS"'WORD="abc"/'
 kills segredo-literal-no-env "ZENY_SEED" "valor de segredo atribuído numa linha"
+# roteiro_check_md_refs (M3 E05): um roteiro inexistente, um .md fora da lista e um roteiro que o pacote não exige.
+MUT='s/`roteiro-m3\.md`, `LEIA-ME\.md`/`roteiro-m3.md`, `roteiro-m9.md`, `LEIA-ME.md`/'
+kills cita-roteiro-m9 "roteiro-m9.md" "roteiro citando um roteiro que não existe"
+MUT='s/Você não precisa abrir o `LEIA-ME\.md`/Você não precisa abrir o `NOTAS.md`/'
+kills cita-outro-md "não remete a outro .md" "roteiro citando um .md fora da lista"
 
 finish
