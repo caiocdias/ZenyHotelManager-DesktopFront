@@ -699,14 +699,46 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Riscos e mitigação:** nenhum além dos do M2.
 
-**Evidências e handoff:**
+**Evidências e handoff** (parcial: o lote parou a pedido do usuário, em 2026-11-17, com a etapa `#em-andamento`):
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-17-m3-reservas-e05.md`, com 6 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable. Ela correu adiantada, sobre o rascunho, enquanto a E04 rodava. A rodada 0 bloqueou por 1 Crítico (a tarefa do pacote não fecha verde sem o testador ajustar travas antes) e 5 Importantes.
+  - A Task 3 é do testador e roda antes da Task 4: é uma exceção escrita ao "testador uma vez por etapa".
+- **Commits:** `830f296..920dcd2` na `roadmap/m3-reservas`.
+
+  | Task | Entrega | Commit | Estado |
+  |---|---|---|---|
+  | 1 | Seed: `FutureSeeder` e a porta `FutureGateway` (duas reservas futuras e uma cancelada, do Hóspede Doze) | `920dcd2` | Completa e integrada; integridade exit 0 |
+  | 2 | Seed: adaptador, ligação no `DemoSeed` e `LiveSeedReservationsCheck` | — | Despachada e interrompida logo no início; nada alterado |
+  | 3 | Testador: as travas aceitam o `roteiro-m3.md` | — | Interrompida com duas travas alteradas, sem commit |
+  | 4 | O pacote leva o roteiro do M3 | — | Não começou (depende da Task 3) |
+  | 5 | `LivePreReservationConfirmCheck` (confirmação da pré-reserva ao vivo) | — | Interrompida com a verificação escrita e o opt-in registrado, sem commit e sem gate |
+  | 6 | O roteiro do M3 | — | Não começou (depende das Tasks 2 e 4) |
+
+  A Task 1 só cria arquivos novos: o `DemoSeed` ainda não chama o `FutureSeeder`, e o seed se comporta como na E04.
+- **Trabalho interrompido, fora do git.** Está no workspace do SDD, `.superpowers/sdd/2026-11-17-m3-reservas-e05/`, que é ignorado pelo git e fica só no worktree `roadmap-m3-reservas`:
+  - `task-3-wip/travas.patch`: o diff do testador em `tests/test_roteiro_m1_zero_ataque.sh` e `tests/test_roteiro_m2_ataque.sh`. O build tinha passado; faltavam o `tests/run.sh`, a prova nos dois estados e o commit;
+  - `task-5-wip/`: `LivePreReservationConfirmCheck.kt` e o diff do `app/build.gradle.kts`. Faltavam o gate e o commit;
+  - o ledger (`progress.md`), os briefs das 6 tarefas e o contexto do plano.
+
+  Nada disso foi conferido nem revisado: o próximo orquestrador retoma a partir deles ou refaz pelo brief.
+- **Falta para fechar:**
+  1. As Tasks 2 a 6, pelo plano. Podem correr em paralelo a 2, a 3 e a 5; depois a 4; por último a 6.
+  2. O testador de etapa, que escreve as travas do roteiro novo (`tests/test_roteiro_m3_ataque.sh`) e ajusta os laços de `tests/test_fechamento_automatico_ataque.sh`.
+  3. A verificação do gate, na ordem do plano: clone limpo; recriar a demo do notebook (`tools/server-env/down.sh -v` e `up.sh`, no mesmo dia da verificação e depois das 03:00); seed duas vezes, com o tempo; `smokeTest`; as verificações ao vivo do M2 e do M3; pacote e `save-images.sh`.
+  4. O fechamento: a etapa fica "Aguardando o Windows" (regra 7), entra na lista "Validações acumuladas no Windows", e as entradas 1 a 3 da lista passam a pedir o `roteiro-m3.md`.
+- **Revisão final:** ainda não feita.
+- **Critérios verificados:** nenhum ainda.
+- **Decisões para o usuário**, já tomadas no plano e revisáveis:
+  1. **O relatório impresso do seed não ganha linha.** As reservas futuras, a cancelada e as pendentes entram por seeders próprios, sem aparecer na saída; o roteiro do M3 diz onde vê-las. A dívida fica registrada: o relatório subconta políticas, planos, reservas e bloqueios.
+  2. **Reservas novas do seed:** duas futuras e uma cancelada, todas do Hóspede Doze, por um seeder separado (`FutureSeeder`), para o contrato do `PendingSeeder` ficar como o testador da E04 o fixou.
+  3. **O roteiro do M3 não é executado clicando no notebook.** No lugar: cada "Resultado esperado" novo aponta a asserção ao vivo que o sustenta; a confirmação da pré-reserva ganha verificação ao vivo; e o gate roda as verificações do M2 e do M3 no ambiente recriado. A execução de ponta a ponta é a do usuário no Windows.
+  4. **O orquestrador recria a demo do notebook para o gate** (regra 5 do README e design §7.2). Se a sessão negar, ele não contorna, e o critério 2 fica aberto. Dois avisos: se o app mobile da outra trilha estiver usando o `zeny-front` do notebook, a recriação zera os dados dele; e depois do `down -v` a senha do administrador volta à inicial.
+  5. **A etapa fica "Aguardando o Windows"** e não fecha `#concluida` no lote.
+- **Notas para a próxima etapa:**
+  - A recriação da demo ainda não foi tentada nesta sessão.
+  - O `PendingSeeder` e o `FutureSeeder` não têm a espera de inventário do `BookingSeeder`. Se o seed falhar no banco novo com `ROOM_TYPE_UNAVAILABLE` ou `INVENTORY_DATE_OUT_OF_HORIZON`, a correção é a repetição com espera, como adendo ao plano.
+  - A pré-reserva `DEMO-PEND-P1` do ambiente de pé foi criada em 16/11 às 23:23 e vence 48 h depois.
 
 ---
 
