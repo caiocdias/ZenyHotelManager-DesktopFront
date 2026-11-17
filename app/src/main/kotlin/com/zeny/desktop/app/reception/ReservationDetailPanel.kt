@@ -39,6 +39,8 @@ data class DetailActions(
     val onChange: (() -> Unit)? = null,
     val onConfirmReservation: (() -> Unit)? = null,
     val onConfirmationPdf: (() -> Unit)? = null,
+    val onCancel: (() -> Unit)? = null,
+    val onReactivate: (() -> Unit)? = null,
 )
 
 /** A falha de uma releitura com o conteúdo antigo à vista: o conteúdo fica, e a falha aparece por cima dele. */
@@ -84,38 +86,7 @@ internal fun ReservationDetailPanel(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         OutlinedButton(onClick = detail::close) { Text("Fechar") }
-        if (actions.onCheckIn != null) {
-            Button(onClick = actions.onCheckIn, modifier = Modifier.testTag("open-check-in")) { Text("Fazer check-in") }
-        }
-        if (actions.onMove != null) {
-            Button(onClick = actions.onMove, modifier = Modifier.testTag("open-room-move")) { Text("Trocar UH") }
-        }
-        if (actions.onUndo != null) {
-            OutlinedButton(onClick = actions.onUndo, modifier = Modifier.testTag("open-undo-check-in")) {
-                Text("Desfazer check-in")
-            }
-        }
-        if (actions.onCard != null) {
-            OutlinedButton(onClick = actions.onCard, modifier = Modifier.testTag("open-registration-card")) {
-                Text("Ficha de registro")
-            }
-        }
-        if (actions.onChange != null) {
-            Button(onClick = actions.onChange, modifier = Modifier.testTag("open-reservation-change")) {
-                Text("Alterar")
-            }
-        }
-        if (actions.onConfirmReservation != null) {
-            Button(onClick = actions.onConfirmReservation, modifier = Modifier.testTag("open-reservation-confirm")) {
-                Text("Confirmar reserva")
-            }
-        }
-        if (actions.onConfirmationPdf != null) {
-            OutlinedButton(
-                onClick = actions.onConfirmationPdf,
-                modifier = Modifier.testTag("open-reservation-confirmation"),
-            ) { Text("Confirmação (PDF)") }
-        }
+        DetailActionButtons(actions)
         if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
         Box(Modifier.weight(1f)) {
             when {
@@ -123,6 +94,53 @@ internal fun ReservationDetailPanel(
                 error != null -> ErrorState(error, onRetry = detail::reload)
                 else -> LoadingState()
             }
+        }
+    }
+}
+
+/** Os botões das [actions] que o dono da tela oferece, na ordem do painel. */
+@Composable
+private fun DetailActionButtons(actions: DetailActions) {
+    if (actions.onCheckIn != null) {
+        Button(onClick = actions.onCheckIn, modifier = Modifier.testTag("open-check-in")) { Text("Fazer check-in") }
+    }
+    if (actions.onMove != null) {
+        Button(onClick = actions.onMove, modifier = Modifier.testTag("open-room-move")) { Text("Trocar UH") }
+    }
+    if (actions.onUndo != null) {
+        OutlinedButton(onClick = actions.onUndo, modifier = Modifier.testTag("open-undo-check-in")) {
+            Text("Desfazer check-in")
+        }
+    }
+    if (actions.onCard != null) {
+        OutlinedButton(onClick = actions.onCard, modifier = Modifier.testTag("open-registration-card")) {
+            Text("Ficha de registro")
+        }
+    }
+    if (actions.onChange != null) {
+        Button(onClick = actions.onChange, modifier = Modifier.testTag("open-reservation-change")) {
+            Text("Alterar")
+        }
+    }
+    if (actions.onConfirmReservation != null) {
+        Button(onClick = actions.onConfirmReservation, modifier = Modifier.testTag("open-reservation-confirm")) {
+            Text("Confirmar reserva")
+        }
+    }
+    if (actions.onConfirmationPdf != null) {
+        OutlinedButton(
+            onClick = actions.onConfirmationPdf,
+            modifier = Modifier.testTag("open-reservation-confirmation"),
+        ) { Text("Confirmação (PDF)") }
+    }
+    if (actions.onCancel != null) {
+        OutlinedButton(onClick = actions.onCancel, modifier = Modifier.testTag("open-reservation-cancel")) {
+            Text("Cancelar reserva")
+        }
+    }
+    if (actions.onReactivate != null) {
+        Button(onClick = actions.onReactivate, modifier = Modifier.testTag("open-reservation-reactivate")) {
+            Text("Reativar")
         }
     }
 }

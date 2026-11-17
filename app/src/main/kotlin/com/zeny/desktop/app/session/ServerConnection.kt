@@ -8,9 +8,12 @@ import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
 import com.zeny.desktop.app.reservations.AvailabilitySource
 import com.zeny.desktop.app.reservations.NewReservationSource
+import com.zeny.desktop.app.reservations.PendingSource
+import com.zeny.desktop.app.reservations.ReservationCancelSource
 import com.zeny.desktop.app.reservations.ReservationChangeSource
 import com.zeny.desktop.app.reservations.ReservationConfirmSource
 import com.zeny.desktop.app.reservations.ReservationConfirmations
+import com.zeny.desktop.app.reservations.ReservationReactivateSource
 import com.zeny.desktop.app.reservations.ReservationSearchSource
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.app.rooms.RoomsSource
@@ -21,6 +24,7 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.facade.CancelInput
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
@@ -45,8 +49,11 @@ import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.model.AvailabilityResponse
 import com.zeny.desktop.sdk.model.CheckInResponse
+import com.zeny.desktop.sdk.model.DepositShortfallResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.PendingGuaranteeResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
+import com.zeny.desktop.sdk.model.ReallocationRequiredResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -61,6 +68,7 @@ import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import java.time.Instant
 
 private const val GUEST_SEARCH_LIMIT = 20
 
@@ -123,6 +131,15 @@ interface ServerConnection : AutoCloseable {
 
     /** A confirmação da reserva em PDF; `null` quando a conexão não a oferece. */
     fun reservationConfirmations(): ReservationConfirmations? = null
+
+    /** O cancelamento de reserva; `null` quando a conexão não o oferece. */
+    fun reservationCancelSource(): ReservationCancelSource? = null
+
+    /** A reativação de reserva; `null` quando a conexão não a oferece. */
+    fun reservationReactivateSource(): ReservationReactivateSource? = null
+
+    /** As listas de pendências de reservas; `null` quando a conexão não as oferece. */
+    fun pendingSource(): PendingSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -423,6 +440,54 @@ class CoreConnection(
 
     /** A confirmação da reserva em PDF sobre `core.documents`. */
     override fun reservationConfirmations(): ReservationConfirmations = reservationConfirmations
+
+    private val reservationCancel =
+        object : ReservationCancelSource {
+            override suspend fun reservation(id: String): ReservationDetailResponse = core.reservations.reservation(id)
+
+            override fun cancelReservation(
+                id: String,
+                input: CancelInput,
+                intent: Intent,
+            ): ApprovableAction<ReservationDetailResponse> = core.bookings.cancelReservation(id, input, intent)
+        }
+
+    /** O cancelamento de reserva sobre `core.reservations` e `core.bookings`. */
+    override fun reservationCancelSource(): ReservationCancelSource = reservationCancel
+
+    private val reservationReactivate =
+        ReservationReactivateSource { id, intent -> core.bookings.reactivateReservation(id, intent) }
+
+    /** A reativação de reserva sobre `core.bookings`. */
+    override fun reservationReactivateSource(): ReservationReactivateSource = reservationReactivate
+
+    private val pending =
+        object : PendingSource {
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun pendingGuarantees(
+                to: Instant,
+                cursor: String?,
+                limit: Int,
+            ): Page<PendingGuaranteeResponse> = core.pending.pendingGuarantees(to, cursor, limit)
+
+            override suspend fun depositShortfalls(): List<DepositShortfallResponse> = core.pending.depositShortfalls()
+
+            override suspend fun expectedNoShows(
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.pending.expectedNoShows(cursor, limit)
+
+            override suspend fun reallocationRequired(
+                cursor: String?,
+                limit: Int,
+            ): Page<ReallocationRequiredResponse> = core.pending.reallocationRequired(cursor, limit)
+
+            override suspend fun holder(guestId: String): HolderSummary = core.guests.guest(guestId).toHolderSummary()
+        }
+
+    /** As listas de pendências sobre `core.pending`, `core.hotel` e `core.guests`. */
+    override fun pendingSource(): PendingSource = pending
 
     override fun close() = core.close()
 }
