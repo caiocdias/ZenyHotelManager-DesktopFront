@@ -99,10 +99,10 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 
 ## Definição global de pronto
 
-- [ ] Os comandos oficiais de build, teste e lint passam.
-- [ ] O `smokeTest` passa contra o ambiente recriado.
+- [x] Os comandos oficiais de build, teste e lint passam. *(E05, no clone limpo do `57ccb4e`.)*
+- [x] O `smokeTest` passa contra o ambiente recriado. *(E05, em 2026-11-17.)*
 - [ ] O roteiro `docs/demo/roteiro-m3.md`, que acumula os anteriores, foi executado pelo usuário no Windows.
-- [ ] Nenhuma etapa depende de pedido ao servidor.
+- [x] Nenhuma etapa depende de pedido ao servidor. *(`PF-03` e `PF-04` são não bloqueantes.)*
 - [ ] A revisão de segurança adiada do processo acelerado está paga (E06).
 
 ## Protocolo de execução
@@ -646,8 +646,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] No clone limpo, build, teste e lint passam.
-- [ ] O `smokeTest` passa, e o seed roda em menos de 2 minutos.
+- [x] No clone limpo, build, teste e lint passam.
+- [x] O `smokeTest` passa, e o seed roda em menos de 2 minutos.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 
 **Validação obrigatória:**
@@ -667,57 +667,71 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Riscos e mitigação:** nenhum além dos do M2.
 
-**Evidências e handoff** (parcial: o lote parou a pedido do usuário, em 2026-11-17, com a etapa `#em-andamento`):
+**Evidências e handoff** (2026-11-17; a etapa fica `#em-andamento`, **Aguardando o Windows**, pela regra 7 do README):
 
-- **Plano:** `docs/superpowers/plans/2026-11-17-m3-reservas-e05.md`, com 6 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
-  - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable. Ela correu adiantada, sobre o rascunho, enquanto a E04 rodava. A rodada 0 bloqueou por 1 Crítico (a tarefa do pacote não fecha verde sem o testador ajustar travas antes) e 5 Importantes.
-  - A Task 3 é do testador e roda antes da Task 4: é uma exceção escrita ao "testador uma vez por etapa".
-- **Processo, desde 2026-11-17 ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md)):** o processo acelerado foi revogado com esta etapa em andamento. O restante dela segue o processo normal do orquestrador:
-  - a `revisor-seguranca` em cada tarefa e na revisão final, com o scanner;
-  - o testador por tarefa só em `Risco: alto` da lista fechada, e uma vez na etapa;
-  - o gate de integração;
-  - o fechamento só com a revisão final limpa.
+- **Estado:** Aguardando o Windows. Tudo o que dá para verificar no notebook está verificado, e a revisão final saiu limpa. Falta só o critério 3: o usuário executar o `roteiro-m3.md` no Windows. A etapa entrou na lista "Validações acumuladas no Windows" do README (item 4), e as entradas 1 a 3 da lista passaram a pedir o `roteiro-m3.md`.
+- **Plano:** `docs/superpowers/plans/2026-11-17-m3-reservas-e05.md`, com 7 tarefas.
+  - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable (`revisor-arquitetura`), sobre o rascunho.
+  - Na retomada pelo processo normal (ADR 0012), o plano ganhou a seção "Ondas", a Task 2 passou a `Risco: alto` (dado pessoal ou segredo) e entrou a Task 7, como adendo. Os adendos não voltaram ao `revisor-arquitetura`: um é de processo, e a Task 7 é só código de teste, no caminho "ganha verificação" que o plano aprovado já previa. A revisão final conferiu a seção contra o ledger e aceitou.
+- **Commits:** `830f296..5a35b66` na `roadmap/m3-reservas`, mais o commit deste handoff.
 
-  O plano foi escrito no processo acelerado e não foi alterado: todas as tarefas são `Risco: normal`, e ele não tem a seção `## Ondas`. Pelo passo 3a do orquestrador, um plano sem a seção roda cada tarefa restante como onda de uma tarefa só. Rever o `Risco:` pela lista fechada ou acrescentar a seção fica com o orquestrador, que é o dono do plano.
-
-  Antes de retomar, a branch `roadmap/m3-reservas` precisa receber a `main` (é fast-forward): o worktree dela ainda não tem o ADR 0012, o `CLAUDE.md` sem o processo acelerado nem a E06. O workspace da etapa fica só nesse worktree e não pode ser apagado.
-- **Revisão de segurança: adiada (ADR 0011) — commits `830f296..920dcd2`, integridade exit 0.** É o trecho feito antes da revogação. Só a Task 1 (`e8a1542..920dcd2`) tem código, e ela não teve revisão por tarefa. O trecho é a entrada 4 da lista "Revisões de segurança adiadas" do README. A revisão final desta etapa cobre o intervalo inteiro dela e alcança esse trecho; a E06 paga a lista.
-- **Commits:** `830f296..920dcd2` na `roadmap/m3-reservas`.
-
-  | Task | Entrega | Commit | Estado |
+  | Task | Entrega | Commits | Revisão por tarefa (`revisor-seguranca`) |
   |---|---|---|---|
-  | 1 | Seed: `FutureSeeder` e a porta `FutureGateway` (duas reservas futuras e uma cancelada, do Hóspede Doze) | `920dcd2` | Completa e integrada; integridade exit 0 |
-  | 2 | Seed: adaptador, ligação no `DemoSeed` e `LiveSeedReservationsCheck` | — | Despachada e interrompida logo no início; nada alterado |
-  | 3 | Testador: as travas aceitam o `roteiro-m3.md` | — | Interrompida com duas travas alteradas, sem commit |
-  | 4 | O pacote leva o roteiro do M3 | — | Não começou (depende da Task 3) |
-  | 5 | `LivePreReservationConfirmCheck` (confirmação da pré-reserva ao vivo) | — | Interrompida com a verificação escrita e o opt-in registrado, sem commit e sem gate |
-  | 6 | O roteiro do M3 | — | Não começou (depende das Tasks 2 e 4) |
+  | 1 | Seed: `FutureSeeder` e a porta `FutureGateway` | `920dcd2` | Não teve (ADR 0011); lida pela revisão final |
+  | 2 | Seed: `cancelReservation` no adaptador, ligação no `DemoSeed` e `LiveSeedReservationsCheck` (`Risco: alto`) | `e2ff688`, `1ce4840` (testador), `9daeb7b`, `107598c` (testador) | Aprovada. O testador da tarefa achou o `detail` do servidor subindo em `ApprovalRequired` e `PreconditionFailed`, corrigido em `9daeb7b`. O gate da onda reprovou um ataque no `detektTest`, corrigido em `107598c` |
+  | 3 | Testador: as travas aceitam o `roteiro-m3.md` | `938501c` | Aprovada |
+  | 4 | O pacote leva o roteiro do M3 | `fda967f` | Aprovada |
+  | 5 | `LivePreReservationConfirmCheck` | `06c935b` | Aprovada |
+  | 6 | `docs/demo/roteiro-m3.md` | `1722245`, `0833dc0` | Aprovada depois de 1 rodada: o 20.1 omitia a linha "Standard · GARANTIDA", e o 26 citava o titular numa lista que mostra "—" |
+  | 7 | Verificações ao vivo das lacunas do roteiro, a correção do `periodAndStatusFilter` e o passo 19.1 | `a967e9a`, `52e21aa`, `acaea3b` | Aprovada |
+  | — | Testador de etapa: travas do roteiro novo (45 mutantes), do pacote, do fechamento e das verificações ao vivo; ataque ao `FutureSeeder` | `ea27424`, `a16dea5`, `57ccb4e` | Lido pela revisão final |
 
-  A Task 1 só cria arquivos novos: o `DemoSeed` ainda não chama o `FutureSeeder`, e o seed se comporta como na E04.
-- **Trabalho interrompido, fora do git.** Está no workspace do SDD, `.superpowers/sdd/2026-11-17-m3-reservas-e05/`, que é ignorado pelo git e fica só no worktree `roadmap-m3-reservas`:
-  - `task-3-wip/travas.patch`: o diff do testador em `tests/test_roteiro_m1_zero_ataque.sh` e `tests/test_roteiro_m2_ataque.sh`. O build tinha passado; faltavam o `tests/run.sh`, a prova nos dois estados e o commit;
-  - `task-5-wip/`: `LivePreReservationConfirmCheck.kt` e o diff do `app/build.gradle.kts`. Faltavam o gate e o commit;
-  - o ledger (`progress.md`), os briefs das 6 tarefas e o contexto do plano.
-
-  Nada disso foi conferido nem revisado: o próximo orquestrador retoma a partir deles ou refaz pelo brief.
-- **Falta para fechar:**
-  0. Fora do plano da etapa, e sem bloquear nada: abrir os dois pedidos ao servidor que o usuário decidiu em 2026-11-17 (decisões D1 e D2), em `docs/pedidos-servidor.md` e no brain, conforme o ADR 0005.
-  1. As Tasks 2 a 6, pelo plano. Podem correr em paralelo a 2, a 3 e a 5; depois a 4; por último a 6.
-  2. O testador de etapa, que escreve as travas do roteiro novo (`tests/test_roteiro_m3_ataque.sh`) e ajusta os laços de `tests/test_fechamento_automatico_ataque.sh`.
-  3. A verificação do gate, na ordem do plano: clone limpo; recriar a demo do notebook (`tools/server-env/down.sh -v` e `up.sh`, no mesmo dia da verificação e depois das 03:00); seed duas vezes, com o tempo; `smokeTest`; as verificações ao vivo do M2 e do M3; pacote e `save-images.sh`.
-  4. O fechamento: a etapa fica "Aguardando o Windows" (regra 7), entra na lista "Validações acumuladas no Windows", e as entradas 1 a 3 da lista passam a pedir o `roteiro-m3.md`.
-- **Revisão final:** ainda não feita.
-- **Critérios verificados:** nenhum ainda.
-- **Decisões para o usuário**, já tomadas no plano e revisáveis:
-  1. **O relatório impresso do seed não ganha linha.** As reservas futuras, a cancelada e as pendentes entram por seeders próprios, sem aparecer na saída; o roteiro do M3 diz onde vê-las. A dívida fica registrada: o relatório subconta políticas, planos, reservas e bloqueios.
-  2. **Reservas novas do seed:** duas futuras e uma cancelada, todas do Hóspede Doze, por um seeder separado (`FutureSeeder`), para o contrato do `PendingSeeder` ficar como o testador da E04 o fixou.
-  3. **O roteiro do M3 não é executado clicando no notebook.** No lugar: cada "Resultado esperado" novo aponta a asserção ao vivo que o sustenta; a confirmação da pré-reserva ganha verificação ao vivo; e o gate roda as verificações do M2 e do M3 no ambiente recriado. A execução de ponta a ponta é a do usuário no Windows.
-  4. **O orquestrador recria a demo do notebook para o gate** (regra 5 do README e design §7.2). Se a sessão negar, ele não contorna, e o critério 2 fica aberto. Dois avisos: se o app mobile da outra trilha estiver usando o `zeny-front` do notebook, a recriação zera os dados dele; e depois do `down -v` a senha do administrador volta à inicial.
+- **Revisão final:** `revisor-seguranca`, no fable, com o prompt `code-reviewer.md`, sobre `830f296..57ccb4e`: **0 Críticos, 0 Importantes, 5 Menores; pronto para o merge.**
+  - Gate do projeto no HEAD revisado (`57ccb4e`): `./gradlew build --continue` → BUILD SUCCESSFUL; 4744 testes, 0 falhas, 55 pulados; `bash tests/run.sh` → 60 arquivos, 0 falhas, 0 com casos pulados.
+  - Verificação mecânica (`check_test_integrity.py --base 830f296`): exit 1, com o aviso `MERGE_IGNORADO` (o merge `fcab5a1` do lote anterior) e 10 apontamentos, todos justificados pela revisora: 8 `ASSERCAO_REMOVIDA` são asserções reescritas com força igual ou maior (uma delas era falsa para o seed), e 2 `SKIP_ADICIONADO` são a trava `nao_tem '@Disabled'`. Nenhuma trava antiga ficou mais fraca.
+  - Scanner: `osv-scanner` 2.7.0, `scan source -r --no-ignore .`, no `57ccb4e`: 6 lockfiles do Gradle (buildscript 131, sdk 190, demo-seed 194, core 194, design 361 e app 359 pacotes), "No issues found". O `--no-ignore` é necessário no worktree: ele fica sob `.claude/worktrees/`, que o git do checkout principal ignora, e sem a opção o scanner não visita nada.
+  - Seção "Revisão de arquitetura" do plano contra o ledger: confere.
+  - Não houve onda de correção final (decisão 9, abaixo).
+- **Revisão de segurança adiada (ADR 0011):** o trecho `830f296..920dcd2` (a Task 1) foi lido pela revisão final desta etapa, sem achado. A entrada 4 da lista "Revisões de segurança adiadas" do README continua lá: quem a marca como paga é a E06.
+- **Critérios verificados:**
+  1. **Clone limpo: verificado.** Clone do `57ccb4e` fora do repositório: `./gradlew build ktlintCheck detekt :app:desktopJar :demo-seed:seedJar --max-workers=2` → BUILD SUCCESSFUL in 9m 34s; 4744 testes, 0 falhas, 55 pulados; os dois JARs gerados. `bash tests/run.sh` → 60 arquivos, 0 falhas, 4 com casos pulados: são as comparações com o repositório do servidor (`test_wrapper.sh`, `test_wrapper_ataque.sh`, `test_gen_env.sh` e `test_server_env_lib.sh`), que um clone fora do repositório não enxerga; no gate da branch elas rodam e passam.
+  2. **`smokeTest` e seed: verificado**, contra a demo do notebook recriada em 2026-11-17 às 03:54 (`down.sh -v`, `up.sh`, readiness `{"status":"UP"}`, servidor `5e06f16d51ff`).
+     - Seed: 16,1 s no banco novo; a segunda execução, 4,7 s, sem criar nada; a terceira, depois das verificações que escrevem, 3,9 s, sem criar nem tocar reserva.
+     - `smokeTest -PserverUrl=http://127.0.0.1:8088`: 1 teste, 0 falhas.
+     - Ao vivo, só leem: `LiveSeedReservationsCheck` 3/0 falhas, `LiveReceptionCheck` 2/0, `LiveRegistrationCardCheck` 3/0, `LiveAvailabilityCheck` 3/0 e `LiveReservationSearchCheck` 6/0.
+     - Ao vivo, escrevem: `LiveCheckInCheck` 2/0, `LiveStayActionsCheck` 2/0, `LiveWalkInCheck` 3/0, `LiveTracesCheck` 3/0, `LiveAvailabilityBookingCheck` 2/0, `LiveBookingFlowCheck` 3/0, `LiveReservationLifecycleCheck` 3/0 e, por último, `LivePreReservationConfirmCheck` 1/0.
+     - O seed e o `smokeTest` rodaram com o JAR do `9daeb7b`, e as verificações ao vivo, com o código de teste do `52e21aa`. Do `9daeb7b` ao `57ccb4e` não mudou nada em `demo-seed/src/main`, `core`, `sdk`, `app/src/main` nem nos scripts de build; do `52e21aa` ao `57ccb4e`, nenhum `Live*Check` (conferido com `git diff --stat`).
+  3. **Roteiro no Windows: aberto.** Fica com o usuário (regra 7).
+  - **Pacote:** `build/demo-package/` no checkout principal, gerado do `5a35b66` (`VERSAO.txt`: `front_dirty=false`, servidor `5e06f16d51ff`), com os três roteiros iguais aos do HEAD, os dois JARs, nenhum `.env`, nenhuma das senhas do ambiente e `images/zeny-server-images.tar` (427 MB, por `save-images.sh`). O `build/demo-package.zip` que está ao lado é de um lote anterior e não foi regerado.
+- **Decisões para o usuário**, já tomadas pela opção recomendada e revisáveis:
+  1. **O relatório impresso do seed não ganha linha.** As reservas futuras, a cancelada e as pendentes entram por seeders próprios, sem aparecer na saída; o roteiro diz onde vê-las. Dívida: o relatório subconta políticas, planos, reservas e bloqueios.
+  2. **Reservas novas do seed:** duas futuras e uma cancelada, do Hóspede Doze, por um seeder separado (`FutureSeeder`).
+  3. **O roteiro do M3 não foi executado clicando no notebook.** Cada "Resultado esperado" novo aponta a asserção ao vivo que o sustenta. Das 10 lacunas que a Task 6 relatou, quatro ganharam verificação ao vivo (Task 7) e uma foi coberta no gate (o seed repetido depois das escritas). Ficaram **aceitas sem verificação ao vivo**: o clique na célula do calendário (20), o titular achado por nome (21 e 22), os termos de cancelamento no resumo da criação (21), a conferência pela busca da tela (22) e a reativação da própria `DEMO-FUT-C1` (25; ao vivo, a reativação é de outra reserva cancelada). Custo se errado: o passo reprova no Windows e reabre a etapa com uma rodada de correção.
+  4. **A demo do notebook foi recriada para o gate** (03:54 de 17/11). Os dados de ensaio anteriores se perderam. Antes de recriar, o proxy tinha 2 linhas de log em 6 horas: ninguém estava usando o ambiente. As senhas são as de `.server/seed-secrets.env`.
   5. **A etapa fica "Aguardando o Windows"** e não fecha `#concluida` no lote.
+  6. **O roteiro do M3 tem 7 diferenças do M2 nos passos 0 a 18, e não 6.** A frase do passo 11 sobre o Gerente passou a citar também as aprovações dos passos 22 e 25: só renumerada, ficaria falsa. A trava do testador fixa as 7.
+  7. **Risco e ondas revistos na retomada.** A Task 2 virou `Risco: alto`, com testador por tarefa, que achou o vazamento do `detail`. As tarefas correram em ondas paralelas, com a verificação rápida do `CLAUDE.md` por tarefa e o gate do projeto na integração.
+  8. **O código do plano "GARANTIDA" aparece numa linha de "Indisponíveis" da cotação** (`QuotePanel.kt:198`, código da E02): a tela cai no código quando nenhuma oferta tem o plano. Não foi corrigido aqui (fora de escopo); o roteiro avisa que é o esperado, e o achado vai para a E06.
+  9. **Sem onda de correção final.** A revisão final só trouxe Menores. Dois deles são do roteiro e viraram notas para a execução no Windows (abaixo); os de código vão para a E06. Uma onda custaria cerca de 1 hora (desenvolvedor, testador, re-revisão, gate e novo clone limpo).
+  10. **Pedidos ao servidor abertos:** `PF-03` (trocar titular e hóspedes antes do check-in) e `PF-04` (prévia da multa de cancelamento), em `docs/pedidos-servidor.md` e em duas capturas na Inbox do brain. São as decisões D1 e D2 do usuário; nenhuma etapa depende deles.
+  11. **O CPF fictício do Hóspede Doze está impresso no roteiro** (passo 19.2), como a Task 6 pedia. Ele tem dígitos verificadores válidos, pelo desenho do `FictitiousDocuments`, anterior a esta etapa: um número válido pode coincidir com o de uma pessoa real, embora nenhum nome real esteja associado. A revisora deixou a decisão para o usuário.
+- **Notas para a execução no Windows:**
+  - Uma execução do `roteiro-m3.md`, do zero, fecha as quatro entradas da lista acumulada (M0 E02, M2 E06, M0 E03 e esta etapa). Recrie no mesmo dia da execução, depois das 03:00 (regra 5).
+  - Para não construir a imagem no Windows, faça antes o `docker load -i images\zeny-server-images.tar`.
+  - O seed pode passar dos "cerca de 10 s" do passo 5: no notebook, levou 16 s no banco novo.
+  - Se o seed terminar com a linha "Falha: Não há UH disponível deste tipo em todas as noites.", rode o bloco 5.8 de novo: o seed é idempotente. "Erros comuns" ainda não traz essa linha.
+  - No passo 20.1, o motivo que a tela mostra para os 4 adultos é a frase inteira do servidor, "O tipo de UH recebe até 3 adulto(s) e N criança(s)."; o roteiro a resume.
 - **Notas para a próxima etapa:**
-  - A recriação da demo ainda não foi tentada nesta sessão.
-  - O `PendingSeeder` e o `FutureSeeder` não têm a espera de inventário do `BookingSeeder`. Se o seed falhar no banco novo com `ROOM_TYPE_UNAVAILABLE` ou `INVENTORY_DATE_OUT_OF_HORIZON`, a correção é a repetição com espera, como adendo ao plano.
-  - A pré-reserva `DEMO-PEND-P1` do ambiente de pé foi criada em 16/11 às 23:23 e vence 48 h depois.
+  - **Itens levados à E06**, que revê este código:
+    - o código do plano em "Indisponíveis" (decisão 8);
+    - `createReservation`, `assignRoom` e `openOutOfOrder` do `SdkPendingGateway` (E04) propagam o `detail` do servidor a quem chama; a impressão final do seed já redige. O `withoutServerDetail` do cancelamento é privado no adaptador, fora do `Redaction.kt`;
+    - o KDoc do `cancelReservation` diz "só o status e o código sobem", mas o `ApprovalRequired` preserva `action`, `permission`, `resourceRef` e `limit`;
+    - o KDoc da `LiveSeedReservationsCheck` diz "Só lê", mas a entrada pelo `AdminSignIn` troca a senha inicial do administrador se ela rodar antes do seed;
+    - nomes de teste do testador que prometem mais do que afirmam: `networkFailureDoesNotCarryRequestData`, `unauthorizedRefusalIsATypedSessionEnd` e `nonJsonRefusalBodyCarriesOnlyStatus` (`SdkPendingGatewayCancelAtaqueTest`) e o caso da linha 188 do `DemoSeedFutureAtaqueTest`;
+    - `ZENY_LIVE_OUTAGE` está nas entradas da tarefa de teste do `app`, mas falta no `upToDateWhen` (anterior a esta etapa);
+    - o texto do roteiro nos dois pontos das notas do Windows (20.1 e "Erros comuns"), se a E06 mexer no roteiro; a trava do testador fixa a frase do 20.1 e muda junto.
+  - **Processo:** a verificação rápida do `CLAUDE.md` roda `detekt`, mas não `detektMain` nem `detektTest`. Peça os dois no despacho de tarefas de Kotlin, para o achado não esperar o gate.
+  - **Ambiente `zeny-front` do notebook:** recriado em 17/11 às 03:54, com o seed e os dados das verificações ao vivo (walk-in, reservas de ensaio, a pré-reserva `DEMO-PEND-P1` já confirmada). O servidor fecha o dia às 03:00 de 18/11. `LiveSeedReservationsCheck`, `LivePreReservationConfirmCheck` e as duas verificações novas de busca só passam logo depois do seed, numa demo recriada.
 
 ---
 
@@ -798,3 +812,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`): o fechamento do dia do servidor marca o no-show e avança a data às 03:00. A E04 ganhou a nota da reativação de no-show, e a E05 a da recriação no mesmo dia. O marco passa a exigir a M0 E03 antes da E01 (regra 3). Nenhuma tag mudou.
 - 2026-11-17 — fim do lote do processo acelerado (`claude --agent orquestrador`): E02, E03 e E04 `#concluida`, com a revisão de segurança adiada (ADR 0011); E05 `#em-andamento`, parada a pedido do usuário. O usuário decidiu em entrevista abrir dois pedidos não bloqueantes ao servidor (D1 e D2 em "Hipóteses e decisões em aberto").
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E05, iniciada no processo acelerado, não foi reescrita: o handoff dela registra que o restante segue o processo normal, e o trecho já commitado (`830f296..920dcd2`) entrou na lista "Revisões de segurança adiadas" do README. Por decisão do usuário em entrevista, a dívida de revisão é paga antes do M4: entra a E06. Nenhuma tag mudou.
+- 2026-11-17 — lote do processo normal (`claude --agent orquestrador`): a E05 foi retomada pelo ciclo do ADR 0012 e fica `#em-andamento`, **Aguardando o Windows** (regra 7), com a revisão final limpa (0 Críticos, 0 Importantes). Os pedidos `PF-03` e `PF-04` foram abertos (D1 e D2).
