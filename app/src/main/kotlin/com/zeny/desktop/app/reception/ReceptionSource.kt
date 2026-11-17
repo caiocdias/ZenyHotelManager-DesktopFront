@@ -64,6 +64,10 @@ fun GuestResponse.toGuestPick(): GuestPick = GuestPick(id.toString(), toHolderSu
  */
 @Suppress("TooManyFunctions") // porta que espelha as operações da recepção sobre o `core`
 interface ReceptionSource {
+    /**
+     * As permissões efetivas da sessão: o mesmo conjunto que `AvailabilitySource.permissions` devolve (as duas portas
+     * leem a conta da sessão), por isso a área Reservas lê só uma delas.
+     */
     suspend fun permissions(): Set<String>
 
     suspend fun businessDay(): BusinessDay

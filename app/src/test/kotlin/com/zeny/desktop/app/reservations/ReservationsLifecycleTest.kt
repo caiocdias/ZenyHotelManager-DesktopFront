@@ -46,6 +46,7 @@ import kotlin.test.assertTrue
 private const val MANAGE = "reservations.reservations.manage"
 private const val READ = "reservations.reservations.read"
 private const val AVAILABILITY_READ = "reservations.availability.read"
+private val WITH_AVAILABILITY = setOf(MANAGE, READ, AVAILABILITY_READ)
 private const val SEARCH_TAB = "Busca"
 private const val AVAILABILITY_TAB = "Disponibilidade e cotação"
 private const val PENDING_TAB = "Pendências"
@@ -218,9 +219,11 @@ class ReservationsLifecycleTest {
                 FakePendingSource(),
                 FakeReservationCancelSource(),
                 FakeReservationReactivateSource(),
-                FakeAvailabilitySource().apply { this.permissions = setOf(AVAILABILITY_READ) },
+                FakeAvailabilitySource(),
             )
+        // Na produção as duas portas devolvem o mesmo conjunto: as permissões efetivas da sessão.
         rig.reception.permissions = permissions
+        rig.availability.permissions = permissions
         items.forEach { item ->
             val holder = HolderSummary("Hóspede ${item.code}", null)
             val id = item.id.toString()
@@ -339,7 +342,7 @@ class ReservationsLifecycleTest {
     @Test
     fun cancelDoneReloadsDetailTableAndCalendar() {
         val item = searchItemOf(code = "R-1", status = "CONFIRMED")
-        val rig = rig(item)
+        val rig = rig(item, permissions = WITH_AVAILABILITY)
         shell(rig.connection(availability = true, pending = true)) {
             open("Reservas")
             open("R-1")
@@ -366,7 +369,7 @@ class ReservationsLifecycleTest {
     @Test
     fun reactivateDoneReloadsDetailTableAndCalendar() {
         val item = searchItemOf(code = "R-1", status = "CANCELLED")
-        val rig = rig(item)
+        val rig = rig(item, permissions = WITH_AVAILABILITY)
         shell(rig.connection(availability = true)) {
             open("Reservas")
             open("R-1")
@@ -428,7 +431,7 @@ class ReservationsLifecycleTest {
     @Test
     fun confirmFromPendingTabReloadsPendingList() {
         val item = searchItemOf(code = "G-1", status = "PROVISIONAL")
-        val rig = rig(item)
+        val rig = rig(item, permissions = WITH_AVAILABILITY)
         val id = item.id
         rig.pending.guarantees += pendingGuaranteeOf(code = "G-1", holderGuestId = item.holderGuestId.toString())
         rig.pending.guarantees[0] = rig.pending.guarantees[0].copy(id = id)
@@ -456,7 +459,7 @@ class ReservationsLifecycleTest {
     @Test
     fun changeDoneReloadsCalendarAndPendingList() {
         val item = searchItemOf(code = "G-1", status = "CONFIRMED")
-        val rig = rig(item)
+        val rig = rig(item, permissions = WITH_AVAILABILITY)
         val id = item.id.toString()
         rig.pending.guarantees += pendingGuaranteeOf(code = "G-1", holderGuestId = item.holderGuestId.toString())
         rig.pending.guarantees[0] = rig.pending.guarantees[0].copy(id = item.id)
@@ -497,8 +500,7 @@ class ReservationsLifecycleTest {
 
     @Test
     fun tabsWithoutAvailability() {
-        val rig = rig(searchItemOf(code = "R-1"))
-        rig.availability.permissions = emptySet()
+        val rig = rig(searchItemOf(code = "R-1"), permissions = setOf(MANAGE, READ))
         shell(rig.connection(availability = true, pending = true)) {
             open("Reservas")
             assertTrue(hasText(SEARCH_TAB))
@@ -509,7 +511,7 @@ class ReservationsLifecycleTest {
 
     @Test
     fun tabsAreSearchAvailabilityAndPendingInOrder() {
-        val rig = rig(searchItemOf(code = "R-1"))
+        val rig = rig(searchItemOf(code = "R-1"), permissions = WITH_AVAILABILITY)
         shell(rig.connection(availability = true, pending = true)) {
             open("Reservas")
             val left =
@@ -523,7 +525,7 @@ class ReservationsLifecycleTest {
 
     @Test
     fun noPendingTabWithoutThePort() {
-        val rig = rig(searchItemOf(code = "R-1"))
+        val rig = rig(searchItemOf(code = "R-1"), permissions = WITH_AVAILABILITY)
         shell(rig.connection(availability = true)) {
             open("Reservas")
             assertTrue(hasText(AVAILABILITY_TAB))
