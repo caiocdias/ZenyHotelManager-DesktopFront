@@ -154,7 +154,7 @@ class DemoSeedFutureAtaqueTest {
             val inner = futureFake()
             val future =
                 object : FutureGateway by inner {
-                    override suspend fun findReservation(externalId: String) = throw IllegalStateException(SECRET_ECHO)
+                    override suspend fun findReservation(externalId: String) = error(SECRET_ECHO)
                 }
             assertEquals(1, execute { context(pendingFake(), future) })
             lines.forEach {
