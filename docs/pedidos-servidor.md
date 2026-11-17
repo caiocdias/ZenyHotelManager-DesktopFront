@@ -43,6 +43,8 @@ A resposta do servidor é a captura de fechamento da etapa dele, que cita **"ate
 |---|---|---|---|---|---|
 | PF-01 | Setores dos recados legíveis com `frontdesk.traces.manage` | aberto | `ZenyHotelManager - pedido do front PF-01 Setores dos recados legíveis com frontdesk.traces.manage` (2026-11-15) | M2 E05 (não depende; tira a role extra do seed quando entregue) | — |
 | PF-02 | Histórico do desfazer check-in com a aprovação do superior | aberto | `ZenyHotelManager - pedido do front PF-02 Histórico do desfazer check-in com a aprovação do superior` (2026-11-15) | M2 E06 (não depende; o roteiro do M2 deixa de prometer "Com aprovação de superior" nessa linha do histórico até a entrega) | — |
+| PF-03 | Trocar o titular e os hóspedes de uma reserva antes do check-in | aberto | `ZenyHotelManager - pedido do front PF-03 Trocar o titular e os hóspedes de uma reserva antes do check-in` (2026-11-17) | M3 E03 (não depende; a tela de alteração ganha a troca de titular e de hóspedes quando entregue) | — |
+| PF-04 | Prévia da multa de cancelamento da reserva | aberto | `ZenyHotelManager - pedido do front PF-04 Prévia da multa de cancelamento da reserva` (2026-11-17) | M3 E04 (não depende; o diálogo de cancelamento passa a mostrar o valor e o prazo antes de confirmar quando entregue) | — |
 
 ## Rodadas de análise do M0
 
