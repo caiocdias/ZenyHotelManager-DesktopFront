@@ -1,6 +1,6 @@
 # 0011 — Processo acelerado: testador por etapa, mais paralelismo e revisão de segurança adiada
 
-- Estado: aceita · 2026-11-16 · decidida pelo usuário, vale até segunda ordem dele
+- Estado: revogada em 2026-11-17 pelo [ADR 0012](0012-revoga-o-processo-acelerado.md)
 - Relacionadas: [ADR 0006](0006-marcos-por-valor-de-demo.md) · soul `orquestrador` (`~/.claude/agents/second-brain-souls/orquestrador.md`, passos 3, 3a e 5)
 
 ## Contexto

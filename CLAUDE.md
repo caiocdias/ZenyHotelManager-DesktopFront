@@ -19,6 +19,7 @@ Kotlin, Compose Multiplatform e Gradle 9.8.1 (wrapper). Versões só em `gradle/
 | JAR do seed | `./gradlew :demo-seed:seedJar` → `demo-seed/build/libs/demo-seed.jar` |
 | smokeTest | `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`, com os segredos pelas variáveis `ZENY_SEED_*` (fora de `check` e de `build`) |
 | travas | `./gradlew resolveAndLockAll --write-locks` |
+| verificação rápida | `./gradlew :<módulo>:test --tests '<filtro>' :<módulo>:ktlintCheck :<módulo>:detekt`, com `<módulo>` em `sdk`, `core`, `design`, `app` ou `demo-seed` e `<filtro>` na classe ou no padrão dos testes do que a tarefa tocou (`--tests` pode repetir). Um trio por módulo tocado e por módulo que usa o que mudou (`sdk` → `core` → `design`, `app` e `demo-seed`; `design` → `app`). Script de `tools/` ou `tests/`: `bash tests/run.sh tests/<arquivo>.sh` |
 | gate do projeto | `./gradlew build` + `bash tests/run.sh` |
 
 - Regrave os lockfiles no mesmo commit que muda catálogo ou plugin.
@@ -35,7 +36,3 @@ Kotlin, Compose Multiplatform e Gradle 9.8.1 (wrapper). Versões só em `gradle/
 ## Decisões do usuário
 
 As decisões são tomadas por entrevista, com uma opção recomendada. Elas ficam registradas em `docs/adr/`; consulte lá em vez de copiar aqui. ADR em estado de proposta espera a decisão do usuário.
-
-## Processo acelerado (até segunda ordem)
-
-Por decisão do usuário, o orquestrador segue o [ADR 0011](docs/adr/0011-processo-acelerado-ate-a-demo.md). Toda tarefa entra como `Risco: normal`, e o testador roda uma vez por etapa. Os planos são escritos para ondas paralelas de até 3 tarefas. A `revisor-seguranca` e o scanner ficam fora até a revogação. Nesse período, a etapa fecha com suíte verde, gate verde e a evidência de cada critério de aceite. A revisão adiada cobre `a300a23..HEAD`.

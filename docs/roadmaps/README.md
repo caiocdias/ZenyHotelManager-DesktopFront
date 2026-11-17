@@ -13,8 +13,8 @@ O servidor de referência é o commit fixado em `api/server-pin.properties` ([AD
 | M0 | [Sincronização com o servidor](roadmap-m0-sincronizacao.md) | 1 por rodada | Commit fixado, contrato copiado, pré-voo de defasagem, ambiente do servidor e pacote do Windows. Repete-se a cada avanço do servidor | — |
 | M1 | [Fundação e mapa de UHs](roadmap-m1-fundacao.md) | 7 | Projeto Gradle, SDK gerado, núcleo HTTP e sessão, design system, login com endereço do servidor, menu por permissão, aprovação de superior, tempo real, `demo-seed` e mapa de UHs ao vivo | M0 E01 |
 | M2 | [Recepção do dia](roadmap-m2-recepcao-do-dia.md) | 7 | Painel do dia, check-in com alocação, ficha de registro em PDF (visualizador e impressão local), walk-in, troca de UH, desfazer check-in e recados | M1 e M0 E02 |
-| M3 | [Reservas](roadmap-m3-reservas.md) | 5 | Busca, disponibilidade e cotação, nova reserva e alteração com a confirmação em PDF, cancelar e reativar, pendências | M2 e M0 E03 |
-| M4 | [Contas, caixa e check-out](roadmap-m4-contas-caixa-checkout.md) | 5 | Conta da hospedagem com extrato em PDF, turno de caixa, pagamentos e cauções, check-out | M3 |
+| M3 | [Reservas](roadmap-m3-reservas.md) | 6 | Busca, disponibilidade e cotação, nova reserva e alteração com a confirmação em PDF, cancelar e reativar, pendências. Depois do gate, a revisão adiada do processo acelerado (E06) | M2 e M0 E03 |
+| M4 | [Contas, caixa e check-out](roadmap-m4-contas-caixa-checkout.md) | 5 | Conta da hospedagem com extrato em PDF, turno de caixa, pagamentos e cauções, check-out | M3, com a E06 |
 | M5 | [Hóspedes e empresas](roadmap-m5-hospedes-empresas.md) | 5 | Perfil completo (com a descrição do gênero da FNRH), documentos com trilha, duplicados e mesclagem, LGPD, empresas | M4 |
 | M6 | [Governança e operação](roadmap-m6-governanca-operacao.md) | 8 | Status de governança, OOO/OOS, checklists, notificações, escala do dia e fechamento do dia (desbloqueado pela rodada 3 do M0) | M5 |
 | M7 | [Gestão e cadastros](roadmap-m7-gestao-cadastros.md) | 12 | UHs, tarifas, bloqueios, usuários e roles, hotel, financeiro, modelos de checklist, pessoal, FNRH com a fila de envio, auditoria, impressoras e agentes de impressão | M6 |
@@ -60,12 +60,12 @@ O gate de cada marco é um dia de trabalho (o usuário faz um gate por dia). Se 
    - Quando o usuário voltar ao Windows, ele executa a lista na ordem, com o pacote mais recente:
      - cada aprovação fecha a etapa `#concluida`;
      - uma reprovação reabre a etapa com uma rodada de correção, antes de qualquer etapa nova.
-8. **Processo acelerado (temporário).** O usuário decidiu em 2026-11-16 ([ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md)) que, até segunda ordem, as etapas podem rodar pelo "Prompt acelerado" de cada roadmap. Nesse modo:
-   - toda tarefa é `Risco: normal`, e o testador roda uma vez por etapa;
-   - os planos são escritos para ondas paralelas de até 3 tarefas;
-   - a `revisor-seguranca` e o scanner não rodam.
-
-   A etapa fecha `#concluida` com suíte verde, gate verde e a evidência de cada critério de aceite. O handoff dela traz a linha `Revisão de segurança: adiada (ADR 0011)`, e ela entra na lista "Revisões de segurança adiadas" abaixo. Essa lista é o escopo do marco final de análise do projeto, que o usuário vai executar.
+8. **Processo acelerado (revogado).** Valeu de 2026-11-16 a 2026-11-17, pelo [ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md), e foi revogado pelo [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md): o ciclo padrão das souls passou a trazer o que ele buscava. Desde a revogação:
+   - nenhuma etapa nova entra por esta regra, e os roadmaps não têm mais o "Prompt acelerado";
+   - toda execução segue o ciclo completo do orquestrador, com a `revisor-seguranca` em cada tarefa e na revisão final e com o scanner;
+   - a etapa só fecha `#concluida` com a revisão final limpa e a evidência de cada critério de aceite;
+   - as etapas que fecharam por esta regra mantêm no handoff a linha `Revisão de segurança: adiada (ADR 0011)` e a entrada na lista "Revisões de segurança adiadas" abaixo. Essa lista é o escopo da dívida de revisão;
+   - **a dívida é paga antes do M4**, na M3 E06 (decisão do usuário em 2026-11-17, por entrevista; ADR 0012). O M4 só começa com a M3 E06 `#concluida`.
 
 ## Revisões de segurança adiadas
 
@@ -75,7 +75,7 @@ Etapas executadas pela regra 8 sem a `revisor-seguranca`, na ordem em que fechar
 - a saída da `check_test_integrity.py --base <MERGE_BASE>` (exit e apontamentos);
 - os achados estacionados no ledger.
 
-O marco final de análise do projeto paga a lista inteira. A revisão final cobre `a300a23..HEAD` da `main`, com o scanner. Os achados viram etapas de correção.
+A M3 E06 paga a lista inteira, antes do M4 (ADR 0012). A revisão cobre `a300a23..HEAD`, com o scanner e a `check_test_integrity.py --base a300a23`. Os achados Críticos e Importantes são corrigidos nela.
 
 1. **M3 E02 — Disponibilidade e cotação.**
    - Commits: `b6aafa9..2ad4b09` na `roadmap/m3-reservas`.
@@ -92,6 +92,11 @@ O marco final de análise do projeto paga a lista inteira. A revisão final cobr
    - Integridade (`--base fc7a0b3`): exit 1. Dois `SKIP_ADICIONADO` em `tests/test_live_lifecycle_ataque.sh`, falsos positivos: as linhas `nao_tem '@Disabled'` e `nao_tem '@Ignore'` são a trava que proíbe desligar a verificação ao vivo.
    - Nenhuma tarefa teve revisão de código. O testador de etapa atacou o intervalo inteiro, sem defeito.
    - Achados estacionados: as observações do testador e as dívidas das "Notas para a próxima etapa" da E04, no roadmap do M3.
+4. **M3 E05 — Gate do marco M3 (só o trecho feito antes da revogação; a etapa segue `#em-andamento`).**
+   - Commits: `830f296..920dcd2` na `roadmap/m3-reservas`.
+   - Integridade (`--base 830f296 --head 920dcd2`): exit 0, nenhum apontamento.
+   - Só a Task 1 tem código (`e8a1542..920dcd2`: o `FutureSeeder` e a porta `FutureGateway`, no `demo-seed`), e ela não teve revisão de código nem testador. Os outros dois commits do intervalo são documentos do orquestrador (a tag e o plano). O restante da etapa segue o processo normal (ADR 0012).
+   - Achados estacionados: nenhum no ledger da etapa.
 
 ## Validações acumuladas no Windows
 
@@ -124,3 +129,4 @@ Estão no design, §10:
 - 2026-11-16 — a M3 E02 entra na lista "Revisões de segurança adiadas" (`claude --agent orquestrador`).
 - 2026-11-16 — a M3 E03 entra na lista "Revisões de segurança adiadas" (`claude --agent orquestrador`).
 - 2026-11-17 — a M3 E04 entra na lista "Revisões de segurança adiadas" (`claude --agent orquestrador`).
+- 2026-11-17 — regra 8 encerrada: o processo acelerado foi revogado pelo [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), por decisão do usuário, depois da mudança das souls. Os roadmaps perderam o "Prompt acelerado". A M3 E05, iniciada no processo acelerado, segue o processo normal, e o trecho já commitado dela entrou na lista "Revisões de segurança adiadas" (item 4). Por entrevista, o usuário decidiu pagar a dívida antes do M4: entra a M3 E06, e o M4 passa a exigi-la. Notas de partes independentes, para as ondas dos planos, em etapas pendentes do M4 ao M7 (`claude --agent arquiteto`).

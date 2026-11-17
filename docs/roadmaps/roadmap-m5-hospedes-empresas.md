@@ -1,6 +1,6 @@
 # Roadmap — M5 Hóspedes e empresas
 
-> Arquivo: `docs/roadmaps/roadmap-m5-hospedes-empresas.md` · branch de execução: `roadmap/m5-hospedes-empresas` · criado em 2026-11-10 · última revisão 2026-11-15
+> Arquivo: `docs/roadmaps/roadmap-m5-hospedes-empresas.md` · branch de execução: `roadmap/m5-hospedes-empresas` · criado em 2026-11-10 · última revisão 2026-11-17
 
 > **Pré-requisito:** a etapa E05 ("Gate do marco M4") de `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -188,43 +188,6 @@ O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: n
 Ao parar, responda com: etapas concluídas e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, a branch e os commits do lote e o próximo passo sugerido.
 ```
 
-## Prompt acelerado
-
-É o processo acelerado da regra 8 de [README](README.md) e do [ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md). Use este prompt no lugar do prompt de execução enquanto a regra 8 valer. Nele, o testador roda só por etapa, as tarefas correm em ondas paralelas e a `revisor-seguranca` fica de fora. Cada etapa fica marcada para o marco final de análise do projeto.
-
-```text
-Execute o roadmap docs/roadmaps/roadmap-m5-hospedes-empresas.md deste repositório seguindo a seção "Protocolo de execução" dele, com o plugin superpowers, no processo acelerado do ADR 0011 (docs/adr/0011-processo-acelerado-ate-a-demo.md) e da regra 8 de docs/roadmaps/README.md. Onde eles divergem do protocolo ou do texto do orquestrador, valem eles.
-
-Limite desta execução: no máximo 4 etapas concluídas.
-
-Antes da primeira etapa (depois do passo 3): se docs/adr/0011-processo-acelerado-ate-a-demo.md não existe na branch do roadmap, integre a main nela (git merge main, no worktree). Conflito só em docs/roadmaps: resolva mantendo as duas versões.
-
-Processo acelerado, em cada etapa:
-- Planeje toda tarefa como Risco: normal. O testador roda uma vez por etapa, sobre MERGE_BASE..HEAD, antes do fechamento.
-- Escreva o plano para ondas paralelas: tarefas com arquivos disjuntos (contando testes, configuração de build e lockfiles), com Depende de: só quando a dependência é real. No máximo 3 tarefas por onda.
-- Não despache a revisor-seguranca, nem por tarefa nem na revisão final, e não rode o scanner de dependências. Continuam valendo:
-  - a revisão do plano pelo revisor-arquitetura;
-  - a conferência de cada despacho;
-  - a check_test_integrity.py por tarefa e por etapa. Exit 2 para tudo; apontamentos e avisos vão ao ledger e ao handoff;
-  - a suíte verde e o gate do projeto.
-- Feche a etapa #concluida com suíte verde, gate verde e evidência de cada critério de aceite, no lugar da revisão final limpa.
-- No commit de fechamento, marque a etapa para a revisão futura em dois lugares:
-  - no handoff, a linha "Revisão de segurança: adiada (ADR 0011) — commits <MERGE_BASE>..<HEAD no fechamento>, integridade exit <k>";
-  - na lista "Revisões de segurança adiadas" de docs/roadmaps/README.md, uma entrada nova no formato que a lista pede.
-
-1. Confira a pré-condição do protocolo: esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis. A revisor-seguranca não será despachada, mas continua sendo pré-condição. Se faltar alguma, pare e diga como resolver. Leia CLAUDE.md (e AGENTS.md, se existir), docs/roadmaps/README.md e, no roadmap, o cabeçalho inteiro, o pré-requisito, o protocolo e o índice. Se o CLAUDE.md exigir o Second Brain, confira a linha BRAIN: carregado no contexto e leia o hub. Rode git status e git branch -a.
-2. Se alguma etapa estiver #em-andamento, retome-a a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas.
-3. Crie ou retome o worktree/branch roadmap/m5-hospedes-empresas com superpowers:using-git-worktrees. Não trabalhe na branch principal.
-4. Rode o pré-voo do servidor (tools/server-drift.sh) e siga a regra do protocolo.
-5. Repita, uma etapa por vez: escolha a próxima etapa elegível, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado), execute com superpowers:subagent-driven-development no processo acelerado, feche a etapa, marque a revisão adiada e preencha o handoff conforme o protocolo.
-6. Pare nas paradas do protocolo ou ao atingir o limite.
-7. No fim, rode superpowers:finishing-a-development-branch com merge local na main, conforme o fechamento do orquestrador: tudo commitado, pronto para git push origin main e o repositório pronto para o próximo orquestrador. Depois, liste as decisões tomadas e apresente como entrevista com opção recomendada só as de arquitetura que esperam por mim.
-
-O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: nunca escreva nele. Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
-
-Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_test_integrity de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, as entradas acrescentadas a "Revisões de segurança adiadas", a branch e os commits do lote e o próximo passo sugerido.
-```
-
 ## Índice de etapas
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
@@ -284,7 +247,10 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 
 **Revisão humana:** não
 
-**Notas para o plano:** ARCHITECTURE §8.3 do servidor: o documento inteiro sai só por ação própria, com permissão e trilha.
+**Notas para o plano:**
+
+- ARCHITECTURE §8.3 do servidor: o documento inteiro sai só por ação própria, com permissão e trilha.
+- Partes independentes, para as ondas do plano: depois da busca e da casca do perfil, as abas usam operações distintas e não dependem umas das outras. São elas: documentos (`…/documents`, com `/remove` e `/reveal`), dados sensíveis (`…/sensitive-data`), anexos (`…/attachments` e `/api/v1/files`) e consentimentos (`…/consents`).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -342,6 +308,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 - Desde o pin `5e06f16d51ff` (M0 E03), `restrictGuest`, `liftGuestRestriction` e `mergeGuests` respondem `oneOf: [GuestResponse, GuestWriteSummaryResponse]`, sem discriminador (M6 E17 do servidor; ARCHITECTURE §7 dele). Com `guests.profiles.read` vem o perfil inteiro; sem ela, só `{id, restricted}`. A versão vai no `ETag` nos dois casos.
 - O tratamento está decidido no ADR 0010. O `core` escolhe o ramo pelo `required`: o completo exige `fullName`, e o resumo exige `restricted`. Ele decodifica com o serializer gerado e devolve um resultado tipado, falhando fechado. Esta é a primeira etapa que implementa a regra. Faça a escolha do ramo reaproveitável para as próximas respostas desse tipo.
 - O tipo que o ogen gera para essas respostas está caracterizado no teste do `sdk` da M0 E03 (ver o handoff dela).
+- Partes independentes, para as ondas do plano: a escolha do ramo do ADR 0010 é a peça comum das três escritas e vem antes. Depois dela, a mesclagem (com a lista de candidatos) e a restrição não dependem uma da outra.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -386,7 +353,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** partes independentes, para as ondas do plano: exportar (`…/export`) e anonimizar (`…/anonymize`) usam operações distintas e não dependem uma da outra.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -504,3 +471,4 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E01 ganha a descrição do gênero (`genderDescription`). "Fora de escopo" foi corrigido: o servidor já envia à FNRH, e a fila vai para a M7 E10. A M6 E17 do servidor, ainda pendente, vai reduzir o corpo das respostas de `restrict`, `lift-restriction` e `merge` para quem não tem `guests.profiles.read`. A E02 deve reler o contrato na rodada do M0 que vier antes deste marco. Nenhuma tag mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A M6 E17 do servidor chegou: as três escritas de restrição e mesclagem respondem com um `oneOf` (perfil completo ou resumo). A E02 ganhou dois critérios e notas, e o tratamento ficou decidido no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md), por entrevista com o usuário. Nenhuma tag mudou.
+- 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E01, a E02 e a E03 ganharam, em "Notas para o plano", as partes que não dependem uma da outra, para o plano formar ondas. Objetivo, escopo e critérios de aceite não mudaram, e nenhuma tag mudou.

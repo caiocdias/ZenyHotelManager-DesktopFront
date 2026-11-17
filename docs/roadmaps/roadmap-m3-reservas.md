@@ -1,6 +1,6 @@
 # Roadmap — M3 Reservas
 
-> Arquivo: `docs/roadmaps/roadmap-m3-reservas.md` · branch de execução: `roadmap/m3-reservas` · criado em 2026-11-10 · última revisão 2026-11-15
+> Arquivo: `docs/roadmaps/roadmap-m3-reservas.md` · branch de execução: `roadmap/m3-reservas` · criado em 2026-11-10 · última revisão 2026-11-17
 
 > **Pré-requisito:** etapa E06 ("Gate do marco M2") de `docs/roadmaps/roadmap-m2-recepcao-do-dia.md` marcada `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3). A rodada 3 já foi analisada: a etapa E03 de `docs/roadmaps/roadmap-m0-sincronizacao.md` (servidor em `5e06f16d51ff`) precisa estar integrada na `main` antes da E01 deste marco. Pela regra 7, ela pode estar "Aguardando o Windows".
 
@@ -62,7 +62,8 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 - histórico;
 - pendências;
 - seed ampliado;
-- roteiro do M3.
+- roteiro do M3;
+- revisão de segurança adiada do processo acelerado, paga antes do M4 (E06, [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md)).
 
 **Fora de escopo:**
 
@@ -102,6 +103,7 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 - [ ] O `smokeTest` passa contra o ambiente recriado.
 - [ ] O roteiro `docs/demo/roteiro-m3.md`, que acumula os anteriores, foi executado pelo usuário no Windows.
 - [ ] Nenhuma etapa depende de pedido ao servidor.
+- [ ] A revisão de segurança adiada do processo acelerado está paga (E06).
 
 ## Protocolo de execução
 
@@ -185,43 +187,6 @@ O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: n
 Ao parar, responda com: etapas concluídas e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, a branch e os commits do lote e o próximo passo sugerido.
 ```
 
-## Prompt acelerado
-
-É o processo acelerado da regra 8 de [README](README.md) e do [ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md). Use este prompt no lugar do prompt de execução enquanto a regra 8 valer. Nele, o testador roda só por etapa, as tarefas correm em ondas paralelas e a `revisor-seguranca` fica de fora. Cada etapa fica marcada para o marco final de análise do projeto.
-
-```text
-Execute o roadmap docs/roadmaps/roadmap-m3-reservas.md deste repositório seguindo a seção "Protocolo de execução" dele, com o plugin superpowers, no processo acelerado do ADR 0011 (docs/adr/0011-processo-acelerado-ate-a-demo.md) e da regra 8 de docs/roadmaps/README.md. Onde eles divergem do protocolo ou do texto do orquestrador, valem eles.
-
-Limite desta execução: no máximo 4 etapas concluídas.
-
-Antes da primeira etapa (depois do passo 3): se docs/adr/0011-processo-acelerado-ate-a-demo.md não existe na branch do roadmap, integre a main nela (git merge main, no worktree). Conflito só em docs/roadmaps: resolva mantendo as duas versões.
-
-Processo acelerado, em cada etapa:
-- Planeje toda tarefa como Risco: normal. O testador roda uma vez por etapa, sobre MERGE_BASE..HEAD, antes do fechamento.
-- Escreva o plano para ondas paralelas: tarefas com arquivos disjuntos (contando testes, configuração de build e lockfiles), com Depende de: só quando a dependência é real. No máximo 3 tarefas por onda.
-- Não despache a revisor-seguranca, nem por tarefa nem na revisão final, e não rode o scanner de dependências. Continuam valendo:
-  - a revisão do plano pelo revisor-arquitetura;
-  - a conferência de cada despacho;
-  - a check_test_integrity.py por tarefa e por etapa. Exit 2 para tudo; apontamentos e avisos vão ao ledger e ao handoff;
-  - a suíte verde e o gate do projeto.
-- Feche a etapa #concluida com suíte verde, gate verde e evidência de cada critério de aceite, no lugar da revisão final limpa.
-- No commit de fechamento, marque a etapa para a revisão futura em dois lugares:
-  - no handoff, a linha "Revisão de segurança: adiada (ADR 0011) — commits <MERGE_BASE>..<HEAD no fechamento>, integridade exit <k>";
-  - na lista "Revisões de segurança adiadas" de docs/roadmaps/README.md, uma entrada nova no formato que a lista pede.
-
-1. Confira a pré-condição do protocolo: esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis. A revisor-seguranca não será despachada, mas continua sendo pré-condição. Se faltar alguma, pare e diga como resolver. Leia CLAUDE.md (e AGENTS.md, se existir), docs/roadmaps/README.md e, no roadmap, o cabeçalho inteiro, o pré-requisito, o protocolo e o índice. Se o CLAUDE.md exigir o Second Brain, confira a linha BRAIN: carregado no contexto e leia o hub. Rode git status e git branch -a.
-2. Se alguma etapa estiver #em-andamento, retome-a a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas.
-3. Crie ou retome o worktree/branch roadmap/m3-reservas com superpowers:using-git-worktrees. Não trabalhe na branch principal.
-4. Rode o pré-voo do servidor (tools/server-drift.sh) e siga a regra do protocolo.
-5. Repita, uma etapa por vez: escolha a próxima etapa elegível, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado), execute com superpowers:subagent-driven-development no processo acelerado, feche a etapa, marque a revisão adiada e preencha o handoff conforme o protocolo.
-6. Pare nas paradas do protocolo ou ao atingir o limite.
-7. No fim, rode superpowers:finishing-a-development-branch com merge local na main, conforme o fechamento do orquestrador: tudo commitado, pronto para git push origin main e o repositório pronto para o próximo orquestrador. Depois, liste as decisões tomadas e apresente como entrevista com opção recomendada só as de arquitetura que esperam por mim.
-
-O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: nunca escreva nele. Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
-
-Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_test_integrity de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, as entradas acrescentadas a "Revisões de segurança adiadas", a branch e os commits do lote e o próximo passo sugerido.
-```
-
 ## Índice de etapas
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
@@ -231,6 +196,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 | E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #concluida | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #em-andamento | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
+| E06 | Revisão adiada do processo acelerado | #pendente | E05 | Revisão de segurança do intervalo devido, com scanner e integridade, e os achados Críticos e Importantes corrigidos |
 
 ---
 
@@ -706,6 +672,16 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 - **Plano:** `docs/superpowers/plans/2026-11-17-m3-reservas-e05.md`, com 6 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
   - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable. Ela correu adiantada, sobre o rascunho, enquanto a E04 rodava. A rodada 0 bloqueou por 1 Crítico (a tarefa do pacote não fecha verde sem o testador ajustar travas antes) e 5 Importantes.
   - A Task 3 é do testador e roda antes da Task 4: é uma exceção escrita ao "testador uma vez por etapa".
+- **Processo, desde 2026-11-17 ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md)):** o processo acelerado foi revogado com esta etapa em andamento. O restante dela segue o processo normal do orquestrador:
+  - a `revisor-seguranca` em cada tarefa e na revisão final, com o scanner;
+  - o testador por tarefa só em `Risco: alto` da lista fechada, e uma vez na etapa;
+  - o gate de integração;
+  - o fechamento só com a revisão final limpa.
+
+  O plano foi escrito no processo acelerado e não foi alterado: todas as tarefas são `Risco: normal`, e ele não tem a seção `## Ondas`. Pelo passo 3a do orquestrador, um plano sem a seção roda cada tarefa restante como onda de uma tarefa só. Rever o `Risco:` pela lista fechada ou acrescentar a seção fica com o orquestrador, que é o dono do plano.
+
+  Antes de retomar, a branch `roadmap/m3-reservas` precisa receber a `main` (é fast-forward): o worktree dela ainda não tem o ADR 0012, o `CLAUDE.md` sem o processo acelerado nem a E06. O workspace da etapa fica só nesse worktree e não pode ser apagado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `830f296..920dcd2`, integridade exit 0.** É o trecho feito antes da revogação. Só a Task 1 (`e8a1542..920dcd2`) tem código, e ela não teve revisão por tarefa. O trecho é a entrada 4 da lista "Revisões de segurança adiadas" do README. A revisão final desta etapa cobre o intervalo inteiro dela e alcança esse trecho; a E06 paga a lista.
 - **Commits:** `830f296..920dcd2` na `roadmap/m3-reservas`.
 
   | Task | Entrega | Commit | Estado |
@@ -745,9 +721,80 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 ---
 
+## E06 — Revisão adiada do processo acelerado — #pendente
+
+**Objetivo:** pagar a dívida de revisão do processo acelerado. O código que entrou sem a `revisor-seguranca` passa pela revisão que faltou, com o scanner de dependências e a verificação mecânica desde `a300a23`. Os achados Críticos e Importantes são corrigidos nesta etapa, e a lista "Revisões de segurança adiadas" de `docs/roadmaps/README.md` fica marcada como paga.
+
+**Por que agora:** decisão do usuário em 2026-11-17 ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md)). O M4 trata de dinheiro e parte das telas e fachadas de reservas, e o código da E03 e da E04 nunca foi lido por uma revisora. Antes do M4 o intervalo ainda é pequeno, e nenhum marco depende dele.
+
+**Dependências:** E05. Pela regra 7 do README, a E05 "Aguardando o Windows" conta como concluída.
+
+**Escopo:**
+
+- **Revisão:** a `revisor-seguranca`, com o prompt `code-reviewer.md` e o modelo mais capaz disponível, sobre `a300a23..HEAD` da branch no início da etapa. O pacote leva:
+  - o diff do intervalo;
+  - a saída do scanner de dependências no HEAD revisado;
+  - a saída de `check_test_integrity.py --base a300a23`;
+  - a saída do gate do projeto no HEAD revisado;
+  - a lista "Revisões de segurança adiadas" do README, que diz onde focar, com os achados estacionados que ela cita.
+- **Correção:** cada achado Crítico ou Importante, pelo ciclo normal do orquestrador.
+- **Registro:** o destino de cada achado no handoff, e a marca de paga em cada entrada da lista do README.
+- **Pacote:** gerado de novo, se a etapa mudar código de produção.
+
+**Fora de escopo:**
+
+- funcionalidade nova;
+- revisar de novo, a fundo, o que já teve revisão (M3 E01 e as Tasks 1 a 8 da E02). Esse código está no intervalo, mas a lista do README diz o que ficou sem revisão;
+- mudar o plano ou o handoff das etapas já fechadas.
+
+**Critérios de aceite:**
+
+- [ ] O handoff traz o parecer da `revisor-seguranca` sobre `a300a23..HEAD`: os dois SHAs do intervalo, o modelo usado e a contagem de achados por severidade.
+- [ ] O handoff cita a saída do scanner de dependências no HEAD revisado e a de `check_test_integrity.py --base a300a23`. Cada apontamento e cada aviso dela tem a justificativa da revisora.
+- [ ] Cada achado Crítico ou Importante está corrigido, com o commit citado. O que o usuário decidir não corrigir está registrado como decisão dele, com a data.
+- [ ] Cada achado Menor e cada achado estacionado que a lista do README cita tem destino registrado: corrigido, aceito com o motivo ou levado a uma etapa nomeada.
+- [ ] Em `docs/roadmaps/README.md`, cada entrada de "Revisões de segurança adiadas" traz a marca de paga, com a data e esta etapa.
+- [ ] O gate do projeto passa no HEAD final da etapa.
+- [ ] Se a etapa mudou código de produção, o pacote de demo foi gerado de novo depois da última correção, e o handoff diz que é ele o pacote da lista "Validações acumuladas no Windows".
+
+**Validação obrigatória:**
+
+- Gate do projeto (`./gradlew build` e `bash tests/run.sh`) → passa.
+- Scanner de dependências → saída inteira no pacote da revisão.
+- `check_test_integrity.py --base a300a23` → saída inteira no pacote da revisão.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- A etapa tem duas fases, e a revisão vem antes do plano: os achados dela são a spec do plano de correção. Sem achado Crítico nem Importante, não há plano de correção, e a etapa fecha com a evidência da revisão.
+- Em `--base a300a23` reaparecem os apontamentos que a lista do README já descreve: o `MERGE_IGNORADO` do merge da `main`, os três `DEV_TESTE_DO_TESTADOR` da E02 e os `SKIP_ADICIONADO` das travas `nao_tem '@Disabled'` e `nao_tem '@Ignore'`. A revisora os julga com essa descrição em mãos.
+- As correções passam pelo ciclo normal, com revisão por tarefa e revisão final. A revisão final da etapa cobre o intervalo das correções.
+- Achados em features diferentes não dependem uns dos outros, e as correções deles podem ir em tarefas da mesma onda.
+- A E05 é o gate e gera o pacote antes desta etapa. Por isso o último critério: a validação no Windows usa o pacote mais recente (regra 7 do README).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Os achados não cabem num plano de poucas tarefas. O orquestrador corrige os Críticos, para e relata, e as etapas de correção que faltarem são criadas numa sessão do arquiteto.
+- Um achado pede mudança de contrato ou de fronteira entre módulos. É decisão de arquitetura: vai ao usuário por entrevista, conforme o protocolo.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`): a E03 ganha a confirmação da reserva em PDF, no visualizador da M2 E07 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)). A impressão pela fila do servidor fica com a M7 E12. Nenhuma tag mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`): o fechamento do dia do servidor marca o no-show e avança a data às 03:00. A E04 ganhou a nota da reativação de no-show, e a E05 a da recriação no mesmo dia. O marco passa a exigir a M0 E03 antes da E01 (regra 3). Nenhuma tag mudou.
 - 2026-11-17 — fim do lote do processo acelerado (`claude --agent orquestrador`): E02, E03 e E04 `#concluida`, com a revisão de segurança adiada (ADR 0011); E05 `#em-andamento`, parada a pedido do usuário. O usuário decidiu em entrevista abrir dois pedidos não bloqueantes ao servidor (D1 e D2 em "Hipóteses e decisões em aberto").
+- 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E05, iniciada no processo acelerado, não foi reescrita: o handoff dela registra que o restante segue o processo normal, e o trecho já commitado (`830f296..920dcd2`) entrou na lista "Revisões de segurança adiadas" do README. Por decisão do usuário em entrevista, a dívida de revisão é paga antes do M4: entra a E06. Nenhuma tag mudou.

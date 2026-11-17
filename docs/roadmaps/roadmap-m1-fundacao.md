@@ -1,6 +1,6 @@
 # Roadmap — M1 Fundação e mapa de UHs
 
-> Arquivo: `docs/roadmaps/roadmap-m1-fundacao.md` · branch de execução: `roadmap/m1-fundacao` · criado em 2026-11-10 · última revisão 2026-11-10
+> Arquivo: `docs/roadmaps/roadmap-m1-fundacao.md` · branch de execução: `roadmap/m1-fundacao` · criado em 2026-11-10 · última revisão 2026-11-17
 
 > **Pré-requisito:** a etapa E01 de `docs/roadmaps/roadmap-m0-sincronizacao.md` está `#concluida`, com o commit fixado, o contrato copiado e o ambiente `zeny-front` no ar.
 
@@ -175,43 +175,6 @@ Limite desta execução: no máximo 4 etapas concluídas.
 O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: nunca escreva nele. Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
 
 Ao parar, responda com: etapas concluídas e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, a branch e os commits do lote e o próximo passo sugerido.
-```
-
-## Prompt acelerado
-
-É o processo acelerado da regra 8 de [README](README.md) e do [ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md). Use este prompt no lugar do prompt de execução enquanto a regra 8 valer. Nele, o testador roda só por etapa, as tarefas correm em ondas paralelas e a `revisor-seguranca` fica de fora. Cada etapa fica marcada para o marco final de análise do projeto.
-
-```text
-Execute o roadmap docs/roadmaps/roadmap-m1-fundacao.md deste repositório seguindo a seção "Protocolo de execução" dele, com o plugin superpowers, no processo acelerado do ADR 0011 (docs/adr/0011-processo-acelerado-ate-a-demo.md) e da regra 8 de docs/roadmaps/README.md. Onde eles divergem do protocolo ou do texto do orquestrador, valem eles.
-
-Limite desta execução: no máximo 4 etapas concluídas.
-
-Antes da primeira etapa (depois do passo 3): se docs/adr/0011-processo-acelerado-ate-a-demo.md não existe na branch do roadmap, integre a main nela (git merge main, no worktree). Conflito só em docs/roadmaps: resolva mantendo as duas versões.
-
-Processo acelerado, em cada etapa:
-- Planeje toda tarefa como Risco: normal. O testador roda uma vez por etapa, sobre MERGE_BASE..HEAD, antes do fechamento.
-- Escreva o plano para ondas paralelas: tarefas com arquivos disjuntos (contando testes, configuração de build e lockfiles), com Depende de: só quando a dependência é real. No máximo 3 tarefas por onda.
-- Não despache a revisor-seguranca, nem por tarefa nem na revisão final, e não rode o scanner de dependências. Continuam valendo:
-  - a revisão do plano pelo revisor-arquitetura;
-  - a conferência de cada despacho;
-  - a check_test_integrity.py por tarefa e por etapa. Exit 2 para tudo; apontamentos e avisos vão ao ledger e ao handoff;
-  - a suíte verde e o gate do projeto.
-- Feche a etapa #concluida com suíte verde, gate verde e evidência de cada critério de aceite, no lugar da revisão final limpa.
-- No commit de fechamento, marque a etapa para a revisão futura em dois lugares:
-  - no handoff, a linha "Revisão de segurança: adiada (ADR 0011) — commits <MERGE_BASE>..<HEAD no fechamento>, integridade exit <k>";
-  - na lista "Revisões de segurança adiadas" de docs/roadmaps/README.md, uma entrada nova no formato que a lista pede.
-
-1. Confira a pré-condição do protocolo: esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis. A revisor-seguranca não será despachada, mas continua sendo pré-condição. Se faltar alguma, pare e diga como resolver. Leia CLAUDE.md (e AGENTS.md, se existir), docs/roadmaps/README.md e, no roadmap, o cabeçalho inteiro, o pré-requisito, o protocolo e o índice. Se o CLAUDE.md exigir o Second Brain, confira a linha BRAIN: carregado no contexto e leia o hub. Rode git status e git branch -a.
-2. Se alguma etapa estiver #em-andamento, retome-a a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas.
-3. Crie ou retome o worktree/branch roadmap/m1-fundacao com superpowers:using-git-worktrees. Não trabalhe na branch principal.
-4. Rode o pré-voo do servidor (tools/server-drift.sh) e siga a regra do protocolo.
-5. Repita, uma etapa por vez: escolha a próxima etapa elegível, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado), execute com superpowers:subagent-driven-development no processo acelerado, feche a etapa, marque a revisão adiada e preencha o handoff conforme o protocolo.
-6. Pare nas paradas do protocolo ou ao atingir o limite.
-7. No fim, rode superpowers:finishing-a-development-branch com merge local na main, conforme o fechamento do orquestrador: tudo commitado, pronto para git push origin main e o repositório pronto para o próximo orquestrador. Depois, liste as decisões tomadas e apresente como entrevista com opção recomendada só as de arquitetura que esperam por mim.
-
-O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: nunca escreva nele. Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
-
-Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_test_integrity de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, as entradas acrescentadas a "Revisões de segurança adiadas", a branch e os commits do lote e o próximo passo sugerido.
 ```
 
 ## Índice de etapas
@@ -825,3 +788,4 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 - 2026-11-13 — E06 `#concluida` (`claude --agent orquestrador`): cliente SSE com reconexão no `core` e mapa de UHs ao vivo na área Governança; propagação medida de 17 a 52 ms no `core` e de 58 a 264 ms no ladrilho, e recuperação da queda do `api` verificada contra o `zeny-front`; revisão final limpa após a onda de correção. H4 não ocorreu. Critério "Outro (VALOR)" substituído por decisão do usuário (I7).
 - 2026-11-13 — E07 executada (`claude --agent orquestrador`): pacote com os JARs, o roteiro e o `VERSAO.txt`, roteiro do M1, demo recriada com `smokeTest`, clone limpo e JAR abrindo no Linux; revisão final limpa. Fica `#em-andamento` na parada humana (roteiro no Windows). Lote E05–E07 encerrado.
 - 2026-11-13 — E07 `#concluida` (`claude --agent orquestrador`): a pedido do usuário na parada, o roteiro virou um passo a passo único do zero (Tasks 5a–6, executado do zero no Linux); o usuário executou-o no Windows e aprovou. H3 reconfirmada no Windows. **M1 concluído.** Pré-voo para o próximo marco: aditivo (código 11, alvo `57eb5fac5b8a`) — rodada do M0 antes do M2.
+- 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. Nenhuma etapa mudou.

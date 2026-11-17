@@ -1,6 +1,6 @@
 # Roadmap — M7 Gestão e cadastros
 
-> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-15
+> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-17
 
 > **Pré-requisito:** a etapa E07 ("Gate do marco M6") de `docs/roadmaps/roadmap-m6-governanca-operacao.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -200,43 +200,6 @@ O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: n
 Ao parar, responda com: etapas concluídas e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, a branch e os commits do lote e o próximo passo sugerido.
 ```
 
-## Prompt acelerado
-
-É o processo acelerado da regra 8 de [README](README.md) e do [ADR 0011](../adr/0011-processo-acelerado-ate-a-demo.md). Use este prompt no lugar do prompt de execução enquanto a regra 8 valer. Nele, o testador roda só por etapa, as tarefas correm em ondas paralelas e a `revisor-seguranca` fica de fora. Cada etapa fica marcada para o marco final de análise do projeto.
-
-```text
-Execute o roadmap docs/roadmaps/roadmap-m7-gestao-cadastros.md deste repositório seguindo a seção "Protocolo de execução" dele, com o plugin superpowers, no processo acelerado do ADR 0011 (docs/adr/0011-processo-acelerado-ate-a-demo.md) e da regra 8 de docs/roadmaps/README.md. Onde eles divergem do protocolo ou do texto do orquestrador, valem eles.
-
-Limite desta execução: no máximo 4 etapas concluídas.
-
-Antes da primeira etapa (depois do passo 3): se docs/adr/0011-processo-acelerado-ate-a-demo.md não existe na branch do roadmap, integre a main nela (git merge main, no worktree). Conflito só em docs/roadmaps: resolva mantendo as duas versões.
-
-Processo acelerado, em cada etapa:
-- Planeje toda tarefa como Risco: normal. O testador roda uma vez por etapa, sobre MERGE_BASE..HEAD, antes do fechamento.
-- Escreva o plano para ondas paralelas: tarefas com arquivos disjuntos (contando testes, configuração de build e lockfiles), com Depende de: só quando a dependência é real. No máximo 3 tarefas por onda.
-- Não despache a revisor-seguranca, nem por tarefa nem na revisão final, e não rode o scanner de dependências. Continuam valendo:
-  - a revisão do plano pelo revisor-arquitetura;
-  - a conferência de cada despacho;
-  - a check_test_integrity.py por tarefa e por etapa. Exit 2 para tudo; apontamentos e avisos vão ao ledger e ao handoff;
-  - a suíte verde e o gate do projeto.
-- Feche a etapa #concluida com suíte verde, gate verde e evidência de cada critério de aceite, no lugar da revisão final limpa.
-- No commit de fechamento, marque a etapa para a revisão futura em dois lugares:
-  - no handoff, a linha "Revisão de segurança: adiada (ADR 0011) — commits <MERGE_BASE>..<HEAD no fechamento>, integridade exit <k>";
-  - na lista "Revisões de segurança adiadas" de docs/roadmaps/README.md, uma entrada nova no formato que a lista pede.
-
-1. Confira a pré-condição do protocolo: esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis. A revisor-seguranca não será despachada, mas continua sendo pré-condição. Se faltar alguma, pare e diga como resolver. Leia CLAUDE.md (e AGENTS.md, se existir), docs/roadmaps/README.md e, no roadmap, o cabeçalho inteiro, o pré-requisito, o protocolo e o índice. Se o CLAUDE.md exigir o Second Brain, confira a linha BRAIN: carregado no contexto e leia o hub. Rode git status e git branch -a.
-2. Se alguma etapa estiver #em-andamento, retome-a a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas.
-3. Crie ou retome o worktree/branch roadmap/m7-gestao-cadastros com superpowers:using-git-worktrees. Não trabalhe na branch principal.
-4. Rode o pré-voo do servidor (tools/server-drift.sh) e siga a regra do protocolo.
-5. Repita, uma etapa por vez: escolha a próxima etapa elegível, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado), execute com superpowers:subagent-driven-development no processo acelerado, feche a etapa, marque a revisão adiada e preencha o handoff conforme o protocolo.
-6. Pare nas paradas do protocolo ou ao atingir o limite.
-7. No fim, rode superpowers:finishing-a-development-branch com merge local na main, conforme o fechamento do orquestrador: tudo commitado, pronto para git push origin main e o repositório pronto para o próximo orquestrador. Depois, liste as decisões tomadas e apresente como entrevista com opção recomendada só as de arquitetura que esperam por mim.
-
-O repositório do servidor (/home/caio/repos/ZenyHotelManager) é só leitura: nunca escreva nele. Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
-
-Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_test_integrity de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, o resultado do pré-voo, as entradas acrescentadas a "Revisões de segurança adiadas", a branch e os commits do lote e o próximo passo sugerido.
-```
-
 ## Índice de etapas
 
 **Bloco A — Estrutura e comercial**
@@ -293,7 +256,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** partes independentes, para as ondas do plano: áreas e características são cadastros que não referenciam outros no contrato (`AreaResponse`, `RoomFeatureResponse`) e não dependem um do outro. O tipo escolhe características (`featureIds`), e a UH escolhe o tipo e as características (`roomTypeId`, `featureIds`), só por leitura.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -339,7 +302,10 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Revisão humana:** não
 
-**Notas para o plano:** o preço fica congelado na reserva existente (gate do M4 do servidor).
+**Notas para o plano:**
+
+- O preço fica congelado na reserva existente (gate do M4 do servidor).
+- Partes independentes, para as ondas do plano: o plano tarifário não referencia temporada no contrato (`RatePlanResponse`), então o cadastro de temporadas não depende do de planos. A derivação depende do plano.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -385,7 +351,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** partes independentes, para as ondas do plano: pacotes, políticas de cancelamento e políticas de garantia são três cadastros de recursos distintos. Eles não dependem uns dos outros nem das grades de preços e de restrições.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -431,7 +397,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** partes independentes, para as ondas do plano: os bloqueios (`/api/v1/room-blocks`) e o inventário (`/api/v1/room-type-inventory/overbooking-limit` e `/recount`) usam operações distintas e não dependem um do outro.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -486,7 +452,10 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** sim. É autorização: um erro no editor de roles se propaga para todo o acesso do hotel.
 
-**Notas para o plano:** delegação, escopos e limites estão na ARCHITECTURE §8.2 do servidor e na nota `ZenyHotelManager - Segurança, autenticação e autorização`.
+**Notas para o plano:**
+
+- Delegação, escopos e limites estão na ARCHITECTURE §8.2 do servidor e na nota `ZenyHotelManager - Segurança, autenticação e autorização`.
+- Partes independentes, para as ondas do plano: as sessões próprias (`/api/v1/auth/sessions`) não dependem dos cadastros de usuários e de roles. O editor de roles não depende do cadastro de usuários, que só lê a lista de roles para atribuir.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -534,7 +503,7 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** partes independentes, para as ondas do plano: os dados do hotel (com o logotipo), os parâmetros operacionais, as políticas e as taxas são quatro recursos distintos (`/hotel`, `/hotel/operational-settings`, `/hotel/policies` e `/hotel/tax-settings`) e não dependem uns dos outros.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -575,7 +544,7 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** partes independentes, para as ondas do plano: pontos de caixa e códigos de lançamento são cadastros que não se referenciam no contrato (`CashPointResponse`, `TransactionCodeResponse`). As regras de roteamento escolhem códigos de lançamento (`transactionCodeIds`), só por leitura.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -730,6 +699,8 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Notas para o plano:** a nota `ZenyHotelManager - Módulo fnrh` traz o saneamento, os domínios e a semântica da desativação do CPF solicitante. As submissões não trazem dado de hóspede além de ids e do código da reserva, e os erros dos dados sensíveis vêm neutros (`person.sensitiveData`, decisão E08 (e) do servidor). A tela orienta a abrir o perfil (M5 E01) e não tenta adivinhar o campo. Ao ligar a integração, sai todo o acumulado (nota da M5 E08 do servidor): a tela de configuração avisa isso antes de gravar a credencial. Desde o pin `5e06f16d51ff` (M0 E03; M6 E14 do servidor), o no-show do fechamento do dia também vai à fila. A tela dá rótulo pt-BR próprio à operação `NO_SHOW` e à falha `REMOTE_NO_SHOW` de `FnrhSubmissionResponse`, que são `x-extensible-enum`.
 
+Partes independentes, para as ondas do plano: a trilha de auditoria (`GET /api/v1/audit-entries`) não depende de nada da FNRH. Dentro da FNRH, a fila de envio (`/fnrh/submissions`) não depende da configuração, dos domínios nem do CPF solicitante.
+
 **Bloqueios:** Nenhum bloqueio conhecido.
 
 **Riscos e mitigação:**
@@ -787,6 +758,8 @@ Todo usuário vê e revoga as próprias sessões.
 **Notas para o plano:** sem agente, um job fica `PENDING` para sempre, e a tela deixa isso claro. O README do servidor, seção "Impressão", e a nota `ZenyHotelManager - Módulo printing`, se já existir no brain, trazem os detalhes do agente (long-poll, SSE, confirmação e reenvio). O front não implementa nada disso.
 
 *Nota da M0 E02 (2026-11-13, ruling R4):* o `core` não serve às 5 operações `/api/v1/print-agents/me/*`, que usam o esquema `printAgentToken`. O `AuthPlugin` (`core/.../session/AuthPlugin.kt:34-37`) põe o `Bearer` do usuário em qualquer requisição com `ogenAuthAttr` não vazio, e o `ApiExecutor` (`core/.../http/ApiExecutor.kt:81-87`) transforma o `401` dela em `SessionEnded`: chamar uma dessas rotas pelo `core` encerraria a sessão do usuário. Esta etapa não as chama (as rotas do agente ficam fora do desktop, ADR 0009). Se o plano precisar delas, a correção recomendada é o `AuthPlugin` e o `ApiExecutor` só tratarem como sessão de usuário as requisições cujo requisito se chame `bearerAuth`, falhando fechado. O teste `SdkAttackTest.printAgentOperationsDeclarePrintAgentTokenScheme` caracteriza o atributo.
+
+Partes independentes, para as ondas do plano: o envio de documento entra em três telas diferentes (ficha, confirmação e extrato), que não dependem umas das outras; as três só leem as impressoras ativas. A fila de jobs é leitura à parte dos cadastros. O cadastro de impressoras depende do de agentes (`agentId` em `PrinterResponse`).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -858,4 +831,5 @@ Todo usuário vê e revoga as próprias sessões.
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E10 ganha a fila de envio à FNRH (lista, `retry` e `dismiss`) e a limpeza da credencial. Ficou registrada a ruling de não adotar o WireMock da FNRH no `zeny-front` por ora. Entra a E12 (impressoras, agentes e fila de impressão, com "Enviar à impressora do hotel" nas telas de documento; [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E11 passa a depender dela e a separar na cobertura as rotas do agente de impressão. O fechamento do dia saiu de "Fora de escopo" e foi para a M6 E08. O marco tem 12 etapas, no limite de referência. Nenhuma tag mudou.
+- 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. As etapas E01 a E07, a E10 e a E12 ganharam, em "Notas para o plano", as partes que não dependem uma da outra, para o plano formar ondas; as relações entre cadastros foram conferidas no contrato fixado (`api/openapi.yaml`). Objetivo, escopo e critérios de aceite não mudaram, e nenhuma tag mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A E10 ganhou a nota do no-show na fila da FNRH (`NO_SHOW` e `REMOTE_NO_SHOW`). Nenhuma tag mudou.
