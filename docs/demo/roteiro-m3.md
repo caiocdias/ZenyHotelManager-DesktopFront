@@ -717,7 +717,7 @@ Clique de novo em **Hospedada**, para desmarcar. Nenhuma situação pode ficar m
 | Confirmada | Luxo | mais 21 dias | mais 23 dias | do seed |
 | Cancelada | Standard | mais 28 dias | mais 30 dias | do seed, cancelada sem multa |
 
-A busca por documento não usa o período: as reservas do seed aparecem mesmo fora do "De" e do "Até". Elas são as que não apareciam na saída do seed, no passo 5.
+A busca por documento não usa o período: as reservas do seed aparecem mesmo fora do "De" e do "Até". Elas são as que não apareciam na saída do seed, no passo 5. A linha "Pré-reserva" só aparece numa demo recriada no dia (o aviso do passo 0): a pré-reserva do seed vence 48 h depois de criada.
 
 **19.3. Abrir uma reserva.** Clique na linha da reserva "Cancelada" (chegada na data operacional mais 28 dias; no exemplo, 13/12/2026).
 
@@ -741,7 +741,7 @@ Clique na célula de hoje da linha **Standard**.
 
 **20.1. Uma cotação que não cabe.** Na cotação, em **Chegada**, digite a data operacional mais 30 dias (no exemplo, `15/12/2026`); em **Saída**, a data operacional mais 33 dias (`18/12/2026`). Em **Adultos**, troque o 2 por `4`. Clique em **Cotar**.
 
-**Resultado esperado:** aparece a seção "Indisponíveis", com uma linha que começa por "Standard ·" e outra que começa por "Luxo ·", cada uma com o motivo em português: o tipo de UH recebe até 3 adultos. Nenhum código em maiúsculas com sublinhado. A Suíte pode aparecer como oferta, acima da seção.
+**Resultado esperado:** aparece a seção "Indisponíveis", com duas linhas que começam por "Standard ·" e uma que começa por "Luxo ·", cada uma com o motivo em português: o tipo de UH recebe até 3 adultos. Uma das linhas Standard é "Standard · GARANTIDA" (o plano com garantia por cartão que o seed vende só no site, mostrado pelo código), que traz também o motivo "O plano não é vendido neste canal.": isso é o esperado, não é reprovação. Nenhum código em maiúsculas com sublinhado. A Suíte pode aparecer como oferta, acima da seção.
 
 **20.2. A cotação de 3 noites para 2 adultos.** Em **Adultos**, volte a `2`, com as mesmas datas, e clique em **Cotar**.
 
@@ -751,7 +751,7 @@ Clique na célula de hoje da linha **Standard**.
 
 ## 21. Nova reserva
 
-Um hóspede liga e reserva 3 noites. Na cotação do 20.2, clique em **Reservar** na oferta "Standard · Tarifa balcão · Café da manhã".
+Um hóspede no balcão reserva 3 noites. Na cotação do 20.2, clique em **Reservar** na oferta "Standard · Tarifa balcão · Café da manhã".
 
 **Resultado esperado:** abre o diálogo "Nova reserva", com o resumo da oferta ("Standard · Tarifa balcão · Café da manhã", o período da chegada à saída, "3 noites", e o mesmo "Total R$ …" da oferta) e as seções "Titular" ("Escolha o titular"), "Origem" ("Balcão" marcado), "Segmento" ("Lazer" marcado), os campos "Pedidos especiais" e "Diária negociada (opcional)" e os botões "Cancelar" e "Criar reserva".
 
@@ -858,7 +858,7 @@ Clique na aba **Pendências**.
 - **Garantias pendentes:** a pré-reserva do seed, de "Hóspede Demonstração Doze" (chegada na data operacional mais 10 dias), com a situação "Pré-reserva · Cartão" e, em "Prazo", a data e a hora do vencimento. A pré-reserva vence 48 h depois de criada pelo seed: numa demo recriada no dia, ela está aqui.
 - **Depósitos em falta:** vazia, com "Nenhum depósito em falta.". A lista é das reservas com garantia por depósito que ainda não receberam o depósito; a demo não tem nenhuma, e o registro do depósito na conta da reserva só chega no M4.
 - **No-shows previstos:** as chegadas de hoje que continuam "Confirmada", sem check-in: as do passo 11 que não fizeram check-in, inclusive a de "Hóspede Demonstração Três", que voltou a confirmada no passo 16. A reserva cancelada no passo 24 não entra. A lista existe só enquanto essas chegadas não fazem check-in: às 03:00 o servidor as marca como "Não compareceu" (o aviso do passo 0).
-- **Realocação necessária:** a reserva Luxo do seed de "Hóspede Demonstração Doze" (chegada na data operacional mais 5 dias), com a situação "UH 208 fora de ordem na estadia": a UH alocada a ela entra em fora de ordem nesses dias. O servidor marca a reserva alguns segundos depois do seed: se a lista vier vazia, clique em **Atualizar**.
+- **Realocação necessária:** a reserva do seed na UH 208 (a Luxo de "Hóspede Demonstração Doze" no 19.2), achada pelo "Período", da data operacional mais 5 dias à data operacional mais 7 dias, com "2 noites", e pela situação "UH 208 fora de ordem na estadia": a UH alocada a ela entra em fora de ordem nesses dias. Nesta lista a coluna "Titular" mostra "—", porque o servidor não manda o titular nela: isso é o esperado, não é reprovação. O servidor marca a reserva alguns segundos depois do seed: se a lista vier vazia, clique em **Atualizar**.
 
 Volte a **Garantias pendentes** e clique na linha da pré-reserva.
 
