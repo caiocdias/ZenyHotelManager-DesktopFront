@@ -20,6 +20,7 @@ import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.session.SessionState
+import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.design.theme.ZenyTheme
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -63,6 +64,21 @@ private const val CPF_FIRST_WEIGHT = 10
 private const val CPF_MODULUS = 11
 private const val NEED_SEED =
     "pré-condição do ambiente: o seed pós-fechamento não deixou hospedados suficientes no dia operacional"
+private const val G12_CPF_BASE = "202600112"
+private const val CANCELLED = "CANCELLED"
+private const val CANCELLED_FROM_DAYS = 28L
+private const val CANCELLED_TO_DAYS = 30L
+private const val NEED_DEMO_SEED = "NEED_SEED: rode o demo-seed desta etapa"
+
+// O `externalId` das reservas do seed do Hóspede Doze e a situação que o roteiro (passo 19.2) mostra após o seed.
+private val SEED_STATUS_LABELS =
+    mapOf(
+        "DEMO-PEND-P1" to "Pré-reserva",
+        "DEMO-PEND-R1" to "Confirmada",
+        "DEMO-FUT-F1" to "Confirmada",
+        "DEMO-FUT-F2" to "Confirmada",
+        "DEMO-FUT-C1" to "Cancelada",
+    )
 private const val CONTROL_MARKER = "zeny-live-control-7f3a"
 
 /**
@@ -206,6 +222,88 @@ class LiveReservationSearchCheck {
             }
         }
 
+    /**
+     * Passo 19.2 do roteiro; **só lê**. Vale **logo depois do seed**: depois da demo (o walk-in do passo 14, a
+     * reativação da `DEMO-FUT-C1`, a confirmação da `DEMO-PEND-P1`) as situações mudam e ela reprova de propósito.
+     * Linhas a mais do mesmo titular (o walk-in) não reprovam.
+     */
+    @Test
+    fun documentSearchFindsSeedReservationsOfGuestTwelve() =
+        withViewer { _, connection ->
+            val source = connection.reservationSearchSource()
+            val codes = SEED_STATUS_LABELS.keys.associateWith { seedCode(source, it) }
+            val cpf = fictitiousCpf(G12_CPF_BASE)
+            val masked = "CPF ***${cpf.takeLast(4)}"
+            withSearchScreen(connection, PAGE_LIMIT) { search ->
+                searchByDocument(search, cpf)
+                waitForIdle()
+                assertNull(search.table.error, "a busca falhou: ${search.table.error?.userMessage}")
+                assertEquals(masked, search.searchedDocument, "máscara inesperada")
+                val texts = screenTexts()
+                assertTrue(texts.any { it.contains(masked) }, "a tela não mostra $masked")
+                assertTrue(texts.none { it.contains(cpf) }, "há nó com os 11 dígitos do CPF do Hóspede Doze")
+                val statusByCode = search.table.rows.associate { it.code to it.status }
+                SEED_STATUS_LABELS.forEach { (externalId, label) ->
+                    val code = codes.getValue(externalId)
+                    assertEquals(
+                        label,
+                        statusByCode[code],
+                        "$externalId ($code) na busca por documento: esperava \"$label\", a tela mostra " +
+                            "${statusByCode[code]?.let { "\"$it\"" } ?: "nenhuma linha"} " +
+                            "(${search.table.rows.size} linha(s) no resultado)",
+                    )
+                }
+                println(
+                    "LiveReservationSearchCheck: o documento do Hóspede Doze achou ${search.table.rows.size} " +
+                        "reserva(s), com as ${codes.size} do seed nas situações do roteiro",
+                )
+            }
+        }
+
+    /** Passo 25 do roteiro; **só lê**: o filtro "Cancelada", no período d+28 a d+30, acha a `DEMO-FUT-C1`. */
+    @Test
+    fun cancelledFilterFindsSeedCancelled() =
+        withViewer { _, connection ->
+            val source = connection.reservationSearchSource()
+            val externalId = "DEMO-FUT-C1"
+            val seed = seedReservation(source, externalId)
+            if (seed.status != CANCELLED) {
+                fail("$NEED_DEMO_SEED: a $externalId (${seed.code}) está ${seed.status}, esperava $CANCELLED")
+            }
+            val cancelledLabel = checkNotNull(SEED_STATUS_LABELS[externalId])
+            withSearchScreen(connection, PAGE_LIMIT) { search ->
+                runOnUiThread { search.start() }
+                waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { search.day != null && !search.table.loading }
+                runOnUiThread {
+                    val day = checkNotNull(search.day).date.value
+                    search.number = ""
+                    search.name = ""
+                    search.fromText = DateInput.format(BusinessDate(day.plusDays(CANCELLED_FROM_DAYS)))
+                    search.toText = DateInput.format(BusinessDate(day.plusDays(CANCELLED_TO_DAYS)))
+                    search.statuses = setOf(CANCELLED)
+                    search.search()
+                }
+                waitUntil(timeoutMillis = LOAD_TIMEOUT_MILLIS) { !search.table.loading }
+                waitForIdle()
+                assertNull(search.table.error, "a busca falhou: ${search.table.error?.userMessage}")
+                assertNull(search.fieldError, "a busca foi barrada no cliente: ${search.fieldError}")
+                val rows = search.table.rows
+                assertTrue(
+                    rows.any { it.code == seed.code },
+                    "a ${seed.code} ($externalId) não está no filtro \"$cancelledLabel\" de d+$CANCELLED_FROM_DAYS " +
+                        "a d+$CANCELLED_TO_DAYS: ${rows.size} linha(s), códigos ${rows.map { it.code }}",
+                )
+                val others = rows.filter { it.status != cancelledLabel }
+                assertTrue(
+                    others.isEmpty(),
+                    "há linha que não mostra \"$cancelledLabel\": ${others.map { "${it.code} ${it.status}" }}",
+                )
+                println(
+                    "LiveReservationSearchCheck: o filtro Cancelada achou a ${seed.code} entre ${rows.size} linha(s)",
+                )
+            }
+        }
+
     @Test
     fun termNotInLogs() =
         withViewer { _, connection ->
@@ -304,8 +402,58 @@ class LiveReservationSearchCheck {
         return texts(onRoot(useUnmergedTree = true).fetchSemanticsNode())
     }
 
-    /** O CPF fictício do G1: a base mais os dois dígitos verificadores, a mesma regra de `FictitiousDocuments`. */
-    private fun fictitiousCpf(): String {
+    /** Abre a tela de Reservas com o estado real, entrega a `search` ao [block] e a fecha no fim. */
+    private fun withSearchScreen(
+        connection: CoreConnection,
+        pageSize: Int,
+        block: ComposeUiTest.(ReservationSearchState) -> Unit,
+    ) {
+        val source = connection.reservationSearchSource()
+        runDesktopComposeUiTest(WIDTH, HEIGHT) {
+            lateinit var search: ReservationSearchState
+            setContent {
+                val scope = rememberCoroutineScope()
+                search = remember { ReservationSearchState(source, scope, pageSize) }
+                val detail = remember { ReservationDetailState(connection.receptionSource(), scope) }
+                ZenyTheme { ReservationsScreen(search, detail) }
+            }
+            try {
+                block(search)
+            } finally {
+                search.close()
+            }
+        }
+    }
+
+    /** A reserva do seed de `externalId` dado, achada pela busca; sem ela, ou duplicada, `NEED_SEED`. */
+    private fun seedReservation(
+        source: ReservationSearchSource,
+        externalId: String,
+    ): ReservationListItemResponse {
+        val found =
+            runBlocking {
+                val rows = mutableListOf<ReservationListItemResponse>()
+                var cursor: String? = null
+                do {
+                    val page = source.search(ReservationFilter(externalId = externalId), cursor, PAGE_LIMIT)
+                    rows += page.items
+                    cursor = page.nextCursor
+                } while (cursor != null)
+                rows
+            }
+        if (found.size != 1) {
+            fail("$NEED_DEMO_SEED: a busca pelo externalId $externalId achou ${found.size} reserva(s), esperava 1")
+        }
+        return found.single()
+    }
+
+    private fun seedCode(
+        source: ReservationSearchSource,
+        externalId: String,
+    ): String = seedReservation(source, externalId).code
+
+    /** O CPF fictício de um hóspede do seed (por padrão o G1): a base mais os dígitos, como `FictitiousDocuments`. */
+    private fun fictitiousCpf(baseDigits: String = G1_CPF_BASE): String {
         fun digit(
             base: String,
             firstWeight: Int,
@@ -313,9 +461,9 @@ class LiveReservationSearchCheck {
             val sum = base.mapIndexed { i, c -> (c - '0') * (firstWeight - i) }.sum()
             return (sum % CPF_MODULUS).let { if (it < 2) 0 else CPF_MODULUS - it }
         }
-        val d1 = digit(G1_CPF_BASE, CPF_FIRST_WEIGHT)
-        val d2 = digit(G1_CPF_BASE + d1, CPF_FIRST_WEIGHT + 1)
-        return "$G1_CPF_BASE$d1$d2"
+        val d1 = digit(baseDigits, CPF_FIRST_WEIGHT)
+        val d2 = digit(baseDigits + d1, CPF_FIRST_WEIGHT + 1)
+        return "$baseDigits$d1$d2"
     }
 
     /** Os códigos dos hospedados do dia sem a saída vencida: o período não os toca depois da virada das 03:00. */

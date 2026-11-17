@@ -166,7 +166,11 @@ class LiveReservationLifecycleCheck {
             cleanup.getOrThrow()
         }
 
-    /** Critério 3: as quatro listas carregam, cada pendência do seed está nelas uma vez e a linha abre o detalhe. */
+    /**
+     * Critério 3: as quatro listas carregam, cada pendência do seed está nelas uma vez e a linha abre o detalhe.
+     * Sustenta também o passo 26 do roteiro: "Depósitos em falta" está vazia. A lista só ganha linha com operações de
+     * `billing`, que são do M4; quando o M4 as trouxer, esta asserção e o texto do roteiro mudam juntos.
+     */
     @Test
     fun pendingListsLoad() =
         withScreen { screen, ports, _ ->
@@ -182,6 +186,12 @@ class LiveReservationLifecycleCheck {
                 pending.start()
             }
             val counts = PendingList.entries.associateWith { loadAll(screen, pending.table(it), it.label).size }
+            assertEquals(
+                0,
+                counts[PendingList.DEPOSITS],
+                "\"${PendingList.DEPOSITS.label}\" devia estar vazia (o depósito é do M4); veio com " +
+                    "${counts[PendingList.DEPOSITS]} linha(s)",
+            )
             val guarantees = pending.table(PendingList.GUARANTEES).rows
             val guarantee =
                 guarantees.firstOrNull { it.code == preBooking.code }

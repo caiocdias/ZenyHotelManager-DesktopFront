@@ -68,6 +68,7 @@ private const val LOAD_TIMEOUT_MILLIS = 60_000L
 private const val PAGE_LIMIT = 200
 private const val LIFECYCLE_ARRIVAL_DAYS = 30L
 private const val LIFECYCLE_DEPARTURE_DAYS = 33L
+private const val CHANGED_DEPARTURE_DAYS = 34L
 private const val DISCOUNT_ARRIVAL_DAYS = 35L
 private const val DISCOUNT_DEPARTURE_DAYS = 36L
 private const val ADULTS = 2
@@ -147,7 +148,10 @@ class LiveBookingFlowCheck {
         assumeTrue(System.getenv("ZENY_LIVE_BOOKING") == "1", "sem ZENY_LIVE_BOOKING=1: verificação real pulada")
     }
 
-    /** Critérios 1, 4 e 5, sobre a mesma reserva: cria pela cotação, altera em concorrência e abre a confirmação. */
+    /**
+     * Critérios 1, 4 e 5 e o passo 23.1 do roteiro, sobre a mesma reserva: cria pela cotação, altera em concorrência,
+     * abre a confirmação e muda a saída com o total novo do servidor.
+     */
     @Test
     fun bookingLifecycle() =
         withScreen { screen, ports, _ ->
@@ -157,6 +161,7 @@ class LiveBookingFlowCheck {
             val created = createFromQuote(screen, ports, arrival, departure)
             concurrentChangeReloads(screen, ports, created)
             confirmationOpens(screen, ports, created)
+            departureChangeRaisesTotal(screen, ports, created, today.plusDays(CHANGED_DEPARTURE_DAYS))
         }
 
     /** Critério 2: a diária negociada abaixo do teto da Recepcionista pede o Gerente e cria uma reserva só. */
@@ -378,6 +383,60 @@ class LiveBookingFlowCheck {
                 first.close()
                 second.close()
             }
+        }
+    }
+
+    // --- Passo 23.1 do roteiro ----------------------------------------------------------------------------------
+
+    /**
+     * Passo 23.1 do roteiro: a saída de uma reserva confirmada ganha um dia pela tela; o total novo que a tela mostra
+     * é o que o servidor devolve (maior que o anterior) e o histórico ganha uma entrada. **Escreve** na reserva criada.
+     */
+    @Suppress("LongMethod") // um roteiro só: leitura, edição, espera, releitura e conferência
+    private fun DesktopComposeUiTest.departureChangeRaisesTotal(
+        screen: Screen,
+        ports: Ports,
+        created: Created,
+        newDeparture: BusinessDate,
+    ) {
+        val before = runBlocking { ports.reception.reservation(created.id) }.reservation
+        val historyBefore = runBlocking { ports.reception.history(created.id) }.size
+        val totalBefore = BigDecimal(before.total)
+        val change = newChange(screen, ports, created.id)
+        try {
+            runOnUiThread { change.start() }
+            awaitLoaded(change, "${created.code}, na mudança de saída")
+            assertTrue(!change.inHouse, "a reserva ${created.code} abriu como hospedada; esperava confirmada")
+            runOnUiThread { change.departureText = DateInput.format(newDeparture) }
+            assertEquals(DateInput.format(newDeparture), change.departureText, "a nova saída de ${created.code}")
+            runOnUiThread { change.confirm() }
+            awaitSettled(screen, change)
+            assertSettledDone(change, "a mudança de saída da ${created.code}")
+            val after = runBlocking { ports.reception.reservation(created.id) }.reservation
+            assertEquals(newDeparture.toApi(), after.departure, "a saída relida da ${created.code}")
+            val totalAfter = BigDecimal(after.total)
+            assertTrue(
+                totalAfter > totalBefore,
+                "o total relido da ${created.code} devia crescer com a noite a mais: antes $totalBefore, " +
+                    "depois $totalAfter",
+            )
+            assertEquals(
+                "Reserva ${created.code} alterada. Novo total: ${ReceptionText.money(after.total)}.",
+                change.done,
+                "o total novo que a tela mostra da ${created.code} não é o relido do servidor ($totalAfter)",
+            )
+            val historyAfter = runBlocking { ports.reception.history(created.id) }.size
+            assertEquals(
+                historyBefore + 1,
+                historyAfter,
+                "entradas do histórico da ${created.code}: antes $historyBefore, depois $historyAfter",
+            )
+            println(
+                "LiveBookingFlowCheck: reserva ${created.code} com a saída em ${newDeparture.toApi()}: total " +
+                    "$totalBefore -> $totalAfter, igual ao da tela; histórico $historyBefore -> $historyAfter",
+            )
+        } finally {
+            runOnUiThread { change.close() }
         }
     }
 
