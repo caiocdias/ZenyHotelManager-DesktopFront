@@ -95,7 +95,7 @@ O recepcionista trabalha o dia no app. Ele vê chegadas, saídas e hospedados da
 
 - [x] Comandos oficiais de build, teste e lint verdes. *(E06, clone limpo.)*
 - [x] O `smokeTest` passa contra o ambiente recriado. *(E06.)*
-- [ ] O roteiro `docs/demo/roteiro-m2.md`, acumulando o do M1, executado pelo usuário no Windows.
+- [x] O roteiro `docs/demo/roteiro-m2.md`, acumulando o do M1, executado pelo usuário no Windows. *(Pelo `roteiro-m3.md`, que o acumula; aprovado em 2026-11-17.)*
 - [x] Nenhuma etapa depende de pedido ao servidor. *(E06: PF-01 e PF-02 abertos, sem etapa dependente.)*
 
 ## Protocolo de execução
@@ -190,7 +190,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E04 | Troca de UH e desfazer check-in | #concluida | E02 | Troca de UH do hospedado e desfazer check-in com aprovação de superior |
 | E05 | Recados | #concluida | E01 | Recados por setor ligados a reserva ou UH, com resolução |
 | E07 | Ficha de registro e visualizador de PDF | #concluida | E02 | Ficha da hospedagem em PDF no app, em memória, com "Salvar como…" e impressão local |
-| E06 | Gate do marco M2 | #em-andamento | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
+| E06 | Gate do marco M2 | #concluida | E03, E04, E05, E07 | Seed ampliado, roteiro do M2 e definição de pronto verificada |
 
 ---
 
@@ -685,7 +685,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Gate do marco M2 — #em-andamento
+## E06 — Gate do marco M2 — #concluida
 
 **Objetivo:** o M2 entregue como build testável. O seed tem dados para todos os fluxos do marco, o roteiro do M2 existe e a definição global de pronto foi verificada num clone limpo e no Windows.
 
@@ -706,7 +706,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - [x] Clone limpo: build, teste e lint verdes.
 - [x] O `smokeTest` passa e o seed roda em menos de 2 minutos.
-- [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
+- [x] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa. *(Aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"); o roteiro do M3 acumula o do M2.)*
 
 **Validação obrigatória:**
 
@@ -726,7 +726,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-15):** `#em-andamento`, **Aguardando o Windows** (regra 7 do `docs/roadmaps/README.md`). Tudo o que dá para verificar no notebook foi verificado; falta só o usuário executar o `roteiro-m2.md` do pacote no Windows e aprovar. A base (M0 E02) também ainda não foi validada no Windows: a mesma execução a fecha (entrada 1 das "Validações acumuladas no Windows"). Por decisão do usuário (2026-11-15), essa execução fica para o gate do M3, que acumula o roteiro do M2; o M3 começa sem esperar o Windows.
+- **Estado (2026-11-17):** `#concluida`. A validação no Windows foi aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"). Fechada pelo `claude --agent orquestrador` do lote que fechou o M3.
+- **Estado anterior (2026-11-15):** `#em-andamento`, **Aguardando o Windows** (regra 7 do `docs/roadmaps/README.md`). Tudo o que dá para verificar no notebook foi verificado; falta só o usuário executar o `roteiro-m2.md` do pacote no Windows e aprovar. A base (M0 E02) também ainda não foi validada no Windows: a mesma execução a fecha (entrada 1 das "Validações acumuladas no Windows"). Por decisão do usuário (2026-11-15), essa execução fica para o gate do M3, que acumula o roteiro do M2; o M3 começa sem esperar o Windows.
 - **Plano:** [`docs/superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md`](../superpowers/plans/2026-11-15-m2-recepcao-do-dia-e06.md), com 7 tarefas em série (todas de risco alto) e a verificação do gate pelo orquestrador. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (6 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2. A Task 7 é um adendo da execução, aprovado com notas na revisão do adendo (rodada 0): a execução do roteiro no notebook achou um defeito da E05 (abaixo).
 - **Commits:** `aae75c3..8390605` na branch `roadmap/m2-recepcao-do-dia` (com o merge `e288efb` do lote anterior no meio), com o trailer `Soul:`.
   - Task 1, porta de recados no seed (`TraceGateway`, `SdkTraceGateway`): `1c11fe4`, `77c0118` (o testador restaurou e corrigiu os testes de ataque revertidos em `c49bb6e` no lote anterior).
@@ -775,3 +776,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-15 — E06 aguardando o Windows (`claude --agent orquestrador`). Pré-voo: aditivo (código 11, servidor em `5e06f16d51ff`; avisos só em operações de hóspede não usadas pelo front), pin mantido. Tasks 1 a 7 concluídas e revisadas; a Task 7 corrigiu um defeito da E05 achado pelo roteiro (recado de UH aparecendo como "Reserva"). Revisão final limpa depois de uma onda de correção. PF-02 aberto. Falta só o usuário executar o `roteiro-m2.md` no Windows.
 - 2026-11-15 — entrevista do fim do lote da E06 (`claude --agent orquestrador`): a impressão no Linux com o temporário da JVM foi aceita (D1, exceção a registrar no ADR 0009); a verificação de checksums das dependências (D5 do M1) será adotada com SHA-256.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. Nenhuma etapa mudou.
+- 2026-11-17 — E06 `#concluida`: o usuário aprovou a execução no Windows do `roteiro-m3.md`, que acumula o do M2 (entrada 2 da lista "Validações acumuladas no Windows" do README) (`claude --agent orquestrador`).

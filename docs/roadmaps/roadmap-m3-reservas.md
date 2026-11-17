@@ -101,7 +101,7 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 
 - [x] Os comandos oficiais de build, teste e lint passam. *(E05, no clone limpo do `57ccb4e`.)*
 - [x] O `smokeTest` passa contra o ambiente recriado. *(E05, em 2026-11-17.)*
-- [ ] O roteiro `docs/demo/roteiro-m3.md`, que acumula os anteriores, foi executado pelo usuário no Windows.
+- [x] O roteiro `docs/demo/roteiro-m3.md`, que acumula os anteriores, foi executado pelo usuário no Windows. *(Aprovado em 2026-11-17, com o pacote de `a800b25`.)*
 - [x] Nenhuma etapa depende de pedido ao servidor. *(`PF-03` e `PF-04` são não bloqueantes.)*
 - [ ] A revisão de segurança adiada do processo acelerado está paga (E06).
 
@@ -195,7 +195,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
 | E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #concluida | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
-| E05 | Gate do marco M3 | #em-andamento | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
+| E05 | Gate do marco M3 | #concluida | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
 | E06 | Revisão adiada do processo acelerado | #em-andamento | E05 | Revisão de segurança do intervalo devido, com scanner e integridade, e os achados Críticos e Importantes corrigidos |
 
 ---
@@ -627,7 +627,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Gate do marco M3 — #em-andamento
+## E05 — Gate do marco M3 — #concluida
 
 **Objetivo:** entregar o M3 como build testável. O seed passa a ter reservas futuras, canceladas e pendentes. O roteiro do M3 fica escrito, e a definição de pronto é verificada num clone limpo e no Windows.
 
@@ -648,7 +648,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - [x] No clone limpo, build, teste e lint passam.
 - [x] O `smokeTest` passa, e o seed roda em menos de 2 minutos.
-- [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
+- [x] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa. *(Aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows").)*
 
 **Validação obrigatória:**
 
@@ -667,9 +667,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Riscos e mitigação:** nenhum além dos do M2.
 
-**Evidências e handoff** (2026-11-17; a etapa fica `#em-andamento`, **Aguardando o Windows**, pela regra 7 do README):
+**Evidências e handoff** (2026-11-17):
 
-- **Estado:** Aguardando o Windows. Tudo o que dá para verificar no notebook está verificado, e a revisão final saiu limpa. Falta só o critério 3: o usuário executar o `roteiro-m3.md` no Windows. A etapa entrou na lista "Validações acumuladas no Windows" do README (item 4), e as entradas 1 a 3 da lista passaram a pedir o `roteiro-m3.md`.
+- **Estado (2026-11-17, fechamento):** `#concluida`. O critério 3 foi aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows"). A revisão final desta etapa já tinha saído limpa. Fechada pelo `claude --agent orquestrador` do lote que fechou o M3.
+- **Estado anterior:** Aguardando o Windows. Tudo o que dá para verificar no notebook está verificado, e a revisão final saiu limpa. Falta só o critério 3: o usuário executar o `roteiro-m3.md` no Windows. A etapa entrou na lista "Validações acumuladas no Windows" do README (item 4), e as entradas 1 a 3 da lista passaram a pedir o `roteiro-m3.md`.
 - **Plano:** `docs/superpowers/plans/2026-11-17-m3-reservas-e05.md`, com 7 tarefas.
   - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable (`revisor-arquitetura`), sobre o rascunho.
   - Na retomada pelo processo normal (ADR 0012), o plano ganhou a seção "Ondas", a Task 2 passou a `Risco: alto` (dado pessoal ou segredo) e entrou a Task 7, como adendo. Os adendos não voltaram ao `revisor-arquitetura`: um é de processo, e a Task 7 é só código de teste, no caminho "ganha verificação" que o plano aprovado já previa. A revisão final conferiu a seção contra o ledger e aceitou.
@@ -701,7 +702,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
      - Ao vivo, só leem: `LiveSeedReservationsCheck` 3/0 falhas, `LiveReceptionCheck` 2/0, `LiveRegistrationCardCheck` 3/0, `LiveAvailabilityCheck` 3/0 e `LiveReservationSearchCheck` 6/0.
      - Ao vivo, escrevem: `LiveCheckInCheck` 2/0, `LiveStayActionsCheck` 2/0, `LiveWalkInCheck` 3/0, `LiveTracesCheck` 3/0, `LiveAvailabilityBookingCheck` 2/0, `LiveBookingFlowCheck` 3/0, `LiveReservationLifecycleCheck` 3/0 e, por último, `LivePreReservationConfirmCheck` 1/0.
      - O seed e o `smokeTest` rodaram com o JAR do `9daeb7b`, e as verificações ao vivo, com o código de teste do `52e21aa`. Do `9daeb7b` ao `57ccb4e` não mudou nada em `demo-seed/src/main`, `core`, `sdk`, `app/src/main` nem nos scripts de build; do `52e21aa` ao `57ccb4e`, nenhum `Live*Check` (conferido com `git diff --stat`).
-  3. **Roteiro no Windows: aberto.** Fica com o usuário (regra 7).
+  3. **Roteiro no Windows: verificado.** Aprovado pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), na execução única do `roteiro-m3.md` com o pacote mais recente (o de `a800b25`, entrada 4 da lista "Validações acumuladas no Windows").
   - **Pacote:** `build/demo-package/` no checkout principal, gerado do `5a35b66` (`VERSAO.txt`: `front_dirty=false`, servidor `5e06f16d51ff`), com os três roteiros iguais aos do HEAD, os dois JARs, nenhum `.env`, nenhuma das senhas do ambiente e `images/zeny-server-images.tar` (427 MB, por `save-images.sh`). O `build/demo-package.zip` que está ao lado é de um lote anterior e não foi regerado.
 - **Decisões para o usuário**, já tomadas pela opção recomendada e revisáveis:
   1. **O relatório impresso do seed não ganha linha.** As reservas futuras, a cancelada e as pendentes entram por seeders próprios, sem aparecer na saída; o roteiro diz onde vê-las. Dívida: o relatório subconta políticas, planos, reservas e bloqueios.
@@ -848,3 +849,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E05, iniciada no processo acelerado, não foi reescrita: o handoff dela registra que o restante segue o processo normal, e o trecho já commitado (`830f296..920dcd2`) entrou na lista "Revisões de segurança adiadas" do README. Por decisão do usuário em entrevista, a dívida de revisão é paga antes do M4: entra a E06. Nenhuma tag mudou.
 - 2026-11-17 — lote do processo normal (`claude --agent orquestrador`): a E05 foi retomada pelo ciclo do ADR 0012 e fica `#em-andamento`, **Aguardando o Windows** (regra 7), com a revisão final limpa (0 Críticos, 0 Importantes). Os pedidos `PF-03` e `PF-04` foram abertos (D1 e D2).
 - 2026-11-17 — parada do lote a pedido do usuário, para validar no Windows (`claude --agent orquestrador`): a E06 fica `#em-andamento`, com a revisão adiada feita (0 Críticos, 2 Importantes, 27 Menores), as 8 tarefas de correção integradas e o gate verde em `a800b25`; falta a revisão final das correções. O pacote de `build/demo-package/` passou a ser o de `a800b25`. Nenhuma tag mudou.
+- 2026-11-17 — a E05 fecha `#concluida`: o usuário aprovou a execução do `roteiro-m3.md` no Windows (`claude --agent orquestrador`).

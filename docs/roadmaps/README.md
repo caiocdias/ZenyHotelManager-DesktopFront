@@ -100,7 +100,9 @@ A M3 E06 paga a lista inteira, antes do M4 (ADR 0012). A revisão cobre `a300a23
 
 ## Validações acumuladas no Windows
 
-Pendentes da regra 7, na ordem em que entraram. Por decisão do usuário (2026-11-15), são executadas juntas no fim do M3, no gate dele, com o roteiro do M3 (que acumula o do M2 e o do M1) e o pacote mais recente:
+**Nenhuma pendente.** As quatro entradas abaixo foram aprovadas pelo usuário em 2026-11-17 ("A demo que rodei no windows deu certo"), numa execução só do `roteiro-m3.md` com o pacote de `a800b25` (o da entrada 4), e as etapas fecharam `#concluida`: M0 E02, M2 E06, M0 E03 e M3 E05. A regra 7 continua valendo até o usuário tirá-la deste README.
+
+Pendentes da regra 7, na ordem em que entraram (histórico). Por decisão do usuário (2026-11-15), são executadas juntas no fim do M3, no gate dele, com o roteiro do M3 (que acumula o do M2 e o do M1) e o pacote mais recente:
 
 1. **M0 E02** (servidor em `57eb5fac5b8a`): executar o `roteiro-m3.md` do pacote mais recente, do zero; ele acumula o do M2 e o do M1 (decisão da M3 E05). Para não construir a imagem no Windows, fazer antes o `docker load` de `images/zeny-server-images.tar`. A aprovação fecha a etapa `#concluida`.
 2. **M2 E06** (gate do M2): a mesma execução do `roteiro-m3.md` da entrada 1. A aprovação fecha também esta etapa `#concluida`; uma reprovação a reabre com uma rodada de correção.
@@ -133,3 +135,4 @@ Estão no design, §10:
 - 2026-11-17 — regra 8 encerrada: o processo acelerado foi revogado pelo [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), por decisão do usuário, depois da mudança das souls. Os roadmaps perderam o "Prompt acelerado". A M3 E05, iniciada no processo acelerado, segue o processo normal, e o trecho já commitado dela entrou na lista "Revisões de segurança adiadas" (item 4). Por entrevista, o usuário decidiu pagar a dívida antes do M4: entra a M3 E06, e o M4 passa a exigi-la. Notas de partes independentes, para as ondas dos planos, em etapas pendentes do M4 ao M7 (`claude --agent arquiteto`).
 - 2026-11-17 — a M3 E05 entra na lista "Validações acumuladas no Windows" (item 4), aguardando o Windows pela regra 7, e as entradas 1 a 3 passam a pedir o `roteiro-m3.md` (`claude --agent orquestrador`).
 - 2026-11-17 — o pacote da entrada 4 de "Validações acumuladas no Windows" passa a ser o de `a800b25`, gerado na M3 E06 com as correções da revisão adiada. A E06 segue `#em-andamento` (falta a revisão final), e a lista "Revisões de segurança adiadas" ainda não tem a marca de paga (`claude --agent orquestrador`).
+- 2026-11-17 — o usuário aprovou a execução no Windows do `roteiro-m3.md` com o pacote de `a800b25`: as quatro entradas de "Validações acumuladas no Windows" fecharam `#concluida` (M0 E02, M2 E06, M0 E03 e M3 E05), e a lista ficou sem pendência (`claude --agent orquestrador`).
