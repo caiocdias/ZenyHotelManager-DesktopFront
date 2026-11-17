@@ -91,7 +91,7 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
-| H1 | `POST /api/v1/bookings` cria tanto a reserva individual quanto a agrupadora, e a alteração do hospedado (estender ou reduzir) é `PUT /api/v1/reservations/{id}` | A tela de nova reserva ou a de alteração precisa de outro fluxo; registrar no handoff | E03 |
+| H1 | `POST /api/v1/bookings` cria tanto a reserva individual quanto a agrupadora, e a alteração do hospedado (estender ou reduzir) é `PUT /api/v1/reservations/{id}`. **Confirmada na E03** (2026-11-16): a tela cria a individual, e o `PUT` estende e reduz o hospedado. O `PUT` não troca titular nem hóspedes (handoff da E03) | A tela de nova reserva ou a de alteração precisa de outro fluxo; registrar no handoff | E03 |
 | H2 | `GET /api/v1/availability` responde rápido o bastante para um calendário de 30 dias por tipo de UH | Calendário paginado por semana | E02 |
 
 ## Definição global de pronto
@@ -226,7 +226,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 |---|---|---|---|---|
 | E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
 | E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
-| E03 | Nova reserva e alteração | #em-andamento | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
+| E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
 
@@ -441,7 +441,7 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 ---
 
-## E03 — Nova reserva e alteração — #em-andamento
+## E03 — Nova reserva e alteração — #concluida
 
 **Objetivo:** a partir de uma cotação, o usuário cria a reserva: titular buscado ou criado, plano, garantia exigida pela política e observações. Ele também altera uma reserva existente (datas, tipo, plano, hóspede), o que inclui estender ou reduzir a estadia de um hospedado, e confirma uma pré-reserva. Desconto acima do limite pede aprovação. Depois de criar ou confirmar, abre a confirmação da reserva em PDF para salvar ou imprimir.
 
@@ -461,11 +461,11 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Criar uma reserva de 3 noites a partir da cotação. Ela aparece na busca e reduz a disponibilidade.
-- [ ] Desconto acima do limite do Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente do seed, a reserva é criada uma vez só.
-- [ ] Estender um hospedado em 1 noite atualiza o período e o histórico.
-- [ ] A alteração concorrente trata o `412` com recarga e aviso.
-- [ ] A confirmação da reserva criada abre no visualizador com o código, as datas e o total iguais aos da API. Numa reserva cancelada, a ação não aparece, ou mostra em pt-BR a recusa `CONFIRMATION_UNAVAILABLE`. Nenhum arquivo é criado sem "Salvar como…".
+- [x] Criar uma reserva de 3 noites a partir da cotação. Ela aparece na busca e reduz a disponibilidade.
+- [x] Desconto acima do limite do Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente do seed, a reserva é criada uma vez só.
+- [x] Estender um hospedado em 1 noite atualiza o período e o histórico.
+- [x] A alteração concorrente trata o `412` com recarga e aviso.
+- [x] A confirmação da reserva criada abre no visualizador com o código, as datas e o total iguais aos da API. Numa reserva cancelada, a ação não aparece, ou mostra em pt-BR a recusa `CONFIRMATION_UNAVAILABLE`. Nenhum arquivo é criado sem "Salvar como…".
 
 **Validação obrigatória:**
 
@@ -484,12 +484,71 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e03.md`, com 11 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable. A rodada 0 bloqueou por 5 Importantes, todos incorporados:
+    - o opt-in da verificação ao vivo fora do `app/build.gradle.kts`;
+    - a semântica do `412` contraditória entre duas tarefas;
+    - a confirmação em PDF verificada sem abrir o visualizador;
+    - dois fatos errados na verificação ao vivo;
+    - dois itens sem consumidor.
+- **Commits:** `5cbac31..87f03cb` na `roadmap/m3-reservas`. As tarefas rodaram em ondas, com no máximo 2 ativas ao mesmo tempo, cada uma no seu worktree.
+
+  | Task | Entrega | Commit | Observação |
+  |---|---|---|---|
+  | 1 | `BookingsFacade` (`createBooking`, `booking`, `changeReservation`, `confirmReservation`) e `DocumentsFacade.reservationConfirmation` | `4be49eb` | |
+  | 2 | `PdfKind` no visualizador da ficha e a porta `ReservationConfirmations` | `5f168c4` | 1 rodada: o título passou a `titlePrefix`, para a trava do roteiro do M2 seguir valendo sem mudar |
+  | 3 | Textos `BookingText` | `c24a575` | |
+  | 4 | `NewReservationState` | `fbc6b4c` | |
+  | 5 | `ReservationChangeState` | `a8d3737`, `075e37f` | 1 rodada de correção: `canConfirm` lia variável não observável, e a tela não recompunha depois da carga |
+  | 6 | `ReservationConfirmState` e o diálogo | `7e05d76` | |
+  | 7 | `NewReservationDialog` e o "Reservar" da cotação | `94daf6d` | |
+  | 8 | `ReservationChangeDialog` | `8c76afc` | |
+  | 9 | Portas no `CoreConnection` e botões do detalhe | `060ccbb` | |
+  | 10 | Fiação na área Reservas (`ReservationDialogs`, `NewReservationHost`) | `1868d35` | Corrige também o `CancellationException` engolido na leitura de permissões (dívida da E02) |
+  | 11 | `LiveBookingFlowCheck` e o opt-in `ZENY_LIVE_BOOKING` | `e86c68f` | |
+  | Etapa | Testador de etapa: 24 testes e a trava `test_live_booking_ataque.sh` | `e86c68f..87f03cb` | Sem defeito |
+
+  A verificação de integridade por tarefa deu exit 0 em todas.
+- **Revisão final:** não feita, pelo processo acelerado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `5cbac31..87f03cb`, integridade exit 1.**
+- **Fechamento** (HEAD `87f03cb`, 2026-11-16):
+  - **Gate:** `./gradlew build --max-workers=2` → BUILD SUCCESSFUL; os XML somam 4523 testes, 0 falhas, 0 erros e 46 pulados (opt-ins ao vivo). `bash tests/run.sh` → 54 arquivos, 0 falhas, 0 com casos pulados. A suíte também rodou verde depois de cada onda integrada.
+  - **Integridade** (`check_test_integrity.py --base 5cbac31`): exit 1, com 1 apontamento, `SKIP_ADICIONADO` em `tests/test_live_booking_ataque.sh` (`87f03cb`). É falso positivo: a linha é `nao_tem '@Disabled'`, a trava que **proíbe** desligar a verificação ao vivo.
+- **Critérios verificados**, ao vivo no `zeny-front`, pelo orquestrador, com as credenciais só no ambiente do subshell. `LiveBookingFlowCheck` passou 3/3, nenhuma pulada, no HEAD `e86c68f`; depois dele só entraram testes.
+  1. **Criar 3 noites a partir da cotação** (`bookingLifecycle`): a reserva `R-2026-000013` nasceu Confirmada, de 16/12 a 19/12, com o total da oferta (R$ 1.170,00). A busca pelo código achou uma linha, e a STD de d+30 ficou com uma unidade a menos.
+  2. **Desconto com aprovação** (`discountNeedsApprovalAndCreatesOnce`): a diária negociada de R$ 1,00 abriu a pendência de `rates.discounts.apply`, com o limite do servidor. Aprovada pelo Gerente do seed (login e PIN), a reserva foi criada, e a contagem do titular no período subiu em exatamente uma.
+  3. **Estender um hospedado** (`extendInHouseUpdatesPeriodAndHistory`): a saída ganhou 1 noite, o histórico ganhou uma entrada, e a saída original foi devolvida no fim (a redução).
+  4. **`412`** (`bookingLifecycle`): com duas telas na mesma reserva, a segunda recebeu o aviso, voltou aos dados do servidor (os pedidos "ENSAIO E03 A" da primeira) e, refeita a edição, salvou.
+  5. **Confirmação em PDF** (`bookingLifecycle`): abriu no visualizador, com o título "Confirmação da reserva — R-2026-000013", e o texto do PDF traz o código, as duas datas e o total da reserva relida. A reserva cancelada ou em no-show não mostra o botão (`confirmationHiddenForCancelled`), e a recusa `CONFIRMATION_UNAVAILABLE` mostra o texto do catálogo (`confirmationRefusalShowsCatalogText`). "Nenhum arquivo sem Salvar como…" é a `noDiskTest` do `design` (M2 E07) mais o `confirmationNeverSavesByItself`.
+  - Build, teste e lint: verdes (gate acima).
+  - Inspeção manual: capturas `app/build/live/new-reservation.png`, `reservation-change.png` e `reservation-confirmation.png` inspecionadas.
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **Titular e hóspedes não mudam na alteração.** O objetivo da etapa cita "hóspede", mas o `PUT /reservations/{id}` não troca o titular nem os hóspedes, e o contrato não tem outra operação para isso antes do check-in. A tela altera datas, ocupação, tipo, plano, segmento e pedidos. Abrir um pedido `PF-NN` não bloqueante ao servidor é pergunta da entrevista do fim do lote.
+  2. **Só a reserva individual (H1).** A tela cria uma reserva (uma UH) por vez. A agrupadora com várias UHs vira etapa nova, se o usuário quiser.
+  3. **Desconto como "diária negociada", só na criação.** O mesmo valor vai em todas as noites, e o servidor decide se é desconto e se pede aprovação. Na alteração, as noites novas entram pelo preço calculado.
+  4. **Alteração por recotação.** Para trocar o tipo ou o plano, "Ver opções" cota a estadia digitada e lista as ofertas. Exige `reservations.availability.read` e não oferece plano de um tipo esgotado.
+  5. **Origens oferecidas:** Balcão, Telefone, E-mail, WhatsApp e Outra, as do canal direto. Site e OTA ficam fora, porque a cotação do app não consulta esses canais.
+  6. **Ações só no detalhe da busca.** O detalhe da Recepção não mudou; o hospedado é alcançado pela busca, com a situação "Hospedada".
+  7. **A verificação ao vivo escreve na demo e não desfaz a criação.** Cada execução deixa duas reservas futuras do G1, marcadas "ENSAIO E03". A E04 as cancela na verificação dela.
+  8. **Ondas de 2, não de 3.** Dois builds frios em paralelo deixaram 1,4 GB livres de 14,8 GB, com a outra trilha (do servidor) na mesma máquina. Os worktrees de tarefa são reaproveitados entre ondas.
+- **Notas para a próxima etapa:**
+  - **Sem evidência ao vivo:** a confirmação da pré-reserva ("Confirmar reserva") só tem teste com fake, porque o seed não cria pré-reserva. O seed da E04 cria uma (plano com garantia por cartão), e o botão passa a aparecer na demo.
+  - **Sem tela:** `BookingsFacade.booking(id)` (o `GET /bookings/{id}` do escopo) é usado só pela fachada. A garantia exigida só aparece depois de criar: a oferta traz só o id da política.
+  - **Observações do testador de etapa**, de gravidade baixa e sem teste:
+    - `NewReservationState.finish` não confere `closed`;
+    - um `IllegalStateException` do `ApprovalCoordinator` vira "resultado desconhecido";
+    - resultado desconhecido seguido de aprovação cancelada deixa a tela travada sem texto;
+    - na hospedada, um erro de campo `arrival` vindo do servidor se perderia na tela.
+  - **Sem teste direto:**
+    - a regra do Esc do `NewReservationDialog` (não fecha com `busy`, `unconfirmed` ou `picker.creating`): o harness de teste não entrega o Esc ao diálogo. A mesma trava está coberta pelo botão de fechar;
+    - o `readOrNull` da leitura de permissões (`AppRoot.kt`): de fora, engolir ou relançar o cancelamento dá o mesmo resultado. O efeito que importa está coberto (a permissão da sessão anterior não vale na nova).
+  - **Dívidas menores:**
+    - os 6 textos de validação da estadia estão duplicados entre `ReservationChangeState` e `QuoteState`;
+    - `resultUnknown`/`fail` repetem a lógica privada do `WalkInState`;
+    - o `ReservationChangeDialog` guarda um contorno (`!state.loading && state.canConfirm`) que ficou redundante depois da correção;
+    - a duplicação com o `DayPanelState` segue da E01.
+  - **Teste instável:** `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes` (core) falhou uma vez sob dois builds em paralelo, no aquecimento de um worktree. Não falhou em nenhuma tarefa.
+  - **Ambiente:** nesta sessão o orquestrador roda as verificações ao vivo. O login da Recepcionista é `recepcao`, e o aprovador é `gerente` com o PIN do seed.
 
 ---
 
