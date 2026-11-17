@@ -245,4 +245,32 @@ class ReservationCancelDialogTest {
             onNodeWithTag("cancel-done").assertExists()
             assertSame(source.calls[0].intent, source.calls[1].intent)
         }
+
+    @Test
+    fun loadFailureShowsReloadAndReloadBringsTheTerms() =
+        runComposeUiTest {
+            val source = source().apply { readError = IOException("caiu") }
+            dialog(source)
+
+            onNodeWithTag("cancel-reload").assertExists()
+            onNodeWithTag("cancel-submit").assertIsNotEnabled()
+            source.readError = null
+            click("cancel-reload")
+
+            onNodeWithTag("cancel-terms").assertTextEquals(CD_TERMS)
+            onNodeWithTag("cancel-reload").assertDoesNotExist()
+            onNodeWithTag("cancel-submit").assertIsEnabled()
+        }
+
+    @Test
+    fun reloadIsNotShownForAnUnconfirmedResult() =
+        runComposeUiTest {
+            val source = source().apply { outcomes += ApiError.Network(IOException("caiu")) }
+            dialog(source)
+
+            click("cancel-submit")
+
+            onNodeWithTag("cancel-error").assertTextEquals(CD_UNCONFIRMED_TEXT)
+            onNodeWithTag("cancel-reload").assertDoesNotExist()
+        }
 }

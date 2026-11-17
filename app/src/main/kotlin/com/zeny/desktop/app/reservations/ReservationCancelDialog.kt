@@ -30,7 +30,8 @@ private val DIALOG_WIDTH = 560.dp
  * Diálogo que cancela uma reserva. Abre lendo a reserva ([state] `start()`) e mostra os termos da política copiada
  * nela, sem valor calculado: a multa só aparece depois, como o servidor a decidiu. Motivo em chips, observação e a
  * opção de isentar a multa (ação sensível: a aprovação de superior, se o servidor pedir, vem do `ApprovalCoordinator`
- * por cima). Com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção). Depois do cancelamento, só
+ * por cima). Com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção);
+ * se a leitura da reserva falhar, "Tentar de novo" ao lado do erro lê de novo. Depois do cancelamento, só
  * o texto e "Fechar". "Voltar"/"Fechar" (desabilitados enquanto escreve) encerram o [state] e chamam [onClose]; o Esc
  * só fecha fora de [busy][ReservationCancelState.busy] e de [unconfirmed][ReservationCancelState.unconfirmed]. Nenhum
  * id nem código cru.
@@ -112,5 +113,10 @@ private fun CancelForm(state: ReservationCancelState) {
     }
     state.error?.let {
         Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("cancel-error"))
+        if (!state.loading && state.terms == null && !state.unconfirmed) {
+            OutlinedButton(onClick = state::start, modifier = Modifier.testTag("cancel-reload")) {
+                Text("Tentar de novo")
+            }
+        }
     }
 }

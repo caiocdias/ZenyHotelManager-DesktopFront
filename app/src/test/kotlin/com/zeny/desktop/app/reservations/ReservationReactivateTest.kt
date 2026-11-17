@@ -409,4 +409,16 @@ class ReservationReactivateDialogTest {
             waitForIdle()
             assertTrue(source.calls.isEmpty())
         }
+
+    @Test
+    fun unconfirmedResultRenamesTheSubmitButton() =
+        runComposeUiTest {
+            val source = raSource().apply { outcomes += ApiError.Network(IOException("caiu")) }
+            dialog(source)
+
+            onNodeWithTag("reactivate-submit").assertTextEquals("Reativar")
+            click("reactivate-submit")
+
+            onNodeWithTag("reactivate-submit").assertTextEquals("Tentar de novo")
+        }
 }
