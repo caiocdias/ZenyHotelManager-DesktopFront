@@ -289,7 +289,7 @@ No mesmo PowerShell, na pasta `C:\zeny-demo`, abra o app no modo da demo:
 java "-Dzeny.devShell=true" -jar app\zeny-desktop.jar
 ```
 
-As aspas em `"-Dzeny.devShell=true"` são obrigatórias: sem elas, o PowerShell parte o argumento no ponto e o Java responde que não encontra a classe `.devShell=true`. Esse modo mostra no menu todas as áreas que o perfil pode ver, com "(em breve)" nas que ainda não têm tela. Sem ele, o menu mostra só as áreas com tela (hoje, a Recepção e a Governança), e os perfis não se distinguiriam.
+As aspas em `"-Dzeny.devShell=true"` são obrigatórias: sem elas, o PowerShell parte o argumento no ponto e o Java responde que não encontra a classe `.devShell=true`. Esse modo mostra no menu todas as áreas que o perfil pode ver, com "(em breve)" nas que ainda não têm tela. Sem ele, o menu mostra só as áreas com tela (hoje, a Recepção, as Reservas e a Governança), e os perfis não se distinguiriam.
 
 **Resultado esperado:** abre a janela "Zeny Hotel Manager" com a tela "Entrar no Zeny Hotel Manager" (campos Servidor, Login e Senha, botões "Testar" e "Entrar"). Este PowerShell fica ocupado enquanto a janela estiver aberta; deixe-o assim.
 
@@ -312,7 +312,7 @@ Em **Login**, digite `recepcao`; em **Senha**, a senha da Recepção (item 3 da 
 - No topo: "Pousada Zeny Demonstração", "Data operacional: dd/mm/aaaa" (a data operacional do servidor, a de hoje num servidor recém-criado), o usuário "Recepção da Demo" e o botão "Sair".
 - No menu lateral, exatamente estas áreas, nesta ordem:
   1. Recepção
-  2. Reservas (em breve)
+  2. Reservas
   3. Contas e caixa (em breve)
   4. Hóspedes (em breve)
   5. Governança
@@ -330,7 +330,7 @@ Em **Login**, digite `gerente`; em **Senha**, a senha do Gerente (item 2 da folh
 - No topo: "Pousada Zeny Demonstração", a mesma data operacional, o usuário "Gerente da Demo" e "Sair".
 - No menu lateral, exatamente estas áreas, nesta ordem:
   1. Recepção
-  2. Reservas (em breve)
+  2. Reservas
   3. Contas e caixa (em breve)
   4. Hóspedes (em breve)
   5. Governança

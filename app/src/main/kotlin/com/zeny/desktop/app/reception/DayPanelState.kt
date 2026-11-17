@@ -12,8 +12,6 @@ import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.table.Column
 import com.zeny.desktop.design.table.TableState
-import com.zeny.desktop.sdk.model.ReservationListItemResponse
-import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -27,48 +25,24 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 
 private const val PAGE_LIMIT = 200
 private const val ROOMS_WINDOW_MS = 2_000L
-private const val PARALLEL_HOLDER_READS = 4
 private const val ROOMS_TOPIC = "rooms"
 private const val END_OF_DAY_TOPIC = "end-of-day"
 private const val ROOMS_PERMISSION = "rooms.status.read"
 private const val END_OF_DAY_PERMISSION = "endofday.runs.read"
-private const val HTTP_FORBIDDEN = 403
-private const val HTTP_NOT_FOUND = 404
-private const val UNKNOWN = "—"
 
 private val tabNames =
     mapOf(DayList.ARRIVALS to "Chegadas", DayList.DEPARTURES to "Saídas", DayList.IN_HOUSE to "Hospedados")
-
-/** Uma linha das listas do dia, já em texto: a busca da tabela acha qualquer célula, alertas incluídos. */
-data class ReservationRow(
-    val id: String,
-    val code: String,
-    val holder: String,
-    val room: String,
-    val roomType: String,
-    val arrival: String,
-    val departure: String,
-    val guests: String,
-    val status: String,
-) {
-    // O titular é dado pessoal: nunca em log nem em `toString`.
-    override fun toString(): String =
-        "ReservationRow(id=$id, code=$code, room=$room, roomType=$roomType, arrival=$arrival, " +
-            "departure=$departure, guests=$guests, status=$status)"
-}
 
 /**
  * Estado do painel do dia: uma [TableState] por lista (chegadas, saídas, hospedados) na data operacional.
  *
  * - Nenhuma página sai antes da primeira data operacional: o `fetch` espera por ela, e cada listagem usa a data da
  *   carga que a criou. A primeira carga das abas é um `reload`; as seguintes, `refresh`, que não esvazia a tabela.
- * - Cada página resolve os titulares que faltam no cache (até [PARALLEL_HOLDER_READS] leituras em paralelo; `403` e
+ * - Cada página resolve os titulares que faltam no cache (até 4 leituras em paralelo; `403` e
  *   `404` viram "—") e os tipos de UH, lidos uma vez por carga (`ApiError.Problem` vira "—" para todos).
  * - Atualizam o painel: [refresh], o ganho de foco da janela, o primeiro `ready` e todo `reset` do stream, a
  *   mensagem de `end-of-day` e, uma vez por rajada, as de `rooms` (2 s depois da primeira). No máximo uma
@@ -97,7 +71,7 @@ class DayPanelState(
     private var currentDate: BusinessDate? = null
 
     /** O nome (ou "—") de cada titular já lido: só em memória, enquanto o painel vive. */
-    private val holderNames = mutableMapOf<String, String>()
+    private val holderNames = HolderNames(source::holder)
 
     /** Os nomes dos tipos de UH da carga vigente; `null` até uma página da carga lê-los. */
     private var roomTypeNames: Map<String, String>? = null
@@ -250,8 +224,8 @@ class DayPanelState(
         val rows =
             lookups.withLock {
                 val types = roomTypeNames ?: readRoomTypeNames().also { roomTypeNames = it }
-                readMissingHolders(page.items.map { it.holderGuestId.toString() })
-                page.items.map { rowOf(it, holderNames[it.holderGuestId.toString()] ?: UNKNOWN, types) }
+                val holders = holderNames.resolve(page.items.map { it.holderGuestId.toString() })
+                page.items.map { it.toReservationRow(holders.getValue(it.holderGuestId.toString()), types) }
             }
         return Page(rows, page.nextCursor)
     }
@@ -261,24 +235,6 @@ class DayPanelState(
             source.roomTypes().filter { it.name.isNotBlank() }.associate { it.id.toString() to it.name }
         } catch (_: ApiError.Problem) {
             emptyMap()
-        }
-
-    private suspend fun readMissingHolders(ids: List<String>) {
-        val slots = Semaphore(PARALLEL_HOLDER_READS)
-        coroutineScope {
-            ids.distinct().filter { it !in holderNames }.forEach { id ->
-                launch { slots.withPermit { holderNames[id] = holderName(id) } }
-            }
-        }
-    }
-
-    /** O nome do titular; sem acesso a ele (`403`) ou apagado (`404`), "—". Os demais erros falham a página. */
-    private suspend fun holderName(id: String): String =
-        try {
-            source.holder(id).name
-        } catch (e: ApiError.Problem) {
-            if (e.status != HTTP_FORBIDDEN && e.status != HTTP_NOT_FOUND) throw e
-            UNKNOWN
         }
 
     private suspend fun listen() {
@@ -343,32 +299,3 @@ private fun topicsFor(permissions: Set<String>): Set<String> =
         if (ROOMS_PERMISSION in permissions) add(ROOMS_TOPIC)
         if (END_OF_DAY_PERMISSION in permissions) add(END_OF_DAY_TOPIC)
     }
-
-private fun rowOf(
-    item: ReservationListItemResponse,
-    holder: String,
-    roomTypeNames: Map<String, String>,
-): ReservationRow {
-    val assignment = (item.roomAssignment as? Option.Some)?.value
-    val roomNumber = (assignment?.roomNumber as? Option.Some)?.value?.takeIf { it.isNotBlank() }
-    return ReservationRow(
-        id = item.id.toString(),
-        code = item.code,
-        holder = holder,
-        room = roomNumber ?: UNKNOWN,
-        roomType = roomTypeNames[item.roomTypeId.toString()] ?: UNKNOWN,
-        arrival = ReceptionText.date(item.arrival),
-        departure = ReceptionText.date(item.departure),
-        guests = ReceptionText.guests(item.adults, item.children),
-        status = statusText(item),
-    )
-}
-
-/** O rótulo da situação seguido dos alertas que valem, nesta ordem. */
-private fun statusText(item: ReservationListItemResponse): String =
-    listOfNotNull(
-        ReceptionText.status(item.status).label,
-        "Day use".takeIf { item.dayUse },
-        "Chegada pendente".takeIf { item.arrivalOverdue },
-        "Saída pendente".takeIf { item.departureOverdue },
-    ).joinToString(" · ")

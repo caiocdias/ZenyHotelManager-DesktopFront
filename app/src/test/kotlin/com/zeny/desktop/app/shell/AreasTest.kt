@@ -131,7 +131,7 @@ class AreasTest {
     }
 
     @Test
-    fun onlyHousekeepingIsImplemented() {
-        assertEquals(setOf(Area.RECEPTION, Area.HOUSEKEEPING), IMPLEMENTED_AREAS)
+    fun receptionReservationsAndHousekeepingAreImplemented() {
+        assertEquals(setOf(Area.RECEPTION, Area.RESERVATIONS, Area.HOUSEKEEPING), IMPLEMENTED_AREAS)
     }
 }

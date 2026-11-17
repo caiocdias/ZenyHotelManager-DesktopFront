@@ -225,9 +225,9 @@ class LiveServerCheck {
             assertTrue(DATE_PATTERN.matches(state.businessDate), "data operacional: ${state.businessDate}")
             assertTrue(
                 state.areas.all { (area, implemented) ->
-                    implemented == (area in setOf(Area.RECEPTION, Area.HOUSEKEEPING))
+                    implemented == (area in setOf(Area.RECEPTION, Area.RESERVATIONS, Area.HOUSEKEEPING))
                 },
-                "só a Recepção e a Governança têm tela",
+                "só a Recepção, as Reservas e a Governança têm tela",
             )
             onNodeWithText(state.hotelName).assertExists()
             onNodeWithText("Data operacional: ${state.businessDate}").assertExists()

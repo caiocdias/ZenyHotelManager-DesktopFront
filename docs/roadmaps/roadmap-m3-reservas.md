@@ -91,7 +91,7 @@ O recepcionista e o gerente gerenciam reservas no app. Eles:
 
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
-| H1 | `POST /api/v1/bookings` cria tanto a reserva individual quanto a agrupadora, e a alteração do hospedado (estender ou reduzir) é `PUT /api/v1/reservations/{id}` | A tela de nova reserva ou a de alteração precisa de outro fluxo; registrar no handoff | E03 |
+| H1 | `POST /api/v1/bookings` cria tanto a reserva individual quanto a agrupadora, e a alteração do hospedado (estender ou reduzir) é `PUT /api/v1/reservations/{id}`. **Confirmada na E03** (2026-11-16): a tela cria a individual, e o `PUT` estende e reduz o hospedado. O `PUT` não troca titular nem hóspedes (handoff da E03) | A tela de nova reserva ou a de alteração precisa de outro fluxo; registrar no handoff | E03 |
 | H2 | `GET /api/v1/availability` responde rápido o bastante para um calendário de 30 dias por tipo de UH | Calendário paginado por semana | E02 |
 
 ## Definição global de pronto
@@ -224,15 +224,15 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Busca de reservas | #pendente | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
-| E02 | Disponibilidade e cotação | #pendente | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
-| E03 | Nova reserva e alteração | #pendente | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
-| E04 | Cancelar, reativar e pendências | #pendente | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
-| E05 | Gate do marco M3 | #pendente | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
+| E01 | Busca de reservas | #concluida | — | Lista com filtros e cursor, busca por documento e acesso ao detalhe |
+| E02 | Disponibilidade e cotação | #concluida | — | Calendário de disponibilidade por tipo, inventário e cotação de preço |
+| E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
+| E04 | Cancelar, reativar e pendências | #concluida | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
+| E05 | Gate do marco M3 | #em-andamento | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
 
 ---
 
-## E01 — Busca de reservas — #pendente
+## E01 — Busca de reservas — #concluida
 
 **Objetivo:** a área Reservas lista as reservas com filtros por período, situação e titular, com paginação por cursor e busca por documento. Um clique abre o detalhe criado no M2.
 
@@ -251,9 +251,9 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, filtrar por período e situação devolve o esperado, e a página seguinte carrega sem repetir linhas.
-- [ ] A busca por documento de um hóspede do seed encontra as reservas dele, com o documento mascarado na tela.
-- [ ] O termo buscado não aparece em log.
+- [x] Contra o seed, filtrar por período e situação devolve o esperado, e a página seguinte carrega sem repetir linhas.
+- [x] A busca por documento de um hóspede do seed encontra as reservas dele, com o documento mascarado na tela.
+- [x] O termo buscado não aparece em log.
 
 **Validação obrigatória:**
 
@@ -270,16 +270,64 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e01.md`, com 7 tarefas, todas `Risco: alto`.
+  - **Revisão de arquitetura:** aprovado com notas, em 1 rodada, no opus. A rodada 0 bloqueou por 5 Importantes, todos incorporados ao plano.
+- **Commits:** `a300a23..2958f15` na `roadmap/m3-reservas`, em série.
+  - Task 1, fachada `search`/`searchByDocument`: `49beab0..537f25a`.
+  - Task 2, `ReservationRow` e `HolderNames`: `537f25a..1c5b5b2`.
+  - Task 3, porta, adaptador e fake: `1c5b5b2..d447a9f`.
+  - Task 4, estado da busca: `d447a9f..737aa58`, com 1 rodada de correção. A carga inicial sobrescrevia a busca do usuário.
+  - Task 5, tela e `ReservationDetailPanel` extraído da Recepção: `737aa58..47e6ab4`, mais o teste do undo do documento.
+  - Task 6, área Reservas na casca: `47e6ab4..331af8f`, mais os testes que pegam a remoção do `close()`.
+  - Task 7, `LiveReservationSearchCheck`: `331af8f..3e87aec`, com 1 rodada de correção. A busca por nome herdava o período padrão.
+  - Onda final: `5aefe60`.
+  - Correção da medição ao vivo: `2958f15`.
+- **Revisão final** (revisor-seguranca, opus, `code-reviewer.md`): com correções, 0 Critical e 1 Important.
+  - O Important era o país emissor que sobrava ao trocar de Passaporte para CPF.
+  - Também ficaram para corrigir dois KDoc adiados das tarefas.
+  - A onda única foi `5aefe60`, e a re-revisão a aprovou como pronta para merge.
+  - Evidências:
+    - `osv-scanner --recursive --no-ignore ./`: 6 lockfiles, "No issues found";
+    - `./gradlew test --rerun --max-workers=2`, isolado: 4088 testes, 0 falhas, 38 pulados por opt-in ao vivo;
+    - `bash tests/run.sh`: 49 arquivos, 0 falhas;
+    - `check_test_integrity.py --base a300a23`: `SEM_SOUL` no `58b35b7` (abertura da etapa, só roadmap) e 4 `ASSERCAO_REMOVIDA`. Estes são ajustes mandados na Task 6, de mesma força.
+- **Verificação ao vivo:**
+  - Na 1ª execução, a `pagesDoNotRepeat` falhou por medição. O `DataTable` pede a página seguinte sozinho perto do fim, e o teste contava páginas pelos tamanhos da tabela.
+  - A correção `2958f15` conta as chamadas à fonte. Ela é só de teste, com integridade exit 0, e a re-revisão a aprovou com 2 Minor.
+  - A 2ª execução, no `zeny-front` e no HEAD `2958f15`, passou 4/4, sem nenhum pulado.
+- **Critérios verificados:**
+  - Período, situação e paginação: `periodAndStatusFilter` deu 5 linhas Hospedada, iguais à lista do dia. `pagesDoNotRepeat` em páginas de 3 deu 5 linhas em 2 páginas, com `limit=3` em toda chamada, sem repetição e com o total certo.
+  - Documento mascarado: `documentSearchFindsHolder` achou a reserva do G1. A captura mostra "Reservas do documento CPF ***0146" com o campo do número vazio.
+  - Termo fora do log: `termNotInLogs` não encontrou o nome nem o CPF no JUL, em stdout ou em stderr. Somam-se os testes unitários de `toString`, de causa trocada e de undo.
+  - Build, teste e lint: verdes.
+  - Inspeção manual: captura `app/build/live/reservation-search.png` inspecionada.
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **Demo sem recriar.** O classificador negou `down -v`, e a E01 só lê. A verificação ao vivo rodou no `zeny-front` depois do fechamento das 03:00, com A1–A4 em no-show e S1/S2 com saída vencida.
+  2. **Duplicação com o `DayPanelState`.** Colunas, `readRoomTypeNames` e trava ficam como dívida para a E03: `reservationColumns()` e um leitor de página compartilhado em `ReservationRows.kt`.
+  3. **Execução ao vivo pelo usuário.** O verificador do worktree isolado recusa `. arquivo` com as credenciais. A senha não foi para a linha de comando.
+- **Notas para a próxima etapa:**
+  - **Candidatos M2.**
+    - `GuestPickerState.kt:112` tem o mesmo defeito do país que sobra ao trocar o tipo.
+    - `GuestsFacade.searchByName` põe o nome na URL, e a causa de `ApiError.Network` pode trazê-lo. Revisão de arquitetura, nota 3.
+  - **Seed.** `pagesDoNotRepeat` exige mais de 3 hospedados não vencidos, e hoje há 5. H1 e H2 vencem em d+2 e d+3. Recrie a demo antes de repetir a verificação depois disso.
+  - **Teste instável.** `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes` falhou uma vez na Task 1, rodando junto com outro Gradle. Passou na execução isolada.
+  - **Undo.** A prova do undo do documento usa `performTextInput`. Falta a checagem manual com teclado físico no `:app:run`: digitar um CPF, buscar e apertar Ctrl+Z.
+  - **Máscara.** Um número curto, de 5 a 7 caracteres, mostra 4 caracteres, como a regra do plano manda. Sugestão: mostrar 2 abaixo de 8.
+  - **Ambiente desta sessão.**
+    - Ondas paralelas continuam inviáveis.
+    - O verificador recusa sourcing de arquivo, então a verificação ao vivo precisa ser rodada pelo usuário.
+    - O verificador leu `osv-scanner scan source` como o builtin `source`; use `osv-scanner --recursive --no-ignore ./`.
+  - **Dívidas menores.** Estão no ledger, triadas na revisão final:
+    - os asserts frouxos `startTwice` (≤2) e `holderReads` (1..3);
+    - o `rowClickWithoutDetailDoesNothing`, que é tautológico;
+    - o teste que fixa o país entre Passaporte e Documento estrangeiro;
+    - a troca de causa assimétrica em `ReservationsFacade`;
+    - na verificação ao vivo, as asserções de `limit` e cursor ignoram a chamada final vazia;
+    - o período padrão pode correr com o `clear()` e daria um vermelho falso. Isso é mais estrito, não mais fraco.
 
 ---
 
-## E02 — Disponibilidade e cotação — #pendente
+## E02 — Disponibilidade e cotação — #concluida
 
 **Objetivo:** um calendário mostra, por tipo de UH, a disponibilidade dos próximos dias. Escolhendo período, tipo e ocupação, o usuário vê a cotação por plano, com o total e o preço por noite vindos do servidor.
 
@@ -300,9 +348,9 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Contra o seed, o calendário de 30 dias mostra a disponibilidade por tipo. Uma reserva criada em outro cliente reduz a disponibilidade depois de recarregar.
-- [ ] A cotação mostra os planos com os valores formatados em BRL, iguais aos devolvidos pela API (conferidos por `curl`).
-- [ ] Uma cotação que fere uma restrição mostra o motivo em pt-BR.
+- [x] Contra o seed, o calendário de 30 dias mostra a disponibilidade por tipo. Uma reserva criada em outro cliente reduz a disponibilidade depois de recarregar.
+- [x] A cotação mostra os planos com os valores formatados em BRL, iguais aos devolvidos pela API (conferidos por `curl`).
+- [x] Uma cotação que fere uma restrição mostra o motivo em pt-BR.
 
 **Validação obrigatória:**
 
@@ -321,16 +369,79 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e02.md`, com 9 tarefas. As Tasks 1–8 rodaram como `Risco: alto`, no processo completo; a Task 9 e o fechamento, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 2 rodadas, no opus.
+  - A rodada 0 bloqueou por 7 Importantes:
+    - aba visível sem a permissão;
+    - motivo falso do ruling 2;
+    - critério 3 sem restrição real;
+    - cancelamento com `If-Match`;
+    - `externalId` fixo;
+    - molde de opt-in inexistente;
+    - total igual à soma das noites.
+  - A rodada 1 bloqueou por 2 Importantes:
+    - validação em `quoteStay` quebraria 4 testes;
+    - códigos de recusa no `ErrorCatalog` sobreporiam o `detail` do walk-in.
+- **Commits:** `b6aafa9..2ad4b09` na `roadmap/m3-reservas`, em série. Plano: `ac558f4`, `48a222a`, `5239cde` e `70c49e9`. O intervalo inclui o merge da `main` (`141b5ba`), que trouxe o ADR 0011 e só toca documentos.
+
+  | Task | Entrega | Commits | Observação |
+  |---|---|---|---|
+  | 1 | `availability` e `quoteStay(includeUnavailable)` na fachada; `ErrorCatalog.isShowableDetail` | `70c49e9..eb717c9` | |
+  | 2 | Porta `AvailabilitySource`, adaptador, `AvailabilityText` e fake | `eb717c9..cd502bd` | 1 rodada de correção: mensagem igual ao código em outra caixa chegava crua |
+  | 3 | `AvailabilityState` | `cd502bd..4b84767` | 1 rodada de correção: dias fora da janela ficavam nas células |
+  | 4 | `QuoteState` | `4b84767..bf4bb90` | |
+  | 5 | `CalendarPanel`, mais a sobrecarga `ErrorState(message)` no `design` | `bf4bb90..231901c` | |
+  | 6 | `QuotePanel` e `AvailabilityScreen` | `231901c..ecc9d9b` | |
+  | 7 | Aba "Disponibilidade e cotação" na área Reservas, só com `reservations.availability.read` | `ecc9d9b..1e65a58` | 1 rodada de correção: a permissão da sessão anterior valia na sessão nova |
+  | 8 | `LiveAvailabilityCheck`, só leitura, com travas estáticas e de mutação | `1e65a58..d26f9dd` | 1 rodada de correção: travas frágeis ao ktlint |
+  | 9 | `LiveAvailabilityBookingCheck` no `demo-seed`, que escreve e desfaz, com a trava estática | `141b5ba..006c8d8` | Processo acelerado: sem testador por tarefa e sem revisão |
+  | Etapa | Testador de etapa: trava `test_live_seed_availability_limpeza_ataque.sh` | `006c8d8..2ad4b09` | Sem defeito; a trava da Task 9 deixava passar 14 de 19 mutantes, e a nova mata 18 |
+
+  As Tasks 1–8 passaram por desenvolvedor, testador, verificação de integridade e revisão (`revisor-seguranca`), e todas foram aprovadas. Os apontamentos `DEV_TESTE_DO_TESTADOR` das Tasks 2, 3 e 7 foram julgados justificados: o teste vermelho do testador foi colado sem mudança.
+- **Revisão final:** não feita, pelo processo acelerado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `b6aafa9..2ad4b09`, integridade exit 1.** As Tasks 1–8 tiveram revisão por tarefa; faltam a da Task 9, a do testador de etapa e a revisão final do intervalo.
+- **Fechamento** (HEAD `2ad4b09`, 2026-11-16):
+  - **Gate:** `./gradlew build --max-workers=2` → BUILD SUCCESSFUL; os XML somam 4314 testes, 0 falhas, 0 erros e 43 pulados (opt-ins ao vivo). `bash tests/run.sh` → 53 arquivos, 0 falhas, 0 com casos pulados.
+  - **Integridade** (`check_test_integrity.py --base b6aafa9`): exit 1.
+    - `MERGE_IGNORADO`: o merge da `main` (`141b5ba`), só de documentos.
+    - 3 `DEV_TESTE_DO_TESTADOR` (`cd502bd`, `4b84767` e `1e65a58`): o teste vermelho do testador colado sem mudança pelo desenvolvedor nas Tasks 2, 3 e 7. A revisora os julgou justificados em cada tarefa.
+    - Por tarefa, a Task 9 deu exit 0 (`--base 141b5ba`).
+- **Critérios verificados**, ao vivo no `zeny-front`, pelo orquestrador, com as credenciais só no ambiente do subshell:
+  1. **Calendário e outro cliente.** `LiveAvailabilityCheck.calendarMatchesApi` passou: o calendário de 30 dias traz os três tipos com os números da API. `LiveAvailabilityBookingCheck.otherClientBookingReducesAvailability` passou: a reserva criada pelo `demo-seed` baixou a STD em d+20 de `a0` para `a0 - 1`, e o cancelamento a devolveu.
+  2. **Cotação em BRL.** `LiveAvailabilityCheck.quoteMatchesApi` passou: o total e cada noite da tela são os decimais da API formatados. A captura mostra "Total R$ 2.040,00" com duas noites de R$ 1.020,00.
+  3. **Restrição em pt-BR.** `LiveAvailabilityBookingCheck.minStayRestrictionRefusesInPortuguese` passou: com `minStay = 2` em d+25, a cotação de 1 noite recusa o `BALCAO` com "exige ao menos 2 noite(s)", e a restrição foi retirada. `LiveAvailabilityCheck.refusalInPortuguese` passou com a recusa de ocupação.
+  - As duas verificações: 3/3 e 2/2, nenhuma pulada.
+  - Build, teste e lint: verdes (gate acima).
+  - Inspeção manual: captura `app/build/live/availability.png` inspecionada. A aba não fica dentro de outra rolagem vertical: só a `AvailabilityScreen` rola (nenhum `verticalScroll` na casca, no `AppRoot` nem no `AppScaffold`).
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **Inventário pela disponibilidade.** O detalhe da célula usa os contadores do `GET /availability`, e o `room-type-inventory` não é chamado, porque os contadores são os mesmos, com uma chamada por tipo.
+  2. **Calendário sem plano.** Decisão de escopo: as restrições do plano aparecem como recusa na cotação. O seletor de plano custaria uma fachada `listRatePlans` e mostraria um plano por vez.
+  3. **Verificação ao vivo no `demo-seed`.** Ela escreve e desfaz na demo:
+     - uma reserva `DEMO-E02-<uuid>` criada e cancelada, que fica como "Cancelada" na busca;
+     - uma `minStay = 2` gravada e retirada em d+25.
+  4. **`ErrorState(message: String)` no `design`.** A sobrecarga ficou fora da lista de arquivos da Task 5. A versão com `ApiError` delega a ela.
+  5. **Erros de campo.** Com `fieldErrors`, a cotação não repete o erro genérico, e a chave de campo desconhecida aparece acima do resultado.
+  6. **Task 9 no processo acelerado.** Ela partiu do trabalho interrompido guardado no workspace e rodou como `Risco: normal`, sem testador por tarefa e sem revisão. O testador de etapa a atacou.
+  7. **Verificação ao vivo pelo orquestrador.** Nesta sessão o subshell com as credenciais foi permitido, então o orquestrador rodou as duas verificações. A senha não foi para a linha de comando nem para a saída.
+- **Notas para a próxima etapa (dívidas menores, todas no ledger):**
+  - `runCatching` engole `CancellationException` na leitura da permissão da aba (`AppRoot.kt`). Falha fechada; a correção entrou no plano da E03 (fiação da área).
+  - `LiveAvailabilityBookingCheck`, do testador de etapa, tudo de baixa severidade:
+    - se a data operacional virar durante o teste, a restrição de d+25 fica na demo;
+    - uma resposta perdida na criação deixa uma reserva `DEMO-E02-` sem cancelar;
+    - a conta `a0 - 1` supõe que ninguém mais reserva a STD em d+20 durante o teste;
+    - a exceção do `finally` pode mascarar a do corpo (melhoria: `addSuppressed`).
+  - Enter cota mesmo com `loading`, e a última cotação vence.
+  - Sem indicador de carga quando o calendário já tem linhas.
+  - O fallback de "Indisponíveis" mostra o código técnico do tipo ou do plano.
+  - Data malformada no motivo aparece como "—".
+  - Mensagem de servidor de uma palavra sem acento cai no texto de reserva.
+  - Helpers de teste duplicados entre os arquivos do desenvolvedor e do testador.
+  - As travas `.sh` da verificação ao vivo dependem de `perl`.
+  - E03: a duplicação com o `DayPanelState` segue da E01.
 
 ---
 
-## E03 — Nova reserva e alteração — #pendente
+## E03 — Nova reserva e alteração — #concluida
 
 **Objetivo:** a partir de uma cotação, o usuário cria a reserva: titular buscado ou criado, plano, garantia exigida pela política e observações. Ele também altera uma reserva existente (datas, tipo, plano, hóspede), o que inclui estender ou reduzir a estadia de um hospedado, e confirma uma pré-reserva. Desconto acima do limite pede aprovação. Depois de criar ou confirmar, abre a confirmação da reserva em PDF para salvar ou imprimir.
 
@@ -350,11 +461,11 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Criar uma reserva de 3 noites a partir da cotação. Ela aparece na busca e reduz a disponibilidade.
-- [ ] Desconto acima do limite do Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente do seed, a reserva é criada uma vez só.
-- [ ] Estender um hospedado em 1 noite atualiza o período e o histórico.
-- [ ] A alteração concorrente trata o `412` com recarga e aviso.
-- [ ] A confirmação da reserva criada abre no visualizador com o código, as datas e o total iguais aos da API. Numa reserva cancelada, a ação não aparece, ou mostra em pt-BR a recusa `CONFIRMATION_UNAVAILABLE`. Nenhum arquivo é criado sem "Salvar como…".
+- [x] Criar uma reserva de 3 noites a partir da cotação. Ela aparece na busca e reduz a disponibilidade.
+- [x] Desconto acima do limite do Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente do seed, a reserva é criada uma vez só.
+- [x] Estender um hospedado em 1 noite atualiza o período e o histórico.
+- [x] A alteração concorrente trata o `412` com recarga e aviso.
+- [x] A confirmação da reserva criada abre no visualizador com o código, as datas e o total iguais aos da API. Numa reserva cancelada, a ação não aparece, ou mostra em pt-BR a recusa `CONFIRMATION_UNAVAILABLE`. Nenhum arquivo é criado sem "Salvar como…".
 
 **Validação obrigatória:**
 
@@ -373,16 +484,75 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e03.md`, com 11 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable. A rodada 0 bloqueou por 5 Importantes, todos incorporados:
+    - o opt-in da verificação ao vivo fora do `app/build.gradle.kts`;
+    - a semântica do `412` contraditória entre duas tarefas;
+    - a confirmação em PDF verificada sem abrir o visualizador;
+    - dois fatos errados na verificação ao vivo;
+    - dois itens sem consumidor.
+- **Commits:** `5cbac31..87f03cb` na `roadmap/m3-reservas`. As tarefas rodaram em ondas, com no máximo 2 ativas ao mesmo tempo, cada uma no seu worktree.
+
+  | Task | Entrega | Commit | Observação |
+  |---|---|---|---|
+  | 1 | `BookingsFacade` (`createBooking`, `booking`, `changeReservation`, `confirmReservation`) e `DocumentsFacade.reservationConfirmation` | `4be49eb` | |
+  | 2 | `PdfKind` no visualizador da ficha e a porta `ReservationConfirmations` | `5f168c4` | 1 rodada: o título passou a `titlePrefix`, para a trava do roteiro do M2 seguir valendo sem mudar |
+  | 3 | Textos `BookingText` | `c24a575` | |
+  | 4 | `NewReservationState` | `fbc6b4c` | |
+  | 5 | `ReservationChangeState` | `a8d3737`, `075e37f` | 1 rodada de correção: `canConfirm` lia variável não observável, e a tela não recompunha depois da carga |
+  | 6 | `ReservationConfirmState` e o diálogo | `7e05d76` | |
+  | 7 | `NewReservationDialog` e o "Reservar" da cotação | `94daf6d` | |
+  | 8 | `ReservationChangeDialog` | `8c76afc` | |
+  | 9 | Portas no `CoreConnection` e botões do detalhe | `060ccbb` | |
+  | 10 | Fiação na área Reservas (`ReservationDialogs`, `NewReservationHost`) | `1868d35` | Corrige também o `CancellationException` engolido na leitura de permissões (dívida da E02) |
+  | 11 | `LiveBookingFlowCheck` e o opt-in `ZENY_LIVE_BOOKING` | `e86c68f` | |
+  | Etapa | Testador de etapa: 24 testes e a trava `test_live_booking_ataque.sh` | `e86c68f..87f03cb` | Sem defeito |
+
+  A verificação de integridade por tarefa deu exit 0 em todas.
+- **Revisão final:** não feita, pelo processo acelerado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `5cbac31..87f03cb`, integridade exit 1.**
+- **Fechamento** (HEAD `87f03cb`, 2026-11-16):
+  - **Gate:** `./gradlew build --max-workers=2` → BUILD SUCCESSFUL; os XML somam 4523 testes, 0 falhas, 0 erros e 46 pulados (opt-ins ao vivo). `bash tests/run.sh` → 54 arquivos, 0 falhas, 0 com casos pulados. A suíte também rodou verde depois de cada onda integrada.
+  - **Integridade** (`check_test_integrity.py --base 5cbac31`): exit 1, com 1 apontamento, `SKIP_ADICIONADO` em `tests/test_live_booking_ataque.sh` (`87f03cb`). É falso positivo: a linha é `nao_tem '@Disabled'`, a trava que **proíbe** desligar a verificação ao vivo.
+- **Critérios verificados**, ao vivo no `zeny-front`, pelo orquestrador, com as credenciais só no ambiente do subshell. `LiveBookingFlowCheck` passou 3/3, nenhuma pulada, no HEAD `e86c68f`; depois dele só entraram testes.
+  1. **Criar 3 noites a partir da cotação** (`bookingLifecycle`): a reserva `R-2026-000013` nasceu Confirmada, de 16/12 a 19/12, com o total da oferta (R$ 1.170,00). A busca pelo código achou uma linha, e a STD de d+30 ficou com uma unidade a menos.
+  2. **Desconto com aprovação** (`discountNeedsApprovalAndCreatesOnce`): a diária negociada de R$ 1,00 abriu a pendência de `rates.discounts.apply`, com o limite do servidor. Aprovada pelo Gerente do seed (login e PIN), a reserva foi criada, e a contagem do titular no período subiu em exatamente uma.
+  3. **Estender um hospedado** (`extendInHouseUpdatesPeriodAndHistory`): a saída ganhou 1 noite, o histórico ganhou uma entrada, e a saída original foi devolvida no fim (a redução).
+  4. **`412`** (`bookingLifecycle`): com duas telas na mesma reserva, a segunda recebeu o aviso, voltou aos dados do servidor (os pedidos "ENSAIO E03 A" da primeira) e, refeita a edição, salvou.
+  5. **Confirmação em PDF** (`bookingLifecycle`): abriu no visualizador, com o título "Confirmação da reserva — R-2026-000013", e o texto do PDF traz o código, as duas datas e o total da reserva relida. A reserva cancelada ou em no-show não mostra o botão (`confirmationHiddenForCancelled`), e a recusa `CONFIRMATION_UNAVAILABLE` mostra o texto do catálogo (`confirmationRefusalShowsCatalogText`). "Nenhum arquivo sem Salvar como…" é a `noDiskTest` do `design` (M2 E07) mais o `confirmationNeverSavesByItself`.
+  - Build, teste e lint: verdes (gate acima).
+  - Inspeção manual: capturas `app/build/live/new-reservation.png`, `reservation-change.png` e `reservation-confirmation.png` inspecionadas.
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **Titular e hóspedes não mudam na alteração.** O objetivo da etapa cita "hóspede", mas o `PUT /reservations/{id}` não troca o titular nem os hóspedes, e o contrato não tem outra operação para isso antes do check-in. A tela altera datas, ocupação, tipo, plano, segmento e pedidos. Abrir um pedido `PF-NN` não bloqueante ao servidor é pergunta da entrevista do fim do lote.
+  2. **Só a reserva individual (H1).** A tela cria uma reserva (uma UH) por vez. A agrupadora com várias UHs vira etapa nova, se o usuário quiser.
+  3. **Desconto como "diária negociada", só na criação.** O mesmo valor vai em todas as noites, e o servidor decide se é desconto e se pede aprovação. Na alteração, as noites novas entram pelo preço calculado.
+  4. **Alteração por recotação.** Para trocar o tipo ou o plano, "Ver opções" cota a estadia digitada e lista as ofertas. Exige `reservations.availability.read` e não oferece plano de um tipo esgotado.
+  5. **Origens oferecidas:** Balcão, Telefone, E-mail, WhatsApp e Outra, as do canal direto. Site e OTA ficam fora, porque a cotação do app não consulta esses canais.
+  6. **Ações só no detalhe da busca.** O detalhe da Recepção não mudou; o hospedado é alcançado pela busca, com a situação "Hospedada".
+  7. **A verificação ao vivo escreve na demo e não desfaz a criação.** Cada execução deixa duas reservas futuras do G1, marcadas "ENSAIO E03". A E04 as cancela na verificação dela.
+  8. **Ondas de 2, não de 3.** Dois builds frios em paralelo deixaram 1,4 GB livres de 14,8 GB, com a outra trilha (do servidor) na mesma máquina. Os worktrees de tarefa são reaproveitados entre ondas.
+- **Notas para a próxima etapa:**
+  - **Sem evidência ao vivo:** a confirmação da pré-reserva ("Confirmar reserva") só tem teste com fake, porque o seed não cria pré-reserva. O seed da E04 cria uma (plano com garantia por cartão), e o botão passa a aparecer na demo.
+  - **Sem tela:** `BookingsFacade.booking(id)` (o `GET /bookings/{id}` do escopo) é usado só pela fachada. A garantia exigida só aparece depois de criar: a oferta traz só o id da política.
+  - **Observações do testador de etapa**, de gravidade baixa e sem teste:
+    - `NewReservationState.finish` não confere `closed`;
+    - um `IllegalStateException` do `ApprovalCoordinator` vira "resultado desconhecido";
+    - resultado desconhecido seguido de aprovação cancelada deixa a tela travada sem texto;
+    - na hospedada, um erro de campo `arrival` vindo do servidor se perderia na tela.
+  - **Sem teste direto:**
+    - a regra do Esc do `NewReservationDialog` (não fecha com `busy`, `unconfirmed` ou `picker.creating`): o harness de teste não entrega o Esc ao diálogo. A mesma trava está coberta pelo botão de fechar;
+    - o `readOrNull` da leitura de permissões (`AppRoot.kt`): de fora, engolir ou relançar o cancelamento dá o mesmo resultado. O efeito que importa está coberto (a permissão da sessão anterior não vale na nova).
+  - **Dívidas menores:**
+    - os 6 textos de validação da estadia estão duplicados entre `ReservationChangeState` e `QuoteState`;
+    - `resultUnknown`/`fail` repetem a lógica privada do `WalkInState`;
+    - o `ReservationChangeDialog` guarda um contorno (`!state.loading && state.canConfirm`) que ficou redundante depois da correção;
+    - a duplicação com o `DayPanelState` segue da E01.
+  - **Teste instável:** `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes` (core) falhou uma vez sob dois builds em paralelo, no aquecimento de um worktree. Não falhou em nenhuma tarefa.
+  - **Ambiente:** nesta sessão o orquestrador roda as verificações ao vivo. O login da Recepcionista é `recepcao`, e o aprovador é `gerente` com o PIN do seed.
 
 ---
 
-## E04 — Cancelar, reativar e pendências — #pendente
+## E04 — Cancelar, reativar e pendências — #concluida
 
 **Objetivo:** o usuário cancela uma reserva, vendo antes a multa da política, e reativa uma cancelada com aprovação do gerente. Também acompanha as quatro listas de pendências e abre a reserva a partir delas.
 
@@ -403,9 +573,9 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Critérios de aceite:**
 
-- [ ] Cancelar uma reserva do seed com política de multa: a multa é mostrada antes de confirmar, e a reserva vira cancelada.
-- [ ] Reativar como Recepcionista abre o diálogo de aprovação. Com o Gerente, a reserva volta.
-- [ ] As quatro listas carregam contra o seed, e o seed tem ao menos um item em cada uma que o servidor permitir criar.
+- [x] Cancelar uma reserva do seed com política de multa: a multa é mostrada antes de confirmar, e a reserva vira cancelada.
+- [x] Reativar como Recepcionista abre o diálogo de aprovação. Com o Gerente, a reserva volta.
+- [x] As quatro listas carregam contra o seed, e o seed tem ao menos um item em cada uma que o servidor permitir criar.
 
 **Validação obrigatória:**
 
@@ -427,16 +597,69 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-16-m3-reservas-e04.md`, com 13 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 2 rodadas, no fable. Ela correu adiantada, sobre o rascunho, enquanto a E03 terminava.
+    - A rodada 0 bloqueou por 1 Crítico (a pré-reserva do seed não entraria na lista de garantias na janela padrão do servidor) e 7 Importantes.
+    - A rodada 1 bloqueou por 3 Importantes, criados pela correção do seed.
+- **Commits:** `fc7a0b3..72e4316` na `roadmap/m3-reservas`. As tarefas rodaram em ondas, com até 3 ativas ao mesmo tempo, cada uma no seu worktree.
+
+  | Task | Entrega | Commit | Observação |
+  |---|---|---|---|
+  | 1 | `BookingsFacade.cancelReservation` e `reactivateReservation` | `b642503` | |
+  | 2 | `PendingFacade` (as quatro listas) | `d038f97` | |
+  | 3 | Seed: `PendingSeeder` e a porta `PendingGateway` | `56b9736` | |
+  | 4 | Seed: `SdkPendingGateway` e a ligação no `DemoSeed` | `4273c7b` | |
+  | 5 | `ReservationCancelState` | `4a769ba` | |
+  | 6 | `ReservationReactivateState` e o diálogo | `a0c72b2` | |
+  | 7 | `PendingListsState` e `PendingText` | `4b6ba10` | |
+  | 8 | `ReservationCancelDialog` | `489bae1` | |
+  | 9 | `PendingPanel` | `31e9ece` | |
+  | 10 | Portas no `CoreConnection` e botões "Cancelar reserva" e "Reativar" | `3a90bde` | |
+  | 11 | `PendingTab` (as listas com o detalhe ao lado) | `275c84d` | |
+  | 12 | Fiação na área Reservas e a aba "Pendências" | `629cd09`, `72e4316` | 1 rodada de correção: confirmar ou alterar passa a recarregar a lista de pendências |
+  | 13 | `LiveReservationLifecycleCheck` e o opt-in `ZENY_LIVE_LIFECYCLE` | `325f658` | |
+  | Etapa | Testador de etapa: 23 testes e a trava `test_live_lifecycle_ataque.sh` | `81164ed`, `1ea3473`, `e222c43` | Sem defeito |
+
+  A verificação de integridade por tarefa deu exit 0 em todas.
+- **Revisão final:** não feita, pelo processo acelerado.
+- **Revisão de segurança: adiada (ADR 0011) — commits `fc7a0b3..72e4316`, integridade exit 1.**
+- **Fechamento** (HEAD `72e4316`, 2026-11-17):
+  - **Gate:** `./gradlew build --max-workers=2` → BUILD SUCCESSFUL; os XML somam 4696 testes, 0 falhas, 0 erros e 49 pulados (opt-ins ao vivo). `bash tests/run.sh` → 55 arquivos, 0 falhas, 0 com casos pulados. A suíte também rodou verde depois de cada onda integrada.
+  - **Integridade** (`check_test_integrity.py --base fc7a0b3`): exit 1, com 2 apontamentos `SKIP_ADICIONADO` em `tests/test_live_lifecycle_ataque.sh`. São falsos positivos: as linhas `nao_tem '@Disabled'` e `nao_tem '@Ignore'` são a trava que **proíbe** desligar a verificação ao vivo.
+- **Critérios verificados**, ao vivo no `zeny-front`, pelo orquestrador, com as credenciais só no ambiente do subshell. `LiveReservationLifecycleCheck` passou 3/3, nenhuma pulada, no `325f658` e de novo no HEAD final `72e4316`.
+  1. **Cancelar com a multa** (`cancelAndReactivate`): numa reserva com a chegada no dia, o diálogo mostrou os termos da política antes de confirmar ("Cancelamento sem multa até 24 h antes do check-in; depois, multa de 1 diária(s)."). Cancelada, a reserva ficou `CANCELLED`, com a multa de R$ 320,00 lançada na conta (lançamento conferido), e a tela disse "Multa lançada na conta: R$ 320,00.".
+  2. **Reativar com a aprovação** (`cancelAndReactivate`): como Recepcionista, a reativação abriu a pendência de `reservations.reservations.reactivate`; aprovada pelo Gerente do seed, a reserva voltou a `CONFIRMED`. Ela apareceu em "No-shows previstos", e o segundo cancelamento não cobrou multa de novo.
+  3. **Pendências** (`pendingListsLoad`): as quatro listas carregaram sem erro. "Garantias pendentes" trouxe a pré-reserva do seed (`DEMO-PEND-P1`), e "Realocação necessária", a `DEMO-PEND-R1`, exatamente uma de cada. A linha da pré-reserva abriu o detalhe ao lado. "Depósitos em falta" fica vazia: o item exige operações de `billing`, do M4.
+  - **Seed:** rodado duas vezes contra o `zeny-front`, em 3,9 s e 3,6 s, sem falha e com a saída impressa inalterada.
+  - Build, teste e lint: verdes (gate acima).
+  - Inspeção manual: capturas `app/build/live/reservation-cancel.png` e `pending.png` inspecionadas.
+- **Decisões para o usuário**, já tomadas e revisáveis:
+  1. **"A multa mostrada antes de confirmar" são os termos da política.** O contrato não tem prévia da multa, e o front não calcula preço nem prazo. O diálogo mostra os termos copiados na reserva e, depois de cancelar, a multa que o servidor lançou. Pedir ao servidor uma prévia (`PF-NN`, não bloqueante) é pergunta da entrevista do fim do lote.
+  2. **Isenção oferecida.** O diálogo tem "Isentar a multa", que passa pela aprovação quando o servidor pede. A isenção não foi verificada ao vivo.
+  3. **Aba própria de pendências, com todas as garantias.** A lista de garantias vai das vencidas até 730 dias à frente. O padrão do servidor (só as que vencem em 12 h) esconderia a pré-reserva recém-criada.
+  4. **Seed por um seeder próprio.** O `PendingSeeder` cria a política "Garantia por cartão (demo)", o plano "Tarifa garantida" (só no canal do site e só Standard, para a cotação do app não ganhar ofertas gêmeas), a pré-reserva `DEMO-PEND-P1` e a reserva `DEMO-PEND-R1` (UH 208, que entra em fora de ordem de d+5 a d+7). O titular das duas é o Hóspede Doze. O relatório impresso do seed não mudou.
+  5. **A verificação ao vivo escreve na demo.** Ela deixa uma reserva cancelada do G1, marcada "ENSAIO E04", e cancelou as duas "ENSAIO E03" da etapa anterior.
+  6. **Ondas de até 3.** O limite passou a ser medido a cada despacho: 3 tarefas ativas com 9 GB livres e a outra trilha parada; senão, 2.
+- **Notas para a próxima etapa:**
+  - **Para a E05:**
+    - o relatório do seed não lista as pendências; a decisão sobre a linha "pendências" está no plano da E05;
+    - o passo 14 do `roteiro-m2.md` (walk-in) diz que o Hóspede Doze "não tem reserva", o que deixou de ser verdade com o seed desta etapa. O roteiro do M3 corrige a frase;
+    - avisos para o roteiro do M3: depósitos sem item, a pré-reserva some em 48 h, e a multa só aparece em reserva com a chegada próxima.
+  - **Observações do testador de etapa**, de gravidade baixa:
+    - se o seed rodar de novo em outro dia operacional sem recriar a demo, ele abre um segundo fora de ordem na UH 208, fora da estadia da `R1`;
+    - no cancelamento e na reativação, uma falha local que não chega à rede aparece como resultado desconhecido (hoje inalcançável pela tela);
+    - o botão da reativação não vira "Tentar de novo" com resultado desconhecido, ao contrário do cancelamento.
+  - **Sem teste direto:** a guarda do Esc dos diálogos de cancelar e de reativar (o harness não entrega a tecla ao diálogo); a mesma trava está coberta pelo botão.
+  - **Dívidas menores:**
+    - criar uma reserva nova pela cotação não recarrega a lista de pendências aberta;
+    - o `createBooking` repete a lógica do ajudante novo de execução aprovável na `BookingsFacade`;
+    - o tratamento do cursor está duplicado entre a `PendingFacade` e a `ReservationsFacade`;
+    - o `PendingSeeder` não tem a espera de inventário do `BookingSeeder`; a primeira execução num banco novo acontece no gate (E05).
+  - **Teste instável:** `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes` (core) falhou uma vez, num gate com três builds em paralelo, e passou na repetição.
 
 ---
 
-## E05 — Gate do marco M3 — #pendente
+## E05 — Gate do marco M3 — #em-andamento
 
 **Objetivo:** entregar o M3 como build testável. O seed passa a ter reservas futuras, canceladas e pendentes. O roteiro do M3 fica escrito, e a definição de pronto é verificada num clone limpo e no Windows.
 
@@ -476,14 +699,46 @@ Ao parar, responda com: etapas concluídas, com o resultado do gate e da check_t
 
 **Riscos e mitigação:** nenhum além dos do M2.
 
-**Evidências e handoff:**
+**Evidências e handoff** (parcial: o lote parou a pedido do usuário, em 2026-11-17, com a etapa `#em-andamento`):
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-17-m3-reservas-e05.md`, com 6 tarefas, todas `Risco: normal`, no processo acelerado (ADR 0011).
+  - Revisão de arquitetura: aprovado com notas, em 1 rodada, no fable. Ela correu adiantada, sobre o rascunho, enquanto a E04 rodava. A rodada 0 bloqueou por 1 Crítico (a tarefa do pacote não fecha verde sem o testador ajustar travas antes) e 5 Importantes.
+  - A Task 3 é do testador e roda antes da Task 4: é uma exceção escrita ao "testador uma vez por etapa".
+- **Commits:** `830f296..920dcd2` na `roadmap/m3-reservas`.
+
+  | Task | Entrega | Commit | Estado |
+  |---|---|---|---|
+  | 1 | Seed: `FutureSeeder` e a porta `FutureGateway` (duas reservas futuras e uma cancelada, do Hóspede Doze) | `920dcd2` | Completa e integrada; integridade exit 0 |
+  | 2 | Seed: adaptador, ligação no `DemoSeed` e `LiveSeedReservationsCheck` | — | Despachada e interrompida logo no início; nada alterado |
+  | 3 | Testador: as travas aceitam o `roteiro-m3.md` | — | Interrompida com duas travas alteradas, sem commit |
+  | 4 | O pacote leva o roteiro do M3 | — | Não começou (depende da Task 3) |
+  | 5 | `LivePreReservationConfirmCheck` (confirmação da pré-reserva ao vivo) | — | Interrompida com a verificação escrita e o opt-in registrado, sem commit e sem gate |
+  | 6 | O roteiro do M3 | — | Não começou (depende das Tasks 2 e 4) |
+
+  A Task 1 só cria arquivos novos: o `DemoSeed` ainda não chama o `FutureSeeder`, e o seed se comporta como na E04.
+- **Trabalho interrompido, fora do git.** Está no workspace do SDD, `.superpowers/sdd/2026-11-17-m3-reservas-e05/`, que é ignorado pelo git e fica só no worktree `roadmap-m3-reservas`:
+  - `task-3-wip/travas.patch`: o diff do testador em `tests/test_roteiro_m1_zero_ataque.sh` e `tests/test_roteiro_m2_ataque.sh`. O build tinha passado; faltavam o `tests/run.sh`, a prova nos dois estados e o commit;
+  - `task-5-wip/`: `LivePreReservationConfirmCheck.kt` e o diff do `app/build.gradle.kts`. Faltavam o gate e o commit;
+  - o ledger (`progress.md`), os briefs das 6 tarefas e o contexto do plano.
+
+  Nada disso foi conferido nem revisado: o próximo orquestrador retoma a partir deles ou refaz pelo brief.
+- **Falta para fechar:**
+  1. As Tasks 2 a 6, pelo plano. Podem correr em paralelo a 2, a 3 e a 5; depois a 4; por último a 6.
+  2. O testador de etapa, que escreve as travas do roteiro novo (`tests/test_roteiro_m3_ataque.sh`) e ajusta os laços de `tests/test_fechamento_automatico_ataque.sh`.
+  3. A verificação do gate, na ordem do plano: clone limpo; recriar a demo do notebook (`tools/server-env/down.sh -v` e `up.sh`, no mesmo dia da verificação e depois das 03:00); seed duas vezes, com o tempo; `smokeTest`; as verificações ao vivo do M2 e do M3; pacote e `save-images.sh`.
+  4. O fechamento: a etapa fica "Aguardando o Windows" (regra 7), entra na lista "Validações acumuladas no Windows", e as entradas 1 a 3 da lista passam a pedir o `roteiro-m3.md`.
+- **Revisão final:** ainda não feita.
+- **Critérios verificados:** nenhum ainda.
+- **Decisões para o usuário**, já tomadas no plano e revisáveis:
+  1. **O relatório impresso do seed não ganha linha.** As reservas futuras, a cancelada e as pendentes entram por seeders próprios, sem aparecer na saída; o roteiro do M3 diz onde vê-las. A dívida fica registrada: o relatório subconta políticas, planos, reservas e bloqueios.
+  2. **Reservas novas do seed:** duas futuras e uma cancelada, todas do Hóspede Doze, por um seeder separado (`FutureSeeder`), para o contrato do `PendingSeeder` ficar como o testador da E04 o fixou.
+  3. **O roteiro do M3 não é executado clicando no notebook.** No lugar: cada "Resultado esperado" novo aponta a asserção ao vivo que o sustenta; a confirmação da pré-reserva ganha verificação ao vivo; e o gate roda as verificações do M2 e do M3 no ambiente recriado. A execução de ponta a ponta é a do usuário no Windows.
+  4. **O orquestrador recria a demo do notebook para o gate** (regra 5 do README e design §7.2). Se a sessão negar, ele não contorna, e o critério 2 fica aberto. Dois avisos: se o app mobile da outra trilha estiver usando o `zeny-front` do notebook, a recriação zera os dados dele; e depois do `down -v` a senha do administrador volta à inicial.
+  5. **A etapa fica "Aguardando o Windows"** e não fecha `#concluida` no lote.
+- **Notas para a próxima etapa:**
+  - A recriação da demo ainda não foi tentada nesta sessão.
+  - O `PendingSeeder` e o `FutureSeeder` não têm a espera de inventário do `BookingSeeder`. Se o seed falhar no banco novo com `ROOM_TYPE_UNAVAILABLE` ou `INVENTORY_DATE_OUT_OF_HORIZON`, a correção é a repetição com espera, como adendo ao plano.
+  - A pré-reserva `DEMO-PEND-P1` do ambiente de pé foi criada em 16/11 às 23:23 e vence 48 h depois.
 
 ---
 

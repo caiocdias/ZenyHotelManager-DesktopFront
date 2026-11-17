@@ -2,10 +2,14 @@
 
 package com.zeny.desktop.app
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -13,8 +17,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -30,14 +37,34 @@ import com.zeny.desktop.app.login.PasswordChangeState
 import com.zeny.desktop.app.reception.CheckInSeed
 import com.zeny.desktop.app.reception.CheckInState
 import com.zeny.desktop.app.reception.DayPanelState
+import com.zeny.desktop.app.reception.PdfKind
 import com.zeny.desktop.app.reception.ReceptionScreen
 import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.ReceptionTraces
 import com.zeny.desktop.app.reception.RegistrationCardState
+import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.ReservationDetailState
 import com.zeny.desktop.app.reception.RoomMoveState
 import com.zeny.desktop.app.reception.UndoCheckInState
 import com.zeny.desktop.app.reception.WalkInState
+import com.zeny.desktop.app.reservations.AvailabilityScreen
+import com.zeny.desktop.app.reservations.AvailabilitySource
+import com.zeny.desktop.app.reservations.AvailabilityState
+import com.zeny.desktop.app.reservations.NewReservationState
+import com.zeny.desktop.app.reservations.PendingListsState
+import com.zeny.desktop.app.reservations.PendingSource
+import com.zeny.desktop.app.reservations.PendingTab
+import com.zeny.desktop.app.reservations.QuoteState
+import com.zeny.desktop.app.reservations.QuotedStay
+import com.zeny.desktop.app.reservations.ReservationCancelState
+import com.zeny.desktop.app.reservations.ReservationChangeState
+import com.zeny.desktop.app.reservations.ReservationConfirmState
+import com.zeny.desktop.app.reservations.ReservationReactivateState
+import com.zeny.desktop.app.reservations.ReservationSearchState
+import com.zeny.desktop.app.reservations.ReservationsActions
+import com.zeny.desktop.app.reservations.ReservationsScreen
+import com.zeny.desktop.app.reservations.asCards
+import com.zeny.desktop.app.reservations.rememberNewReservationHost
 import com.zeny.desktop.app.rooms.RoomMapScreen
 import com.zeny.desktop.app.rooms.RoomMapState
 import com.zeny.desktop.app.session.ServerConnection
@@ -56,6 +83,8 @@ import com.zeny.desktop.design.pdf.FileDialogSaveChooser
 import com.zeny.desktop.design.pdf.PdfActions
 import com.zeny.desktop.design.pdf.PdfDocumentState
 import com.zeny.desktop.design.pdf.SystemPrintDialog
+import com.zeny.desktop.sdk.model.QuoteOfferResponse
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -170,8 +199,8 @@ private fun ServerConnection.activeSessionIds(): Flow<String?> =
 private fun SessionState.activeSessionId(): String? = (this as? SessionState.Active)?.sessionId
 
 /**
- * A tela da área aberta na casca: a Recepção é o painel do dia; a Governança, o mapa de UHs; as demais ainda mostram
- * só o nome.
+ * A tela da área aberta na casca: a Recepção é o painel do dia; as Reservas, a busca de reservas; a Governança, o mapa
+ * de UHs; as demais ainda mostram só o nome.
  */
 @Composable
 internal fun AreaContent(
@@ -180,6 +209,7 @@ internal fun AreaContent(
 ) {
     when (area) {
         Area.RECEPTION -> ReceptionArea(connection)
+        Area.RESERVATIONS -> ReservationsArea(connection)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
     }
@@ -236,6 +266,359 @@ private fun ReceptionArea(connection: ServerConnection) {
 }
 
 /**
+ * A busca de reservas e o detalhe somente leitura vivem enquanto a área está aberta na mesma sessão: nascem com a
+ * chave do `sessionId` vigente (o cache de titulares é da sessão), a busca é iniciada ao entrar e os dois fecham ao
+ * sair da área, da casca ou da sessão (o fechamento descarta a consulta, o cache e o documento mascarado). O detalhe
+ * usa a porta da Recepção; sem ela a tela funciona sem painel. O ganho de foco da janela relê a reserva aberta, sem
+ * refazer a busca.
+ */
+@Composable
+private fun ReservationsArea(connection: ServerConnection) {
+    val source = remember(connection) { connection.reservationSearchSource() }
+    val receptionSource = remember(connection) { connection.receptionSource() }
+    val session by connection.state.collectAsState()
+    val sessionId = (session as? SessionState.Active)?.sessionId
+    val scope = rememberCoroutineScope()
+    when {
+        source == null -> {
+            Unavailable("Reservas indisponíveis nesta conexão.")
+        }
+
+        sessionId != null -> {
+            val search = remember(source, sessionId) { ReservationSearchState(source, scope) }
+            val detail =
+                remember(receptionSource, sessionId) { receptionSource?.let { ReservationDetailState(it, scope) } }
+            DisposableEffect(search, detail) {
+                search.start()
+                onDispose {
+                    search.close()
+                    detail?.close()
+                }
+            }
+            val window = LocalWindowInfo.current
+            LaunchedEffect(detail, window) {
+                snapshotFlow { window.isWindowFocused }.collect { focused ->
+                    if (focused) detail?.reload()
+                }
+            }
+            ReservationsContent(connection, search, detail, sessionId, scope)
+        }
+    }
+}
+
+/**
+ * A busca e, com as portas e as permissões, as ações do detalhe, a aba de disponibilidade e cotação com a nova reserva
+ * e a aba das pendências. Sem a porta da Recepção ou sem a leitura das permissões não há ação alguma; a aba das
+ * pendências só pede a porta delas. Sem nenhuma aba, a área é só a busca.
+ */
+@Composable
+private fun ReservationsContent(
+    connection: ServerConnection,
+    search: ReservationSearchState,
+    detail: ReservationDetailState?,
+    sessionId: String,
+    scope: CoroutineScope,
+) {
+    val receptionSource = remember(connection) { connection.receptionSource() }
+    val availability = reservationsAvailability(connection.availabilitySource(), sessionId, scope)
+    val pending = reservationsPending(remember(connection) { connection.pendingSource() }, sessionId, scope)
+    val permissions = receptionPermissions(receptionSource, sessionId)
+    val approval = LocalApprovalCoordinatorOrNull.current
+    val frame = LocalWindowFrame.current
+    val confirmation = remember(connection, scope, frame) { confirmationCardFactory(connection, scope, frame) }
+    val refreshDetailAndTable: () -> Unit = {
+        detail?.reload()
+        scope.launch { search.table.refresh() }
+    }
+    // Depois de confirmar: o detalhe, a busca e a lista de pendências aberta (a disponibilidade não muda).
+    val refreshAfterConfirm: () -> Unit = {
+        refreshDetailAndTable()
+        pending?.refresh()
+    }
+    // Depois de alterar, cancelar ou reativar: o mesmo e o calendário (a disponibilidade muda).
+    val refreshAfterChange: () -> Unit = {
+        refreshAfterConfirm()
+        availability?.calendar?.reload()
+    }
+    val actions =
+        permissions?.let {
+            ReservationsActions(
+                it,
+                change = changeFactory(connection, scope, approval, it, refreshAfterChange),
+                confirm = confirmFactory(connection, scope, refreshAfterConfirm),
+                confirmation = confirmation,
+                cancel = cancelFactory(connection, scope, approval, refreshAfterChange),
+                reactivate = reactivateFactory(connection, scope, approval, refreshAfterChange),
+            )
+        }
+    if (availability == null && pending == null) {
+        ReservationsScreen(search, detail, actions)
+    } else {
+        val newReservation =
+            availability?.let {
+                newReservationFactory(connection, receptionSource, scope, approval, permissions) {
+                    it.calendar.reload()
+                    refreshDetailAndTable()
+                }
+            }
+        ReservationsTabs(availability, pending, newReservation, confirmation, detail, actions) {
+            ReservationsScreen(search, detail, actions)
+        }
+    }
+}
+
+private const val AVAILABILITY_READ = "reservations.availability.read"
+private const val RESERVATIONS_MANAGE = "reservations.reservations.manage"
+
+/** O calendário e a cotação de uma sessão; só existem com a permissão de leitura da disponibilidade. */
+private class ReservationsAvailability(
+    val calendar: AvailabilityState,
+    val quote: QuoteState,
+)
+
+/**
+ * A disponibilidade e a cotação da área Reservas, ou nulo enquanto as permissões não foram lidas, se a leitura falhou,
+ * se falta `reservations.availability.read` ou se a conexão não tem a porta. As permissões são lidas uma vez por
+ * sessão; os dois estados nascem com a chave `(source, sessionId)` e fecham ao sair da área.
+ */
+@Composable
+private fun reservationsAvailability(
+    source: AvailabilitySource?,
+    sessionId: String,
+    scope: CoroutineScope,
+): ReservationsAvailability? {
+    // A leitura pertence à (source, sessionId) que a produziu: com a chave nova, o valor da sessão anterior não vale.
+    val granted by produceState<Pair<AvailabilitySource, String>?>(null, source, sessionId) {
+        val allowed = source != null && readOrNull { AVAILABILITY_READ in source.permissions() } == true
+        value = if (allowed) source to sessionId else null
+    }
+    if (source == null || granted != (source to sessionId)) return null
+    val availability =
+        remember(source, sessionId) {
+            ReservationsAvailability(AvailabilityState(source, scope), QuoteState(source, scope))
+        }
+    DisposableEffect(availability) {
+        onDispose {
+            availability.calendar.close()
+            availability.quote.close()
+        }
+    }
+    return availability
+}
+
+/**
+ * As pendências da sessão: o [state] e se a aba já o iniciou. [refresh] só recarrega depois do [start]: sem a aba
+ * aberta, nada é lido (a entrada na aba carrega as quatro listas de qualquer modo). A marca é só deste guarda; a tela
+ * não a lê.
+ */
+private class ReservationsPending(
+    val state: PendingListsState,
+) {
+    private var started = false
+
+    fun start() {
+        started = true
+        state.start()
+    }
+
+    fun refresh() {
+        if (started) state.refresh()
+    }
+}
+
+/**
+ * As pendências da área Reservas, ou nulas sem a porta da conexão. O estado nasce com a chave `(source, sessionId)` e
+ * fecha ao sair da área; quem o inicia é a aba, ao ser aberta. Não depende da porta da Recepção nem de permissão lida
+ * aqui: o menu da área já exige `reservations.reservations.read`.
+ */
+@Composable
+private fun reservationsPending(
+    source: PendingSource?,
+    sessionId: String,
+    scope: CoroutineScope,
+): ReservationsPending? {
+    if (source == null) return null
+    val pending =
+        remember(source, sessionId) {
+            ReservationsPending(PendingListsState(source, scope, Clock.systemUTC()::instant))
+        }
+    DisposableEffect(pending) { onDispose { pending.state.close() } }
+    return pending
+}
+
+/** A leitura de permissões da [sessionId] na [source] que a produziu. */
+private class GrantedPermissions(
+    val source: ReceptionSource,
+    val sessionId: String,
+    val permissions: Set<String>,
+)
+
+/**
+ * As permissões efetivas da sessão, lidas na porta da Recepção (a busca não as tem, e a disponibilidade pode faltar),
+ * ou nulas enquanto não foram lidas, se a leitura falhou ou sem a porta. Lidas uma vez por `(source, sessionId)`: a
+ * leitura da sessão anterior não vale na nova.
+ */
+@Composable
+private fun receptionPermissions(
+    source: ReceptionSource?,
+    sessionId: String,
+): Set<String>? {
+    val read by produceState<GrantedPermissions?>(null, source, sessionId) {
+        value = source?.let { s -> readOrNull { s.permissions() }?.let { GrantedPermissions(s, sessionId, it) } }
+    }
+    val granted = read
+    return granted?.takeIf { it.source === source && it.sessionId == sessionId }?.permissions
+}
+
+/** O resultado de uma leitura, ou nulo se ela falhou; o cancelamento da coroutine nunca é engolido. */
+private suspend fun <T : Any> readOrNull(block: suspend () -> T): T? =
+    runCatching { block() }.onFailure { if (it is CancellationException) throw it }.getOrNull()
+
+/** A alteração de reserva do detalhe, ou nula sem a porta; a aprovação é a do coordenador da sessão. */
+private fun changeFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    permissions: Set<String>,
+    onChanged: () -> Unit,
+): ((String) -> ReservationChangeState)? {
+    val source = connection.reservationChangeSource() ?: return null
+    val canQuote = AVAILABILITY_READ in permissions
+    return { id -> ReservationChangeState(source, scope, id, canQuote, { approveAction(approval, it) }, onChanged) }
+}
+
+/** A confirmação da pré-reserva do detalhe, ou nula sem a porta (a confirmação não pede aprovação). */
+private fun confirmFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    onChanged: () -> Unit,
+): ((String) -> ReservationConfirmState)? {
+    val source = connection.reservationConfirmSource() ?: return null
+    return { id -> ReservationConfirmState(source, scope, id, onChanged) }
+}
+
+/** O cancelamento da reserva do detalhe, ou nulo sem a porta; a aprovação (da isenção da multa) é a da sessão. */
+private fun cancelFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    onChanged: () -> Unit,
+): ((String) -> ReservationCancelState)? {
+    val source = connection.reservationCancelSource() ?: return null
+    return { id -> ReservationCancelState(source, scope, id, { approveAction(approval, it) }, onChanged) }
+}
+
+/** A reativação da reserva do detalhe, ou nula sem a porta; a aprovação é a do coordenador da sessão. */
+private fun reactivateFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    onChanged: () -> Unit,
+): ((String, String) -> ReservationReactivateState)? {
+    val source = connection.reservationReactivateSource() ?: return null
+    return { id, code ->
+        ReservationReactivateState(source, scope, id, code, { approveAction(approval, it) }, onChanged)
+    }
+}
+
+/**
+ * A nova reserva a partir de uma oferta da cotação. Só existe com `reservations.reservations.manage`, com a porta da
+ * criação e com a da Recepção (a busca de titular); senão, nula.
+ */
+@Suppress("LongParameterList") // as dependências da área, como nas outras fábricas
+private fun newReservationFactory(
+    connection: ServerConnection,
+    guests: ReceptionSource?,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    permissions: Set<String>?,
+    onChanged: () -> Unit,
+): ((QuoteOfferResponse, QuotedStay) -> NewReservationState)? {
+    val source = connection.newReservationSource()
+    val granted = permissions?.takeIf { RESERVATIONS_MANAGE in it }
+    if (source == null || guests == null || granted == null) return null
+    return { offer, stay ->
+        NewReservationState(
+            source,
+            guests,
+            scope,
+            offer,
+            stay,
+            granted,
+            { approveAction(approval, it) },
+            onChanged,
+        )
+    }
+}
+
+private enum class ReservationsTab(
+    val label: String,
+) {
+    SEARCH("Busca"),
+    AVAILABILITY("Disponibilidade e cotação"),
+    PENDING("Pendências"),
+}
+
+/**
+ * As abas da área: "Busca", "Disponibilidade e cotação" (com a disponibilidade) e "Pendências" (com a porta delas).
+ * A busca fica composta fora das abas só no estado: o conteúdo é recriado, mas os estados vivem acima. A aba das
+ * pendências inicia o estado ao ser aberta e usa o mesmo detalhe e as mesmas ações da busca.
+ */
+@Composable
+@Suppress("LongParameterList") // os estados e as fábricas da área, já resolvidos por quem a compõe
+private fun ReservationsTabs(
+    availability: ReservationsAvailability?,
+    pending: ReservationsPending?,
+    newReservation: ((QuoteOfferResponse, QuotedStay) -> NewReservationState)?,
+    confirmation: ((reservationId: String, code: String) -> RegistrationCardState)?,
+    detail: ReservationDetailState?,
+    actions: ReservationsActions?,
+    search: @Composable () -> Unit,
+) {
+    var selected by remember { mutableStateOf(ReservationsTab.SEARCH) }
+    val tabs =
+        ReservationsTab.entries.filter {
+            when (it) {
+                ReservationsTab.SEARCH -> true
+                ReservationsTab.AVAILABILITY -> availability != null
+                ReservationsTab.PENDING -> pending != null
+            }
+        }
+    val tab = selected.takeIf { it in tabs } ?: ReservationsTab.SEARCH
+    val reserve = rememberNewReservationHost(newReservation, confirmation)
+    Column(Modifier.fillMaxSize()) {
+        PrimaryTabRow(selectedTabIndex = tabs.indexOf(tab)) {
+            tabs.forEach {
+                Tab(selected = tab == it, onClick = { selected = it }, text = { Text(it.label) })
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            when {
+                tab == ReservationsTab.AVAILABILITY && availability != null -> {
+                    LaunchedEffect(availability) { availability.calendar.start() }
+                    AvailabilityScreen(
+                        availability.calendar,
+                        availability.quote,
+                        Modifier.fillMaxSize().padding(16.dp),
+                        onReserve = if (newReservation != null) reserve::open else null,
+                    )
+                }
+
+                tab == ReservationsTab.PENDING && pending != null -> {
+                    LaunchedEffect(pending) { pending.start() }
+                    PendingTab(pending.state, detail, actions, Modifier.padding(16.dp))
+                }
+
+                else -> {
+                    search()
+                }
+            }
+        }
+    }
+    reserve.Show()
+}
+
+/**
  * A fábrica da ficha de registro da recepção, ou nula sem porta de fichas nesta conexão. As portas reais (o diálogo
  * "Salvar como…" com a janela por pai e o de impressão do sistema) nascem aqui, a cada abertura; o diálogo de salvar
  * roda na thread de UI do AWT e a escrita e a impressão, fora dela.
@@ -244,9 +627,23 @@ private fun registrationCardFactory(
     connection: ServerConnection,
     scope: CoroutineScope,
     window: Frame?,
-): ((String, String) -> RegistrationCardState)? {
-    val cards = connection.registrationCards() ?: return null
+): ((String, String) -> RegistrationCardState)? =
+    connection.registrationCards()?.let { pdfFactory(it, PdfKind.REGISTRATION_CARD, scope, window) }
 
+/** A fábrica da confirmação da reserva em PDF (o visualizador da ficha), ou nula sem a porta nesta conexão. */
+private fun confirmationCardFactory(
+    connection: ServerConnection,
+    scope: CoroutineScope,
+    window: Frame?,
+): ((String, String) -> RegistrationCardState)? =
+    connection.reservationConfirmations()?.let { pdfFactory(it.asCards(), PdfKind.CONFIRMATION, scope, window) }
+
+private fun pdfFactory(
+    cards: RegistrationCards,
+    kind: PdfKind,
+    scope: CoroutineScope,
+    window: Frame?,
+): (String, String) -> RegistrationCardState {
     @Suppress("InjectDispatcher") // a escrita e a impressão vão para o pool de E/S, sem injeção nesta fábrica
     val io = Dispatchers.IO
     val awt = Executor { EventQueue.invokeLater(it) }.asCoroutineDispatcher()
@@ -260,6 +657,7 @@ private fun registrationCardFactory(
             newActions = { bytes, name ->
                 PdfActions(bytes, name, FileDialogSaveChooser(window), SystemPrintDialog(), awt, io)
             },
+            kind = kind,
         )
     }
 }

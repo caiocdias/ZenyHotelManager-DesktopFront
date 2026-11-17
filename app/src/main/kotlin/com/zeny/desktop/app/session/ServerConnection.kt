@@ -6,6 +6,15 @@ import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.RegistrationCards
 import com.zeny.desktop.app.reception.toGuestPick
 import com.zeny.desktop.app.reception.toHolderSummary
+import com.zeny.desktop.app.reservations.AvailabilitySource
+import com.zeny.desktop.app.reservations.NewReservationSource
+import com.zeny.desktop.app.reservations.PendingSource
+import com.zeny.desktop.app.reservations.ReservationCancelSource
+import com.zeny.desktop.app.reservations.ReservationChangeSource
+import com.zeny.desktop.app.reservations.ReservationConfirmSource
+import com.zeny.desktop.app.reservations.ReservationConfirmations
+import com.zeny.desktop.app.reservations.ReservationReactivateSource
+import com.zeny.desktop.app.reservations.ReservationSearchSource
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.app.rooms.RoomsSource
 import com.zeny.desktop.app.traces.RoomOption
@@ -15,13 +24,17 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.facade.CancelInput
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
+import com.zeny.desktop.core.facade.DocumentQuery
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
+import com.zeny.desktop.core.facade.ReservationChangeInput
+import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
 import com.zeny.desktop.core.facade.TraceChange
@@ -34,9 +47,13 @@ import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.realtime.RealtimeStatus
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.sdk.model.AvailabilityResponse
 import com.zeny.desktop.sdk.model.CheckInResponse
+import com.zeny.desktop.sdk.model.DepositShortfallResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.PendingGuaranteeResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
+import com.zeny.desktop.sdk.model.ReallocationRequiredResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationHistoryResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
@@ -51,6 +68,7 @@ import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import java.time.Instant
 
 private const val GUEST_SEARCH_LIMIT = 20
 
@@ -93,8 +111,35 @@ interface ServerConnection : AutoCloseable {
     /** Os recados; `null` quando a conexão não os oferece. */
     fun tracesSource(): TracesSource? = null
 
+    /** A busca de reservas; `null` quando a conexão não a oferece. */
+    fun reservationSearchSource(): ReservationSearchSource? = null
+
+    /** A disponibilidade e a cotação; `null` quando a conexão não as oferece. */
+    fun availabilitySource(): AvailabilitySource? = null
+
     /** A ficha de registro em PDF; `null` quando a conexão não a oferece. */
     fun registrationCards(): RegistrationCards? = null
+
+    /** A criação de reserva a partir da cotação; `null` quando a conexão não a oferece. */
+    fun newReservationSource(): NewReservationSource? = null
+
+    /** A alteração de reserva; `null` quando a conexão não a oferece. */
+    fun reservationChangeSource(): ReservationChangeSource? = null
+
+    /** A confirmação da pré-reserva; `null` quando a conexão não a oferece. */
+    fun reservationConfirmSource(): ReservationConfirmSource? = null
+
+    /** A confirmação da reserva em PDF; `null` quando a conexão não a oferece. */
+    fun reservationConfirmations(): ReservationConfirmations? = null
+
+    /** O cancelamento de reserva; `null` quando a conexão não o oferece. */
+    fun reservationCancelSource(): ReservationCancelSource? = null
+
+    /** A reativação de reserva; `null` quando a conexão não a oferece. */
+    fun reservationReactivateSource(): ReservationReactivateSource? = null
+
+    /** As listas de pendências de reservas; `null` quando a conexão não as oferece. */
+    fun pendingSource(): PendingSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -294,10 +339,155 @@ class CoreConnection(
     /** Os recados sobre `core.traces`, `core.reservations`, `core.rooms`, `core.account` e `core.hotel`. */
     override fun tracesSource(): TracesSource = traces
 
+    private val reservationSearch =
+        object : ReservationSearchSource {
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun search(
+                filter: ReservationFilter,
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.reservations.search(filter, cursor, limit)
+
+            override suspend fun searchByDocument(
+                query: DocumentQuery,
+                statuses: Set<String>,
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.reservations.searchByDocument(query, statuses, cursor, limit)
+
+            override suspend fun holder(guestId: String): HolderSummary = core.guests.guest(guestId).toHolderSummary()
+
+            override suspend fun roomTypes(): List<RoomTypeResponse> = core.rooms.roomTypes()
+        }
+
+    /** A busca de reservas sobre `core.hotel`, `core.reservations`, `core.guests` e `core.rooms`. */
+    override fun reservationSearchSource(): ReservationSearchSource = reservationSearch
+
+    private val availability =
+        object : AvailabilitySource {
+            override suspend fun permissions(): Set<String> = core.account.me().permissions
+
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun availability(
+                from: BusinessDate,
+                to: BusinessDate,
+            ): AvailabilityResponse = core.reservations.availability(from, to)
+
+            override suspend fun quote(
+                arrival: BusinessDate,
+                departure: BusinessDate,
+                adults: Int,
+                childAges: List<Int>,
+            ): QuoteResponse =
+                core.reservations.quoteStay(arrival, departure, adults, childAges, includeUnavailable = true)
+        }
+
+    /** A disponibilidade e a cotação sobre `core.account`, `core.hotel` e `core.reservations`. */
+    override fun availabilitySource(): AvailabilitySource = availability
+
     private val registrationCards = RegistrationCards { id -> core.documents.registrationCard(id) }
 
     /** A ficha de registro sobre `core.documents`. */
     override fun registrationCards(): RegistrationCards = registrationCards
+
+    private val newReservation =
+        NewReservationSource { input, intent -> core.bookings.createBooking(input, intent) }
+
+    /** A criação de reserva sobre `core.bookings`. */
+    override fun newReservationSource(): NewReservationSource = newReservation
+
+    private val reservationChange =
+        object : ReservationChangeSource {
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun reservationVersion(id: String): ReservationVersion =
+                core.reservations.reservationVersion(id)
+
+            override suspend fun quote(
+                arrival: BusinessDate,
+                departure: BusinessDate,
+                adults: Int,
+                childAges: List<Int>,
+            ): QuoteResponse = core.reservations.quoteStay(arrival, departure, adults, childAges)
+
+            override fun changeReservation(
+                id: String,
+                input: ReservationChangeInput,
+                etag: String,
+            ): ApprovableAction<ReservationDetailResponse> = core.bookings.changeReservation(id, input, etag)
+        }
+
+    /** A alteração de reserva sobre `core.bookings`, `core.reservations` e `core.hotel`. */
+    override fun reservationChangeSource(): ReservationChangeSource = reservationChange
+
+    private val reservationConfirm =
+        object : ReservationConfirmSource {
+            override suspend fun reservation(id: String): ReservationDetailResponse = core.reservations.reservation(id)
+
+            override suspend fun confirmReservation(
+                id: String,
+                guarantee: String,
+                intent: Intent,
+            ): ReservationDetailResponse = core.bookings.confirmReservation(id, guarantee, intent)
+        }
+
+    /** A confirmação da pré-reserva sobre `core.reservations` e `core.bookings`. */
+    override fun reservationConfirmSource(): ReservationConfirmSource = reservationConfirm
+
+    private val reservationConfirmations = ReservationConfirmations { id -> core.documents.reservationConfirmation(id) }
+
+    /** A confirmação da reserva em PDF sobre `core.documents`. */
+    override fun reservationConfirmations(): ReservationConfirmations = reservationConfirmations
+
+    private val reservationCancel =
+        object : ReservationCancelSource {
+            override suspend fun reservation(id: String): ReservationDetailResponse = core.reservations.reservation(id)
+
+            override fun cancelReservation(
+                id: String,
+                input: CancelInput,
+                intent: Intent,
+            ): ApprovableAction<ReservationDetailResponse> = core.bookings.cancelReservation(id, input, intent)
+        }
+
+    /** O cancelamento de reserva sobre `core.reservations` e `core.bookings`. */
+    override fun reservationCancelSource(): ReservationCancelSource = reservationCancel
+
+    private val reservationReactivate =
+        ReservationReactivateSource { id, intent -> core.bookings.reactivateReservation(id, intent) }
+
+    /** A reativação de reserva sobre `core.bookings`. */
+    override fun reservationReactivateSource(): ReservationReactivateSource = reservationReactivate
+
+    private val pending =
+        object : PendingSource {
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+
+            override suspend fun pendingGuarantees(
+                to: Instant,
+                cursor: String?,
+                limit: Int,
+            ): Page<PendingGuaranteeResponse> = core.pending.pendingGuarantees(to, cursor, limit)
+
+            override suspend fun depositShortfalls(): List<DepositShortfallResponse> = core.pending.depositShortfalls()
+
+            override suspend fun expectedNoShows(
+                cursor: String?,
+                limit: Int,
+            ): Page<ReservationListItemResponse> = core.pending.expectedNoShows(cursor, limit)
+
+            override suspend fun reallocationRequired(
+                cursor: String?,
+                limit: Int,
+            ): Page<ReallocationRequiredResponse> = core.pending.reallocationRequired(cursor, limit)
+
+            override suspend fun holder(guestId: String): HolderSummary = core.guests.guest(guestId).toHolderSummary()
+        }
+
+    /** As listas de pendências sobre `core.pending`, `core.hotel` e `core.guests`. */
+    override fun pendingSource(): PendingSource = pending
 
     override fun close() = core.close()
 }

@@ -1,6 +1,5 @@
 package com.zeny.desktop.app.reception
 
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,11 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -39,20 +34,15 @@ import com.zeny.desktop.app.traces.TraceRow
 import com.zeny.desktop.app.traces.TraceTarget
 import com.zeny.desktop.app.traces.TracesListState
 import com.zeny.desktop.app.traces.TracesPanel
-import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.design.feedback.ErrorState
 import com.zeny.desktop.design.feedback.LoadingState
-import com.zeny.desktop.design.feedback.StatusChip
-import com.zeny.desktop.design.feedback.errorMessage
 import com.zeny.desktop.design.table.DataTable
-import com.zeny.desktop.design.theme.ZenyColors
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 
 private const val EMPTY_LIST = "Nenhuma reserva nesta lista."
-private val DETAIL_WIDTH = 380.dp
 private const val TRACES_READ = "frontdesk.traces.read"
 private const val TRACES_TAB = "TRACES"
 private val WALK_IN_PERMISSIONS =
@@ -120,13 +110,15 @@ fun ReceptionScreen(
             Box(Modifier.weight(1f).fillMaxHeight()) { Body(panel, detail, tracesUi) }
             if (detail.openId != null) {
                 val open = detail.reservation?.takeIf { canCheckIn }
-                DetailPanel(
+                ReservationDetailPanel(
                     detail,
-                    open?.let { { checkInUi.open(it, checkIn) } },
-                    stay.moveAction(detail, panel.permissions),
-                    stay.undoAction(detail, panel.permissions),
-                    tracesUi,
-                    card.action(panel.permissions),
+                    DetailActions(
+                        onCheckIn = open?.let { { checkInUi.open(it, checkIn) } },
+                        onMove = stay.moveAction(detail, panel.permissions),
+                        onUndo = stay.undoAction(detail, panel.permissions),
+                        onCard = card.action(panel.permissions),
+                    ),
+                    traces = { tracesUi.Section(detail) },
                 )
             }
         }
@@ -208,27 +200,6 @@ private fun Header(
     }
 }
 
-/** A falha de uma releitura com o conteúdo antigo à vista: o conteúdo fica, e a falha aparece por cima dele. */
-@Composable
-private fun ErrorBand(
-    error: ApiError,
-    onRetry: () -> Unit,
-    tag: String,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .border(1.dp, ZenyColors.Danger, MaterialTheme.shapes.small)
-            .padding(8.dp)
-            .testTag(tag),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text(errorMessage(error), Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
-        Button(onClick = onRetry) { Text("Tentar de novo") }
-    }
-}
-
 /** A tabela só entra com a data operacional: antes dela, o carregando ou o erro da data. */
 @Composable
 private fun Body(
@@ -289,97 +260,6 @@ private fun Lists(
                 emptyMessage = EMPTY_LIST,
             )
         }
-    }
-}
-
-@Composable
-@Suppress("LongParameterList") // uma ação opcional por botão do detalhe
-private fun DetailPanel(
-    detail: ReservationDetailState,
-    onCheckIn: (() -> Unit)?,
-    onMove: (() -> Unit)?,
-    onUndo: (() -> Unit)?,
-    tracesUi: ReceptionTracesUi,
-    onCard: (() -> Unit)?,
-) {
-    val error = detail.error
-    val view = detail.view
-    Column(
-        Modifier
-            .width(DETAIL_WIDTH)
-            .fillMaxHeight()
-            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.small)
-            .padding(12.dp)
-            .testTag("reservation-detail"),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        OutlinedButton(onClick = detail::close) { Text("Fechar") }
-        if (onCheckIn != null) {
-            Button(onClick = onCheckIn, modifier = Modifier.testTag("open-check-in")) { Text("Fazer check-in") }
-        }
-        if (onMove != null) {
-            Button(onClick = onMove, modifier = Modifier.testTag("open-room-move")) { Text("Trocar UH") }
-        }
-        if (onUndo != null) {
-            OutlinedButton(onClick = onUndo, modifier = Modifier.testTag("open-undo-check-in")) {
-                Text("Desfazer check-in")
-            }
-        }
-        if (onCard != null) {
-            OutlinedButton(onClick = onCard, modifier = Modifier.testTag("open-registration-card")) {
-                Text("Ficha de registro")
-            }
-        }
-        if (view != null && error != null) ErrorBand(error, detail::reload, "detail-error")
-        Box(Modifier.weight(1f)) {
-            when {
-                view != null -> DetailBody(view, detail::reload) { tracesUi.Section(detail) }
-                error != null -> ErrorState(error, onRetry = detail::reload)
-                else -> LoadingState()
-            }
-        }
-    }
-}
-
-@Composable
-private fun DetailBody(
-    view: ReservationDetailView,
-    onRetry: () -> Unit,
-    traces: @Composable () -> Unit,
-) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), Arrangement.spacedBy(6.dp)) {
-        Text(view.code, style = MaterialTheme.typography.titleMedium)
-        StatusChip(view.status)
-        Field("Titular", view.holder)
-        view.document?.let { Field("Documento", it) }
-        Field("Período", view.period)
-        Field("Tipo", view.roomType)
-        Field("UH", view.room)
-        Field("Hóspedes", view.guests)
-        Field("Plano", view.plan)
-        Field("Total", view.total)
-        view.alerts.forEach { Text(it, color = MaterialTheme.colorScheme.error) }
-        if (view.stayGuests.isNotEmpty() || view.stayGuestsError != null) {
-            Section("Hóspedes da estadia", view.stayGuestsError, onRetry) {
-                view.stayGuests.forEach {
-                    val primary = if (it.primary) " (principal)" else ""
-                    Text(listOfNotNull(it.name, it.document).joinToString(" · ") + primary)
-                }
-            }
-        }
-        Section("Alocações", view.assignmentsError, onRetry) {
-            view.assignments.forEach {
-                val moved = if (it.doNotMove) " · Não mover" else ""
-                Text("${it.room} · ${it.period} · ${it.reason} · ${it.state}$moved")
-            }
-        }
-        Section("Histórico", view.historyError, onRetry) {
-            view.history.forEach {
-                Text("${it.at} · ${it.title}", style = MaterialTheme.typography.labelLarge)
-                if (it.detail.isNotBlank()) Text(it.detail)
-            }
-        }
-        traces()
     }
 }
 
@@ -483,31 +363,4 @@ internal fun rememberReceptionTracesUi(
         snapshotFlow { window.isWindowFocused }.drop(1).filter { it }.collect { ui.refresh() }
     }
     return ui
-}
-
-@Composable
-private fun Field(
-    label: String,
-    value: String,
-) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value)
-    }
-}
-
-@Composable
-private fun Section(
-    title: String,
-    error: ApiError?,
-    onRetry: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-    if (error != null) {
-        Text(errorMessage(error), color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = onRetry) { Text("Tentar de novo") }
-    } else {
-        content()
-    }
 }
