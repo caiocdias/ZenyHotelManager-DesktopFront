@@ -196,7 +196,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Nova reserva e alteração | #concluida | E01, E02 | Criar reserva a partir da cotação, alterar (inclusive estender e reduzir) e confirmar |
 | E04 | Cancelar, reativar e pendências | #concluida | E01 | Cancelamento com multa, reativação aprovada e listas de pendências |
 | E05 | Gate do marco M3 | #em-andamento | E03, E04 | Seed ampliado, roteiro do M3 e definição de pronto verificada |
-| E06 | Revisão adiada do processo acelerado | #pendente | E05 | Revisão de segurança do intervalo devido, com scanner e integridade, e os achados Críticos e Importantes corrigidos |
+| E06 | Revisão adiada do processo acelerado | #em-andamento | E05 | Revisão de segurança do intervalo devido, com scanner e integridade, e os achados Críticos e Importantes corrigidos |
 
 ---
 
@@ -735,7 +735,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Revisão adiada do processo acelerado — #pendente
+## E06 — Revisão adiada do processo acelerado — #em-andamento
 
 **Objetivo:** pagar a dívida de revisão do processo acelerado. O código que entrou sem a `revisor-seguranca` passa pela revisão que faltou, com o scanner de dependências e a verificação mecânica desde `a300a23`. Os achados Críticos e Importantes são corrigidos nesta etapa, e a lista "Revisões de segurança adiadas" de `docs/roadmaps/README.md` fica marcada como paga.
 
