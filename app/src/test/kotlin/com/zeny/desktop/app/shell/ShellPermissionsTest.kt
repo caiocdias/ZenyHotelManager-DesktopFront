@@ -196,6 +196,25 @@ class ShellPermissionsTest {
         }
 
     @Test
+    fun receivedSetDecidesTabAndActions() {
+        listOf(
+            setOf(READ, AVAILABILITY_READ) to (true to false),
+            setOf(READ, MANAGE) to (false to true),
+        ).forEach { (permissions, expected) ->
+            runComposeUiTest {
+                val conn = Conn(me = { error("a área não lê o me") }, SessionState.Active("u-1", "s-1", false))
+                setContent { ZenyTheme { AreaContent(Area.RESERVATIONS, conn, "s-1", permissions) } }
+                waitForIdle()
+                click("R-1")
+
+                onNodeWithTag("reservation-detail").assertExists()
+                assertEquals(expected.first, hasText(TAB), "aba com $permissions")
+                assertEquals(expected.second, hasTag(CHANGE), "ação com $permissions")
+            }
+        }
+    }
+
+    @Test
     fun areaWithForeignSessionDrawsNothing() =
         runComposeUiTest {
             val conn = Conn(me = { error("a área não lê o me") }, SessionState.Active("u-1", "B", false))

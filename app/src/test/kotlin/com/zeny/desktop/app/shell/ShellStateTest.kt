@@ -428,6 +428,15 @@ class ShellStateTest {
         }
 
     @Test
+    fun emptyPermissionsReadWithSuccessAreAnEmptySetNotNull() =
+        runTest {
+            val state = loaded(FakeConnection(me = { Me("u-1", "ana", "Ana Souza", emptySet()) }))
+
+            assertNull(state.error)
+            assertEquals(emptySet(), state.permissions)
+        }
+
+    @Test
     fun permissionsAreAnImmutableCopy() =
         runTest {
             val read = mutableSetOf("reservations.reservations.read")
