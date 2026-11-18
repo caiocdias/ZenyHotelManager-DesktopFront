@@ -8,6 +8,7 @@ import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.json
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
+import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
 import io.ktor.client.request.HttpRequestData
@@ -23,6 +24,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private const val A_RES = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9e11"
 private const val A_BOOKING = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f11"
@@ -135,6 +137,53 @@ class BookingsFacadeAtaqueTest {
                 assertEquals("tok-gerente", requests[2].headers["X-Approval-Token"], "a repetição perdeu o token")
                 assertEquals(1, requests[2].headers.getAll("Idempotency-Key")?.size)
             }
+        }
+
+    /**
+     * M4 E01: o `approvable` único também nas duas ações de ciclo de vida. A tentativa sem token não leva token; a
+     * aprovada gira a chave e leva o token uma vez; a repetição sem token depois de perder a aprovada leva a chave
+     * girada e o token, e não gira de novo.
+     */
+    private suspend fun lifecycleLostApprovedRun(
+        action: (ZenyCore, Intent) -> ApprovableAction<ReservationDetailResponse>,
+    ) {
+        val approvedRuns = AtomicInteger()
+        core { request ->
+            when {
+                request.headers["X-Approval-Token"] == null -> json(approvalProblem, HttpStatusCode.Forbidden)
+                approvedRuns.getAndIncrement() == 0 -> throw IOException("conexão caiu depois do envio")
+                else -> json(detail())
+            }
+        }.use { core ->
+            val intent = Intent()
+            val first = action(core, intent)
+            assertFailsWith<ApiError.ApprovalRequired> { first.run(null) }
+            assertIs<ApiError.Network>(assertFailsWith<ApiError> { first.run("tok-gerente") })
+            action(core, intent).run(null)
+
+            assertEquals(3, requests.size)
+            assertNull(requests[0].headers["X-Approval-Token"])
+            assertEquals(listOf("tok-gerente"), requests[1].headers.getAll("X-Approval-Token"))
+            assertEquals(listOf("tok-gerente"), requests[2].headers.getAll("X-Approval-Token"))
+            val keys = requests.map { it.headers.getAll("Idempotency-Key").orEmpty() }
+            assertTrue(keys.all { it.size == 1 }, "uma Idempotency-Key por pedido: $keys")
+            assertNotEquals(keys[0], keys[1], "a repetição aprovada gira a chave")
+            assertEquals(keys[1], keys[2], "a repetição do resultado desconhecido leva a chave girada")
+        }
+    }
+
+    @Test
+    fun lostApprovedCancelIsResentWithTheRotatedKeyAndTheToken() =
+        runTest {
+            lifecycleLostApprovedRun { core, intent ->
+                core.bookings.cancelReservation(A_RES, CancelInput("GUEST_REQUEST", false, null), intent)
+            }
+        }
+
+    @Test
+    fun lostApprovedReactivationIsResentWithTheRotatedKeyAndTheToken() =
+        runTest {
+            lifecycleLostApprovedRun { core, intent -> core.bookings.reactivateReservation(A_RES, intent) }
         }
 
     @Test
