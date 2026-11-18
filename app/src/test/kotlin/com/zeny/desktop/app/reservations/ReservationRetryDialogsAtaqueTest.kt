@@ -281,7 +281,7 @@ class ReservationReactivateLabelAtaqueTest {
             val source =
                 source().apply {
                     outcomes += ApiError.Network(IOException("a"))
-                    outcomes += ApiError.Problem(502, "BAD_GATEWAY", "x", emptyList())
+                    outcomes += ApiError.Unexpected(502)
                 }
             dialog(source)
 
@@ -292,6 +292,31 @@ class ReservationReactivateLabelAtaqueTest {
             onNodeWithText("BAD_GATEWAY", substring = true).assertDoesNotExist()
             click("reactivate-submit")
             onNodeWithTag("reactivate-done").assertExists()
+            assertEquals(
+                1,
+                source.runs
+                    .map { it.key }
+                    .toSet()
+                    .size,
+            )
+        }
+
+    @Test
+    fun aStoredProblem5xxAfterAnUnknownResultOffersOnlyCloseAndNeverCallsAgain() =
+        runComposeUiTest {
+            val source =
+                source().apply {
+                    outcomes += ApiError.Network(IOException("a"))
+                    outcomes += ApiError.Problem(502, "BAD_GATEWAY", "x", emptyList())
+                }
+            dialog(source)
+            click("reactivate-submit")
+            click("reactivate-submit")
+
+            onNodeWithTag("reactivate-submit").assertDoesNotExist()
+            onNodeWithTag("reactivate-close").assertExists()
+            onNodeWithText("BAD_GATEWAY", substring = true).assertDoesNotExist()
+            assertEquals(2, source.runs.size)
             assertEquals(
                 1,
                 source.runs

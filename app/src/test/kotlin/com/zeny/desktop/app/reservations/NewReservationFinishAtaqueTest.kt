@@ -13,18 +13,16 @@ import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-private const val NF_UNCONFIRMED_TEXT =
-    "Não foi possível confirmar a reserva. Conclua de novo sem mudar nada; " +
-        "se fechar, confira na Busca antes de refazer."
+private const val NF_NO_RESERVATION_TEXT =
+    "O servidor confirmou a criação, mas não devolveu a reserva. Feche e confira na busca de reservas."
 
 /**
  * Ataques da M3 E06 ao `finish` da `NewReservationState`: o servidor respondeu a criação com `reservations` vazia. A
- * tela não cai, nada vira "criada", a lista não é recarregada por uma reserva que a tela não viu, e a repetição leva a
- * mesma `Idempotency-Key` (o servidor responde o mesmo, e a reserva que ele criou não se duplica).
+ * tela não cai, nada vira "criada", a lista não é recarregada por uma reserva que a tela não viu, e a resposta é um
+ * incompatível definitivo (M4 E01): só resta fechar e conferir, e nenhuma ação chama a criação de novo.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NewReservationFinishAtaqueTest {
@@ -67,21 +65,22 @@ class NewReservationFinishAtaqueTest {
         }
 
     @Test
-    fun emptyReservationsIsAnUnknownResultWithTheStandardTextAndNoLeak() =
+    fun emptyReservationsIsADefinitiveIncompatibleAnswerWithTheOwnTextAndNoLeak() =
         runTest {
             val source = FakeNewReservationSource().apply { response = empty() }
             val state = state(source)
 
             go(state)
 
-            assertTrue(state.unconfirmed)
-            assertEquals(NF_UNCONFIRMED_TEXT, state.error)
+            assertFalse(state.unconfirmed)
+            assertTrue(state.closeOnly)
+            assertEquals(NF_NO_RESERVATION_TEXT, state.error)
             assertTrue(state.fieldErrors.isEmpty())
             assertFalse(state.toString().contains("NoSuchElement"))
         }
 
     @Test
-    fun emptyReservationsRetryKeepsTheKeyAndLocksTheInputs() =
+    fun emptyReservationsRetryNeverCallsCreateAgainAndKeepsTheInputsLocked() =
         runTest {
             val source = FakeNewReservationSource().apply { response = empty() }
             val state = state(source)
@@ -91,13 +90,13 @@ class NewReservationFinishAtaqueTest {
             assertEquals("", state.specialRequests)
             go(state)
 
-            assertEquals(2, source.runs.size)
-            assertEquals(source.runs[0].key, source.runs[1].key)
+            assertEquals(1, source.runs.size)
+            assertFalse(state.canConfirm)
             assertEquals(0, changes)
         }
 
     @Test
-    fun emptyReservationsThenAnAnswerWithTheReservationFinishesOnce() =
+    fun emptyReservationsThenAServerThatWouldAnswerNowIsNeverCalledAndNeverFinishes() =
         runTest {
             val source = FakeNewReservationSource().apply { response = empty() }
             val state = state(source)
@@ -105,13 +104,12 @@ class NewReservationFinishAtaqueTest {
             source.response = etResponse()
 
             go(state)
-
-            assertNotNull(state.done)
-            assertFalse(state.unconfirmed)
-            assertNull(state.error)
-            assertEquals(1, changes)
-            assertEquals(source.runs[0].key, source.runs[1].key)
             go(state)
-            assertEquals(2, source.runs.size, "concluída, a tela não envia de novo")
+
+            assertEquals(1, source.runs.size, "nenhuma ação chama createBooking de novo")
+            assertNull(state.done)
+            assertTrue(state.closeOnly)
+            assertEquals(NF_NO_RESERVATION_TEXT, state.error)
+            assertEquals(0, changes)
         }
 }

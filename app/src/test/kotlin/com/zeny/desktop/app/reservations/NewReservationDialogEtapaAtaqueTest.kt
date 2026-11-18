@@ -7,7 +7,6 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -25,7 +24,6 @@ import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -164,17 +162,21 @@ class NewReservationDialogEtapaAtaqueTest {
 
             assertNull(state.done)
             assertFalse(state.busy)
-            assertTrue(state.unconfirmed)
+            assertFalse(state.unconfirmed)
+            assertTrue(state.closeOnly)
             onNodeWithTag("new-reservation-dialog").assertExists()
-            onNodeWithTag("new-reservation-error").assertExists()
-            onNodeWithTag("new-reservation-submit").assertTextEquals("Tentar de novo")
+            onNodeWithTag("new-reservation-error").assertTextContains(
+                "O servidor confirmou a criação, mas não devolveu a reserva. Feche e confira na busca de reservas.",
+            )
+            onNodeWithTag("new-reservation-submit").assertDoesNotExist()
             onNodeWithTag("new-reservation-close").assertIsEnabled()
             assertEquals(1, server.runs.size)
             onNodeWithText("NoSuchElement", substring = true).assertDoesNotExist()
             onNodeWithText("empty", substring = true).assertDoesNotExist()
-            submit()
-            assertEquals(2, server.runs.size)
-            assertEquals(server.runs[0].key, server.runs[1].key)
-            assertNotEquals(0, server.calls.size)
+            assertEquals(1, server.calls.size)
+            onNodeWithTag("new-reservation-close").performClick()
+            waitForIdle()
+            assertEquals(1, closes)
+            assertEquals(1, server.runs.size)
         }
 }
