@@ -15,7 +15,7 @@
 
 Não há `ARCHITECTURE.md` no repositório.
 
-**Riscos:** cálculo de valor monetário (fundo, sangria, suprimento, contagem e diferença); concorrência (escritas idempotentes repetidas depois de falha); autenticação ou autorização (a área e o indicador pelo conjunto da casca; o fechamento cego esconde o esperado).
+**Riscos:** cálculo de valor monetário (fundo, sangria, suprimento, contagem e diferença); concorrência (escritas idempotentes repetidas depois de falha); autenticação ou autorização (a área e o indicador pelo conjunto da casca; o fechamento cego esconde o esperado); dado pessoal ou segredo (as duas verificações ao vivo leem senhas do ambiente e nunca as imprimem; acrescentado pela revisão final).
 
 ## Global Constraints
 

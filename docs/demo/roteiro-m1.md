@@ -329,6 +329,7 @@ Em **Login**, digite `gerente`; em **Senha**, a senha do Gerente (item 2 da folh
 **Resultado esperado:**
 
 - No topo: "Pousada Zeny Demonstração", a mesma data operacional, o usuário "Gerente da Demo" e "Sair".
+- No topo, o indicador do caixa: "Sem turno aberto" (ou "Turno <número> aberto · <ponto>", se o Gerente tiver um turno aberto).
 - No menu lateral, exatamente estas áreas, nesta ordem:
   1. Recepção
   2. Reservas
