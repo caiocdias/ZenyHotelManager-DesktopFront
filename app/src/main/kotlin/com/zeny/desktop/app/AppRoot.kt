@@ -32,6 +32,10 @@ import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
 import com.zeny.desktop.app.cashier.CashierScreen
 import com.zeny.desktop.app.cashier.CashierState
+import com.zeny.desktop.app.folio.FolioSource
+import com.zeny.desktop.app.folio.FolioWiring
+import com.zeny.desktop.app.folio.pdfKind
+import com.zeny.desktop.app.folio.statementCards
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
@@ -77,6 +81,7 @@ import com.zeny.desktop.app.traces.TraceFormState
 import com.zeny.desktop.app.traces.TracesListState
 import com.zeny.desktop.app.traces.TracesSource
 import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.design.approval.ApprovalDialog
@@ -424,6 +429,7 @@ private fun ReservationsContent(
 
 private const val AVAILABILITY_READ = "reservations.availability.read"
 private const val RESERVATIONS_MANAGE = "reservations.reservations.manage"
+private const val FOLIOS_READ = "billing.folios.read"
 
 /** O calendário e a cotação de uma sessão; só existem com a permissão de leitura da disponibilidade. */
 private class ReservationsAvailability(
@@ -659,6 +665,37 @@ private fun confirmationCardFactory(
     window: Frame?,
 ): ((String, String) -> RegistrationCardState)? =
     connection.reservationConfirmations()?.let { pdfFactory(it.asCards(), PdfKind.CONFIRMATION, scope, window) }
+
+/**
+ * O portador da conta que as três entradas recebem (a aba "Contas", "Conta" na Recepção e nas Reservas), ou nulo sem a
+ * porta nesta conexão ou sem `billing.folios.read` nas [permissions] da casca. A aprovação é a do coordenador da sessão
+ * e os dois PDFs do extrato abrem no visualizador da ficha, cada um com a audiência e o `PdfKind` dele.
+ */
+internal fun folioWiring(
+    connection: ServerConnection,
+    permissions: Set<String>,
+    scope: CoroutineScope,
+    approval: ApprovalCoordinator?,
+    window: Frame?,
+): FolioWiring? {
+    val source = connection.folioSource()
+    if (source == null || FOLIOS_READ !in permissions) return null
+    return FolioWiring(
+        source = source,
+        permissions = permissions,
+        approve = { approveAction(approval, it) },
+        guestPdf = statementPdfFactory(source, StatementAudience.GUEST, scope, window),
+        internalPdf = statementPdfFactory(source, StatementAudience.INTERNAL, scope, window),
+    )
+}
+
+private fun statementPdfFactory(
+    source: FolioSource,
+    audience: StatementAudience,
+    scope: CoroutineScope,
+    window: Frame?,
+): (String, String) -> RegistrationCardState =
+    pdfFactory(source.statementCards(audience), audience.pdfKind, scope, window)
 
 private fun pdfFactory(
     cards: RegistrationCards,
