@@ -211,10 +211,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E06 | Fonte única de permissões | #concluida | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
-| E02 | Conta da hospedagem | #pendente | E06, E01, E07 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
+| E02 | Conta da hospedagem | #em-andamento | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
 | E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
-| E05 | Gate do marco M4 | #pendente | E04 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
+| E05 | Gate do marco M4 | #pendente | E04, E08 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -532,9 +533,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Conta da hospedagem — #pendente
+## E02 — Conta da hospedagem — #em-andamento
 
-**Objetivo:** a partir do detalhe da reserva ou da área Contas e caixa, o usuário abre a conta. Ele vê os lançamentos, o saldo e a taxa de serviço separada. Lança consumos por código de lançamento, estorna, ajusta, divide, transfere entre contas e remove a taxa a pedido do cliente. Também troca o pagador e o limite de crédito e vê o extrato `GUEST` e `INTERNAL`.
+**Objetivo:** a partir do detalhe da reserva ou da área Contas e caixa, o usuário abre a conta. Ele vê os lançamentos, o saldo e a taxa de serviço separada. Lança consumos por código de lançamento e estorna, e vê o extrato `GUEST` e `INTERNAL`, na tela e em PDF. Ajustar, dividir, transferir, remover a taxa a pedido, trocar o pagador e o limite de crédito, o `B-M5` e a isenção ao vivo passaram à E08 (divisão de 2026-11-18, no histórico).
 
 **Por que agora:** a conta é o centro financeiro da hospedagem e pré-requisito do check-out.
 
@@ -542,23 +543,20 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Escopo:**
 
-- **Contas:** `GET /api/v1/folios`, `GET`/`PUT /api/v1/folios/{id}` e `POST /api/v1/folios`, se a conta avulsa fizer sentido na tela.
+- **Contas:** `GET /api/v1/folios` e `GET /api/v1/folios/{id}`, e `POST /api/v1/folios`, se a conta avulsa fizer sentido na tela.
 - **Lançamentos:**
   - `GET`/`POST /api/v1/folios/{id}/postings`;
-  - `/reverse`, `/adjust`, `/split` e `/remove-service-charge` em `POST /api/v1/folios/{id}/postings/{postingId}/…`;
-  - `POST /api/v1/folios/{id}/postings/transfer`.
+  - `POST /api/v1/folios/{id}/postings/{postingId}/reverse`.
 - **Códigos de lançamento:** `GET /api/v1/transaction-codes`.
 - **Extrato:** `GET /api/v1/folios/{id}/statement` na tela e `GET /api/v1/folios/{id}/statement/pdf` no visualizador da M2 E07 (em memória, "Salvar como…" e impressão local, ADR 0009), com a mesma escolha de `audience`.
 - **Aprovação de superior:** diálogo onde o servidor exigir.
 - **Atalho:** "Conta" no detalhe da reserva.
-- **Multa de cancelamento (achados da M3 E06):**
-  - `B-M5`: os textos da multa numa reserva cancelada mais de uma vez;
-  - a isenção da multa, verificada ao vivo. Na M3 E04 o diálogo oferece "Isentar a multa", mas a isenção nunca foi verificada ao vivo.
 
 **Fora de escopo:**
 
 - encerrar e reabrir a conta, que ficam no check-out (E04) ou num atalho gerencial registrado no handoff;
 - pagamento (E03);
+- ajustar, dividir, transferir, remover a taxa a pedido, `PUT /api/v1/folios/{id}` (pagador e limite de crédito), o `B-M5` e a isenção ao vivo (E08);
 - a prévia da multa antes de cancelar, que depende do pedido não bloqueante `PF-04` (D2 do M3).
 
 **Critérios de aceite:**
@@ -569,24 +567,21 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] O extrato `GUEST` não mostra os lançamentos internos que o servidor omite.
 - [ ] O extrato em PDF abre no visualizador com o mesmo saldo do extrato na tela, para `GUEST` e para `INTERNAL`, e nenhum arquivo é criado sem "Salvar como…".
 - [ ] Um tipo de lançamento desconhecido aparece como "Outro (VALOR)".
-- [ ] **`B-M5`:** cancelar, reativar e cancelar de novo uma reserva do seed. O texto da multa no diálogo de cancelamento e a multa que a conta mostra batem com os lançamentos da API. No segundo cancelamento o servidor não cobrou de novo na verificação ao vivo da M3 E04 (critério 2), e o texto não diz que cobrou. Isso vale num teste do estado e na verificação ao vivo.
-- [ ] **Isenção ao vivo:** uma verificação ao vivo contra o `zeny-front` cancela uma reserva do seed com "Isentar a multa", com a aprovação do Gerente se o servidor pedir. A conta da reserva fica sem a multa, ou com o lançamento que a API devolver para a isenção, e a tela diz o mesmo que a conta.
 - [ ] As ações da conta usam o conjunto de permissões da casca (ADR 0013), e as escritas usam a função única do resultado desconhecido (D1): o grep do critério da E01 continua sem linha.
 
 **Validação obrigatória:**
 
 - Comandos oficiais de build, teste e lint → verdes.
 - Inspeção manual contra `zeny-front`.
-- Verificação ao vivo da multa e da isenção, com as credenciais só no ambiente do subshell, como as da M3 E04.
 
 **Revisão humana:** não
 
 **Notas para o plano:**
 
 - O `type` do lançamento foi o primeiro `x-extensible-enum` do servidor (ARCHITECTURE §7).
-- **Fonte do `B-M5`:** a descrição está só na tabela de destinos do plano da M3 E06 (`docs/superpowers/plans/2026-11-17-m3-reservas-e06.md`). O planejador lê o texto da multa no `ReservationCancelState` e no diálogo e o compara com o que a conta mostra. A verificação ao vivo da multa e da reativação é a `LiveReservationLifecycleCheck` (M3 E04), e a isenção pode entrar nela ou numa verificação ao lado. Ela escreve na demo, como a da M3 E04 (decisão 5 do handoff dela).
 - **Cursor:** as listas de contas e lançamentos são as primeiras fachadas paginadas do M4. O `core` já tem `CursorPager` (`core/.../http/CursorPager.kt`), e o `A-M10`/`B-M7` apontou o cursor duplicado entre fachadas. A fachada nova usa o `CursorPager` e não cria outra cópia.
-- Partes independentes, para as ondas do plano: o extrato (`…/statement` na tela e `…/statement/pdf` no visualizador) só lê a conta e não depende das ações sobre os lançamentos. A troca do pagador e do limite de crédito (`PUT /api/v1/folios/{id}`) também não depende delas.
+- Partes independentes, para as ondas do plano: o extrato (`…/statement` na tela e `…/statement/pdf` no visualizador) só lê a conta e não depende das ações sobre os lançamentos.
+- **Divisão (2026-11-18):** o escopo original não cabia em três fatias (só a leitura da conta com os atalhos e o extrato chega a ~10 arquivos de produção, e as sete escritas, a multa e as duas verificações ao vivo passavam de 60 min cada). O que saiu está na E08, com as notas do `B-M5` e da isenção.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -724,13 +719,76 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E08 — Correções da conta e multa de cancelamento — #pendente
+
+**Objetivo:** na conta aberta pela E02, o usuário ajusta um lançamento, divide-o entre contas, transfere lançamentos para outra conta e remove a taxa de serviço a pedido do cliente. Ele também troca o pagador e o limite de crédito. A multa de uma reserva cancelada mais de uma vez tem texto que bate com a conta (`B-M5`), e a isenção da multa é verificada ao vivo.
+
+**Por que agora:** saiu da E02 na divisão de 2026-11-18 (histórico). Não é pré-requisito do pagamento nem do check-out, por isso vem depois da E04; o gate (E05) espera por ela.
+
+**Dependências:** E02 (a tela da conta, a fachada e a porta). O ID é o próximo livre; a posição no índice segue a dependência e o valor para a demo.
+
+**Escopo:**
+
+- **Correções:** `/adjust`, `/split` e `/remove-service-charge` em `POST /api/v1/folios/{id}/postings/{postingId}/…` e `POST /api/v1/folios/{id}/postings/transfer`.
+- **Conta:** `PUT /api/v1/folios/{id}` (pagador e limite de crédito), com `If-Match`.
+- **Aprovação de superior:** diálogo onde o servidor exigir (o ajuste é ação sensível com limite).
+- **Multa de cancelamento (achados da M3 E06, antes destinados à E02):**
+  - `B-M5`: os textos da multa numa reserva cancelada mais de uma vez;
+  - a isenção da multa, verificada ao vivo. Na M3 E04 o diálogo oferece "Isentar a multa", mas a isenção nunca foi verificada ao vivo.
+
+**Fora de escopo:**
+
+- encerrar e reabrir a conta (E04);
+- cadastro de empresas (M5); o pagador é escolhido entre as empresas que o servidor lista.
+
+**Critérios de aceite:**
+
+- [ ] Ajustar acima do limite como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, o ajuste aparece como lançamento vinculado, com o original intacto.
+- [ ] Dividir e transferir mostram, nas duas contas, os lançamentos e os saldos que a API devolve, e a taxa de serviço acompanha o item.
+- [ ] Remover a taxa a pedido gera o estorno da taxa com o motivo do servidor; a ação não aparece em lançamento que não é taxa.
+- [ ] Trocar o limite de crédito com uma versão velha (`412`) mostra a mensagem em pt-BR e relê a conta.
+- [ ] Cada escrita repetida depois de erro de rede leva a mesma `Idempotency-Key` (teste), e as escritas usam a função única do resultado desconhecido (D1).
+- [ ] **`B-M5`:** cancelar, reativar e cancelar de novo uma reserva do seed. O texto da multa no diálogo de cancelamento e a multa que a conta mostra batem com os lançamentos da API. No segundo cancelamento o servidor não cobrou de novo na verificação ao vivo da M3 E04 (critério 2), e o texto não diz que cobrou. Isso vale num teste do estado e na verificação ao vivo.
+- [ ] **Isenção ao vivo:** uma verificação ao vivo contra o `zeny-front` cancela uma reserva do seed com "Isentar a multa", com a aprovação do Gerente se o servidor pedir. A conta da reserva fica sem a multa, ou com o lançamento que a API devolver para a isenção, e a tela diz o mesmo que a conta.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+- Verificação ao vivo da multa e da isenção, com as credenciais só no ambiente do subshell, como as da M3 E04.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- **Fonte do `B-M5`:** a descrição está só na tabela de destinos do plano da M3 E06 (`docs/superpowers/plans/2026-11-17-m3-reservas-e06.md`). O planejador lê o texto da multa no `ReservationCancelState` e no diálogo e o compara com o que a conta mostra. No segundo cancelamento, a M3 E04 viu `penalty.amount` zero, sem `postingId`, e o resumo atual diz "Sem multa.", embora a multa do primeiro cancelamento continue na conta (`penaltiesCharged`). A verificação ao vivo da multa e da reativação é a `LiveReservationLifecycleCheck` (M3 E04), e a isenção pode entrar nela ou numa verificação ao lado. Ela escreve na demo, como a da M3 E04 (decisão 5 do handoff dela).
+- Partes independentes, para as ondas do plano: a troca do pagador e do limite (`PUT`) não depende das correções; a multa não depende de nenhuma das duas.
+- **Risco:** cálculo de valor monetário e concorrência estão na lista fechada.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Muitas ações numa tela só. Agrupar em menu de contexto por lançamento (nota da E02).
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E05 — Gate do marco M4 — #pendente
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o ciclo completo da hospedagem para a demo.
 
-**Dependências:** E04.
+**Dependências:** E04 e E08 (o gate cobre o marco inteiro).
 
 **Escopo:**
 
@@ -808,3 +866,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E07 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa e revisão final limpos; faltam as duas verificações ao vivo, que pedem as credenciais do usuário. A E02 e as seguintes esperam por ela.
 - 2026-11-18 — entrevista do fim do lote (`claude --agent orquestrador`): o usuário ratificou a divisão da E01 com a E07 (D3) e emendou o ADR 0012, item 7, para o testador de etapa com despachos escopados (D4). Nenhuma tag mudou.
 - 2026-11-18 — a E07 fecha `#concluida` (`claude --agent orquestrador`): o usuário rodou o seed (que agora cria o ponto de caixa "Recepção") e as duas verificações ao vivo, que passaram. A E02 fica elegível.
+- 2026-11-18 — a E02 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E02 fica com a leitura da conta (lançamentos, saldo e taxa separada), lançar, estornar e o extrato na tela e em PDF, com os critérios dela sem mudança. Entra a **E08, "Correções da conta e multa de cancelamento"**, com ajustar, dividir, transferir, remover a taxa a pedido, o pagador e o limite de crédito, e os critérios do `B-M5` e da isenção ao vivo, que saíram da E02. A E08 depende da E02 e vem depois da E04 no índice; a E05 passa a depender também dela. A E02 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E02.
