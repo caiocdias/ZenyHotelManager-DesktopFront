@@ -206,7 +206,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E06 | Fonte única de permissões | #em-andamento | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
+| E06 | Fonte única de permissões | #concluida | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
 | E01 | Turno de caixa | #pendente | E06 | Regra única do "resultado desconhecido" no `core` (D1); abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório |
 | E02 | Conta da hospedagem | #pendente | E06, E01 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
 | E03 | Pagamentos e cauções | #pendente | E01, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
@@ -215,7 +215,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Fonte única de permissões — #em-andamento
+## E06 — Fonte única de permissões — #concluida
 
 **Objetivo:** as áreas do app usam o conjunto de permissões do `me` que a casca leu na sessão vigente, conforme o [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md). Nenhuma área lê o `me` por conta própria, e a falha da leitura passa a ser a falha da casca, com o "Tentar de novo" dela. A Recepção e os Recados deixam de esconder ações por falha silenciosa.
 
@@ -241,19 +241,19 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Só a casca lê o `me`. `grep -rn 'fun permissions' app/src/main` não devolve linha, e `grep -rn 'account\.me()' app/src/main` devolve só a implementação de `ServerConnection.me()`, chamada só pelo `ShellState`.
-- [ ] `grep -rnE 'AreaPermissionsState|PermissionsNotice' app/src/main` não devolve linha.
-- [ ] Teste: com uma porta falsa que conta as chamadas ao `me`, abrir a casca e depois a Recepção, as Reservas e os Recados, em sequência, registra uma leitura só.
-- [ ] Teste: com o `me` falhando, a casca mostra o `ErrorState`, e nenhuma área é desenhada. O "Tentar de novo" relê, e com o `me` dando certo na repetição as ações da área aberta seguem as permissões lidas.
-- [ ] Teste: na troca de `sessionId`, as áreas da sessão nova nunca recebem o conjunto da anterior, nem com a leitura da sessão nova ainda em voo. Do início do `reload()` até a resposta, o `ShellState` não expõe o conjunto velho.
-- [ ] Teste: o `DayPanelState` assina os tópicos do tempo real pelo conjunto recebido da casca, e o `WalkInState` recebe o mesmo conjunto.
-- [ ] O comportamento por permissão da M3 continua verde com o conjunto entregue pela casca:
+- [x] Só a casca lê o `me`. `grep -rn 'fun permissions' app/src/main` não devolve linha, e `grep -rn 'account\.me()' app/src/main` devolve só a implementação de `ServerConnection.me()`, chamada só pelo `ShellState`.
+- [x] `grep -rnE 'AreaPermissionsState|PermissionsNotice' app/src/main` não devolve linha.
+- [x] Teste: com uma porta falsa que conta as chamadas ao `me`, abrir a casca e depois a Recepção, as Reservas e os Recados, em sequência, registra uma leitura só.
+- [x] Teste: com o `me` falhando, a casca mostra o `ErrorState`, e nenhuma área é desenhada. O "Tentar de novo" relê, e com o `me` dando certo na repetição as ações da área aberta seguem as permissões lidas.
+- [x] Teste: na troca de `sessionId`, as áreas da sessão nova nunca recebem o conjunto da anterior, nem com a leitura da sessão nova ainda em voo. Do início do `reload()` até a resposta, o `ShellState` não expõe o conjunto velho.
+- [x] Teste: o `DayPanelState` assina os tópicos do tempo real pelo conjunto recebido da casca, e o `WalkInState` recebe o mesmo conjunto.
+- [x] O comportamento por permissão da M3 continua verde com o conjunto entregue pela casca:
   - a aba de disponibilidade só com `reservations.availability.read`;
   - as ações da reserva só com `reservations.reservations.manage`;
   - editar e resolver recado só com as permissões de cada ação.
 
   Toda `ASSERCAO_REMOVIDA` de `check_test_integrity.py` na etapa tem justificativa da revisão, com a asserção nova de força igual ou maior.
-- [ ] O handoff registra o commit que removeu o `AreaPermissionsState`, que a E01 cita no destino dos Menores M1, M2 e M5 da M3 E06.
+- [x] O handoff registra o commit que removeu o `AreaPermissionsState`, que a E01 cita no destino dos Menores M1, M2 e M5 da M3 E06.
 
 **Validação obrigatória:**
 
@@ -284,12 +284,37 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: [`docs/superpowers/plans/2026-11-17-m4-contas-caixa-checkout-e06.md`](../superpowers/plans/2026-11-17-m4-contas-caixa-checkout-e06.md). Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (3 Importantes: a amarração sessão × conjunto, os filtros das fatias e a ruling do `C-M6` sem registro), aprovado com notas na rodada 1 (`371baac`).
+- Commits (`MERGE_BASE` `510bc44`, HEAD `785d864`):
+  - Task 1, a casca guarda e entrega o conjunto, e as Reservas o consomem: `847bfdb`, `bca85f1`, `6dd85d3`. Revisão de fatia (`revisor-seguranca`): aprovada, 0 Críticos e 0 Importantes.
+  - Task 2, a Recepção e os Recados consomem o conjunto, e as portas saem: `b749a58`, `6b575c2`. Revisão de fatia: aprovada, 0 Críticos e 0 Importantes.
+  - Testador de etapa: `9b4a355` (19 testes novos, auditoria dos 30 arquivos do testador alterados pelo desenvolvedor, nenhum defeito de produção).
+  - Correção do fim da etapa: `785d864` (um `DisposableEffect` por *holder* na Recepção e na Reservas; `import` do `Set.copyOf`).
+  - **Remoção do `AreaPermissionsState`** (e do `PermissionsNotice` e do `ReservationsPermissionsAtaqueTest`): **`bca85f1`**. É o commit que a E01 cita no destino dos Menores M1, M2 e M5 da M3 E06.
+- Revisão final (`revisor-seguranca`, fable, `code-reviewer.md`, sobre `510bc44..6b575c2`): 0 Críticos, 2 Importantes de teste (o ataque integrado do `me` da sessão A preso e a entrega aos Recados pela casca), fechados pelo testador em `9b4a355`. A re-revisão escopada de `6b575c2..785d864` saiu limpa: "Ready to merge: Yes".
+- Gate no HEAD `785d864`: `./gradlew build` → BUILD SUCCESSFUL, com o `:app:test` executado (2572 testes, 0 falhas, 45 pulados, que são os checks ao vivo); `bash tests/run.sh` → 60 arquivos, 0 falhas, 1 com casos pulados (o busybox, alheio à etapa).
+- Scanner: `osv-scanner --recursive --no-ignore ./` no `6b575c2` → 6 lockfiles do Gradle (1429 pacotes), "No issues found". A etapa não muda dependência, catálogo, plugin nem lockfile.
+- Integridade: `check_test_integrity.py --base 510bc44` no `785d864` → exit 1, 222 `ASSERCAO_REMOVIDA` e 21 `TESTE_REMOVIDO`, sem avisos. Cada remoção tem justificativa da revisão (assunto extinto pelo ADR 0013, mudança de regra decidida ou substituto de força igual ou maior), conferida por nome nas revisões de fatia e na final. O script conta `TESTE_REMOVIDO` líquido (remoções menos adições) e atribui por arquivo de forma pouco confiável; em etapa que apaga e cria muitos testes, o mapa precisa ser conferido por nome. Ele também só marca `DEV_TESTE_DO_TESTADOR` para commits do testador dentro do intervalo: a lista dos arquivos do testador alterados foi conferida contra o histórico pelo orquestrador.
+- Critérios verificados:
+  1. Greps no `785d864`: `fun permissions` em `app/src/main` não devolve linha; `account.me()` só em `ServerConnection.kt:168` (`CoreConnection.me()`); `.me()` só nessa linha e em `ShellState.kt:81`.
+  2. `AreaPermissionsState|PermissionsNotice` em `app/src/main` não devolve linha.
+  3. Leitura única: `ShellMeReadCountTest.oneMeReadAcrossAreas` (`meCalls == 1`; o vermelho registrava 5) e `ShellPermissionsAtaqueTest.receptionTracesFromTheShellShowTheListWithOneMeRead`.
+  4. `me` que falha: `ShellPermissionsTest.failedMeDrawsNoAreaAndRetryGrants` e `failedMeDrawsNoReceptionAndRetryGrants`.
+  5. Troca de `sessionId`: `ShellStateTest.reloadClearsPermissionsBeforeTheAnswer`, `ShellPermissionsTest.newSessionAreaNeverSeesThePreviousSet`, `areaWithForeignSessionDrawsNothing`, `receptionWithForeignSessionDrawsNothing` e, do testador, `heldMeOfSessionAIsCancelledAndSessionBAreaNeverSeesItsLargerSet`.
+  6. `DayPanelStateTest.subscribesTopicsFromTheReceivedSet` e `ReceptionShellTest.walkInGetsTheShellSet`.
+  7. Comportamento por permissão da M3: `ShellPermissionsTest.receivedSetDecidesTabAndActions`, os testes de Reservas, Recepção e Recados adaptados e `TracesShellSetAtaqueTest`, todos verdes no gate; as `ASSERCAO_REMOVIDA` com justificativa da revisão.
+  8. Commit da remoção do `AreaPermissionsState`: `bca85f1` (acima).
+- Validação manual: **pendente do usuário.** O `zeny-front` estava de pé, mas as credenciais `ZENY_LIVE_*` não estavam no ambiente da sessão, e o orquestrador não procurou segredos na máquina. Entrar como Recepcionista e como Governanta do seed e abrir cada área do menu; os `Live*Check` tocados pela etapa só compilaram.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **`C-M6` na E06.** O desenvolvedor fez a adaptação forçada em 30 arquivos com commit do testador e apagou os testes cujo assunto deixou de existir (`AreaPermissionsStateAtaqueTest`, `ReservationsPermissionsAtaqueTest`, a porta `permissions()` das fixtures), com o mapa para os substitutos. Diverge da letra do ADR 0013 (Consequências) e da nota `C-M6`, porque a remoção da porta quebra a compilação dos testes no mesmo commit. O testador de etapa auditou os 30 arquivos e repôs o que tinha só substituto parcial. Custo se errado: uma asserção do testador enfraquecida, coberta pela integridade, pelas revisões e pela auditoria.
+  2. **`Error` no `me`.** A casca captura `Exception`, nunca `Throwable` (correção do M2 da M3 E06). Um `Error` da JVM no `me` deixa a casca em "carregando", sem conceder nada; não há tela de erro. Custo se errado: um `Error` raro trava a casca até sair e entrar de novo.
+  3. **Verificação ao vivo não rodada** pelo orquestrador (acima).
+- Notas para a próxima etapa (E01):
+  - **M1, M2 e M5 da M3 E06:** resolvidos pela remoção em `bca85f1`. A leitura que ficou (`ShellState.reload()`) usa `catch (e: Exception)` com `ensureActive()`, e o `permissions` fica nulo com `error` (`b749a58`).
+  - **Para a passada do testador na E01:** o nome desatualizado `panelPermissionsStayEmptyWhileTheReadIsPendingAndNeverCallPermissionsTwice` em `FakeReceptionActionsAtaqueTest`, hoje eco do construtor; a seção de recados da reserva (`forReservation` em `receptionTraces`) sem asserção pela casca; a mensagem "sem ler a permissão" em `ReservationsAvailabilityTabAtaqueTest`.
+  - `ShellStateTest.errorNeverComesWithPermissions` provoca a falha tardia pelo `writeObserver` do snapshot do Compose; é frágil a mudanças internas do runtime.
+  - O indicador de turno no topo (E01) lê `ShellState.permissions`. A área nova recebe o conjunto e o `sessionId` da casca pelo `AreaContent` e segue a amarração sessão × conjunto (desenha só com o `sessionId` ativo igual ao da casca; *holders* com `remember(source, sessionId, permissions)` e um `DisposableEffect` por *holder*).
+  - Os testes de UI que montam a casca passam o conjunto pelo `me` da conexão falsa; as portas falsas não têm mais `permissions()`.
 
 ---
 
@@ -670,3 +695,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
     - a conferência do `C-M6`;
     - o Ubuntu novo.
   - As restrições ganharam o resultado desconhecido e as permissões, e "Hipóteses e decisões em aberto" ganhou D1 e D2.
+- 2026-11-18 — a E06 fecha `#concluida` (`claude --agent orquestrador`): a casca é a fonte única das permissões; o `AreaPermissionsState` saiu em `bca85f1`.
