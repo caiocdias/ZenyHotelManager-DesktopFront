@@ -13,7 +13,7 @@ import io.ktor.http.ContentType
 import java.io.ByteArrayOutputStream
 import kotlin.uuid.Uuid
 
-/** Teto de um PDF do servidor: acima disso a resposta não é a ficha nem a confirmação. */
+/** Teto de um PDF do servidor: acima disso a resposta não é a ficha, a confirmação nem o extrato da conta. */
 private const val MAX_PDF_BYTES = 20L * 1024 * 1024
 private val PDF_MAGIC = "%PDF-".encodeToByteArray()
 private const val PDF_EXTENSION = ".pdf"
