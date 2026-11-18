@@ -50,6 +50,7 @@ class SeedReportAtaqueTest {
                 "temporadas",
                 "planos",
                 "tabelas de preço",
+                "pontos de caixa",
                 "perfis",
                 "usuários",
                 "empresas",
@@ -110,5 +111,54 @@ class SeedReportAtaqueTest {
         SeedItem.entries.forEach { r.kept(it) }
         assertTrue(r.lines().none { Regex("\\d{11}").containsMatchIn(it) })
         assertTrue(r.lines().none { it.contains('@') })
+    }
+
+    @Test
+    fun warningLinesComeAfterAllItemLinesAndAreNotCountedAsItems() {
+        val r = SeedReport()
+        r.warn("primeiro")
+        r.created(SeedItem.CASH_POINT)
+        r.warn("segundo")
+        r.kept(SeedItem.HOTEL)
+        assertEquals(
+            listOf(
+                "hotel: 0 criados, 1 já existiam",
+                "pontos de caixa: 1 criados, 0 já existiam",
+                "aviso: primeiro",
+                "aviso: segundo",
+            ),
+            r.lines(),
+        )
+        assertEquals(listOf("primeiro", "segundo"), r.warnings())
+        assertEquals(0, r.createdCount(SeedItem.HOTEL))
+    }
+
+    @Test
+    fun warningsAloneProduceLinesAndAppearInToString() {
+        val r = SeedReport()
+        r.warn("x")
+        assertEquals(listOf("aviso: x"), r.lines())
+        assertEquals("SeedReport(aviso: x)", r.toString())
+    }
+
+    @Test
+    fun warningsReturnedIsASnapshotNotALiveView() {
+        val r = SeedReport()
+        r.warn("a")
+        val snapshot = r.warnings()
+        r.warn("b")
+        assertEquals(listOf("a"), snapshot)
+        assertEquals(listOf("a", "b"), r.warnings())
+    }
+
+    @Test
+    fun cashPointItemIsCountedIndependentlyOfNeighbours() {
+        val r = SeedReport()
+        r.created(SeedItem.CASH_POINT)
+        r.kept(SeedItem.CASH_POINT)
+        assertEquals(1, r.createdCount(SeedItem.CASH_POINT))
+        assertEquals(1, r.keptCount(SeedItem.CASH_POINT))
+        assertEquals(0, r.createdCount(SeedItem.PRICES))
+        assertEquals(0, r.createdCount(SeedItem.ROLE))
     }
 }

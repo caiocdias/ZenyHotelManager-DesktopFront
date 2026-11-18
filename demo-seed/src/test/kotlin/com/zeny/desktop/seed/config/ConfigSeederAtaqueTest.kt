@@ -410,4 +410,41 @@ class ConfigSeederAtaqueTest {
             assertEquals(data.prices.size, fake.priceWrites.size)
             assertEquals(data.prices.size, gateway.writes)
         }
+
+    @Test
+    fun deactivatedCashPointWarningLeaksNothingBeyondTheCashPointName() =
+        runTest {
+            val fake = FakeConfigGateway()
+            fake.cashPoints["RECEPÇÃO"] = false
+            val data = DemoCatalog.build(LocalDate.of(2026, 11, 12))
+            val report = SeedReport()
+            ConfigSeeder(fake, report).seed(data, LocalDate.of(2026, 11, 12))
+            val warning = report.warnings().single()
+            assertTrue(warning.contains("Recepção"))
+            val secrets =
+                listOf(data.hotel.cnpj, data.hotel.legalName) +
+                    data.guests.flatMap { listOf(it.fullName, it.cpf) } +
+                    data.companies.flatMap { listOf(it.legalName, it.cnpj) } +
+                    data.users.flatMap { listOf(it.login, it.name) }
+            secrets.forEach { assertTrue(!warning.contains(it), "vazou: $it") }
+            assertTrue(Regex("\\d{11}").find(warning) == null)
+            // desativado nao e reativado nem recriado, e o resto do catalogo segue sendo semeado
+            assertEquals(mapOf("RECEPÇÃO" to false), fake.cashPoints)
+            assertEquals(0, report.createdCount(SeedItem.CASH_POINT))
+            assertEquals(0, report.keptCount(SeedItem.CASH_POINT))
+            assertEquals(20, fake.roomStates.size)
+        }
+
+    @Test
+    fun conflictOnCashPointCreationDoesNotWarnAndKeepsSeedingTheRest() =
+        runTest {
+            val fake = FakeConfigGateway()
+            fake.cashPointCreateConflicts = true
+            val date = LocalDate.of(2026, 11, 12)
+            val report = SeedReport()
+            ConfigSeeder(fake, report).seed(DemoCatalog.build(date), date)
+            assertTrue(report.warnings().isEmpty())
+            assertEquals(1, report.keptCount(SeedItem.CASH_POINT))
+            assertEquals(20, fake.roomStates.size)
+        }
 }
