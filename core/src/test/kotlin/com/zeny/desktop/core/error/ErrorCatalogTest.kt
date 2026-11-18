@@ -94,6 +94,11 @@ class ErrorCatalogTest {
     }
 
     @Test
+    fun shiftOperatorRequiredTellsWhoCanAct() {
+        assertEquals("Só o operador do turno pode fazer isso.", ErrorCatalog.message("CASHIER_SHIFT_OPERATOR_REQUIRED"))
+    }
+
+    @Test
     fun unknownCodeFallsBackToDetail() {
         assertEquals("Detalhe do servidor.", ErrorCatalog.userMessage(422, "SOMETHING_NEW", "Detalhe do servidor."))
     }
