@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.shell
 
+import androidx.compose.runtime.snapshots.Snapshot
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
@@ -425,6 +426,40 @@ class ShellStateTest {
             advanceUntilIdle()
             assertTrue(state.error != null)
             assertNull(state.permissions)
+        }
+
+    @Test
+    fun errorNeverComesWithPermissions() =
+        runTest {
+            val connection = FakeConnection(me = { Me("u-1", "rec", "Recepcionista", receptionist) })
+            val state = loaded(connection)
+            assertEquals(receptionist, state.permissions)
+
+            // O me e a data respondem, mas um passo da carga falha depois de o conjunto existir: a primeira escrita
+            // de estado com o conjunto já visível lança (o observador de escrita do snapshot faz as vezes de qualquer
+            // falha tardia, como a da formatação da data ou da área restaurada).
+            var armed = false
+            var thrown = false
+            val snapshot =
+                Snapshot.takeMutableSnapshot(writeObserver = {
+                    if (armed && !thrown && state.permissions != null) {
+                        thrown = true
+                        error("falha depois do conjunto")
+                    }
+                })
+            try {
+                snapshot.enter {
+                    state.reload()
+                    armed = true
+                    advanceUntilIdle()
+
+                    assertTrue(thrown, "a carga não chegou a ter o conjunto")
+                    assertNotNull(state.error, "a carga que falhou depois do me não deu erro")
+                    assertNull(state.permissions, "o conjunto ficou junto com o erro")
+                }
+            } finally {
+                snapshot.dispose()
+            }
         }
 
     @Test

@@ -81,16 +81,19 @@ class ShellState(
                     val date = connection.businessDate()
                     userName = me.name
                     areas = visibleAreas(me.permissions, IMPLEMENTED_AREAS, devMode)
-                    permissions = java.util.Set.copyOf(me.permissions)
+                    val read = java.util.Set.copyOf(me.permissions)
                     businessDate = DateInput.format(date)
                     restoreArea?.let { selected = it }
                     restoreArea = null
                     if (selected !in openableAreas()) selected = null
+                    // Por último: nenhuma falha da carga deixa o conjunto ao lado do `error`.
+                    permissions = read
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
                 ) {
                     // Cancelamento desta carga se propaga; um vindo da chamada (tempo esgotado) é falha comum.
                     currentCoroutineContext().ensureActive()
+                    permissions = null
                     error = e as? ApiError ?: ApiError.Network(e)
                 }
                 loading = false
