@@ -748,4 +748,20 @@ class ReservationCancelStateTest {
             assertFalse(state.waivePenalty)
             assertNull(state.done)
         }
+
+    @Test
+    fun startKeepsTheStoredTextWhenCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += rxProblem(500, "INTERNAL_ERROR") }
+            val state = started(source)
+            confirmNow(state)
+            assertTrue(state.closeOnly)
+
+            state.start()
+            runCurrent()
+
+            assertEquals(RX_SERVER_UNCONFIRMED_TEXT, state.error)
+            assertEquals(1, source.readCalls.size)
+            assertFalse(state.loading)
+        }
 }

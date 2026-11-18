@@ -158,6 +158,7 @@ private fun Form(state: NewReservationState) {
         onValueChange = { state.nightlyRateText = it },
         label = "Diária negociada (opcional)",
         modifier = Modifier.fillMaxWidth().testTag("new-reservation-rate"),
+        enabled = enabled,
     )
     state.rateError?.let {
         Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("new-reservation-rate-error"))

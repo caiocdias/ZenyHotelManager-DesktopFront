@@ -236,6 +236,8 @@ class CheckInState(
         val outcome = classifyWriteFailure(failure)
         if (outcome == WriteFailure.DEFINITIVE) dropIntent()
         error = if (outcome == WriteFailure.UNKNOWN_STORED) SERVER_UNCONFIRMED_TEXT else ActionText.error(failure)
+        // Só a recusa definitiva mexe nas escolhas: um 5xx com esses códigos é desconhecido, e a intenção fica.
+        if (outcome != WriteFailure.DEFINITIVE) return
         when ((failure as? ApiError.Problem)?.code) {
             FEE_CHANGED -> {
                 chargeEarly = false

@@ -63,10 +63,12 @@ object MoneyInput {
 }
 
 @Composable
+@Suppress("LongParameterList") // `enabled` é opcional e fica no fim, sem quebrar quem já chama
 fun MoneyField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
     error: String? = null,
     modifier: Modifier = Modifier,
-) = ParsedTextField(value, onValueChange, FieldSpec(label, error, MoneyInput::parse), modifier)
+    enabled: Boolean = true,
+) = ParsedTextField(value, onValueChange, FieldSpec(label, error, MoneyInput::parse, enabled = enabled), modifier)

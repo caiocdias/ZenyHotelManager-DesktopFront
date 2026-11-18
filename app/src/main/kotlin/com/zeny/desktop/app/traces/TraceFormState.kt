@@ -60,11 +60,10 @@ private data class LoadedTrace(
  * Estado do formulário de recado (criação e edição). Escopo próprio, cancelado no [close]; com [busy], as entradas e
  * o [save] são no-op; resultado que chega depois do [close] é descartado.
  *
- * Criação: chama `create` uma vez. A falha que `classifyWriteFailure` não dá como definitiva (rede, resposta
- * incompatível, sessão encerrada, `5xx`) deixa o resultado desconhecido: a criação não tem `Idempotency-Key`, então
- * quer dizer "pode ter sido feito, confira". Avisa, atualiza a lista ([onSaved]) e não repete sozinha; o formulário
- * fica livre para nova tentativa só por clique (um recado duplicado custa pouco e se resolve na lista, ao contrário do
- * walk-in, que trava).
+ * Criação: chama `create` uma vez. A falha que `classifyWriteFailure` não dá como definitiva deixa o resultado
+ * desconhecido: a criação não tem `Idempotency-Key`, então quer dizer "pode ter sido feito, confira". Avisa, atualiza
+ * a lista ([onSaved]) e não repete sozinha; o formulário fica livre para nova tentativa só por clique (um recado
+ * duplicado custa pouco e se resolve na lista, ao contrário do walk-in, que trava).
  *
  * Edição: guarda o `ETag` lido. No `412`, relê o recado, troca campos e `ETag` e avisa, sem salvar; se a releitura
  * falha ou traz o recado resolvido, o salvamento fica bloqueado. O vencimento só é conferido contra a data

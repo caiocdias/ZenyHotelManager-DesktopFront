@@ -148,9 +148,12 @@ class ReservationCancelState(
     /** Com o estado ocupado, não confirmado, só para fechar ou concluído, as entradas viram no-op. */
     private val locked: Boolean get() = closed || busy || unconfirmed || closeOnly || done != null
 
+    /** Fechado, escrevendo, só para fechar ou concluído: a releitura não roda (apagaria o texto da falha guardada). */
+    private val reloadBlocked: Boolean get() = closed || busy || closeOnly || done != null
+
     /** Lê a reserva e os termos; de novo, tenta outra vez depois de uma falha. */
     fun start() {
-        if (closed || busy || done != null) return
+        if (reloadBlocked) return
         val mine = ++generation
         loading = true
         error = null

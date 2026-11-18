@@ -395,6 +395,30 @@ class RoomMoveStateTest {
         }
 
     @Test
+    fun problem5xxWithRefusalCodeKeepsChoiceAndKey() =
+        runTest {
+            for (code in listOf("ROOM_ALREADY_ASSIGNED", "RESERVATION_TRANSITION_NOT_ALLOWED")) {
+                changes = 0
+                val source = source()
+                val state = ready(source)
+                val versionReads = source.versionCalls.size
+                source.moveOutcomes += mvProblem(500, code)
+
+                confirmNow(state)
+
+                assertEquals(MV_STORED_TEXT, state.error, code)
+                assertEquals("102", state.room?.number, code)
+                assertEquals(versionReads, source.versionCalls.size, code)
+                assertEquals(0, changes, code)
+                assertTrue(state.canConfirm, code)
+                confirmNow(state)
+                val keys = source.moveRuns.map { it.key }
+                assertEquals(2, keys.size, code)
+                assertEquals(keys[0], keys[1], code)
+            }
+        }
+
+    @Test
     fun unexpected5xxKeepsTheKey() =
         runTest {
             for (failure in listOf(ApiError.Unexpected(500), ApiError.Unexpected(502))) {

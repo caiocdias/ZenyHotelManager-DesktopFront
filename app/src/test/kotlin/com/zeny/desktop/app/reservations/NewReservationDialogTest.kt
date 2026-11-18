@@ -408,6 +408,7 @@ class NewReservationDialogTest {
             onNodeWithText("Criar reserva").assertDoesNotExist()
             listOf(
                 "new-reservation-requests",
+                "new-reservation-rate",
                 "new-reservation-swap-holder",
                 "new-reservation-origin-PHONE",
                 "new-reservation-segment-EVENT",

@@ -231,6 +231,7 @@ private class FakeApprover(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // um teste por regra: cotação, early, chave, falhas, aprovação, hóspede e cargas
 class CheckInStateTest {
     private val id = checkInResUuid.toString()
     private val holderId = checkInHolderUuid.toString()
@@ -501,6 +502,28 @@ class CheckInStateTest {
             val keys = source.checkInRuns.map { it.key }
             assertEquals(2, keys.size)
             assertEquals(keys[0], keys[1])
+        }
+
+    @Test
+    fun problem5xxWithRefusalCodeKeepsChoiceAndKey() =
+        runTest {
+            for (code in listOf("EARLY_LATE_FEE_CHANGED", "RESERVATION_TRANSITION_NOT_ALLOWED")) {
+                changes = 0
+                val source = source().apply { checkInOutcomes += ciProblem(code, 500) }
+                val state = started(source)
+                state.chargeEarly = true
+
+                confirmNow(state)
+
+                assertEquals(STORED_TEXT, state.error, code)
+                assertTrue(state.chargeEarly, code)
+                assertEquals(1, source.quoteCalls.size, code)
+                assertEquals(0, changes, code)
+                confirmNow(state)
+                val keys = source.checkInRuns.map { it.key }
+                assertEquals(2, keys.size, code)
+                assertEquals(keys[0], keys[1], code)
+            }
         }
 
     @Test

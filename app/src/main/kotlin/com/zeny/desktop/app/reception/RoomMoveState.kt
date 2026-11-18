@@ -193,6 +193,8 @@ class RoomMoveState(
         val text = if (stored) SERVER_UNCONFIRMED_TEXT else ActionText.moveError(failure)
         val code = (failure as? ApiError.Problem)?.code
         error = text
+        // Só a recusa definitiva mexe na escolha e relê: um 5xx com esses códigos é desconhecido, e a intenção fica.
+        if (outcome != WriteFailure.DEFINITIVE) return
         when {
             failure is ApiError.PreconditionFailed -> {
                 load(text)
