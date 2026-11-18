@@ -15,13 +15,31 @@ import java.util.Set as JavaSet
 
 private const val UNCONFIGURED_HOTEL = "Hotel ainda não configurado"
 private const val UNKNOWN_HOTEL = "Hotel"
+private const val CASHIER_OPERATE = "billing.cashier.operate"
+
+/** O indicador de turno do topo da casca. */
+sealed interface ShiftIndicator {
+    /** Sem `billing.cashier.operate` no conjunto, sem porta do caixa na conexão, ou antes da leitura. */
+    data object Hidden : ShiftIndicator
+
+    /** A leitura do turno corrente falhou: o topo não afirma nada. */
+    data object Unknown : ShiftIndicator
+
+    data object None : ShiftIndicator
+
+    data class Open(
+        val number: String,
+        val cashPointName: String,
+    ) : ShiftIndicator
+}
 
 /**
  * Estado da casca: usuário e áreas (`me`), data operacional e nome do hotel, lidos ao nascer e a cada `reload`.
  * Falha em `me` ou na data vira `error` (com "Tentar de novo"); o nome do hotel é independente: leitura negada
  * (o `403` da Governanta) ou falha dá só o nome genérico, sem impedir a data nem o menu. Quem cria chama
  * `close()` quando a casca sai de cena. [restoreArea] (a área aberta na casca da sessão anterior) só abre depois
- * que o `me` desta sessão a confirma no menu.
+ * que o `me` desta sessão a confirma no menu. O indicador de turno ([shift]) é lido depois do `me` e da data, num job
+ * à parte como o nome do hotel, e só com `billing.cashier.operate` no conjunto: a falha dele não vira `error`.
  */
 class ShellState(
     private val connection: ServerConnection,
@@ -55,8 +73,13 @@ class ShellState(
     var permissions by mutableStateOf<Set<String>?>(null)
         private set
 
+    /** O turno do usuário no topo; [ShiftIndicator.Hidden] do início de cada `reload` até a leitura dele. */
+    var shift by mutableStateOf<ShiftIndicator>(ShiftIndicator.Hidden)
+        private set
+
     private var load: Job? = null
     private var hotelRead: Job? = null
+    private var shiftRead: Job? = null
     private var closed = false
 
     init {
@@ -71,9 +94,11 @@ class ShellState(
         if (closed) return
         load?.cancel()
         hotelRead?.cancel()
+        shiftRead?.cancel()
         loading = true
         error = null
         permissions = null
+        shift = ShiftIndicator.Hidden
         hotelRead = scope.launch { hotelName = readHotelName() }
         load =
             scope.launch {
@@ -89,6 +114,7 @@ class ShellState(
                     if (selected !in openableAreas()) selected = null
                     // Por último: nenhuma falha da carga deixa o conjunto ao lado do `error`.
                     permissions = read
+                    readShift(read)
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
                 ) {
@@ -106,6 +132,16 @@ class ShellState(
         closed = true
         load?.cancel()
         hotelRead?.cancel()
+        shiftRead?.cancel()
+    }
+
+    /**
+     * Relê o turno do topo (a área de caixa chama depois de abrir ou fechar um turno); a leitura anterior em voo é
+     * cancelada. Não faz nada depois do [close], antes do conjunto ou sem `billing.cashier.operate` nele.
+     */
+    fun refreshShift() {
+        if (closed) return
+        readShift(permissions ?: return)
     }
 
     /** Só áreas com tela podem ser abertas; as "(em breve)" ficam só no menu. */
@@ -114,6 +150,28 @@ class ShellState(
     }
 
     private fun openableAreas() = areas.filter { (_, implemented) -> implemented }.map { it.first }
+
+    private fun readShift(read: Set<String>) {
+        val cashier = connection.cashierSource()
+        if (CASHIER_OPERATE !in read || cashier == null) return
+        shiftRead?.cancel()
+        shiftRead =
+            scope.launch {
+                val value =
+                    try {
+                        cashier.currentShift()?.let { ShiftIndicator.Open(it.number, it.cashPointName) }
+                            ?: ShiftIndicator.None
+                    } catch (
+                        @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
+                    ) {
+                        currentCoroutineContext().ensureActive()
+                        ShiftIndicator.Unknown
+                    }
+                // A resposta de uma leitura cancelada (reload, close ou outra releitura) não sobrescreve o valor.
+                currentCoroutineContext().ensureActive()
+                shift = value
+            }
+    }
 
     private suspend fun readHotelName(): String =
         try {

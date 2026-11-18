@@ -1164,4 +1164,80 @@ class WalkInConfirmAtaqueTest {
                 if (code != "A_CODE_FROM_THE_FUTURE") assertFalse(WA_DETAIL in text, code)
             }
         }
+
+    // ---- pendências do handoff da E01 ----
+
+    @Test
+    fun cancelledApprovalAfterUnknownResultAcceptsAnEditThatKeepsTheQuote() =
+        runTest {
+            val source = source().apply { walkInOutcomes += ApiError.Network(IOException("offline")) }
+            val state = ready(source)
+            confirmNow(state)
+            assertTrue(state.unconfirmed)
+            state.segment = "EVENT"
+            assertEquals("LEISURE", state.segment, "o resultado desconhecido deixou mudar a entrada")
+
+            source.walkInRequiresApproval = waApproval()
+            approver.cancel = true
+            confirmNow(state)
+
+            // A prova do destravamento é a edição valer, não só o `canConfirm`.
+            state.segment = "EVENT"
+            assertEquals("EVENT", state.segment, "o formulário ficou travado depois da aprovação cancelada")
+            assertTrue(state.canConfirm, "a edição do segmento derrubou a cotação")
+            approver.cancel = false
+            source.walkInRequiresApproval = null
+            confirmNow(state)
+
+            assertNotNull(state.done)
+            assertNotEquals(keys(source).first(), keys(source).last(), "a tupla mudou e a chave ficou")
+            assertEquals(
+                "EVENT",
+                source.walkInCalls
+                    .last()
+                    .input.segment,
+            )
+        }
+
+    @Test
+    fun keyInUseWith500IsUnknownNotStored() =
+        runTest {
+            val source = source().apply { walkInOutcomes += waProblem(500, "IDEMPOTENCY_KEY_IN_USE") }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly, "o IDEMPOTENCY_KEY_IN_USE 500 virou resposta guardada")
+            assertEquals(WA_UNCONFIRMED, state.error)
+            assertTrue(state.canConfirm)
+            confirmNow(state)
+
+            assertNotNull(state.done)
+            val sent = keys(source)
+            assertEquals(2, sent.size)
+            assertEquals(sent[0], sent[1])
+            assertEquals(1, changes)
+        }
+
+    @Test
+    fun lostApprovedRunWithStored5xxIsCloseOnly() =
+        runTest {
+            val source =
+                source().apply {
+                    walkInRequiresApproval = waApproval()
+                    walkInOutcomes += waProblem(500, "INTERNAL_ERROR")
+                }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertEquals(listOf(null, "tok"), source.walkInRuns.map { it.token })
+            assertTrue(state.closeOnly, "a aprovada perdida com 5xx guardado ainda oferece repetir")
+            assertFalse(state.canConfirm)
+            confirmNow(state)
+            assertEquals(2, source.walkInRuns.size, "repetiu a resposta guardada")
+            assertNull(state.done)
+            assertEquals(0, changes)
+        }
 }

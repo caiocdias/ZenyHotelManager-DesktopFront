@@ -84,6 +84,7 @@ class ConfigSeeder(
         val cancellationId = seedCancellationPolicy(data)
         val typeIds = seedRoomTypes(data)
         seedAreas(data)
+        seedCashPoint(data)
         seedRooms(data, typeIds)
         seedRoomStatus(data)
         seedOutOfOrder(data, businessDate)
@@ -152,6 +153,27 @@ class ConfigSeeder(
             } else {
                 gateway.createArea(spec)
                 report.created(SeedItem.AREA)
+            }
+        }
+    }
+
+    private suspend fun seedCashPoint(data: DemoData) {
+        val spec = data.cashPoint
+        when (gateway.cashPointActive(spec.name)) {
+            true -> {
+                report.kept(SeedItem.CASH_POINT)
+            }
+
+            false -> {
+                report.warn(
+                    "o ponto de caixa \"${spec.name}\" está desativado e não foi reativado; " +
+                        "reative-o ou desative-o e use outro nome para a demo ter um caixa ativo.",
+                )
+            }
+
+            null -> {
+                val created = gateway.createCashPoint(spec)
+                if (created) report.created(SeedItem.CASH_POINT) else report.kept(SeedItem.CASH_POINT)
             }
         }
     }

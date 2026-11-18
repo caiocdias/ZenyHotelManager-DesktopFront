@@ -97,6 +97,8 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 | H2 | O seed consegue abrir um turno para a Recepcionista e lançar consumos nas contas dos hospedados pela API | O roteiro abre o turno à mão no início | E05 |
 | D1 | **Decidida pelo usuário em 2026-11-17** (D4 do M3, na entrevista do fim do lote da M3 E06, pela opção recomendada). A regra do "resultado desconhecido" (`A-M10`/`B-M7`) está copiada em 8 estados, com 3 variantes. Ela vira uma função única no `core`, na **primeira tarefa da E01**, antes da primeira escrita de dinheiro. Vão junto o `B-M2a`, o `WalkInState`, a criação sem reserva como `IncompatibleResponse` e os Menores M1, M2 e M4 a M7 da revisão final da M3 E06 | Sem a extração, o M4 cria mais cópias em telas de dinheiro | E01 |
 | D2 | **Decidida pelo usuário em 2026-11-17** (D5 do M3; desenho fechado por entrevista na sessão do arquiteto, as quatro respostas pela opção recomendada): **uma fonte de permissões por sessão**, registrada no [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md). O estado fica no `ShellState` e vai às áreas por parâmetro. A falha e o "Tentar de novo" são os da casca. O valor vive no `ShellState` da sessão, recriado a cada `sessionId`. A migração das áreas existentes é uma etapa própria (E06), antes da E01 | Sem a fonte, cada área do M4 repetiria a leitura e o estado de falha | E06, E07, E02 |
+| D3 | **Decidida pelo usuário em 2026-11-18** (entrevista do fim do lote, pela opção recomendada): ratificada a divisão da antiga E01 em E01 (regra única do resultado desconhecido) e **E07, "Turno de caixa"**, com a E02 e a E03 dependendo da E07 | Sem a ratificação, uma sessão do arquiteto reveria a divisão e as dependências | E01, E07, E02, E03 |
+| D4 | **Decidida pelo usuário em 2026-11-18** (mesma entrevista, pela opção recomendada): o [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md) foi emendado (item 7): testador de etapa sobre o diff inteiro, mais despachos escopados do testador dentro da fatia quando ela quebra testes dele, em vez de testador por tarefa | Sem a emenda, cada tarefa de risco alto pediria um testador | Todas |
 
 ## Definição global de pronto
 
@@ -208,7 +210,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E06 | Fonte única de permissões | #concluida | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
-| E07 | Turno de caixa | #pendente | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
+| E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #pendente | E06, E01, E07 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
 | E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
@@ -424,8 +426,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - **Semântica de `classifyWriteFailure`** (registro pedido pela revisão de arquitetura, na falta de `ARCHITECTURE.md`): `Network`, `IncompatibleResponse` e `SessionEnded` → `UNKNOWN`; `Problem` com `IDEMPOTENCY_KEY_IN_USE` → `UNKNOWN` em qualquer status; `Problem` 5xx → `UNKNOWN_STORED` (o `IdempotencyFilter` do servidor guarda a resposta sob a chave qualquer que seja o status); `Unexpected` 5xx → `UNKNOWN` (502/504 de proxy não são guardados); o resto → `DEFINITIVE`. Numa escrita sem chave (o recado), `UNKNOWN` quer dizer "pode ter sido feito, confira". Alternativas descartadas: manter as três variantes por estado (o D1 decidiu pela única); pôr a criação sem reserva no `core` (o `IncompatibleResponse` é desconhecido pela regra); `closeOnly` também no check-in, na troca de UH e no recado (lá a repetição só devolve a resposta guardada, e o texto novo já manda conferir).
 - **Correção da spec:** a nota "conservadora (não duplica)" vale para o check-in e a troca de UH, que têm chave. O recado não é escrita idempotente (o contrato do `createTrace` não declara `Idempotency-Key`): nele o desconhecido relê a lista para conferir.
 - Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
-  1. **Divisão da E01.** O plano não cabia em três fatias: só a regra única somava 15 arquivos de produção, e o turno sozinho chegava a 12, com mais de 60 min. O roadmap mandava parar e dividir numa sessão do arquiteto; pelo pedido do usuário de decidir as intervenções pela recomendada, o orquestrador dividiu pela mitigação que a própria etapa previa. A E01 ficou com a regra única e os achados da M3 E06, e entrou a **E07, "Turno de caixa"**, com os critérios do turno sem mudança. A E03 passou a depender da E07, e a E02 também (a área "Contas e caixa" nasce na E07). Custo se errado: reorganizar o índice numa sessão do arquiteto.
-  2. **Testador por tarefa (Importante de processo da revisão final).** A nota "Risco" antiga da E01 pedia testador por tarefa nas escritas e na extração, e a divisão a tirou. O ciclo do orquestrador usa um testador de etapa sobre o diff inteiro, mais despachos escopados do testador dentro da fatia quando a mudança quebra testes dele de propósito. Isso diverge do item 2 do [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), e o usuário decide se emenda o ADR. Nesta etapa o testador de etapa achou um defeito (D1) que a revisão de fatia não pegou.
+  1. **Divisão da E01** (ratificada pelo usuário em 2026-11-18, D3). O plano não cabia em três fatias: só a regra única somava 15 arquivos de produção, e o turno sozinho chegava a 12, com mais de 60 min. O roadmap mandava parar e dividir numa sessão do arquiteto; pelo pedido do usuário de decidir as intervenções pela recomendada, o orquestrador dividiu pela mitigação que a própria etapa previa. A E01 ficou com a regra única e os achados da M3 E06, e entrou a **E07, "Turno de caixa"**, com os critérios do turno sem mudança. A E03 passou a depender da E07, e a E02 também (a área "Contas e caixa" nasce na E07). Custo se errado: reorganizar o índice numa sessão do arquiteto.
+  2. **Testador por tarefa (Importante de processo da revisão final; o usuário emendou o ADR 0012 em 2026-11-18, D4).** A nota "Risco" antiga da E01 pedia testador por tarefa nas escritas e na extração, e a divisão a tirou. O ciclo do orquestrador usa um testador de etapa sobre o diff inteiro, mais despachos escopados do testador dentro da fatia quando a mudança quebra testes dele de propósito. Isso diverge do item 2 do [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), e o usuário decide se emenda o ADR. Nesta etapa o testador de etapa achou um defeito (D1) que a revisão de fatia não pegou.
   3. **Correção fora do escopo (`e18142f`).** O defeito do `executeBytes` não era da E01, mas deixava o gate vermelho, e a causa raiz foi achada; foi corrigido na rodada 2, com teste determinístico.
   4. **Antecipação parcial do `A-M7`.** O `MoneyField` já tem `enabled` (D1, `533f98d`). Na E03 continuam o `enabled` do `DateField` e o sinal da colagem acima de 1000 caracteres nos dois campos.
   5. **Rótulo "Fechar" com `closeOnly`.** Nos diálogos de nova reserva e de cancelar, com o caso guardado, "Cancelar" e "Voltar" viram "Fechar": eles sugeririam desistir do que pode ter sido feito.
@@ -442,7 +444,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E07 — Turno de caixa — #pendente
+## E07 — Turno de caixa — #concluida
 
 **Objetivo:** a operadora abre o próprio turno num ponto de caixa e vê o turno corrente. Ela registra sangria e suprimento e fecha às cegas, informando o contado. O app mostra o relatório de fechamento com as diferenças, e o topo indica se há turno aberto.
 
@@ -465,11 +467,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Abrir o turno como Recepcionista do seed: o indicador aparece no topo, e reabrir com um turno já aberto mostra mensagem em pt-BR.
-- [ ] Sangria e suprimento aparecem no turno, e repetir após erro de rede não duplica (`Idempotency-Key`, se a operação exigir).
-- [ ] O fechamento cego não mostra o esperado antes de informar o contado. O relatório mostra a diferença em BRL.
-- [ ] A diferença de caixa gera a notificação ao Gerente no servidor (conferida por `GET /api/v1/notifications` como Gerente). A tela de notificações é do M6.
-- [ ] As escritas do turno usam a função única do resultado desconhecido (D1): o grep do critério da E01 continua sem linha. A área de caixa e o indicador usam o conjunto de permissões da casca (ADR 0013).
+- [x] Abrir o turno como Recepcionista do seed: o indicador aparece no topo, e reabrir com um turno já aberto mostra mensagem em pt-BR.
+- [x] Sangria e suprimento aparecem no turno, e repetir após erro de rede não duplica (`Idempotency-Key`, se a operação exigir).
+- [x] O fechamento cego não mostra o esperado antes de informar o contado. O relatório mostra a diferença em BRL.
+- [x] A diferença de caixa gera a notificação ao Gerente no servidor (conferida por `GET /api/v1/notifications` como Gerente). A tela de notificações é do M6.
+- [x] As escritas do turno usam a função única do resultado desconhecido (D1): o grep do critério da E01 continua sem linha. A área de caixa e o indicador usam o conjunto de permissões da casca (ADR 0013).
 
 **Validação obrigatória:**
 
@@ -494,12 +496,39 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#concluida` em 2026-11-18, depois da verificação ao vivo rodada pelo usuário contra o `zeny-front` (abaixo).
+- Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e07.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e07.md). Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado nas rodadas 0 (6 Importantes) e 1 (1 Importante), aprovado com notas na rodada 2 (`1262670`).
+- Commits (`MERGE_BASE` `16a3cc4`, HEAD de código `6a631ee`):
+  - Task 1, a fachada no `core`: `4382d70`. Revisão de fatia aprovada.
+  - Task 2, a área, a abertura e o indicador do topo: `c8b3bcb` (desenvolvedor) e `ae3a575` (testador, os testes dele quebrados de propósito pela área nova). Revisão de fatia aprovada.
+  - Task 3, movimentos, fechamento cego, relatório e as duas verificações ao vivo: `7edd357`. Revisão de fatia aprovada.
+  - Roteiros m1–m3 com a área e o indicador: `2b0b14b` e `f2356c4` (orquestrador).
+  - Testador de etapa: `1e7a056` e `1831526` (bordas de valor, repetição, fechamento cego com controle positivo, respostas atrasadas com a porta `LateAnswer`, trava `tests/test_live_cashier_ataque.sh` contra credencial impressa, pendências da E01).
+  - Rodada 2, depois da primeira execução ao vivo (falhou com "sem ponto de caixa ativo para abrir o turno": a demo não tinha ponto de caixa, o seed não criava e o servidor não cria um padrão): `9468e64` (o `demo-seed` cria, idempotente, o ponto "Recepção" com fechamento cego), `185bff9` (testador) e `e365c85` (a linha "pontos de caixa" na saída do seed dos roteiros m1–m3). Re-revisão escopada: "Ready to merge: Yes".
+  - Correção do fim da etapa: `6a631ee` (aviso à casca no `CASHIER_SHIFT_CLOSED` com releitura falha, texto de valor mal formado, motivo do 403 num booleano, `endsWith` no título da notificação e `ensureActive()` depois do sucesso no `RoomMoveState`).
+- Revisão final (`revisor-seguranca`, fable, `16a3cc4..2b0b14b`): 0 Críticos, 1 Importante de processo (o risco "dado pessoal ou segredo" faltava no plano; acrescentado e levado ao testador) e 7 Menores. Re-revisão escopada de `2b0b14b..6a631ee`: "Ready to merge: Yes".
+- Gate no `6a631ee`: `./gradlew build` → BUILD SUCCESSFUL (app 2704 testes, 46 pulados, 0 falhas; core 1210, 1, 0; design 372, 0, 0; demo-seed 696, 10, 0); `bash tests/run.sh` → 61 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- Scanner: `osv-scanner --recursive --no-ignore ./` no `2b0b14b` → 6 lockfiles do Gradle, "No issues found"; a etapa não muda dependência.
+- Integridade: `check_test_integrity.py --base 16a3cc4` no `6a631ee` → exit 1, 2 `ASSERCAO_REMOVIDA`, as trocas previstas (`AreasTest`, o conjunto implementado com quatro áreas; `RoomMapShellAtaqueTest`, "Contas e caixa" sem "(em breve)"), com asserção de força igual ou maior.
+- Critérios verificados (testes, revisões e a execução ao vivo do usuário em 2026-11-18, depois de rodar o seed, que criou o ponto: `pontos de caixa: 1 criados`):
+  1. **Abrir como Recepcionista, indicador, reabrir:** `LiveCashierCheck` passou (1 teste, 0 pulados): "turno CX-2026-000001 aberto; o topo mostra o turno" e "reabrir mostrou \"Já existe um turno de caixa aberto.\" e releu o turno aberto". Testes: `openCreatesShiftAndNotifies`, `alreadyOpenShowsMessageAndReloads`, `shiftIndicatorFollowsTheRead`.
+  2. **Sangria e suprimento sem duplicar:** ao vivo, "sangria e suprimento repetidos com a mesma chave: um movimento de cada". Testes: `doubleSubmitRecordsOnce`, `retryAfterNetworkKeepsTheKey`, `sameIntentKeepsTheKey`.
+  3. **Fechamento cego e diferença em BRL:** ao vivo, "turno CX-2026-000001 fechado com diferença; Dinheiro -R$ 110,00". Testes: `closeFormNeverExposesExpected` com o controle positivo do seletor e `closeShowsReportWithDifferences`.
+  4. **Notificação ao Gerente:** `LiveCashierNotificationCheck` passou (1 teste, 0 pulados): "turno CX-2026-000002 fechado com diferença" e "o Gerente recebeu \"Diferença no fechamento do caixa CX-2026-000002\"".
+  5. **Função única e conjunto da casca:** os greps da E01 sem linha no HEAD; a área segue a amarração da E06 e lê permissões só do parâmetro.
+- **Como repetir a verificação ao vivo** (fecha turnos da Recepcionista na demo; a H2 e a E05 esperam um turno aberto): no worktree, com todas as `ZENY_SEED_*` no ambiente (o `SeedArgs` exige todas), rodar o seed, `ZENY_LIVE_URL=$ZENY_SEED_SERVER ZENY_LIVE_VIEWER_LOGIN=recepcao ZENY_LIVE_VIEWER_PASSWORD="$ZENY_SEED_RECEPTIONIST_PASSWORD" ZENY_LIVE_CASHIER=1 ./gradlew :app:test --tests '*LiveCashierCheck*' --rerun` e `ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*CashierNotification*' --rerun`. Confira no relatório de testes que nenhum dos dois foi pulado.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **Verificação ao vivo com o usuário.** As credenciais estão na folha de senhas; o orquestrador não procurou segredos na máquina, e o usuário rodou os comandos.
+  7. **Seed com ponto de caixa (rodada 2).** O `demo-seed` passou a criar o ponto "Recepção" com fechamento cego, o que antecipa uma parte pequena do seed ampliado da E05; sem ele nenhum turno abre na demo. Um "Recepção" desativado vira aviso, sem reativar nem falhar.
+  2. **Escopo reduzido:** `GET /api/v1/cashier-shifts` (lista dos turnos) e `GET /api/v1/cashier-shifts/{id}` ficaram fora: nenhum critério os usa, e "Ver relatório" alcança só o turno recém-fechado. Uma lista de turnos anteriores entra quando uma tela gerencial a pedir.
+  3. **Fechar com todas as formas vazias** declara zero em tudo num clique (o plano manda "vazia vale zero e não vai"). A escrita é irreversível e a diferença notifica o Gerente: pedir confirmação ou exigir ao menos o dinheiro é decisão de produto.
+  4. **Limites do servidor** (teto de R$ 1.000.000,00; dinheiro negativo na contagem) ficam com o servidor, que responde com o texto do catálogo.
+  5. **Notificações no `demo-seed`:** o check usa a `NotificationsApi` do `sdk` cru reaproveitando o cliente autenticado; quando a tela de notificações (M6) trouxer uma fachada, o check passa a usá-la.
+  6. **Roteiros m1–m3** atualizados pelo orquestrador: a área "Contas e caixa" sem "(em breve)" e o indicador do caixa nos passos da Recepcionista e do Gerente.
+- Notas para a próxima etapa:
+  - **E05:** o ponto de caixa "Recepção" já vem do seed (`9468e64`); não criar outro. A H2 (seed abre um turno da Recepcionista) continua da E05. Menores da re-revisão da rodada 2: o texto do aviso do ponto desativado manda "desativá-lo", o seed termina com código 0 mesmo sem caixa ativo, e a permissão do administrador para cadastrar ponto foi confirmada só pela execução ao vivo (passou).
+  - Para o testador: `ensureActive()` depois do `approve(...)` falta em `WalkInState`, `NewReservationState`, `ReservationCancelState`, `ReservationChangeState` e `ReservationReactivateState` (sem conferir se outra guarda cobre); `CashierStateTest.closeDropsTheLateAnswer` e `ShellStateTest.lateShiftAnswerAfter*` esperam de forma cancelável (a cobertura real está nos `late*` com `LateAnswer`); a asserção `BAD_GATEWAY` de `labelStaysRetryAcrossRepeatedUnknownResults` não pode falhar; a regra de `println` com credencial em `tests/test_live_cashier_ataque.sh` usa `grep -oP` (sem PCRE ela abre); `LateAnswer` mora em `cashier/` e é usada pela recepção e pela casca.
+  - A E02 abre a conta também pela área "Contas e caixa", que agora existe; as escritas da conta seguem a E01 e o `closeOnly`.
 
 ---
 
@@ -776,3 +805,6 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E06 fecha `#concluida` (`claude --agent orquestrador`): a casca é a fonte única das permissões; o `AreaPermissionsState` saiu em `bca85f1`.
 - 2026-11-18 — a E01 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela mitigação que ela mesma previa: o plano não cabia em três fatias (a regra única passa de 12 arquivos de produção, e o turno sozinho também). A E01 fica com a regra única do resultado desconhecido (D1) e os achados da M3 E06; entra a **E07, "Turno de caixa"**, com o resto do escopo e os critérios do turno sem mudança, dependente da E06 e da E01. A E03 passa a depender da E07. O roadmap previa a divisão numa sessão do arquiteto; o usuário autorizou, para este lote, decidir as intervenções pela opção recomendada, e a divisão está nas "Decisões para o usuário" do handoff da E01.
 - 2026-11-18 — a E01 fecha `#concluida` (`claude --agent orquestrador`): a regra única do resultado desconhecido está no `core` (`WriteFailure`/`classifyWriteFailure`). A E02 passa a depender também da E07, onde nasce a área "Contas e caixa" (Menor da revisão final), e a E03 registra que o `enabled` do `MoneyField` já entrou.
+- 2026-11-18 — a E07 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa e revisão final limpos; faltam as duas verificações ao vivo, que pedem as credenciais do usuário. A E02 e as seguintes esperam por ela.
+- 2026-11-18 — entrevista do fim do lote (`claude --agent orquestrador`): o usuário ratificou a divisão da E01 com a E07 (D3) e emendou o ADR 0012, item 7, para o testador de etapa com despachos escopados (D4). Nenhuma tag mudou.
+- 2026-11-18 — a E07 fecha `#concluida` (`claude --agent orquestrador`): o usuário rodou o seed (que agora cria o ponto de caixa "Recepção") e as duas verificações ao vivo, que passaram. A E02 fica elegível.

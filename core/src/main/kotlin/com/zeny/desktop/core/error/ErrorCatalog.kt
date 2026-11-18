@@ -265,7 +265,7 @@ object ErrorCatalog {
             "CASHIER_SHIFT_INVALID" to "O turno de caixa está inválido.",
             "CASHIER_SHIFT_NOT_CLOSED" to "O turno de caixa ainda não está fechado.",
             "CASHIER_SHIFT_NOT_FOUND" to "O turno de caixa não foi encontrado.",
-            "CASHIER_SHIFT_OPERATOR_REQUIRED" to "Informe o operador do turno de caixa.",
+            "CASHIER_SHIFT_OPERATOR_REQUIRED" to "Só o operador do turno pode fazer isso.",
             "CASHIER_SHIFT_REQUIRED" to "É preciso um turno de caixa aberto.",
             // checklists
             "CHECKLIST_ACTION_INVALID" to "A ação do item do checklist é inválida.",

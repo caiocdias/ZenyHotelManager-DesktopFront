@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -29,6 +30,8 @@ import androidx.compose.ui.unit.dp
 import com.zeny.desktop.app.approval.ApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
+import com.zeny.desktop.app.cashier.CashierScreen
+import com.zeny.desktop.app.cashier.CashierState
 import com.zeny.desktop.app.login.LoginScreen
 import com.zeny.desktop.app.login.LoginState
 import com.zeny.desktop.app.login.PasswordChangeScreen
@@ -174,9 +177,10 @@ internal fun AppRoot(
                     LocalApprovalCoordinator provides approvals,
                     LocalApprovalCoordinatorOrNull provides approvals,
                 ) {
-                    // A área recebe o conjunto lido por esta casca e o `sessionId` dela (ADR 0013).
+                    // A área recebe o conjunto lido por esta casca e o `sessionId` dela (ADR 0013); a de caixa relê o
+                    // turno do topo depois de abrir ou fechar um turno.
                     ShellScreen(state, onLogout = { scope.launch { controller.logout() } }) { area, permissions ->
-                        AreaContent(area, connection, sessionId, permissions)
+                        AreaContent(area, connection, sessionId, permissions, state::refreshShift)
                     }
                     insideShell()
                     ApprovalHost(approvals)
@@ -198,9 +202,10 @@ private fun ServerConnection.activeSessionIds(): Flow<String?> =
 private fun SessionState.activeSessionId(): String? = (this as? SessionState.Active)?.sessionId
 
 /**
- * A tela da área aberta na casca: a Recepção é o painel do dia; as Reservas, a busca de reservas; a Governança, o mapa
- * de UHs; as demais ainda mostram só o nome. [sessionId] e [permissions] são os da casca (ADR 0013): a Recepção e as
- * Reservas, que os recebem, só desenham quando a sessão ativa da conexão é a mesma [sessionId].
+ * A tela da área aberta na casca: a Recepção é o painel do dia; as Reservas, a busca de reservas; Contas e caixa, o
+ * turno de caixa; a Governança, o mapa de UHs; as demais ainda mostram só o nome. [sessionId] e [permissions] são os
+ * da casca (ADR 0013): a Recepção, as Reservas e o caixa, que os recebem, só desenham quando a sessão ativa da conexão
+ * é a mesma [sessionId]. [onShiftChanged] é o que o caixa chama quando o turno muda (a casca relê o topo).
  */
 @Composable
 internal fun AreaContent(
@@ -208,12 +213,49 @@ internal fun AreaContent(
     connection: ServerConnection,
     sessionId: String?,
     permissions: Set<String>,
+    onShiftChanged: () -> Unit = {},
 ) {
     when (area) {
         Area.RECEPTION -> ReceptionArea(connection, sessionId, permissions)
         Area.RESERVATIONS -> ReservationsArea(connection, sessionId, permissions)
+        Area.ACCOUNTS -> CashierArea(connection, sessionId, permissions, onShiftChanged)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
+    }
+}
+
+/**
+ * O turno de caixa vive enquanto a área está aberta na mesma sessão: nasce com a chave do [sessionId] e das
+ * [permissions] da casca e fecha ao sair da área, da casca ou da sessão (o fechamento descarta a abertura em voo).
+ * Enquanto a sessão ativa da conexão não é a [sessionId] da casca, o quadro fica vazio: as [permissions] de uma sessão
+ * nunca valem na outra.
+ */
+@Composable
+private fun CashierArea(
+    connection: ServerConnection,
+    sessionId: String?,
+    permissions: Set<String>,
+    onShiftChanged: () -> Unit,
+) {
+    val source = remember(connection) { connection.cashierSource() }
+    val session by connection.state.collectAsState()
+    val activeSessionId = (session as? SessionState.Active)?.sessionId
+    val scope = rememberCoroutineScope()
+    val notify by rememberUpdatedState(onShiftChanged)
+    when {
+        source == null -> {
+            Unavailable("Caixa indisponível nesta conexão.")
+        }
+
+        sessionId != null && sessionId == activeSessionId -> {
+            val cashier =
+                remember(source, sessionId, permissions) { CashierState(source, scope, permissions) { notify() } }
+            DisposableEffect(cashier) {
+                cashier.start()
+                onDispose { cashier.close() }
+            }
+            CashierScreen(cashier)
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.session
 
+import com.zeny.desktop.app.cashier.CashierSource
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
@@ -25,6 +26,8 @@ import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CancelInput
+import com.zeny.desktop.core.facade.CashCount
+import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
@@ -47,7 +50,12 @@ import com.zeny.desktop.core.realtime.RealtimeEvent
 import com.zeny.desktop.core.realtime.RealtimeStatus
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.model.AvailabilityResponse
+import com.zeny.desktop.sdk.model.CashMovementResponse
+import com.zeny.desktop.sdk.model.CashPointResponse
+import com.zeny.desktop.sdk.model.CashierShiftReportResponse
+import com.zeny.desktop.sdk.model.CashierShiftResponse
 import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.DepositShortfallResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
@@ -140,6 +148,9 @@ interface ServerConnection : AutoCloseable {
 
     /** As listas de pendências de reservas; `null` quando a conexão não as oferece. */
     fun pendingSource(): PendingSource? = null
+
+    /** O turno de caixa; `null` quando a conexão não o oferece. */
+    fun cashierSource(): CashierSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -482,6 +493,38 @@ class CoreConnection(
 
     /** As listas de pendências sobre `core.pending`, `core.hotel` e `core.guests`. */
     override fun pendingSource(): PendingSource = pending
+
+    private val cashier =
+        object : CashierSource {
+            override suspend fun cashPoints(): List<CashPointResponse> = core.cashier.cashPoints()
+
+            override suspend fun currentShift(): CashierShiftResponse? = core.cashier.currentShift()
+
+            override suspend fun openShift(
+                cashPointId: String,
+                openingFloat: Money,
+                intent: Intent,
+            ): CashierShiftResponse = core.cashier.openShift(cashPointId, openingFloat, intent)
+
+            override suspend fun recordMovement(
+                shiftId: String,
+                type: CashMovementType,
+                amount: Money,
+                reason: String,
+                intent: Intent,
+            ): CashMovementResponse = core.cashier.recordMovement(shiftId, type, amount, reason, intent)
+
+            override suspend fun closeShift(
+                shiftId: String,
+                counts: List<CashCount>,
+                intent: Intent,
+            ): CashierShiftReportResponse = core.cashier.closeShift(shiftId, counts, intent)
+
+            override suspend fun report(shiftId: String): CashierShiftReportResponse = core.cashier.report(shiftId)
+        }
+
+    /** O turno de caixa sobre `core.cashier`. */
+    override fun cashierSource(): CashierSource = cashier
 
     override fun close() = core.close()
 }

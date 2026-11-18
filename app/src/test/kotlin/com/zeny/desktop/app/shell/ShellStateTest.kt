@@ -1,6 +1,9 @@
 package com.zeny.desktop.app.shell
 
 import androidx.compose.runtime.snapshots.Snapshot
+import com.zeny.desktop.app.cashier.CashierSource
+import com.zeny.desktop.app.cashier.FakeCashierSource
+import com.zeny.desktop.app.cashier.shiftOf
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
@@ -50,6 +53,7 @@ class ShellStateTest {
         var me: suspend () -> Me = { Me("user-1", "ana", "Ana Souza", setOf("rooms.status.read")) },
         var hotel: () -> HotelInfo = { HotelInfo("Hotel Mar Azul", configured = true) },
         var businessDate: () -> BusinessDate = { BusinessDate(LocalDate.of(2026, 3, 7)) },
+        var cashier: CashierSource? = null,
     ) : ServerConnection {
         override val state = MutableStateFlow<SessionState>(SessionState.Active("user-1", "session-1", false))
         var meCalls = 0
@@ -81,6 +85,8 @@ class ShellStateTest {
             required: ApiError.ApprovalRequired,
             input: ApprovalInput,
         ): String = error("não usado")
+
+        override fun cashierSource(): CashierSource? = cashier
 
         override fun close() = Unit
     }
@@ -250,11 +256,18 @@ class ShellStateTest {
             val release = loaded(FakeConnection(me = me), devMode = false)
 
             assertEquals(
-                Area.entries.map { it to (it in setOf(Area.RECEPTION, Area.RESERVATIONS, Area.HOUSEKEEPING)) },
+                Area.entries.map {
+                    it to (it in setOf(Area.RECEPTION, Area.RESERVATIONS, Area.ACCOUNTS, Area.HOUSEKEEPING))
+                },
                 dev.areas,
             )
             assertEquals(
-                listOf(Area.RECEPTION to true, Area.RESERVATIONS to true, Area.HOUSEKEEPING to true),
+                listOf(
+                    Area.RECEPTION to true,
+                    Area.RESERVATIONS to true,
+                    Area.ACCOUNTS to true,
+                    Area.HOUSEKEEPING to true,
+                ),
                 release.areas,
             )
         }
@@ -485,5 +498,141 @@ class ShellStateTest {
                 (permissions as MutableSet<String>).add("reservations.reservations.manage")
             }
             assertEquals(setOf("reservations.reservations.read"), state.permissions)
+        }
+
+    private fun receptionistWith(cashier: FakeCashierSource?) =
+        FakeConnection(me = { Me("u-1", "rec", "Recepcionista", receptionist) }, cashier = cashier)
+
+    @Test
+    fun shiftIndicatorFollowsTheRead() =
+        runTest {
+            val cashier = FakeCashierSource()
+            cashier.current = { shiftOf(number = "CX-0003", cashPointName = "Bar") }
+            val state = loaded(receptionistWith(cashier))
+
+            assertEquals(ShiftIndicator.Open("CX-0003", "Bar"), state.shift)
+
+            cashier.current = { null }
+            state.refreshShift()
+            advanceUntilIdle()
+
+            assertEquals(ShiftIndicator.None, state.shift)
+            assertEquals(2, cashier.currentCalls)
+        }
+
+    @Test
+    fun shiftHiddenWithoutOperate() =
+        runTest {
+            val cashier = FakeCashierSource()
+            cashier.current = { shiftOf() }
+            val reader = setOf("billing.folios.read", "rooms.status.read")
+            val state = loaded(FakeConnection(me = { Me("u-1", "ana", "Ana Souza", reader) }, cashier = cashier))
+
+            assertEquals(ShiftIndicator.Hidden, state.shift)
+            state.refreshShift()
+            advanceUntilIdle()
+            assertEquals(ShiftIndicator.Hidden, state.shift)
+            assertEquals(0, cashier.currentCalls, "leu o turno sem billing.cashier.operate")
+
+            // Sem a porta do caixa (as conexões falsas), o topo também não mostra nada.
+            assertEquals(ShiftIndicator.Hidden, loaded(receptionistWith(null)).shift)
+        }
+
+    @Test
+    fun shiftReadFailureKeepsTheShell() =
+        runTest {
+            listOf<ApiError>(
+                ApiError.Network(RuntimeException("sem rede")),
+                ApiError.Problem(500, null, null, emptyList()),
+                ApiError.Problem(403, "FORBIDDEN", null, emptyList()),
+            ).forEach { failure ->
+                val cashier = FakeCashierSource()
+                cashier.current = { throw failure }
+                val state = loaded(receptionistWith(cashier))
+
+                assertEquals(ShiftIndicator.Unknown, state.shift, failure.toString())
+                assertNull(state.error)
+                assertFalse(state.loading)
+                assertEquals(receptionist, state.permissions)
+                assertEquals("Recepcionista", state.userName)
+            }
+        }
+
+    @Test
+    fun reloadResetsShiftToHidden() =
+        runTest {
+            val cashier = FakeCashierSource()
+            cashier.current = { shiftOf() }
+            val connection = receptionistWith(cashier)
+            val state = loaded(connection)
+            assertEquals(ShiftIndicator.Open("CX-0001", "Recepção"), state.shift)
+            val gate = CompletableDeferred<Me>()
+            connection.me = { gate.await() }
+
+            state.reload()
+            assertEquals(ShiftIndicator.Hidden, state.shift, "o turno velho sobreviveu ao início do reload")
+            advanceUntilIdle()
+            assertEquals(ShiftIndicator.Hidden, state.shift, "leu o turno antes do me")
+
+            gate.complete(Me("u-1", "rec", "Recepcionista", receptionist))
+            advanceUntilIdle()
+            assertEquals(ShiftIndicator.Open("CX-0001", "Recepção"), state.shift)
+        }
+
+    @Test
+    fun lateShiftAnswerAfterReloadIsDropped() =
+        runTest {
+            val cashier = FakeCashierSource()
+            val late = CompletableDeferred<Unit>()
+            cashier.current = {
+                late.await()
+                shiftOf(number = "CX-OLD")
+            }
+            val state = loaded(receptionistWith(cashier))
+            assertEquals(ShiftIndicator.Hidden, state.shift)
+
+            cashier.current = { null }
+            state.reload()
+            advanceUntilIdle()
+            late.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(ShiftIndicator.None, state.shift)
+        }
+
+    @Test
+    fun lateShiftAnswerAfterRefreshOrCloseIsDropped() =
+        runTest {
+            val cashier = FakeCashierSource()
+            val late = CompletableDeferred<Unit>()
+            cashier.current = {
+                late.await()
+                shiftOf(number = "CX-OLD")
+            }
+            val state = loaded(receptionistWith(cashier))
+
+            cashier.current = { null }
+            state.refreshShift()
+            advanceUntilIdle()
+            late.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(ShiftIndicator.None, state.shift)
+
+            val gate = CompletableDeferred<Unit>()
+            cashier.current = {
+                gate.await()
+                shiftOf()
+            }
+            state.refreshShift()
+            advanceUntilIdle()
+            state.close()
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(ShiftIndicator.None, state.shift, "a resposta depois do close sobrescreveu o valor")
+
+            val calls = cashier.currentCalls
+            state.refreshShift()
+            advanceUntilIdle()
+            assertEquals(calls, cashier.currentCalls, "releu o turno depois do close")
         }
 }

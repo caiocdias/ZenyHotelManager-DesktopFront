@@ -1,6 +1,6 @@
 # 0012 — Revoga o processo acelerado: volta o ciclo padrão das souls
 
-- Estado: aceita · 2026-11-17 · decidida pelo usuário
+- Estado: aceita · 2026-11-17 · decidida pelo usuário · emendada em 2026-11-18 (item 7)
 - Relacionadas: [ADR 0011](0011-processo-acelerado-ate-a-demo.md) (revogado por este) · souls do Second Brain (`99 System/Souls/DESIGN-desempenho.md` e `README.md` do vault; `~/.claude/agents/second-brain-souls/orquestrador.md`, passos 1, 3, 3a e 5)
 
 ## Contexto
@@ -33,6 +33,8 @@ Estado do repositório na revogação: M3 E02, E03 e E04 fecharam pelo processo 
 4. **Roadmaps:** a seção "Prompt acelerado" sai de todos. O "Protocolo de execução" e o "Prompt de execução" não mudam, porque já remetem ao orquestrador para o ciclo por tarefa. A regra 8 de `docs/roadmaps/README.md` fica encerrada.
 5. **M3 E05, iniciada no processo acelerado:** não é reescrita. O restante segue o processo normal, e o trecho já commitado (`830f296..920dcd2`) entra na lista "Revisões de segurança adiadas". O plano dela não foi alterado.
 6. **Dívida de revisão: paga antes do M4.** Decisão do usuário em 2026-11-17, por entrevista, pela opção recomendada. Entra a etapa **M3 E06**, depois da E05: `revisor-seguranca` com o prompt `code-reviewer.md` sobre `a300a23..HEAD`, com o scanner e a `check_test_integrity.py --base a300a23`, focada na lista do README. Os achados Críticos e Importantes são corrigidos nela, pelo ciclo normal. O M4 só começa com a M3 E06 `#concluida`. Este item substitui o parágrafo "Dívida de revisão" do ADR 0011, que deixava o pagamento para um marco final de análise do projeto.
+
+7. **Emenda de 2026-11-18 ao item 2 (decisão do usuário, por entrevista, pela opção recomendada, no fim do lote da M4 E06/E01/E07):** o testador não roda mais por tarefa. Ele roda uma vez por etapa, sobre o diff inteiro (`MERGE_BASE..HEAD`), com foco nos `Riscos:` do plano. Dentro de uma fatia, o orquestrador despacha o testador de forma escopada só quando a mudança quebra testes dele de propósito, antes da revisão da fatia, para o desenvolvedor não editar arquivos do testador (regra `C-M6`). Motivo: o ciclo vigente do orquestrador já funciona assim, e no lote da M4 o testador de etapa achou defeitos que a revisão de fatia não pegou (a diária habilitada no caso guardado, na E01; o risco de credencial nos checks ao vivo, na E07), com menos despachos. O resto do item 2 continua valendo.
 
 O que fica do ADR 0011, como registro:
 

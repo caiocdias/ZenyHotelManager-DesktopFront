@@ -225,12 +225,28 @@ class RoomMapShellAtaqueTest {
     @Test
     fun releaseWithoutRoomsPermissionHidesHousekeepingAndSaysNoScreensYet() {
         val rooms = BroadcastRoomsSource()
-        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(GUESTS, BILLING)))
+        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(GUESTS)))
         shell(Fake(users, rooms)) {
             onNodeWithText("Ana Souza").assertExists()
             onNodeWithText("Governança", substring = true).assertDoesNotExist()
             onNodeWithText("Hóspedes", substring = true).assertDoesNotExist()
+            onNodeWithText("Contas e caixa", substring = true).assertDoesNotExist()
             onNodeWithText(NO_SCREENS_YET).assertExists()
+            assertEquals(0, rooms.subscriptions)
+        }
+    }
+
+    @Test
+    fun releaseWithBillingPermissionShowsAccountsAndNotTheNoScreensText() {
+        val rooms = BroadcastRoomsSource()
+        val users = mapOf("ana" to User("u-ana", "Ana Souza", setOf(GUESTS, BILLING)))
+        shell(Fake(users, rooms)) {
+            onNodeWithText("Ana Souza").assertExists()
+            onNodeWithText("Contas e caixa").assertExists()
+            onNodeWithText("Contas e caixa (em breve)").assertDoesNotExist()
+            onNodeWithText("Governança", substring = true).assertDoesNotExist()
+            onNodeWithText("Hóspedes", substring = true).assertDoesNotExist()
+            onNodeWithText(NO_SCREENS_YET).assertDoesNotExist()
             assertEquals(0, rooms.subscriptions)
         }
     }
@@ -243,7 +259,8 @@ class RoomMapShellAtaqueTest {
             onNodeWithText("Governança").assertExists()
             onNodeWithText("Governança (em breve)").assertDoesNotExist()
             onNodeWithText("Hóspedes (em breve)").assertExists()
-            onNodeWithText("Contas e caixa (em breve)").assertExists()
+            onNodeWithText("Contas e caixa").assertExists()
+            onNodeWithText("Contas e caixa (em breve)").assertDoesNotExist()
             onNodeWithText(PICK_AN_AREA).assertExists()
 
             onNodeWithText("Hóspedes (em breve)").performClick()

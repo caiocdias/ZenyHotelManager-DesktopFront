@@ -25,7 +25,8 @@ private const val PICK_AN_AREA = "Selecione uma área no menu."
 
 /**
  * Casca do app: menu das áreas que o usuário vê (as sem tela com "(em breve)", só no modo de desenvolvimento da
- * casca) e topo com hotel, data operacional, usuário e "Sair". "Sair" fica disponível também no erro.
+ * casca) e topo com hotel, data operacional, turno de caixa (quando o conjunto opera o caixa), usuário e "Sair".
+ * "Sair" fica disponível também no erro.
  * [areaContent] desenha a área escolhida com as permissões que o `me` desta sessão deu (ADR 0013), e só depois que
  * o `ShellState` as leu; sem ele, só o nome da área.
  */
@@ -79,6 +80,7 @@ private fun TopBar(
         if (state.businessDate.isNotEmpty()) {
             Text("Data operacional: ${state.businessDate}", style = MaterialTheme.typography.bodyMedium)
         }
+        shiftText(state.shift)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         Text(
             state.userName,
             Modifier.weight(1f),
@@ -89,3 +91,12 @@ private fun TopBar(
         OutlinedButton(onClick = onLogout) { Text("Sair") }
     }
 }
+
+/** O texto do indicador de turno no topo; nada quando ele está oculto. */
+internal fun shiftText(indicator: ShiftIndicator): String? =
+    when (indicator) {
+        ShiftIndicator.Hidden -> null
+        ShiftIndicator.Unknown -> "Turno não verificado"
+        ShiftIndicator.None -> "Sem turno aberto"
+        is ShiftIndicator.Open -> "Turno ${indicator.number} aberto · ${indicator.cashPointName}"
+    }

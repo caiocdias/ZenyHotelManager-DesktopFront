@@ -45,6 +45,52 @@ class ConfigSeederTest {
         }
 
     @Test
+    fun createsTheActiveReceptionCashPointWithBlindClose() =
+        runTest {
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals(mapOf("Recepção" to true), fake.cashPoints)
+            assertTrue(data.cashPoint.blindClose)
+            assertEquals(1, report.createdCount(SeedItem.CASH_POINT))
+            assertTrue(report.lines().any { it.startsWith("pontos de caixa: 1 criados") })
+        }
+
+    @Test
+    fun activeCashPointIsKeptWithoutCreating() =
+        runTest {
+            fake.cashPoints["recepção"] = true
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals(mapOf("recepção" to true), fake.cashPoints)
+            assertEquals(1, report.keptCount(SeedItem.CASH_POINT))
+            assertEquals(0, report.createdCount(SeedItem.CASH_POINT))
+            assertTrue(report.warnings().isEmpty())
+        }
+
+    @Test
+    fun conflictOnCashPointCreationCountsAsExisting() =
+        runTest {
+            fake.cashPointCreateConflicts = true
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals(1, report.keptCount(SeedItem.CASH_POINT))
+            assertEquals(0, report.createdCount(SeedItem.CASH_POINT))
+        }
+
+    @Test
+    fun deactivatedCashPointWarnsWithoutCreatingOrFailing() =
+        runTest {
+            fake.cashPoints["Recepção"] = false
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals(mapOf("Recepção" to false), fake.cashPoints)
+            assertEquals(0, report.createdCount(SeedItem.CASH_POINT))
+            assertEquals(1, report.warnings().size)
+            assertTrue(report.warnings().single().contains("Recepção"))
+            assertTrue(report.lines().any { it.startsWith("aviso:") })
+        }
+
+    @Test
     fun secondRunCreatesNothing() =
         runTest {
             seeder().seed(data, date)

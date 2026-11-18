@@ -179,6 +179,7 @@ private class AtApprover(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // o ataque da troca de UH: um teste por comportamento, com a "aprovada perdida" da E01
 class RoomMoveStateAtaqueTest {
     private val id = atRes.toString()
     private var changes = 0
@@ -766,4 +767,90 @@ class RoomMoveStateAtaqueTest {
             assertEquals(1, source.moveRuns.size)
             assertEquals(1, changes)
         }
+
+    // ---- a "aprovada perdida" (handoff da E01) ----
+
+    @Test
+    fun lostApprovedRunKeepsTheKeyAndAsksApprovalAgain() =
+        runTest {
+            val source =
+                source().apply {
+                    moveRequiresApproval = atApproval()
+                    moveOutcomes += ApiError.Network(java.io.IOException("offline"))
+                }
+            val state = ready(source)
+
+            confirmNow(state)
+            assertEquals(listOf(null, "tok"), source.moveRuns.map { it.token })
+            assertNull(state.done)
+            assertNotNull(state.error, "a aprovada perdida não deixou texto")
+            confirmNow(state)
+
+            assertEquals(listOf(null, "tok", null, "tok"), source.moveRuns.map { it.token })
+            assertEquals(
+                1,
+                source.moveRuns
+                    .map { it.key }
+                    .toSet()
+                    .size,
+                "a repetição da aprovada perdida trocou a chave",
+            )
+            assertNotNull(state.done)
+            assertEquals(1, changes)
+        }
+
+    @Test
+    fun lostApprovedRunThenCancelledApprovalKeepsTheTextAndTheKey() =
+        runTest {
+            val source =
+                source().apply {
+                    moveRequiresApproval = atApproval()
+                    moveOutcomes += ApiError.Network(java.io.IOException("offline"))
+                }
+            val state = ready(source)
+            confirmNow(state)
+            val unknown = assertNotNull(state.error)
+
+            approver.cancel = true
+            confirmNow(state)
+
+            assertEquals(unknown, state.error, "a aprovação cancelada apagou o aviso do resultado desconhecido")
+            assertNull(state.done)
+            assertFalse(state.busy)
+            approver.cancel = false
+            confirmNow(state)
+
+            assertNotNull(state.done)
+            assertEquals(
+                1,
+                source.moveRuns
+                    .map { it.key }
+                    .toSet()
+                    .size,
+                "a aprovação cancelada trocou a chave",
+            )
+            assertEquals(1, changes)
+        }
+
+    @Test
+    fun lostApprovedRunWithStored5xxSaysCloseAndCheck() =
+        runTest {
+            val source =
+                source().apply {
+                    moveRequiresApproval = atApproval()
+                    moveOutcomes += atProblem(500, null)
+                }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertEquals(
+                "O servidor não confirmou a troca de UH. Feche e confira a reserva antes de refazer.",
+                state.error,
+            )
+            assertNull(state.done)
+            assertEquals(0, changes)
+        }
+
+    private fun atApproval() = ApiError.ApprovalRequired("frontdesk.stays.move", "frontdesk.stays.move", id, null, null)
 }

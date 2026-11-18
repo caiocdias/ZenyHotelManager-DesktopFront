@@ -2,6 +2,7 @@ package com.zeny.desktop.seed.config
 
 import com.zeny.desktop.seed.data.AreaSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
+import com.zeny.desktop.seed.data.CashPointSpec
 import com.zeny.desktop.seed.data.GuaranteePolicySpec
 import com.zeny.desktop.seed.data.HotelSpec
 import com.zeny.desktop.seed.data.RatePlanSpec
@@ -77,6 +78,15 @@ interface ConfigGateway {
         from: LocalDate,
         to: LocalDate,
     )
+
+    /**
+     * Situação do ponto de caixa de nome `name` (sem diferenciar maiúsculas): `true` ativo, `false` desativado,
+     * nulo se não existe. Lê também os desativados, porque o servidor recusa o nome repetido de um deles.
+     */
+    suspend fun cashPointActive(name: String): Boolean?
+
+    /** `true` se criou; `false` se o servidor respondeu `409 CASH_POINT_NAME_ALREADY_IN_USE` (já existe). */
+    suspend fun createCashPoint(spec: CashPointSpec): Boolean
 
     suspend fun seasonIds(): Map<String, String>
 

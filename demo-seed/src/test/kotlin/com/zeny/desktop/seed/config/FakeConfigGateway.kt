@@ -2,6 +2,7 @@ package com.zeny.desktop.seed.config
 
 import com.zeny.desktop.seed.data.AreaSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
+import com.zeny.desktop.seed.data.CashPointSpec
 import com.zeny.desktop.seed.data.GuaranteePolicySpec
 import com.zeny.desktop.seed.data.HotelSpec
 import com.zeny.desktop.seed.data.RatePlanSpec
@@ -22,6 +23,12 @@ class FakeConfigGateway : ConfigGateway {
     val roomStates = mutableMapOf<String, RoomState>()
     val seasons = mutableMapOf<String, String>()
     val ratePlans = mutableMapOf<String, String>()
+
+    /** Nome do ponto de caixa para a situação ativo (`true`) ou desativado (`false`). */
+    val cashPoints = mutableMapOf<String, Boolean>()
+
+    /** Simula o servidor respondendo `409 CASH_POINT_NAME_ALREADY_IN_USE` à criação. */
+    var cashPointCreateConflicts = false
     val priceWrites = mutableListOf<List<Any>>()
     val outOfOrderOpened = mutableListOf<String>()
     var writeCalls = 0
@@ -132,6 +139,16 @@ class FakeConfigGateway : ConfigGateway {
         val room = roomStates.values.first { it.id == roomId }
         roomStates[room.number] = room.copy(outOfOrder = true)
         outOfOrderOpened += room.number
+    }
+
+    override suspend fun cashPointActive(name: String) =
+        cashPoints.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+
+    override suspend fun createCashPoint(spec: CashPointSpec): Boolean {
+        write()
+        if (cashPointCreateConflicts) return false
+        cashPoints.insertUnique(spec.name, true)
+        return true
     }
 
     override suspend fun seasonIds(): Map<String, String> = seasons.toMap()

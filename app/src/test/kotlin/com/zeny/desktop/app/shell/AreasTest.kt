@@ -131,7 +131,7 @@ class AreasTest {
     }
 
     @Test
-    fun receptionReservationsAndHousekeepingAreImplemented() {
-        assertEquals(setOf(Area.RECEPTION, Area.RESERVATIONS, Area.HOUSEKEEPING), IMPLEMENTED_AREAS)
+    fun receptionReservationsAccountsAndHousekeepingAreImplemented() {
+        assertEquals(setOf(Area.RECEPTION, Area.RESERVATIONS, Area.ACCOUNTS, Area.HOUSEKEEPING), IMPLEMENTED_AREAS)
     }
 }

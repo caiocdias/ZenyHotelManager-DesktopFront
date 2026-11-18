@@ -6,6 +6,7 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -273,6 +274,22 @@ class ReservationReactivateLabelAtaqueTest {
             dialog(source())
 
             onNodeWithTag("reactivate-submit").assertTextEquals("Reativar")
+        }
+
+    // A asserção de `BAD_GATEWAY` em `labelStaysRetryAcrossRepeatedUnknownResults` não pode falhar: o `Unexpected(502)`
+    // não tem `code`. A prova de que o desconhecido não vaza o status cru é esta.
+    @Test
+    fun unexpected502ShowsTheUnconfirmedTextAndNoRawStatus() =
+        runComposeUiTest {
+            val source = source().apply { outcomes += ApiError.Unexpected(502) }
+            dialog(source)
+
+            click("reactivate-submit")
+
+            onNodeWithTag("reactivate-error")
+                .assertTextContains("Não foi possível confirmar a reativação", substring = true)
+            onNodeWithText("502", substring = true).assertDoesNotExist()
+            onNodeWithTag("reactivate-submit").assertTextEquals("Tentar de novo")
         }
 
     @Test

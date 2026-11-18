@@ -7,6 +7,7 @@ import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.sdk.model.AddressDto
 import com.zeny.desktop.sdk.model.AreaRequest
 import com.zeny.desktop.sdk.model.CancellationPolicyRequest
+import com.zeny.desktop.sdk.model.CashPointRequest
 import com.zeny.desktop.sdk.model.GuaranteePolicyRequest
 import com.zeny.desktop.sdk.model.HotelRequest
 import com.zeny.desktop.sdk.model.HousekeepingStatusRequest
@@ -25,6 +26,7 @@ import com.zeny.desktop.seed.config.HousekeepingTransition
 import com.zeny.desktop.seed.config.RoomState
 import com.zeny.desktop.seed.data.AreaSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
+import com.zeny.desktop.seed.data.CashPointSpec
 import com.zeny.desktop.seed.data.GuaranteePolicySpec
 import com.zeny.desktop.seed.data.HotelSpec
 import com.zeny.desktop.seed.data.RatePlanSpec
@@ -54,6 +56,7 @@ class SdkConfigGateway(
     private val rates get() = seed.apis.rates
     private val roomsApi get() = seed.apis.rooms
     private val hotelApi get() = seed.apis.hotel
+    private val billing get() = seed.apis.billing
 
     private suspend fun <I> readAll(fetch: suspend (cursor: String?, limit: Int) -> Page<I>): List<I> {
         val pager = CursorPager(fetch = fetch)
@@ -251,6 +254,24 @@ class SdkConfigGateway(
         executor.execute { roomsApi.openOutOfOrder(Uuid.parse(roomId), null, request, it.headers) }
     }
 
+    /** Lê todas as páginas sem filtro de `active`, para ver também o desativado (o nome continua tomado). */
+    override suspend fun cashPointActive(name: String): Boolean? =
+        readAll { cursor, limit ->
+            val page = executor.execute { billing.listCashPoints(null, cursor, limit, it.headers) }.value
+            Page(page.items, (page.nextCursor as? Option.Some)?.value)
+        }.firstOrNull { it.name.equals(name, ignoreCase = true) }?.active
+
+    /** `false` só no `409 CASH_POINT_NAME_ALREADY_IN_USE` (alguém criou entre a leitura e a escrita). */
+    override suspend fun createCashPoint(spec: CashPointSpec): Boolean {
+        val request = CashPointRequest(blindClose = spec.blindClose, name = spec.name)
+        return try {
+            executor.execute { billing.createCashPoint(request, it.headers) }
+            true
+        } catch (e: ApiError.Problem) {
+            if (e.status == CONFLICT && e.code == CASH_POINT_NAME_IN_USE) false else throw e
+        }
+    }
+
     override suspend fun seasonIds(): Map<String, String> =
         readAll { cursor, limit ->
             val page = executor.execute { rates.listSeasons(null, cursor, limit, it.headers) }.value
@@ -336,5 +357,7 @@ class SdkConfigGateway(
         const val OUT_OF_ORDER_REASON = "Manutenção programada (demo)"
         const val OUT_OF_ORDER_RESPONSIBLE = "Equipe de manutenção (demo)"
         const val MONEY_SCALE = 2
+        const val CONFLICT = 409
+        const val CASH_POINT_NAME_IN_USE = "CASH_POINT_NAME_ALREADY_IN_USE"
     }
 }

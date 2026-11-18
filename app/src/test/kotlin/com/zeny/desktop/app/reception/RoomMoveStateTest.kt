@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.reception
 
+import com.zeny.desktop.app.cashier.LateAnswer
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ReservationVersion
@@ -723,6 +724,28 @@ class RoomMoveStateTest {
             state.confirm()
             runCurrent()
             assertEquals(1, source.moveCalls.size)
+        }
+
+    @Test
+    fun lateAnswerAfterCloseIsDropped() =
+        runTest {
+            val late = LateAnswer<ApiResponse<RoomMoveResponse>?>()
+            val state =
+                RoomMoveState(source(), backgroundScope, id, { _ -> late.await() }) { changes++ }.also {
+                    it.start()
+                    runCurrent()
+                    it.room = it.rooms.first { room -> room.number == "102" }
+                }
+            state.confirm()
+            runCurrent()
+            assertTrue(late.asked)
+
+            state.close()
+            late.answer(ApiResponse(mvMoved(), null, 200))
+            runCurrent()
+
+            assertNull(state.done, "a resposta que chegou depois do close() foi aplicada")
+            assertEquals(0, changes, "a resposta que chegou depois do close() avisou a tela")
         }
 
     @Test

@@ -185,9 +185,9 @@ class NewReservationDialogEtapaAtaqueTest {
             assertEquals(1, server.calls.size)
         }
 
-    // O critério do B-M2a pede as entradas desabilitadas com o resultado desconhecido ou só fechar. O `MoneyField` da
-    // diária não recebe `enabled` (`NewReservationDialog.kt`, `Form`): o campo aparece habilitado, e só o estado
-    // ignora o que se digita.
+    // O critério do B-M2a pede as entradas desabilitadas com o resultado desconhecido ou só fechar. Desde a E01 o
+    // `MoneyField` da diária recebe `enabled` (`NewReservationDialog.kt`, `Form`): com o 5xx guardado ele aparece
+    // desabilitado, como as outras entradas.
     @Test
     fun afterAStoredFailureTheNegotiatedRateFieldIsDisabledLikeTheOtherInputs() =
         runComposeUiTest {
