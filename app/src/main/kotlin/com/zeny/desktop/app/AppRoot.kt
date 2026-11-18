@@ -32,6 +32,8 @@ import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
 import com.zeny.desktop.app.cashier.CashierScreen
 import com.zeny.desktop.app.cashier.CashierState
+import com.zeny.desktop.app.folio.FolioAccounts
+import com.zeny.desktop.app.folio.FolioListScreen
 import com.zeny.desktop.app.folio.FolioSource
 import com.zeny.desktop.app.folio.FolioWiring
 import com.zeny.desktop.app.folio.pdfKind
@@ -208,9 +210,10 @@ private fun SessionState.activeSessionId(): String? = (this as? SessionState.Act
 
 /**
  * A tela da área aberta na casca: a Recepção é o painel do dia; as Reservas, a busca de reservas; Contas e caixa, o
- * turno de caixa; a Governança, o mapa de UHs; as demais ainda mostram só o nome. [sessionId] e [permissions] são os
- * da casca (ADR 0013): a Recepção, as Reservas e o caixa, que os recebem, só desenham quando a sessão ativa da conexão
- * é a mesma [sessionId]. [onShiftChanged] é o que o caixa chama quando o turno muda (a casca relê o topo).
+ * turno de caixa e, com `billing.folios.read`, a aba das contas abertas; a Governança, o mapa de UHs; as demais ainda
+ * mostram só o nome. [sessionId] e [permissions] são os da casca (ADR 0013): a Recepção, as Reservas e o caixa, que os
+ * recebem, só desenham quando a sessão ativa da conexão é a mesma [sessionId]. [onShiftChanged] é o que o caixa chama
+ * quando o turno muda (a casca relê o topo).
  */
 @Composable
 internal fun AreaContent(
@@ -230,8 +233,9 @@ internal fun AreaContent(
 }
 
 /**
- * O turno de caixa vive enquanto a área está aberta na mesma sessão: nasce com a chave do [sessionId] e das
- * [permissions] da casca e fecha ao sair da área, da casca ou da sessão (o fechamento descarta a abertura em voo).
+ * O turno de caixa e, com o portador da conta, a aba "Contas" vivem enquanto a área está aberta na mesma sessão: nascem
+ * com a chave do [sessionId] e das [permissions] da casca e fecham ao sair da área, da casca ou da sessão (o fechamento
+ * descarta a leitura ou a abertura em voo). A aba "Caixa" continua a primeira e a padrão.
  * Enquanto a sessão ativa da conexão não é a [sessionId] da casca, o quadro fica vazio: as [permissions] de uma sessão
  * nunca valem na outra.
  */
@@ -255,13 +259,63 @@ private fun CashierArea(
         sessionId != null && sessionId == activeSessionId -> {
             val cashier =
                 remember(source, sessionId, permissions) { CashierState(source, scope, permissions) { notify() } }
+            // Um efeito por holder, com a chave dele, como na Recepção.
             DisposableEffect(cashier) {
                 cashier.start()
                 onDispose { cashier.close() }
             }
-            CashierScreen(cashier)
+            val wiring = rememberFolioWiring(connection, sessionId, permissions, scope)
+            val folios = wiring?.let { remember(it.source, sessionId, permissions) { FolioAccounts(it, scope) } }
+            DisposableEffect(folios) { onDispose { folios?.close() } }
+            if (folios == null) CashierScreen(cashier) else AccountsTabs(cashier, folios)
         }
     }
+}
+
+private enum class AccountsTab(
+    val label: String,
+) {
+    CASHIER("Caixa"),
+    FOLIOS("Contas"),
+}
+
+/** As abas da área: "Caixa" (a primeira e a padrão) e "Contas". Os estados vivem acima delas, na área. */
+@Composable
+private fun AccountsTabs(
+    cashier: CashierState,
+    folios: FolioAccounts,
+) {
+    var selected by remember { mutableStateOf(AccountsTab.CASHIER) }
+    Column(Modifier.fillMaxSize()) {
+        PrimaryTabRow(selectedTabIndex = selected.ordinal) {
+            AccountsTab.entries.forEach {
+                Tab(selected = selected == it, onClick = { selected = it }, text = { Text(it.label) })
+            }
+        }
+        Box(Modifier.weight(1f)) {
+            when (selected) {
+                AccountsTab.CASHIER -> CashierScreen(cashier)
+                AccountsTab.FOLIOS -> FolioListScreen(folios)
+            }
+        }
+    }
+}
+
+/**
+ * O portador da conta de uma área, lembrado com a chave da porta, do [sessionId] e das [permissions] da casca (E06):
+ * recompor a área não o recria. Nulo sem a porta ou sem `billing.folios.read`.
+ */
+@Composable
+private fun rememberFolioWiring(
+    connection: ServerConnection,
+    sessionId: String,
+    permissions: Set<String>,
+    scope: CoroutineScope,
+): FolioWiring? {
+    val source = remember(connection) { connection.folioSource() }
+    val approval = LocalApprovalCoordinatorOrNull.current
+    val window = LocalWindowFrame.current
+    return remember(source, sessionId, permissions) { folioWiring(connection, permissions, scope, approval, window) }
 }
 
 /**
@@ -314,6 +368,7 @@ private fun ReceptionArea(
                 undoCheckIn = undoCheckInFactory(source, scope, approval, panel, detail),
                 traces = traces,
                 registrationCard = registrationCardFactory(connection, scope, LocalWindowFrame.current),
+                folio = rememberFolioWiring(connection, sessionId, permissions, scope),
             )
         }
     }
@@ -386,6 +441,7 @@ private fun ReservationsContent(
     val approval = LocalApprovalCoordinatorOrNull.current
     val frame = LocalWindowFrame.current
     val confirmation = remember(connection, scope, frame) { confirmationCardFactory(connection, scope, frame) }
+    val folio = rememberFolioWiring(connection, sessionId, permissions, scope)
     val refreshDetailAndTable: () -> Unit = {
         detail?.reload()
         scope.launch { search.table.refresh() }
@@ -409,6 +465,7 @@ private fun ReservationsContent(
                 confirmation = confirmation,
                 cancel = cancelFactory(connection, scope, approval, refreshAfterChange),
                 reactivate = reactivateFactory(connection, scope, approval, refreshAfterChange),
+                folio = folio,
             )
         }
     if (availability == null && pending == null) {

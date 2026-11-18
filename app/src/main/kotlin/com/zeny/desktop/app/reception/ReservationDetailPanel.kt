@@ -41,6 +41,7 @@ data class DetailActions(
     val onConfirmationPdf: (() -> Unit)? = null,
     val onCancel: (() -> Unit)? = null,
     val onReactivate: (() -> Unit)? = null,
+    val onFolio: (() -> Unit)? = null,
 )
 
 /** A falha de uma releitura com o conteúdo antigo à vista: o conteúdo fica, e a falha aparece por cima dele. */
@@ -142,6 +143,9 @@ private fun DetailActionButtons(actions: DetailActions) {
         Button(onClick = actions.onReactivate, modifier = Modifier.testTag("open-reservation-reactivate")) {
             Text("Reativar")
         }
+    }
+    if (actions.onFolio != null) {
+        OutlinedButton(onClick = actions.onFolio, modifier = Modifier.testTag("open-folio")) { Text("Conta") }
     }
 }
 

@@ -26,6 +26,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.zeny.desktop.app.folio.FolioWiring
 import com.zeny.desktop.app.reception.COUNTRY_REQUIRED
 import com.zeny.desktop.app.reception.DetailActions
 import com.zeny.desktop.app.reception.GUEST_DOCUMENT_TYPES
@@ -41,7 +42,8 @@ import com.zeny.desktop.design.table.DataTable
 
 private const val EMPTY_RESULT = "Nenhuma reserva encontrada."
 
-/** As ações da área Reservas numa sessão; cada fábrica é nula sem a porta. */
+/** As ações da área Reservas numa sessão; cada fábrica é nula sem a porta, e [folio] sem `billing.folios.read`. */
+@Suppress("LongParameterList") // uma fábrica por ação do detalhe; as mais novas entram por último, com padrão
 class ReservationsActions(
     val permissions: Set<String>,
     val change: ((reservationId: String) -> ReservationChangeState)?,
@@ -49,6 +51,7 @@ class ReservationsActions(
     val confirmation: ((reservationId: String, code: String) -> RegistrationCardState)?,
     val cancel: ((reservationId: String) -> ReservationCancelState)? = null,
     val reactivate: ((reservationId: String, code: String) -> ReservationReactivateState)? = null,
+    val folio: FolioWiring? = null,
 )
 
 /**

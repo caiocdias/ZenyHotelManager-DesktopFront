@@ -146,6 +146,32 @@ class ReservationFoliosState(
     }
 }
 
+/**
+ * A aba "Contas" de uma sessão: a lista das contas abertas e a conta escolhida nela. Quem a cria (com a chave da sessão
+ * e do conjunto da casca) a fecha ao sair da área; escolher outra conta fecha a anterior.
+ */
+class FolioAccounts(
+    private val wiring: FolioWiring,
+    private val scope: CoroutineScope,
+) {
+    val list = FolioListState(wiring.source, scope)
+
+    var open by mutableStateOf<FolioState?>(null)
+        private set
+
+    fun select(folioId: String) {
+        if (open?.folioId == folioId) return
+        open?.close()
+        open = FolioState(wiring, scope, folioId).also { it.start() }
+    }
+
+    fun close() {
+        list.close()
+        open?.close()
+        open = null
+    }
+}
+
 private const val PAGE_SIZE = 50
 
 private fun folioRowOf(folio: FolioResponse) =
