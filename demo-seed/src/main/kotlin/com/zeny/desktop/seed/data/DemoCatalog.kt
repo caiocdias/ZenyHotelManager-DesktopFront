@@ -134,6 +134,7 @@ data class DemoData(
     val roomTypes: List<RoomTypeSpec>,
     val areas: List<AreaSpec>,
     val cashPoint: CashPointSpec,
+    val serviceChargeRate: String,
     val rooms: List<RoomSpec>,
     val seasons: List<SeasonSpec>,
     val ratePlan: RatePlanSpec,
@@ -150,6 +151,9 @@ object DemoCatalog {
     const val HOTEL_TRADE_NAME = "Pousada Zeny Demonstração"
 
     const val CASH_POINT_NAME = "Recepção"
+
+    /** Taxa de serviço padrão do hotel, em pontos percentuais (RN-10: 10%). */
+    const val SERVICE_CHARGE_RATE = "10"
 
     private const val PLAN_CODE = "BALCAO"
     private const val LOW_SEASON = "Baixa (demo)"
@@ -177,6 +181,7 @@ object DemoCatalog {
                     AreaSpec("Restaurante", "OTHER"),
                 ),
             cashPoint = CashPointSpec(CASH_POINT_NAME, blindClose = true),
+            serviceChargeRate = SERVICE_CHARGE_RATE,
             rooms = rooms(),
             seasons =
                 listOf(

@@ -29,6 +29,12 @@ class FakeConfigGateway : ConfigGateway {
 
     /** Simula o servidor respondendo `409 CASH_POINT_NAME_ALREADY_IN_USE` à criação. */
     var cashPointCreateConflicts = false
+
+    /** Taxas do hotel como nascem no servidor: taxa de serviço `0`, ISS e taxa de turismo já preenchidos. */
+    var taxSettings =
+        TaxSettings(issRate = "3.5", serviceChargeRate = "0", tourismFeePerPersonNight = "7.50", etag = "")
+    val taxReadEtag = "\"tax-v1\""
+    val taxWrites = mutableListOf<TaxSettings>()
     val priceWrites = mutableListOf<List<Any>>()
     val outOfOrderOpened = mutableListOf<String>()
     var writeCalls = 0
@@ -149,6 +155,14 @@ class FakeConfigGateway : ConfigGateway {
         if (cashPointCreateConflicts) return false
         cashPoints.insertUnique(spec.name, true)
         return true
+    }
+
+    override suspend fun taxSettings() = taxSettings.copy(etag = taxReadEtag)
+
+    override suspend fun updateTaxSettings(settings: TaxSettings) {
+        write()
+        taxWrites += settings
+        taxSettings = settings
     }
 
     override suspend fun seasonIds(): Map<String, String> = seasons.toMap()

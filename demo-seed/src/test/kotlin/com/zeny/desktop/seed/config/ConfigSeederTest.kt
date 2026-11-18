@@ -91,6 +91,41 @@ class ConfigSeederTest {
         }
 
     @Test
+    fun serviceChargeRateIsSetWhenZero() =
+        runTest {
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals("10", DemoCatalog.SERVICE_CHARGE_RATE)
+            assertEquals("10", fake.taxSettings.serviceChargeRate)
+            assertEquals("3.5", fake.taxSettings.issRate)
+            assertEquals("7.50", fake.taxSettings.tourismFeePerPersonNight)
+            assertEquals(1, fake.taxWrites.size)
+            assertEquals(fake.taxReadEtag, fake.taxWrites.single().etag)
+            assertTrue(report.lines().contains("taxa de serviço: 10% (definida)"))
+        }
+
+    @Test
+    fun serviceChargeRateKeptWhenAlreadyConfigured() =
+        runTest {
+            fake.taxSettings = fake.taxSettings.copy(serviceChargeRate = "12.5")
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals("12.5", fake.taxSettings.serviceChargeRate)
+            assertTrue(fake.taxWrites.isEmpty())
+            assertTrue(report.lines().contains("taxa de serviço: 10% (já configurada)"))
+        }
+
+    @Test
+    fun secondRunDoesNotWriteTheServiceChargeAgain() =
+        runTest {
+            seeder().seed(data, date)
+            val report = SeedReport()
+            seeder(report).seed(data, date)
+            assertEquals(1, fake.taxWrites.size)
+            assertTrue(report.lines().contains("taxa de serviço: 10% (já configurada)"))
+        }
+
+    @Test
     fun secondRunCreatesNothing() =
         runTest {
             seeder().seed(data, date)

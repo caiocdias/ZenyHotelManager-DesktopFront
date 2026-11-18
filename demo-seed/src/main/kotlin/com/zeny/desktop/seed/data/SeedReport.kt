@@ -29,6 +29,7 @@ class SeedReport {
     private val created = IntArray(SeedItem.entries.size)
     private val kept = IntArray(SeedItem.entries.size)
     private val warnings = mutableListOf<String>()
+    private var serviceChargeLine: String? = null
 
     fun created(item: SeedItem) {
         created[item.ordinal]++
@@ -36,6 +37,14 @@ class SeedReport {
 
     fun kept(item: SeedItem) {
         kept[item.ordinal]++
+    }
+
+    /** Linha da taxa de serviço padrão do hotel: `defined` é `true` se o seed a gravou, `false` se já estava. */
+    fun serviceCharge(
+        rate: String,
+        defined: Boolean,
+    ) {
+        serviceChargeLine = "taxa de serviço: $rate% (${if (defined) "definida" else "já configurada"})"
     }
 
     /** Aviso que não falha o seed; texto fixo, sem dado de hóspede ou empresa (LGPD). */
@@ -49,11 +58,16 @@ class SeedReport {
 
     fun keptCount(item: SeedItem): Int = kept[item.ordinal]
 
-    fun lines(): List<String> =
-        SeedItem.entries
-            .filter { createdCount(it) + keptCount(it) > 0 }
-            .map { "${it.label}: ${createdCount(it)} criados, ${keptCount(it)} já existiam" } +
+    /** A taxa de serviço vem logo depois do hotel (primeiro item), onde o seed a configura, e antes dos avisos. */
+    fun lines(): List<String> {
+        val items =
+            SeedItem.entries
+                .filter { createdCount(it) + keptCount(it) > 0 }
+                .map { "${it.label}: ${createdCount(it)} criados, ${keptCount(it)} já existiam" }
+        val afterHotel = if (createdCount(SeedItem.HOTEL) + keptCount(SeedItem.HOTEL) > 0) 1 else 0
+        return items.take(afterHotel) + listOfNotNull(serviceChargeLine) + items.drop(afterHotel) +
             warnings.map { "aviso: $it" }
+    }
 
     /** Só rótulos e contagens; nunca o hash de identidade do objeto. */
     override fun toString(): String = "SeedReport(" + lines().joinToString("; ") + ")"
