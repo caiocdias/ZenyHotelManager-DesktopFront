@@ -100,6 +100,12 @@ data class CompanySpec(
     val cnpj: String,
 )
 
+/** Ponto de caixa da demo: sem ele nenhum turno abre, e o cadastro de pontos no app só chega no M7. */
+data class CashPointSpec(
+    val name: String,
+    val blindClose: Boolean,
+)
+
 data class GuestSpec(
     val key: String,
     val fullName: String,
@@ -127,6 +133,7 @@ data class DemoData(
     val cancellationPolicy: CancellationPolicySpec,
     val roomTypes: List<RoomTypeSpec>,
     val areas: List<AreaSpec>,
+    val cashPoint: CashPointSpec,
     val rooms: List<RoomSpec>,
     val seasons: List<SeasonSpec>,
     val ratePlan: RatePlanSpec,
@@ -141,6 +148,8 @@ data class DemoData(
 @Suppress("MagicNumber") // catálogo é dado literal da demo: quantidades, tarifas e datas são o conteúdo
 object DemoCatalog {
     const val HOTEL_TRADE_NAME = "Pousada Zeny Demonstração"
+
+    const val CASH_POINT_NAME = "Recepção"
 
     private const val PLAN_CODE = "BALCAO"
     private const val LOW_SEASON = "Baixa (demo)"
@@ -167,6 +176,7 @@ object DemoCatalog {
                     AreaSpec("Piscina", "POOL"),
                     AreaSpec("Restaurante", "OTHER"),
                 ),
+            cashPoint = CashPointSpec(CASH_POINT_NAME, blindClose = true),
             rooms = rooms(),
             seasons =
                 listOf(

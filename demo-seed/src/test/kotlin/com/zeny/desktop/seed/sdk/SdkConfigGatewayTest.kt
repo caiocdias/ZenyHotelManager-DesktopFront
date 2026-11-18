@@ -5,6 +5,7 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.seed.config.HousekeepingTransition
 import com.zeny.desktop.seed.data.AddressSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
+import com.zeny.desktop.seed.data.CashPointSpec
 import com.zeny.desktop.seed.data.GuaranteePolicySpec
 import com.zeny.desktop.seed.data.HotelSpec
 import com.zeny.desktop.seed.data.RatePlanSpec
@@ -289,6 +290,60 @@ class SdkConfigGatewayTest {
                     )
                 }
             assertEquals("AREA_NAME_ALREADY_IN_USE", error.code)
+        }
+
+    private fun cashPointJson(
+        name: String,
+        active: Boolean,
+    ) = """{"active":$active,"blindClose":true,"createdAt":"$STAMP","id":"$ID_A","name":"$name","updatedAt":"$STAMP"}"""
+
+    @Test
+    fun cashPointActiveReadsAllPagesWithoutActiveFilterIgnoringCase() =
+        runTest {
+            val gateway =
+                gateway { request ->
+                    if (request.url.parameters["cursor"] == null) {
+                        json("""{"items":[${cashPointJson("Caixa 2", true)}],"nextCursor":"p2"}""")
+                    } else {
+                        json("""{"items":[${cashPointJson("recepção", false)}]}""")
+                    }
+                }
+            assertEquals(false, gateway.cashPointActive("Recepção"))
+            assertNull(gateway.cashPointActive("Outro"))
+            assertTrue(requests.all { it.url.parameters["active"] == null })
+        }
+
+    @Test
+    fun createCashPointPostsNameAndBlindClose() =
+        runTest {
+            val gateway = gateway { json(cashPointJson("Recepção", true), HttpStatusCode.Created) }
+            assertTrue(gateway.createCashPoint(CashPointSpec("Recepção", blindClose = true)))
+            val request = requests.single()
+            assertEquals(HttpMethod.Post, request.method)
+            assertEquals("/api/v1/cash-points", request.url.encodedPath)
+            val body = Json.parseToJsonElement(bodies.single()).jsonObject
+            assertEquals("Recepção", body.getValue("name").jsonPrimitive.content)
+            assertEquals("true", body.getValue("blindClose").jsonPrimitive.content)
+        }
+
+    @Test
+    fun createCashPointNameConflictIsExisting() =
+        runTest {
+            val gateway =
+                gateway {
+                    json("""{"code":"CASH_POINT_NAME_ALREADY_IN_USE",$PROBLEM_TAIL""", HttpStatusCode.Conflict)
+                }
+            assertEquals(false, gateway.createCashPoint(CashPointSpec("Recepção", blindClose = true)))
+        }
+
+    @Test
+    fun createCashPointOtherProblemPropagates() =
+        runTest {
+            val gateway =
+                gateway {
+                    json("""{"code":"OTHER",$PROBLEM_TAIL""", HttpStatusCode.Conflict)
+                }
+            assertFailsWith<ApiError.Problem> { gateway.createCashPoint(CashPointSpec("Recepção", true)) }
         }
 
     @Test
