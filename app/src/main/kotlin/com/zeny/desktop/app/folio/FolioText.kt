@@ -19,6 +19,23 @@ object FolioText {
     const val NO_POSTINGS = "Nenhum lançamento nesta conta."
     const val NO_OPEN_FOLIOS = "Nenhuma conta aberta."
     const val REVERSED = "Estornado"
+    const val CODES_FORBIDDEN = "Seu perfil não pode listar os códigos de lançamento."
+    const val CODE_REQUIRED = "Escolha o código de lançamento."
+    const val QUANTITY_RANGE = "A quantidade é um número inteiro de 1 a 9999."
+    const val PRICE_REQUIRED = "Informe o valor unitário."
+    const val PRICE_POSITIVE = "O valor unitário deve ser maior que zero."
+    const val POSTING_UNCONFIRMED =
+        "Não foi possível confirmar o lançamento. Lance de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de lançar de novo."
+    const val POSTING_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o lançamento. Feche e confira a conta antes de lançar de novo."
+    const val ROUTED_ELSEWHERE = "Lançado em outra conta pelo roteamento."
+    const val REASON_REQUIRED = "Informe o motivo do estorno."
+    const val REVERSAL_UNCONFIRMED =
+        "Não foi possível confirmar o estorno. Estorne de novo sem mudar nada; se fechar, confira a conta antes de refazer."
+    const val REVERSAL_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o estorno. Feche e confira a conta antes de refazer."
+    const val APPROVAL_CANCELLED = "Aprovação cancelada. O estorno não foi feito."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -58,6 +75,15 @@ object FolioText {
             .stripTrailingZeros()
             .toPlainString()
             .replace('.', ',')
+
+    /** O lançamento que o servidor roteou para a conta [number]. */
+    fun routedTo(number: String): String = "Lançado na conta $number pelo roteamento."
+
+    /** O código de lançamento na escolha: "<code> — <name>". */
+    fun code(
+        code: String,
+        name: String,
+    ): String = "$code — $name"
 
     /** O tipo do lançamento (`x-extensible-enum`): o desconhecido aparece como "Outro (VALOR)". */
     fun postingType(value: String): String = postingTypes.label(value)

@@ -18,7 +18,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
+private const val READ = "billing.folios.read"
+private const val CREATE = "billing.postings.create"
+private const val REVERSE = "billing.postings.reverse"
+
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("TooManyFunctions") // um teste por regra do brief
 class FolioStateTest {
     private fun TestScope.started(source: FakeFolioSource) =
         FolioState(wiringOf(source), backgroundScope, FOLIO_ID.toString()).also {
@@ -162,6 +167,85 @@ class FolioStateTest {
                 listOf(StatementAudience.GUEST, StatementAudience.INTERNAL).map { FOLIO_ID.toString() to it },
                 source.statementCalls,
             )
+        }
+
+    @Test
+    fun switchingAudienceDropsTheShownStatement() =
+        runTest {
+            val source = FakeFolioSource()
+            source.statement = { statementOf(lines = listOf(lineOf("Frigobar", reason = "Cortesia da gerência"))) }
+            val state = started(source)
+            state.showStatement()
+            runCurrent()
+            assertNotNull(
+                state.statement
+                    ?.days
+                    ?.single()
+                    ?.lines
+                    ?.single()
+                    ?.reason,
+            )
+
+            source.statement = { throw ApiError.Network(RuntimeException("sem rede")) }
+            state.audience = StatementAudience.GUEST
+
+            assertNull(state.statement, "o extrato interno some antes da releitura")
+            runCurrent()
+            assertNull(state.statement)
+            assertNotNull(state.statementError)
+        }
+
+    @Test
+    fun postAndReverseFollowPermissionsAndStatus() =
+        runTest {
+            val regular = postingOf(description = "Frigobar")
+            val item = Uuid.random()
+            val source = FakeFolioSource()
+            source.postings = {
+                listOf(
+                    regular,
+                    postingOf(item, "Bar"),
+                    postingOf(description = "Taxa", type = "SERVICE_CHARGE", serviceChargeFor = item),
+                    postingOf(description = "Lavanderia", reversedBy = Uuid.random()),
+                    postingOf(description = "Estorno", type = "REVERSAL"),
+                    postingOf(description = "Novo", type = "LOYALTY_BURN"),
+                )
+            }
+
+            fun TestScope.opened(
+                permissions: Set<String>,
+                status: FolioResponse.Status = FolioResponse.Status.OPEN,
+            ): FolioState {
+                source.folio = { folioOf(status = status) }
+                return FolioState(wiringOf(source, permissions), backgroundScope, FOLIO_ID.toString()).also {
+                    it.start()
+                    runCurrent()
+                }
+            }
+
+            val reader = opened(setOf(READ))
+            assertFalse(reader.canPost)
+            assertTrue(reader.postings.none { reader.canReverse(it) })
+
+            val poster = opened(setOf(READ, CREATE))
+            assertTrue(poster.canPost)
+            assertEquals(listOf(true, true, false, false, false, false), poster.postings.map { poster.canReverse(it) })
+
+            val reverser = opened(setOf(READ, REVERSE))
+            assertFalse(reverser.canPost)
+            assertEquals(
+                listOf("Frigobar", "Bar"),
+                reverser.postings.filter { reverser.canReverse(it) }.map { it.description },
+            )
+
+            val closed = opened(setOf(READ, CREATE, REVERSE), FolioResponse.Status.CLOSED)
+            assertFalse(closed.canPost)
+            assertTrue(closed.postings.none { closed.canReverse(it) })
+            closed.startPosting()
+            closed.startReversal(regular.id.toString())
+            assertNull(closed.posting)
+            assertNull(closed.reversal)
+            assertEquals(0, source.codeCalls)
         }
 
     @Test

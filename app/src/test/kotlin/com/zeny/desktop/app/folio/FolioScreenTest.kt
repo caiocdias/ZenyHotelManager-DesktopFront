@@ -1,5 +1,7 @@
 package com.zeny.desktop.app.folio
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -7,12 +9,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.zeny.desktop.app.ApprovalHost
 import com.zeny.desktop.app.AreaContent
+import com.zeny.desktop.app.approval.ApprovalCoordinator
+import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
 import com.zeny.desktop.app.cashier.FakeCashierSource
 import com.zeny.desktop.app.reception.DayPanelState
 import com.zeny.desktop.app.reception.FakeReceptionSource
@@ -30,6 +38,8 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.design.theme.ZenyTheme
+import com.zeny.desktop.sdk.model.FolioResponse
+import kotlinx.coroutines.flow.emptyFlow
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -39,6 +49,8 @@ import kotlin.uuid.Uuid
 private const val READ = "billing.folios.read"
 private const val OPERATE = "billing.cashier.operate"
 private const val RESERVATIONS_READ = "reservations.reservations.read"
+private const val CREATE = "billing.postings.create"
+private const val REVERSE = "billing.postings.reverse"
 private val FIRST = Uuid.parse("20000000-0000-0000-0000-0000000000f1")
 private val SECOND = Uuid.parse("20000000-0000-0000-0000-0000000000f2")
 private const val HOLDER = "30000000-0000-0000-0000-0000000000f1"
@@ -75,6 +87,35 @@ class FolioScreenTest {
     private fun ComposeUiTest.click(tag: String) {
         onNodeWithTag(tag).performClick()
         waitForIdle()
+    }
+
+    /** O conteúdo com o coordenador de aprovação da casca e o diálogo dele, como o `AppRoot` monta. */
+    private fun ComposeUiTest.withApprovals(content: @Composable () -> Unit) {
+        setContent {
+            val scope = rememberCoroutineScope()
+            val approvals = remember { ApprovalCoordinator({ _, _ -> "tok" }, emptyFlow(), scope) }
+            ZenyTheme {
+                CompositionLocalProvider(LocalApprovalCoordinatorOrNull provides approvals) {
+                    content()
+                    ApprovalHost(approvals)
+                }
+            }
+        }
+        waitForIdle()
+    }
+
+    /** Rola o painel da conta até a linha [tag] e clica nela. */
+    private fun ComposeUiTest.scrollAndClick(tag: String) {
+        onNodeWithTag("folio-panel").performScrollToNode(hasTestTag(tag))
+        click(tag)
+    }
+
+    /** Pede o estorno do lançamento da linha [index] com um motivo. */
+    private fun ComposeUiTest.reverse(index: Int) {
+        scrollAndClick("posting-actions-$index")
+        click("posting-reverse-$index")
+        onNodeWithTag("reversal-reason").performTextInput("Cobrado em dobro")
+        click("reversal-submit")
     }
 
     private fun ComposeUiTest.openFolioTab() {
@@ -316,4 +357,124 @@ class FolioScreenTest {
             click("folio-dialog-close")
             onNodeWithTag("folio-dialog").assertDoesNotExist()
         }
+
+    @Test
+    fun postButtonNeedsCreateAndAnOpenFolio() {
+        runComposeUiTest {
+            accounts(folios())
+            openFolioTab()
+            click("folio-row-$FOLIO_ID")
+            onNodeWithTag("folio-balance").assertExists()
+            onNodeWithTag("folio-post").assertDoesNotExist()
+        }
+        runComposeUiTest {
+            accounts(folios(), permissions = setOf(READ, OPERATE, CREATE))
+            openFolioTab()
+            click("folio-row-$FOLIO_ID")
+            onNodeWithTag("folio-post").assertExists()
+        }
+        runComposeUiTest {
+            val source = folios().apply { folio = { folioOf(status = FolioResponse.Status.CLOSED) } }
+            accounts(source, permissions = setOf(READ, OPERATE, CREATE, REVERSE))
+            openFolioTab()
+            click("folio-row-$FOLIO_ID")
+            onNodeWithText("Situação: Conta encerrada").assertExists()
+            onNodeWithTag("folio-post").assertDoesNotExist()
+            onNodeWithTag("posting-actions-0").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun reverseOnlyOnRegularNotReversedPostings() {
+        val item = Uuid.random()
+        val source =
+            folios().apply {
+                postings = {
+                    listOf(
+                        postingOf(item, "Bar"),
+                        postingOf(description = "Taxa", type = "SERVICE_CHARGE", serviceChargeFor = item),
+                        postingOf(description = "Lavanderia", reversedBy = Uuid.random()),
+                        postingOf(description = "Estorno", type = "REVERSAL"),
+                    )
+                }
+            }
+        listOf(setOf(READ, OPERATE, CREATE), setOf(READ, OPERATE, REVERSE)).forEach { permissions ->
+            runComposeUiTest {
+                accounts(source, permissions = permissions)
+                openFolioTab()
+                click("folio-row-$FOLIO_ID")
+                onNodeWithTag("posting-actions-0").assertExists()
+                (1..3).forEach { onNodeWithTag("posting-actions-$it").assertDoesNotExist() }
+            }
+        }
+        runComposeUiTest {
+            accounts(source)
+            openFolioTab()
+            click("folio-row-$FOLIO_ID")
+            onNodeWithTag("posting-0").assertExists()
+            onNodeWithTag("posting-actions-0").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun newPostingShowsInTheTableAfterConfirm() =
+        runComposeUiTest {
+            val source = folios()
+            accounts(source, permissions = setOf(READ, OPERATE, CREATE))
+            openFolioTab()
+            click("folio-row-$FOLIO_ID")
+
+            click("folio-post")
+            onNodeWithTag("posting-dialog").assertExists()
+            onNodeWithText("FRIGO — Frigobar").assertExists()
+            click("posting-code-0")
+            onNodeWithTag("posting-price").performTextInput("25,00")
+            source.postings = {
+                listOf(postingOf(description = "Frigobar", amount = "20.00"), postingOf(description = "Café"))
+            }
+            click("posting-submit")
+
+            onNodeWithTag("posting-dialog").assertDoesNotExist()
+            onNodeWithText("Café", substring = true).assertExists()
+            assertEquals(1, source.postCalls.size)
+            assertEquals(
+                "25.00",
+                source.postCalls
+                    .single()
+                    .input.unitPrice
+                    .toApi(),
+            )
+        }
+
+    @Test
+    fun reversalApprovalOpensTheShellDialogFromTheAccountsTab() =
+        runComposeUiTest {
+            val source = folios().apply { requiresApproval = reversalApproval() }
+            val connection = FolioConnection(source, cashier = FakeCashierSource())
+            withApprovals { AreaContent(Area.ACCOUNTS, connection, "A", setOf(READ, OPERATE, CREATE)) }
+            openFolioTab()
+            click("folio-row-$FOLIO_ID")
+
+            reverse(0)
+
+            onNodeWithTag("approval-login").assertExists()
+            assertEquals(listOf<String?>(null), source.reverseRuns.map { it.token })
+        }
+
+    @Test
+    fun reversalApprovalOpensTheShellDialogFromReception() =
+        runComposeUiTest {
+            val source = folios().apply { requiresApproval = reversalApproval() }
+            val connection = FolioConnection(source, reception = reception())
+            withApprovals { AreaContent(Area.RECEPTION, connection, "A", reception().permissions + CREATE) }
+            click("row-$FIRST")
+            click("open-folio")
+
+            reverse(0)
+
+            onNodeWithTag("approval-login").assertExists()
+            assertEquals(listOf<String?>(null), source.reverseRuns.map { it.token })
+        }
+
+    private fun reversalApproval() = ApiError.ApprovalRequired("POSTING_REVERSAL", REVERSE, "posting", null, null)
 }

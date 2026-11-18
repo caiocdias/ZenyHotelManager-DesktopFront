@@ -1,9 +1,11 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.PdfDocument
 import com.zeny.desktop.core.facade.PostingInput
 import com.zeny.desktop.core.facade.StatementAudience
+import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.sdk.model.FolioOwnerDto
@@ -63,11 +65,12 @@ fun postingOf(
     quantity: Double = 1.0,
     reversedBy: Uuid? = null,
     serviceChargeFor: Uuid? = null,
+    folioId: Uuid = FOLIO_ID,
 ) = PostingResponse(
     amount = amount,
     businessDate = "2026-11-18",
     description = description,
-    folioId = FOLIO_ID,
+    folioId = folioId,
     id = id,
     postedAt = "2026-11-18T13:00:00Z",
     postedBy = Option.Some(USER_ID),
@@ -78,6 +81,48 @@ fun postingOf(
     transactionCodeId = Uuid.random(),
     type = type,
     unitPrice = amount,
+)
+
+val CODE_ID: Uuid = Uuid.parse("90000000-0000-0000-0000-000000000001")
+
+fun codeOf(
+    id: Uuid = CODE_ID,
+    code: String = "FRIGO",
+    name: String = "Frigobar",
+    kind: TransactionCodeResponse.Kind = TransactionCodeResponse.Kind.CHARGE,
+    serviceCharge: Boolean = true,
+) = TransactionCodeResponse(
+    active = true,
+    code = code,
+    createdAt = "2026-11-01T12:00:00Z",
+    id = id,
+    kind = kind,
+    name = name,
+    passThrough = false,
+    revenueGroup = TransactionCodeResponse.RevenueGroup.FOOD_BEVERAGE,
+    serviceChargeApplies = serviceCharge,
+    updatedAt = "2026-11-01T12:00:00Z",
+)
+
+/** Um lançamento pedido ao falso: a conta, a entrada e a `Intent` da tela. */
+data class PostCall(
+    val folioId: String,
+    val input: PostingInput,
+    val intent: Intent,
+)
+
+/** Um estorno pedido ao falso (a criação da ação): a conta, o lançamento, o motivo e a `Intent` da tela. */
+data class ReverseCall(
+    val folioId: String,
+    val postingId: String,
+    val reason: String,
+    val intent: Intent,
+)
+
+/** Uma execução (`run`) de uma ação de estorno: a `Intent.key` em uso e o token, se houve. */
+data class ReverseRun(
+    val key: String,
+    val token: String?,
 )
 
 fun lineOf(
@@ -140,6 +185,13 @@ class FakeFolioSource : FolioSource {
     var postings: suspend (String) -> List<PostingResponse> = { emptyList() }
     var statement: suspend (StatementAudience) -> FolioStatementResponse = { statementOf() }
     var pdf: suspend (StatementAudience) -> PdfDocument = { PdfDocument(FOLIO_PDF, "extrato-F-0001.pdf") }
+    var codes: suspend () -> List<TransactionCodeResponse> = { listOf(codeOf()) }
+    var post: suspend (PostingInput) -> PostingResponse = { postingOf(description = "Café", amount = "25.00") }
+
+    /** O estorno: sem token e com [requiresApproval], falha; senão, o próximo de [reverseOutcomes] ou sucesso. */
+    var reversal: suspend () -> PostingResponse = { postingOf(description = "Estorno", type = "REVERSAL") }
+    var requiresApproval: ApiError.ApprovalRequired? = null
+    val reverseOutcomes = ArrayDeque<Throwable?>()
 
     val pageCalls = mutableListOf<Pair<String?, Int>>()
     val reservationCalls = mutableListOf<String>()
@@ -147,6 +199,11 @@ class FakeFolioSource : FolioSource {
     val postingCalls = mutableListOf<String>()
     val statementCalls = mutableListOf<Pair<String, StatementAudience>>()
     val pdfCalls = mutableListOf<Pair<String, StatementAudience>>()
+    var codeCalls = 0
+    val postCalls = mutableListOf<PostCall>()
+    val reverseCalls = mutableListOf<ReverseCall>()
+    val reverseRuns = mutableListOf<ReverseRun>()
+    val actions = mutableListOf<ApprovableAction<PostingResponse>>()
 
     override suspend fun openFolioPage(
         cursor: String?,
@@ -171,20 +228,38 @@ class FakeFolioSource : FolioSource {
         return postings.invoke(folioId)
     }
 
-    override suspend fun transactionCodes(): List<TransactionCodeResponse> = emptyList()
+    override suspend fun transactionCodes(): List<TransactionCodeResponse> {
+        codeCalls++
+        return codes()
+    }
 
     override suspend fun post(
         folioId: String,
         input: PostingInput,
         intent: Intent,
-    ): PostingResponse = error("não usado nesta tarefa")
+    ): PostingResponse {
+        postCalls += PostCall(folioId, input, intent)
+        return post.invoke(input)
+    }
 
     override fun reverse(
         folioId: String,
         postingId: String,
         reason: String,
         intent: Intent,
-    ): ApprovableAction<PostingResponse> = error("não usado nesta tarefa")
+    ): ApprovableAction<PostingResponse> {
+        reverseCalls += ReverseCall(folioId, postingId, reason, intent)
+        val action =
+            ApprovableAction { token ->
+                reverseRuns += ReverseRun(intent.key, token)
+                val approval = requiresApproval
+                if (token == null && approval != null) throw approval
+                reverseOutcomes.removeFirstOrNull()?.let { throw it }
+                ApiResponse(reversal(), null, 201)
+            }
+        actions += action
+        return action
+    }
 
     override suspend fun statement(
         folioId: String,
@@ -203,8 +278,9 @@ class FakeFolioSource : FolioSource {
     }
 }
 
-/** O portador com as duas fábricas de PDF desligadas; a aprovação nunca é chamada nestes testes. */
+/** O portador com as duas fábricas de PDF desligadas; sem [approve], a ação corre sem aprovação. */
 fun wiringOf(
     source: FolioSource,
     permissions: Set<String> = setOf("billing.folios.read"),
-) = FolioWiring(source, permissions, { error("não usado nesta tarefa") }, null, null)
+    approve: suspend (ApprovableAction<PostingResponse>) -> ApiResponse<PostingResponse>? = { it.run(null) },
+) = FolioWiring(source, permissions, approve, null, null)

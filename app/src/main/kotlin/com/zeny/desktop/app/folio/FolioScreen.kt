@@ -15,16 +15,22 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -39,6 +45,9 @@ import com.zeny.desktop.design.feedback.LoadingState
 private val LIST_WIDTH = 320.dp
 private val CHARGE_INDENT = 24.dp
 private const val DIALOG_FRACTION = 0.92f
+
+/** As audiências do extrato na tela, na ordem dos chips: o interno (o padrão) primeiro. */
+private val SCREEN_AUDIENCES = listOf(StatementAudience.INTERNAL, StatementAudience.GUEST)
 
 /**
  * A aba "Contas": as contas abertas (número, dono, saldo e "Limite excedido"), com "Carregar mais", e, ao lado, a conta
@@ -177,8 +186,9 @@ private fun ReservationFolios(
 }
 
 /**
- * O painel da conta: cabeçalho, lançamentos (a taxa de serviço recuada sob o item dela), o extrato da audiência
- * escolhida e os dois botões do extrato em PDF, independentes dela. Tudo como o servidor devolve.
+ * O painel da conta: cabeçalho, "Lançar", lançamentos (a taxa de serviço recuada sob o item dela, cada um com o menu
+ * dele), o extrato da audiência escolhida e os dois botões do extrato em PDF, independentes dela. Tudo como o servidor
+ * devolve. O PDF aberto fecha quando o painel sai de cena (trocar de aba).
  */
 @Composable
 fun FolioPanel(
@@ -187,6 +197,7 @@ fun FolioPanel(
 ) {
     val view = state.view
     val error = state.error
+    DisposableEffect(state) { onDispose { state.closePdf() } }
     Column(
         modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("folio-panel"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -209,12 +220,24 @@ fun FolioPanel(
                     )
                 }
                 Header(view)
-                Postings(state.postings)
+                Actions(state)
+                Postings(state)
                 Statement(state)
             }
         }
     }
     state.pdf?.let { RegistrationCardDialog(it, onClose = state::closePdf) }
+    state.posting?.let { PostingDialog(it, onLeave = state::dismissPosting) }
+    val reversing = state.reversing
+    state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
+}
+
+@Composable
+private fun Actions(state: FolioState) {
+    if (state.canPost) {
+        Button(onClick = state::startPosting, modifier = Modifier.testTag("folio-post")) { Text("Lançar") }
+    }
+    state.notice?.let { Text(it, modifier = Modifier.testTag("folio-notice")) }
 }
 
 @Composable
@@ -228,16 +251,52 @@ private fun Header(view: FolioView) {
 }
 
 @Composable
-private fun Postings(rows: List<PostingRow>) {
+private fun Postings(state: FolioState) {
+    val rows = state.postings
     Text("Lançamentos", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
     if (rows.isEmpty()) Text(FolioText.NO_POSTINGS)
     rows.forEachIndexed { index, row ->
-        val parts = listOf(row.date, row.description, row.type, row.quantity, row.amount)
-        val reversed = if (row.reversed) " · ${FolioText.REVERSED}" else ""
-        Text(
-            parts.joinToString(" · ") + reversed,
-            Modifier.padding(start = if (row.serviceCharge) CHARGE_INDENT else 0.dp).testTag("posting-$index"),
-        )
+        PostingLine(index, row, onReverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null)
+    }
+}
+
+/** Uma linha da tabela; com [onReverse], o menu dela oferece "Estornar". */
+@Composable
+private fun PostingLine(
+    index: Int,
+    row: PostingRow,
+    onReverse: (() -> Unit)?,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = if (row.serviceCharge) CHARGE_INDENT else 0.dp)
+            .testTag("posting-$index"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(listOf(row.date, row.description, row.type).joinToString(" · "), Modifier.weight(1f))
+        Text(row.quantity)
+        Text(row.amount)
+        if (row.reversed) Text(FolioText.REVERSED, color = MaterialTheme.colorScheme.secondary)
+        if (onReverse != null) {
+            var open by remember { mutableStateOf(false) }
+            Box {
+                TextButton(onClick = { open = true }, modifier = Modifier.testTag("posting-actions-$index")) {
+                    Text("Ações")
+                }
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Estornar") },
+                        onClick = {
+                            open = false
+                            onReverse()
+                        },
+                        modifier = Modifier.testTag("posting-reverse-$index"),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -248,7 +307,7 @@ private fun Statement(state: FolioState) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         itemVerticalAlignment = Alignment.CenterVertically,
     ) {
-        StatementAudience.entries.reversed().forEach { audience ->
+        SCREEN_AUDIENCES.forEach { audience ->
             FilterChip(
                 selected = state.audience == audience,
                 onClick = { state.audience = audience },

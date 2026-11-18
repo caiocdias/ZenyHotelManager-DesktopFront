@@ -19,6 +19,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
+private const val CREATE = "billing.postings.create"
+private const val REVERSE = "billing.postings.reverse"
+private const val REGULAR = "REGULAR"
+
 /** O cabeçalho da conta: número, dono (rótulo do tipo), situação, saldo e limite como o servidor os devolve. */
 data class FolioView(
     val number: String,
@@ -30,7 +34,10 @@ data class FolioView(
     val closed: Boolean,
 )
 
-/** Um lançamento na tabela; o [id] serve às ações e nunca aparece. A taxa de serviço vem logo abaixo do item dela. */
+/**
+ * Um lançamento na tabela; o [id] serve às ações e nunca aparece. A taxa de serviço vem logo abaixo do item dela.
+ * [reversible]: um `REGULAR` ainda não estornado (só esse oferece "Estornar").
+ */
 data class PostingRow(
     val id: String,
     val date: String,
@@ -40,6 +47,7 @@ data class PostingRow(
     val amount: String,
     val reversed: Boolean,
     val serviceCharge: Boolean,
+    val reversible: Boolean,
 )
 
 /** Uma linha do extrato: a descrição que o servidor escreveu e, só no `INTERNAL`, o motivo quando vem. */
@@ -73,7 +81,14 @@ data class StatementView(
  * [audience] escolhida (padrão `INTERNAL`, só para a tela; o PDF tem os dois botões dele). O front não calcula nada:
  * saldo, limite, totais e saldo do dia são os do servidor. O [pdf] aberto é deste estado e fecha com ele. As leituras
  * correm no escopo da UI; [close] cancela o que é daqui, e a resposta que chega depois dele é descartada.
+ *
+ * "Lançar" ([startPosting], com `billing.postings.create`) e "Estornar" ([startReversal], com
+ * `billing.postings.create` ou `billing.postings.reverse`, num `REGULAR` não estornado) abrem um diálogo por vez, com
+ * a porta e a aprovação do [wiring], e nunca com a conta encerrada. Depois do sucesso, e no `FOLIO_CLOSED`, a conta é
+ * relida; fechar um diálogo sem resultado conhecido também a relê, para conferir. O lançamento que o servidor roteou
+ * para outra conta deixa o [notice] com o número dela.
  */
+@Suppress("TooManyFunctions") // leitura, extrato, PDF e os dois diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
     private val wiring: FolioWiring,
     scope: CoroutineScope,
@@ -110,14 +125,47 @@ class FolioState(
     private var statementShown by mutableStateOf(false)
     private var chosenAudience by mutableStateOf(StatementAudience.INTERNAL)
 
-    /** A audiência do extrato na tela; trocá-la com o extrato à vista o relê na nova. */
+    /**
+     * A audiência do extrato na tela; trocá-la tira da tela o extrato da anterior (o interno traz o motivo) e, com o
+     * extrato à vista, o relê na nova.
+     */
     var audience: StatementAudience
         get() = chosenAudience
         set(value) {
             if (value == chosenAudience) return
             chosenAudience = value
+            statementGeneration++
+            statement = null
+            statementError = null
+            statementLoading = false
             if (statementShown) showStatement()
         }
+
+    /** O aviso do último lançamento roteado para outra conta. */
+    var notice by mutableStateOf<String?>(null)
+        private set
+
+    /** O diálogo "Lançar" aberto. */
+    var posting by mutableStateOf<PostingFormState?>(null)
+        private set
+
+    /** O diálogo "Estornar" aberto e o lançamento dele. */
+    var reversal by mutableStateOf<ReversalState?>(null)
+        private set
+
+    var reversing by mutableStateOf<PostingRow?>(null)
+        private set
+
+    private val canCreate = CREATE in wiring.permissions
+    private val canReverseAny = canCreate || REVERSE in wiring.permissions
+
+    private val dialogOpen: Boolean get() = posting != null || reversal != null
+
+    /** "Lançar": com `billing.postings.create` e a conta aberta. */
+    val canPost: Boolean get() = !closed && canCreate && view?.closed == false
+
+    /** "Estornar" na linha: um `REGULAR` não estornado, com uma das duas permissões e a conta aberta. */
+    fun canReverse(row: PostingRow): Boolean = !closed && canReverseAny && view?.closed == false && row.reversible
 
     /** O extrato em PDF aberto (o visualizador da ficha). */
     var pdf by mutableStateOf<RegistrationCardState?>(null)
@@ -196,10 +244,91 @@ class FolioState(
         pdf = null
     }
 
+    /** Abre "Lançar"; com outro diálogo aberto, nada. */
+    fun startPosting() {
+        if (!canPost || dialogOpen) return
+        notice = null
+        posting =
+            PostingFormState(wiring.source, ownScope, folioId, ::posted, onFolioClosed = ::reload).also { it.start() }
+    }
+
+    /** "Voltar" ou "Fechar" do lançamento; sem resultado conhecido, a conta é relida para conferir. */
+    fun dismissPosting() {
+        val form = posting ?: return
+        if (form.busy) return
+        form.close()
+        posting = null
+        if (form.unconfirmed || form.closeOnly) reload()
+    }
+
+    /** Abre "Estornar" para o lançamento [postingId] da tabela; fora das regras ou com outro diálogo aberto, nada. */
+    fun startReversal(postingId: String) {
+        val row = postings.firstOrNull { it.id == postingId }
+        if (row == null || !canReverse(row) || dialogOpen) return
+        reversing = row
+        reversal = ReversalState(wiring.source, ownScope, folioId, postingId, wiring.approve, ::reversalChanged)
+    }
+
+    /** "Voltar" ou "Fechar" do estorno; sem resultado conhecido, a conta é relida para conferir. */
+    fun dismissReversal() {
+        val form = reversal ?: return
+        if (form.busy) return
+        form.close()
+        reversal = null
+        reversing = null
+        if (form.unconfirmed || form.closeOnly) reload()
+    }
+
     fun close() {
         closed = true
         jobs.cancel()
+        posting?.close()
+        reversal?.close()
         closePdf()
+    }
+
+    /** O lançamento deu certo: o diálogo sai, a conta é relida e, roteado para outra conta, o aviso diz qual. */
+    private fun posted(response: PostingResponse) {
+        posting?.close()
+        posting = null
+        afterWrite()
+        val target = response.folioId.toString()
+        if (target != folioId) readRoutedNumber(target)
+    }
+
+    /** O estorno deu certo (o diálogo sai) ou a conta fechou (o diálogo fica com a mensagem): a conta é relida. */
+    private fun reversalChanged() {
+        val form = reversal
+        if (form?.done == true) {
+            form.close()
+            reversal = null
+            reversing = null
+        }
+        afterWrite()
+    }
+
+    /** Saldo, taxa e lançamentos novos vêm do servidor; o extrato à vista também é relido. */
+    private fun afterWrite() {
+        reload()
+        if (statementShown) showStatement()
+    }
+
+    private fun readRoutedNumber(target: String) {
+        if (closed) return
+        ownScope.launch {
+            val text =
+                try {
+                    FolioText.routedTo(wiring.source.folio(target).number)
+                } catch (
+                    // A releitura falhou: o aviso diz só que foi para outra conta.
+                    @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
+                ) {
+                    currentCoroutineContext().ensureActive()
+                    FolioText.ROUTED_ELSEWHERE
+                }
+            currentCoroutineContext().ensureActive()
+            notice = text
+        }
     }
 
     override fun toString() = "FolioState(loading=$loading, view=${view != null}, postings=${postings.size})"
@@ -235,9 +364,12 @@ private fun rowOf(posting: PostingResponse) =
         type = FolioText.postingType(posting.type),
         quantity = FolioText.quantity(posting.quantity),
         amount = FolioText.money(posting.amount),
-        reversed = (posting.reversedBy as? Option.Some)?.value != null,
+        reversed = posting.isReversed(),
         serviceCharge = posting.chargedItem() != null,
+        reversible = posting.type == REGULAR && !posting.isReversed(),
     )
+
+private fun PostingResponse.isReversed() = (reversedBy as? Option.Some)?.value != null
 
 private fun statementViewOf(
     response: FolioStatementResponse,
