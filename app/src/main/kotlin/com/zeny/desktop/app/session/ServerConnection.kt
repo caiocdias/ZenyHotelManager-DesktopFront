@@ -2,6 +2,7 @@ package com.zeny.desktop.app.session
 
 import com.zeny.desktop.app.cashier.CashierSource
 import com.zeny.desktop.app.folio.FolioSource
+import com.zeny.desktop.app.folio.PaymentSource
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
@@ -37,8 +38,10 @@ import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
+import com.zeny.desktop.core.facade.PaymentInput
 import com.zeny.desktop.core.facade.PdfDocument
 import com.zeny.desktop.core.facade.PostingInput
+import com.zeny.desktop.core.facade.RefundInput
 import com.zeny.desktop.core.facade.ReservationChangeInput
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
@@ -65,6 +68,7 @@ import com.zeny.desktop.sdk.model.DepositShortfallResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.FolioStatementResponse
+import com.zeny.desktop.sdk.model.PaymentResponse
 import com.zeny.desktop.sdk.model.PendingGuaranteeResponse
 import com.zeny.desktop.sdk.model.PostingResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
@@ -162,6 +166,9 @@ interface ServerConnection : AutoCloseable {
 
     /** As contas da hospedagem; `null` quando a conexão não as oferece. */
     fun folioSource(): FolioSource? = null
+
+    /** Os pagamentos da conta; `null` quando a conexão não os oferece. */
+    fun paymentSource(): PaymentSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -579,6 +586,27 @@ class CoreConnection(
 
     /** As contas da hospedagem sobre `core.folios` e `core.documents`. */
     override fun folioSource(): FolioSource = folios
+
+    private val payments =
+        object : PaymentSource {
+            override suspend fun payments(folioId: String): List<PaymentResponse> = core.payments.payments(folioId)
+
+            override suspend fun receive(
+                folioId: String,
+                input: PaymentInput,
+                intent: Intent,
+            ): PaymentResponse = core.payments.receive(folioId, input, intent)
+
+            override fun refund(
+                folioId: String,
+                paymentId: String,
+                input: RefundInput,
+                intent: Intent,
+            ): ApprovableAction<PaymentResponse> = core.payments.refund(folioId, paymentId, input, intent)
+        }
+
+    /** Os pagamentos da conta sobre `core.payments`. */
+    override fun paymentSource(): PaymentSource = payments
 
     override fun close() = core.close()
 }
