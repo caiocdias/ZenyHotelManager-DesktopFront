@@ -206,7 +206,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E06 | Fonte única de permissões | #pendente | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
+| E06 | Fonte única de permissões | #em-andamento | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
 | E01 | Turno de caixa | #pendente | E06 | Regra única do "resultado desconhecido" no `core` (D1); abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório |
 | E02 | Conta da hospedagem | #pendente | E06, E01 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
 | E03 | Pagamentos e cauções | #pendente | E01, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
@@ -215,7 +215,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E06 — Fonte única de permissões — #pendente
+## E06 — Fonte única de permissões — #em-andamento
 
 **Objetivo:** as áreas do app usam o conjunto de permissões do `me` que a casca leu na sessão vigente, conforme o [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md). Nenhuma área lê o `me` por conta própria, e a falha da leitura passa a ser a falha da casca, com o "Tentar de novo" dela. A Recepção e os Recados deixam de esconder ações por falha silenciosa.
 
