@@ -105,7 +105,7 @@ class DayPanelStateAtaqueTest {
         }
 
     private fun TestScope.panel(source: FakeReceptionSource) =
-        DayPanelState(source, backgroundScope).also { runCurrent() }
+        DayPanelState(source, backgroundScope, source.permissions).also { runCurrent() }
 
     private fun DayPanelState.codes(list: DayList) = tabs.getValue(list).rows.map { it.code }
 
@@ -656,7 +656,7 @@ class DayPanelStateAtaqueTest {
             val scope = CoroutineScope(backgroundScope.coroutineContext + parent)
             val sibling = scope.launch { awaitCancellation() }
             val source = source()
-            val state = DayPanelState(source, scope)
+            val state = DayPanelState(source, scope, source.permissions)
             runCurrent()
 
             state.close()
@@ -673,7 +673,7 @@ class DayPanelStateAtaqueTest {
             val parent = Job(backgroundScope.coroutineContext[Job])
             val scope = CoroutineScope(backgroundScope.coroutineContext + parent)
             val source = source()
-            val state = DayPanelState(source, scope)
+            val state = DayPanelState(source, scope, source.permissions)
             runCurrent()
             assertEquals(1, source.activeSubscriptions)
 

@@ -46,8 +46,9 @@ private val tabNames =
  *   `404` viram "—") e os tipos de UH, lidos uma vez por carga (`ApiError.Problem` vira "—" para todos).
  * - Atualizam o painel: [refresh], o ganho de foco da janela, o primeiro `ready` e todo `reset` do stream, a
  *   mensagem de `end-of-day` e, uma vez por rajada, as de `rooms` (2 s depois da primeira). No máximo uma
- *   atualização em voo e uma pendente. Cada tópico só é assinado com a permissão dele; a assinatura que termina,
- *   com erro ou sem, só deixa de atualizar o painel.
+ *   atualização em voo e uma pendente. Cada tópico só é assinado com a permissão dele nas [permissions] recebidas
+ *   da casca (ADR 0013); sem nenhuma, não há assinatura. A assinatura que termina, com erro ou sem, só deixa de
+ *   atualizar o painel.
  *
  * Como o `RoomMapState`: as mutações correm no escopo da UI (uma thread só), por isso o estado dispensa trava fora
  * das leituras de apoio. Quem cria chama [close] quando o painel sai de cena.
@@ -56,6 +57,8 @@ private val tabNames =
 class DayPanelState(
     private val source: ReceptionSource,
     scope: CoroutineScope,
+    /** As permissões efetivas da sessão, lidas pela casca: as ações da tela e o check-in e o walk-in as usam. */
+    val permissions: Set<String>,
 ) {
     /** Filho do job da UI: o [close] cancela só o que é do painel. */
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
@@ -85,10 +88,6 @@ class DayPanelState(
     var selectedTab by mutableStateOf(DayList.ARRIVALS)
         private set
     var day by mutableStateOf<BusinessDay?>(null)
-        private set
-
-    /** As permissões efetivas do usuário, lidas uma vez no início; vazio até a leitura responder (ou se falhar). */
-    var permissions by mutableStateOf<Set<String>>(emptySet())
         private set
 
     /** Só da data operacional; o erro de uma lista fica na aba dela. */
@@ -238,17 +237,7 @@ class DayPanelState(
         }
 
     private suspend fun listen() {
-        val topics =
-            try {
-                permissions = source.permissions()
-                topicsFor(permissions)
-            } catch (
-                @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
-            ) {
-                // Sem saber as permissões, não assina: um `403` derrubaria a assinatura do outro tópico.
-                currentCoroutineContext().ensureActive()
-                emptySet()
-            }
+        val topics = topicsFor(permissions)
         if (topics.isEmpty()) return
         try {
             source.events(topics).collect(::onEvent)

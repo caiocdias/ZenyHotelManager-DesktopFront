@@ -63,7 +63,7 @@ class TracesListStateTest {
     private fun TestScope.state(
         source: FakeTracesSource,
         fixed: String? = null,
-    ) = TracesListState(source, backgroundScope, fixed).also {
+    ) = TracesListState(source, backgroundScope, source.permissions, fixed).also {
         it.start()
         runCurrent()
     }
@@ -285,7 +285,7 @@ class TracesListStateTest {
                 source.reservationCodes[reservationId(reservation).toString()] = "R-$reservation"
             }
             source.reservationCodeGate = CompletableDeferred()
-            val state = TracesListState(source, backgroundScope)
+            val state = TracesListState(source, backgroundScope, source.permissions)
             state.start()
             runCurrent()
             assertEquals(4, source.reservationCodeInFlight)
@@ -358,6 +358,30 @@ class TracesListStateTest {
 
             assertFalse(state.canEdit(row))
             assertTrue(state.canResolve(row))
+        }
+
+    @Test
+    fun canEditAndCanResolveFollowTheConstructorSet() =
+        runTest {
+            val cases =
+                listOf(
+                    setOf(MANAGE, RESOLVE) to (true to true),
+                    setOf(MANAGE) to (true to false),
+                    setOf(RESOLVE) to (false to true),
+                    emptySet<String>() to (false to false),
+                )
+            for ((permissions, expected) in cases) {
+                val source = source()
+                val row = TraceRow("t-1", "—", DEPARTMENT.name, "", "", TraceText.status("OPEN"), null, true, null)
+                // Sem `start` e sem nenhuma leitura: o conjunto vem do construtor.
+                val state = TracesListState(source, backgroundScope, permissions)
+                runCurrent()
+
+                assertEquals(permissions, state.permissions)
+                assertEquals(expected, state.canEdit(row) to state.canResolve(row), "permissões $permissions")
+                assertEquals(emptyList(), source.calls, "o estado leu a porta")
+                state.close()
+            }
         }
 
     @Test

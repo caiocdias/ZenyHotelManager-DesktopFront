@@ -779,7 +779,7 @@ private class Ports(
     val booking = connection.newReservationSource()
     val change = connection.reservationChangeSource()
     val confirmations = connection.reservationConfirmations()
-    val permissions: Set<String> = runBlocking { reception.permissions() }
+    val permissions: Set<String> = runBlocking { connection.me().permissions }
 }
 
 /** A extensão de um hospedado: o código, o id e a saída antes e depois. */

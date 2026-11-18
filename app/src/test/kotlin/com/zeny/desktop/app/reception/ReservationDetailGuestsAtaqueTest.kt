@@ -360,7 +360,7 @@ class ReservationDetailGuestsScreenAtaqueTest {
         src.pages[DayList.ARRIVALS to null] = Page(listOf(listItemA()), null)
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(src, scope) }
+            val panel = remember { DayPanelState(src, scope, src.permissions) }
             val detail = remember { ReservationDetailState(src, scope) }
             ZenyTheme { ReceptionScreen(panel, detail) }
         }

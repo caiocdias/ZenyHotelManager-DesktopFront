@@ -168,12 +168,12 @@ class ReceptionActionsSourceTest {
     fun panelExposesPermissions() =
         runTest {
             val source = FakeReceptionSource().apply { permissions = setOf("rooms.status.read") }
-            val panel = DayPanelState(source, backgroundScope)
+            val panel = DayPanelState(source, backgroundScope, source.permissions)
 
-            assertEquals(emptySet(), panel.permissions)
+            // O conjunto da casca vale desde o construtor, sem leitura (ADR 0013).
+            assertEquals(setOf("rooms.status.read"), panel.permissions)
             runCurrent()
 
             assertEquals(setOf("rooms.status.read"), panel.permissions)
-            assertEquals(1, source.permissionsCalls)
         }
 }

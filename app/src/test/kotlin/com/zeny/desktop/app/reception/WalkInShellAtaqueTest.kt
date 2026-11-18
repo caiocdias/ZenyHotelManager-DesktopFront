@@ -157,7 +157,7 @@ private class WsSettings : LocalSettings {
 }
 
 private class WsConn(
-    private val reception: ReceptionSource,
+    private val reception: FakeReceptionSource,
     initial: SessionState = SessionState.LoggedOut,
 ) : ServerConnection {
     override val state = MutableStateFlow(initial)
@@ -181,7 +181,8 @@ private class WsConn(
         state.value = SessionState.LoggedOut
     }
 
-    override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", wsAll)
+    // O conjunto que a porta falsa devolvia (`wsAll`, salvo onde o teste o muda) é o do `me` (ADR 0013).
+    override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", reception.permissions)
 
     override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -318,7 +319,7 @@ class WalkInShellAtaqueTest {
         runComposeUiTest {
             val source = wsSource()
             val conn = WsConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", source.permissions) } }
             waitForIdle()
             onNodeWithTag("open-walk-in").performClick()
             waitForIdle()
@@ -333,7 +334,7 @@ class WalkInShellAtaqueTest {
         runComposeUiTest {
             val source = wsSource().apply { walkInRequiresApproval = wsRequired }
             val conn = WsConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", source.permissions) } }
             waitForIdle()
             onNodeWithTag("open-walk-in").performClick()
             waitForIdle()

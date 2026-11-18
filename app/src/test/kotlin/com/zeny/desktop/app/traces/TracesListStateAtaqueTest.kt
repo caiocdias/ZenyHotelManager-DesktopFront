@@ -60,7 +60,7 @@ class TracesListStateAtaqueTest {
     private fun TestScope.state(
         source: FakeTracesSource,
         fixed: String? = null,
-    ) = TracesListState(source, backgroundScope, fixed).also {
+    ) = TracesListState(source, backgroundScope, source.permissions, fixed).also {
         it.start()
         runCurrent()
     }
@@ -263,7 +263,7 @@ class TracesListStateAtaqueTest {
                 source.reservationCodes[reservationId(it).toString()] = "R-$it"
             }
             source.reservationCodeGate = CompletableDeferred()
-            val state = TracesListState(source, backgroundScope)
+            val state = TracesListState(source, backgroundScope, source.permissions)
             state.start()
             runCurrent()
             assertEquals(4, source.reservationCodeInFlight)
@@ -283,7 +283,7 @@ class TracesListStateAtaqueTest {
             val source = source().apply { seed(trace(1)) }
             val gate = CompletableDeferred<Unit>()
             source.pageGates.addLast(gate)
-            val state = TracesListState(source, backgroundScope)
+            val state = TracesListState(source, backgroundScope, source.permissions)
             state.start()
             runCurrent()
 
@@ -373,21 +373,6 @@ class TracesListStateAtaqueTest {
         }
 
     @Test
-    fun permissionsFailureMeansNoActions() =
-        runTest {
-            val source = source().apply { seed(trace(1)) }
-            source.failNext(TraceOp.PERMISSIONS, network())
-            val state = state(source)
-            val row = state.table.rows.single()
-
-            assertTrue(state.permissions.isEmpty())
-            assertFalse(state.canCreate)
-            assertFalse(state.canEdit(row))
-            assertFalse(state.canResolve(row))
-            assertEquals(listOf(traceId(1)), state.ids())
-        }
-
-    @Test
     fun todayFilterUsesBusinessDateNotJvmClock() =
         runTest {
             val source =
@@ -459,7 +444,7 @@ class TracesListStateAtaqueTest {
                 source.reservationCodes[reservationId(it).toString()] = "R-$it"
             }
             source.reservationCodeGate = CompletableDeferred()
-            val state = TracesListState(source, backgroundScope)
+            val state = TracesListState(source, backgroundScope, source.permissions)
             state.start()
             runCurrent()
             state.setDue(DueFilter.TODAY)

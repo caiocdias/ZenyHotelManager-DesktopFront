@@ -7,6 +7,7 @@ import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.types.BusinessDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -104,16 +105,6 @@ class AvailabilitySourceTest {
         withSource { source, connection -> assertSame(source, connection.availabilitySource()) }
 
     @Test
-    fun permissionsReadTheAccountCodes() =
-        withSource { source, _ ->
-            assertEquals(
-                setOf("reservations.reservations.read", "reservations.reservations.create"),
-                source.permissions(),
-            )
-            assertEquals("/api/v1/auth/me", seen.single().path)
-        }
-
-    @Test
     fun businessDayReadsTheHotelBusinessDate() =
         withSource { source, _ ->
             assertEquals(date("2026-11-16"), source.businessDay().date)
@@ -155,22 +146,43 @@ class AvailabilitySourceTest {
     fun fakeRecordsCallsAndReturnsTheCurrentValues() =
         runTest {
             val fake = FakeAvailabilitySource()
-            fake.permissions = setOf("a.b")
 
-            assertEquals(setOf("a.b"), fake.permissions())
-            fake.permissions = emptySet()
-            assertEquals(emptySet(), fake.permissions())
             fake.availability(date("2026-11-16"), date("2026-11-18"))
             fake.quote(date("2026-11-20"), date("2026-11-22"), 2, listOf(4))
             fake.businessDay()
 
-            assertEquals(2, fake.permissionsCalls)
             assertEquals(1, fake.businessDayCalls)
             assertEquals(listOf(AvailabilityCall(date("2026-11-16"), date("2026-11-18"))), fake.availabilityCalls)
             assertEquals(
                 listOf(QuoteCall(date("2026-11-20"), date("2026-11-22"), 2, listOf(4))),
                 fake.quoteCalls,
             )
+        }
+
+    /** Substitui o ataque do testador feito sobre a porta `permissions()` do falso, que saiu (ADR 0013). */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun heldCallsReturnTheValueAtReleaseTimeAndGateHoldsWithoutConsuming() =
+        runTest {
+            val fake = FakeAvailabilitySource()
+            val before = BusinessDay(date("2026-11-16"), null)
+            val after = BusinessDay(date("2026-11-17"), null)
+            fake.businessDay = before
+            val gate = fake.hold(FakeAvailabilitySource.Op.BUSINESS_DAY)
+            val results = mutableListOf<BusinessDay>()
+            val first = launch { results += fake.businessDay() }
+            val second = launch { results += fake.businessDay() }
+            runCurrent()
+            assertEquals(2, fake.businessDayCalls)
+            assertTrue(results.isEmpty())
+
+            fake.businessDay = after
+            gate.complete(Unit)
+            first.join()
+            second.join()
+
+            assertEquals(listOf(after, after), results)
+            assertEquals(after, fake.businessDay())
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)

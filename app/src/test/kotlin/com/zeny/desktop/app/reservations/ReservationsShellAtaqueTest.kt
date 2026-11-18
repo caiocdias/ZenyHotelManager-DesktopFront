@@ -1,6 +1,8 @@
 package com.zeny.desktop.app.reservations
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -104,6 +106,20 @@ private fun SemanticsNodeInteraction.assertFieldEmpty() {
     assertEquals("", text, "o campo guardou o valor da sessão anterior")
 }
 
+/**
+ * A `AreaContent` como a casca a chama: com o `sessionId` ativo da conexão e o conjunto que a porta da Recepção falsa
+ * devolvia, para que a troca de sessão destes ataques chegue à área como chega pela casca (ADR 0013).
+ */
+@Composable
+private fun SessionAreaContent(
+    area: Area,
+    connection: ServerConnection,
+) {
+    val session by connection.state.collectAsState()
+    val permissions = (connection.receptionSource() as? FakeReceptionSource)?.permissions.orEmpty()
+    AreaContent(area, connection, (session as? SessionState.Active)?.sessionId, permissions)
+}
+
 /** Ataques ao isolamento entre sessões e ao foco da área Reservas, pela `AreaContent` com sessão controlada. */
 @OptIn(ExperimentalTestApi::class)
 class ReservationsShellAtaqueTest {
@@ -175,7 +191,7 @@ class ReservationsShellAtaqueTest {
     ) {
         setContent {
             CompositionLocalProvider(LocalWindowInfo provides window) {
-                ZenyTheme { AreaContent(Area.RESERVATIONS, conn) }
+                ZenyTheme { SessionAreaContent(Area.RESERVATIONS, conn) }
             }
         }
         waitForIdle()
@@ -358,7 +374,7 @@ class ReservationsShellAtaqueTest {
             var current by mutableStateOf(Area.RESERVATIONS)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides Window()) {
-                    ZenyTheme { AreaContent(current, conn) }
+                    ZenyTheme { SessionAreaContent(current, conn) }
                 }
             }
             waitForIdle()
@@ -401,7 +417,7 @@ class ReservationsShellAtaqueTest {
             var current by mutableStateOf(Area.RESERVATIONS)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides Window()) {
-                    ZenyTheme { AreaContent(current, conn) }
+                    ZenyTheme { SessionAreaContent(current, conn) }
                 }
             }
             waitForIdle()

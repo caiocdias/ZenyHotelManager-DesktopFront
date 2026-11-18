@@ -245,9 +245,8 @@ class LiveWalkInCheck {
         screen: Screen,
         source: ReceptionSource,
     ): WalkInState {
-        val permissions = runBlocking { source.permissions() }
         val approve: suspend (ApprovableAction<WalkInResponse>) -> ApiResponse<WalkInResponse>? = { it.run(null) }
-        return WalkInState(source, screen.scope, permissions, approve) { screen.panel.refresh() }
+        return WalkInState(source, screen.scope, screen.panel.permissions, approve) { screen.panel.refresh() }
     }
 
     private fun createGuest(
@@ -311,10 +310,11 @@ class LiveWalkInCheck {
         val screen = Screen()
         val source = connection.receptionSource()
         val rooms = checkNotNull(connection.roomsSource())
+        val permissions = runBlocking { connection.me().permissions }
         runDesktopComposeUiTest(WIDTH, HEIGHT) {
             setContent {
                 screen.scope = rememberCoroutineScope()
-                screen.panel = remember { DayPanelState(source, screen.scope) }
+                screen.panel = remember { DayPanelState(source, screen.scope, permissions) }
                 screen.detail = remember { ReservationDetailState(source, screen.scope) }
                 screen.map = remember { RoomMapState(rooms, screen.scope) }
                 ZenyTheme {

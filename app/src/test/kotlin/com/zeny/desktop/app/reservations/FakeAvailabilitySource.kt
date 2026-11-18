@@ -23,17 +23,16 @@ data class QuoteCall(
 /**
  * Servidor de mentira para a disponibilidade e a cotação.
  *
- * - [permissions], [businessDay], [availability] e [quote] são programáveis e podem ser trocados entre chamadas;
- *   cada chamada devolve o valor do momento. [availability] e [quote] começam vazios.
- * - Cada chamada fica registrada ([permissionsCalls], [businessDayCalls], [availabilityCalls], [quoteCalls]).
+ * - [businessDay], [availability] e [quote] são programáveis e podem ser trocados entre chamadas; cada chamada
+ *   devolve o valor do momento. [availability] e [quote] começam vazios.
+ * - Cada chamada fica registrada ([businessDayCalls], [availabilityCalls], [quoteCalls]).
  * - [hold] prende a próxima resposta de uma operação até o teste completar o portão devolvido; cada operação tem o
  *   seu portão. [failures] programa o erro por operação (lançado depois do portão, se houver).
  */
 class FakeAvailabilitySource : AvailabilitySource {
     /** As operações da porta que o falso segura ou falha por conta própria. */
-    enum class Op { PERMISSIONS, BUSINESS_DAY, AVAILABILITY, QUOTE }
+    enum class Op { BUSINESS_DAY, AVAILABILITY, QUOTE }
 
-    var permissions: Set<String> = emptySet()
     var businessDay: BusinessDay = BusinessDay(BusinessDate.parse("2026-11-16"), null)
     var availability: AvailabilityResponse =
         AvailabilityResponse(from = "2026-11-16", roomTypes = emptyList(), to = "2026-11-22")
@@ -51,8 +50,6 @@ class FakeAvailabilitySource : AvailabilitySource {
     /** Erro programado por operação; vale para toda chamada dela até ser removido. */
     val failures = mutableMapOf<Op, Exception>()
 
-    var permissionsCalls = 0
-        private set
     var businessDayCalls = 0
         private set
     val availabilityCalls = mutableListOf<AvailabilityCall>()
@@ -66,12 +63,6 @@ class FakeAvailabilitySource : AvailabilitySource {
     private suspend fun reached(op: Op) {
         gates[op]?.await()
         failures[op]?.let { throw it }
-    }
-
-    override suspend fun permissions(): Set<String> {
-        permissionsCalls++
-        reached(Op.PERMISSIONS)
-        return permissions
     }
 
     override suspend fun businessDay(): BusinessDay {

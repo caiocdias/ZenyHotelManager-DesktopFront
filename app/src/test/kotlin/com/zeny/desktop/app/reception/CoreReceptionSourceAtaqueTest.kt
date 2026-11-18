@@ -101,8 +101,9 @@ class CoreReceptionSourceAtaqueTest {
 
     @Test
     fun permissionsAreTheCodesOfMeOnly() =
-        withConnection(guest(null)) { source, _ ->
-            assertEquals(setOf("reservations.reservations.read", "guests.profiles.read"), source.permissions())
+        withConnection(guest(null)) { _, connection ->
+            // A porta não lê mais permissões (ADR 0013): o conjunto das áreas é o `me` que a casca lê da conexão.
+            assertEquals(setOf("reservations.reservations.read", "guests.profiles.read"), connection.me().permissions)
             assertEquals(listOf("/api/v1/auth/me"), paths.toList())
         }
 

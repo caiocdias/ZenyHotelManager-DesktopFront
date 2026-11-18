@@ -86,7 +86,7 @@ class TraceLinkServerJsonTest {
     fun tableShowsRoomForRoomTraceWithNullReservation() =
         runTest {
             val source = source()
-            val state = TracesListState(source, backgroundScope, null)
+            val state = TracesListState(source, backgroundScope, source.permissions, null)
             state.start()
             runCurrent()
             val links = state.table.rows.associate { it.id to it.link }

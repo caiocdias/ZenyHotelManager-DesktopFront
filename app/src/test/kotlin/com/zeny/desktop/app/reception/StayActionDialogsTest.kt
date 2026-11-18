@@ -211,7 +211,7 @@ class StayActionDialogsTest {
     ) {
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(source, scope) }
+            val panel = remember { DayPanelState(source, scope, source.permissions) }
             val detail = remember { ReservationDetailState(source, scope) }
             val move: ((String) -> RoomMoveState)? =
                 if (withActions) {

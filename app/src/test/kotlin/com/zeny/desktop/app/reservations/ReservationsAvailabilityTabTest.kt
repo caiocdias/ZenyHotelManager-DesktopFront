@@ -43,17 +43,13 @@ class ReservationsAvailabilityTabTest {
         override val deviceId: String = "device-1"
     }
 
-    /** As duas portas falsas devolvem o mesmo [permissions], como na produção (as permissões efetivas da sessão). */
+    /** O `me` devolve o menu e o [permissions]: as permissões efetivas da sessão, que a casca entrega à área. */
     private class Fake(
         private val search: ReservationSearchSource,
         private val availability: FakeAvailabilitySource?,
-        permissions: Set<String>,
+        private val permissions: Set<String>,
     ) : ServerConnection {
         private val reception = FakeReceptionSource().apply { this.permissions = permissions }
-
-        init {
-            availability?.permissions = permissions
-        }
 
         override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
 
@@ -76,7 +72,12 @@ class ReservationsAvailabilityTabTest {
         }
 
         override suspend fun me(): Me =
-            Me("u-1", "ana", "Ana Souza", setOf("reservations.reservations.read", "frontdesk.stays.checkin"))
+            Me(
+                "u-1",
+                "ana",
+                "Ana Souza",
+                setOf("reservations.reservations.read", "frontdesk.stays.checkin") + permissions,
+            )
 
         override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 

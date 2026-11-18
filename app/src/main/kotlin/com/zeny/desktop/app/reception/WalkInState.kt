@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.CheckInGuest
 import com.zeny.desktop.core.facade.WalkInInput
@@ -64,8 +66,6 @@ private const val MAX_CHILD_AGE = 17
 private const val MIN_GUESTS = 1
 private const val MAX_GUESTS = 40
 private const val FORBIDDEN = 403
-private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
-private const val SERVER_ERROR = 500
 private val SEGMENTS = setOf("LEISURE", "BUSINESS", "EVENT", "OTHER")
 
 // A UH escolhida não serve mais: a lista é relida. A oferta não existe mais: a cotação é refeita.
@@ -85,6 +85,7 @@ private const val UNCONFIRMED_TEXT =
 
 private const val SERVER_UNCONFIRMED_TEXT =
     "O servidor não confirmou o walk-in. Feche e confira em Hospedados antes de refazer."
+private const val APPROVAL_CANCELLED_TEXT = "Aprovação cancelada. O walk-in não foi concluído."
 
 /**
  * Estado do walk-in: a estadia, a cotação, a escolha da oferta, da UH e do hóspede principal, e a conclusão.
@@ -94,10 +95,10 @@ private const val SERVER_UNCONFIRMED_TEXT =
  * o que dela depende; o segmento não entra na cotação e não descarta nada.
  *
  * A conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
- * (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`, erro 5xx do servidor ou do proxy) ou a
- * aprovação foi cancelada; qualquer resposta definitiva, ou a troca de estadia, segmento, oferta, UH ou hóspede, gera
- * outra. O walk-in cria a reserva: depois de um resultado desconhecido o estado fica [unconfirmed] e, como com [busy]
- * ou depois de [done], as entradas viram no-op.
+ * (`classifyWriteFailure`) ou a aprovação foi cancelada; qualquer resposta definitiva, ou a troca de estadia, segmento,
+ * oferta, UH ou hóspede, gera outra. O walk-in cria a reserva: depois de um resultado desconhecido o estado fica
+ * [unconfirmed] e, como com [busy] ou depois de [done], as entradas viram no-op. No `5xx` guardado sob a chave, o
+ * estado fica [closeOnly]: a conclusão também vira no-op, e só resta fechar e conferir.
  */
 @Suppress("TooManyFunctions") // etapas do fluxo: estadia, oferta, UH, hóspede, conclusão e a chave
 class WalkInState(
@@ -126,6 +127,10 @@ class WalkInState(
 
     /** O último resultado é desconhecido: as entradas ficam travadas até uma resposta definitiva. */
     var unconfirmed by mutableStateOf(false)
+        private set
+
+    /** A falha ficou guardada no servidor sob a chave: repetir não adianta, só fechar e conferir em Hospedados. */
+    var closeOnly by mutableStateOf(false)
         private set
     var done by mutableStateOf<WalkInDone?>(null)
         private set
@@ -206,6 +211,7 @@ class WalkInState(
                 !quoting &&
                 !loadingRooms &&
                 !picker.creating &&
+                !closeOnly &&
                 done == null
 
     private var quotedDeparture: BusinessDate? = null
@@ -217,8 +223,8 @@ class WalkInState(
     private var intent: Intent? = null
     private var intentInputs: WalkInIntentInputs? = null
 
-    /** Com o estado ocupado, não confirmado ou concluído, as entradas viram no-op. */
-    private val locked: Boolean get() = closed || busy || unconfirmed || done != null
+    /** Com o estado ocupado, não confirmado, só para fechar ou concluído, as entradas viram no-op. */
+    private val locked: Boolean get() = closed || busy || unconfirmed || closeOnly || done != null
 
     fun start() {
         if (closed) return
@@ -261,7 +267,8 @@ class WalkInState(
         val current = currentIntent()
         ownScope.launch {
             try {
-                approve(source.walkIn(input, current))?.let { finish(it.value) }
+                val approved = approve(source.walkIn(input, current))
+                if (approved == null) approvalCancelled() else finish(approved.value)
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
@@ -322,12 +329,23 @@ class WalkInState(
         onChanged()
     }
 
+    /**
+     * Aprovação cancelada: o servidor respondeu `APPROVAL_REQUIRED` na mesma chave, então nada foi feito. Depois de um
+     * resultado desconhecido, destrava as entradas e troca o texto de "não confirmado", que ficaria falso. A intenção
+     * fica (a chave não muda).
+     */
+    private fun approvalCancelled() {
+        if (!unconfirmed) return
+        unconfirmed = false
+        error = APPROVAL_CANCELLED_TEXT
+    }
+
     private fun fail(failure: ApiError) {
-        if (resultUnknown(failure)) {
+        val outcome = classifyWriteFailure(failure)
+        if (outcome != WriteFailure.DEFINITIVE) {
             unconfirmed = true
-            // O servidor guarda o 5xx sob a chave e o repete: refazer não adianta; 502/504 de proxy não são guardados.
-            val stored = failure is ApiError.Problem && failure.status >= SERVER_ERROR
-            error = if (stored) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
+            closeOnly = outcome == WriteFailure.UNKNOWN_STORED
+            error = if (closeOnly) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
             return
         }
         unconfirmed = false
@@ -355,14 +373,6 @@ class WalkInState(
         val until = quotedDeparture
         if (chosen != null && from != null && until != null) loadRooms(chosen, from, until, refusal)
     }
-
-    /** O servidor pode ter criado o walk-in sem a resposta chegar: a repetição leva a mesma chave. */
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network ||
-            failure is ApiError.IncompatibleResponse ||
-            failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && (failure.code == KEY_IN_USE || failure.status >= SERVER_ERROR)) ||
-            (failure is ApiError.Unexpected && failure.status >= SERVER_ERROR)
 
     private fun currentInputs() =
         WalkInIntentInputs(

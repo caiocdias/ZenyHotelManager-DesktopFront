@@ -17,18 +17,23 @@ fun interface ApprovableAction<T : Any> {
     suspend fun run(approvalToken: String?): ApiResponse<T>
 }
 
-/** Para as fachadas das features: a mesma `Intent` vale na tentativa e na repetição aprovada (decisão D2). */
-internal fun <T : Any> ZenyCore.approvable(
+/**
+ * O ajudante único das escritas que podem pedir aprovação: a mesma `Intent` vale na tentativa e na repetição aprovada
+ * (decisão D2). Sem token, `execute`; com token, `executeApproved`, que renova a chave e anexa o token.
+ */
+internal fun <T : Any> ApiExecutor.approvable(
     intent: Intent,
     call: suspend (CallOptions) -> HttpResponseTyped<T>,
 ): ApprovableAction<T> =
     ApprovableAction { token ->
-        if (token == null) {
-            sdkExecutor.execute(intent, call = call)
-        } else {
-            sdkExecutor.executeApproved(intent, token, call)
-        }
+        if (token == null) execute(intent, call = call) else executeApproved(intent, token, call)
     }
+
+/** Para as fachadas das features: o mesmo ajudante sobre o executor do `core`. */
+internal fun <T : Any> ZenyCore.approvable(
+    intent: Intent,
+    call: suspend (CallOptions) -> HttpResponseTyped<T>,
+): ApprovableAction<T> = sdkExecutor.approvable(intent, call)
 
 /** O PIN fica fora do `toString`. */
 data class ApprovalInput(

@@ -35,7 +35,8 @@ private val SEGMENT_LABELS =
 
 /**
  * Diálogo do walk-in, em passos na mesma janela: estadia, ofertas, UH, hóspede principal e a conclusão.
- * Os passos seguintes só aparecem com a escolha do anterior. Fica aberto até "Fechar". Nenhum id nem código cru.
+ * Os passos seguintes só aparecem com a escolha do anterior. Fica aberto até "Fechar" (o Esc não fecha). Com a
+ * falha guardada no servidor ([WalkInState.closeOnly]), só resta "Fechar". Nenhum id nem código cru.
  */
 @Composable
 fun WalkInDialog(
@@ -64,7 +65,7 @@ fun WalkInDialog(
                     enabled = !state.busy && !state.picker.creating,
                     modifier = Modifier.testTag("walk-in-close"),
                 ) { Text("Fechar") }
-                if (done == null) {
+                if (done == null && !state.closeOnly) {
                     Button(
                         onClick = state::confirm,
                         enabled = state.canConfirm,
@@ -103,7 +104,7 @@ private fun SectionTitle(text: String) {
     Text(text, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
 }
 
-private val WalkInState.inputsLocked: Boolean get() = busy || unconfirmed
+private val WalkInState.inputsLocked: Boolean get() = busy || unconfirmed || closeOnly
 
 @Composable
 private fun StaySection(state: WalkInState) {

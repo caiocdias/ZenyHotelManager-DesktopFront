@@ -59,6 +59,7 @@ class LiveReceptionCheck {
     fun panelMatchesServer() =
         withViewer { core, connection ->
             val source = connection.receptionSource()
+            val permissions = runBlocking { connection.me().permissions }
             val date = runBlocking { core.hotel.businessDay() }.date
             val expected =
                 DayList.entries.associateWith { list ->
@@ -77,7 +78,7 @@ class LiveReceptionCheck {
                 lateinit var panel: DayPanelState
                 setContent {
                     val scope = rememberCoroutineScope()
-                    panel = remember { DayPanelState(source, scope) }
+                    panel = remember { DayPanelState(source, scope, permissions) }
                     val detail = remember { ReservationDetailState(source, scope) }
                     ZenyTheme { ReceptionScreen(panel, detail) }
                 }
@@ -102,12 +103,13 @@ class LiveReceptionCheck {
     fun detailOfInHouseReservation() =
         withViewer { _, connection ->
             val source = connection.receptionSource()
+            val permissions = runBlocking { connection.me().permissions }
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 lateinit var panel: DayPanelState
                 lateinit var detail: ReservationDetailState
                 setContent {
                     val scope = rememberCoroutineScope()
-                    panel = remember { DayPanelState(source, scope) }
+                    panel = remember { DayPanelState(source, scope, permissions) }
                     detail = remember { ReservationDetailState(source, scope) }
                     ZenyTheme { ReceptionScreen(panel, detail) }
                 }

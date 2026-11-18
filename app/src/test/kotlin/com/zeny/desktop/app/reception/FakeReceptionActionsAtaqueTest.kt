@@ -425,50 +425,48 @@ class FakeReceptionActionsAtaqueTest {
         runTest {
             val source = FakeReceptionSource()
 
-            assertTrue(source.permissions().isNotEmpty())
-            assertEquals(1, source.permissionsCalls)
-            source.permissionsError = ApiError.Network(IOException("off"))
-            assertFailsWith<ApiError.Network> { source.permissions() }
-            assertEquals(2, source.permissionsCalls)
+            // A porta não lê mais permissões (ADR 0013): o falso só guarda o conjunto que a casca entregaria.
+            assertTrue(source.permissions.isNotEmpty())
             assertEquals(0, source.checkInRuns.size)
             assertEquals(0, source.roomTypesCalls)
         }
 
     @Test
-    fun panelPermissionsStayEmptyWhenPermissionsFails() =
+    fun panelPermissionsComeOnlyFromTheConstructorAndASourceChangeNeverReachesThePanelOrItsTopics() =
         runTest {
-            val source =
-                FakeReceptionSource().apply { permissionsError = ApiError.Network(IOException("off")) }
-            val panel = DayPanelState(source, backgroundScope)
-
-            assertEquals(emptySet(), panel.permissions)
-            runCurrent()
-
-            assertEquals(emptySet(), panel.permissions)
-            assertEquals(1, source.permissionsCalls)
-            assertEquals(0, source.subscriptions)
-        }
-
-    @Test
-    fun panelPermissionsStayEmptyWhileTheReadIsPendingAndNeverCallPermissionsTwice() =
-        runTest {
+            // Pendência da E06: o nome antigo falava de uma leitura que não existe mais (ADR 0013). O que se prova:
+            // o painel usa só o conjunto da casca; o falso ganhar permissões depois não muda o painel nem as
+            // assinaturas.
             val source = FakeReceptionSource().apply { permissions = setOf("guests.profiles.read") }
-            val panel = DayPanelState(source, backgroundScope)
+            val panel = DayPanelState(source, backgroundScope, setOf("guests.profiles.read"))
             runCurrent()
+            source.permissions = setOf("guests.profiles.read", "rooms.status.read", "endofday.runs.read")
             panel.refresh()
             runCurrent()
             panel.refresh()
             advanceUntilIdle()
 
             assertEquals(setOf("guests.profiles.read"), panel.permissions)
-            assertEquals(1, source.permissionsCalls)
+            assertEquals(0, source.subscriptions, "sem tópico no conjunto da casca, o painel não assina nada")
+            assertTrue(source.subscribedTopics.isEmpty())
+        }
+
+    @Test
+    fun panelSubscribesTheRoomsTopicFromTheShellSetEvenWhenTheSourceSetLacksIt() =
+        runTest {
+            val source = FakeReceptionSource().apply { permissions = emptySet() }
+            DayPanelState(source, backgroundScope, setOf("rooms.status.read"))
+            runCurrent()
+
+            assertEquals(1, source.subscriptions)
+            assertEquals(listOf(setOf("rooms")), source.subscribedTopics)
         }
 
     @Test
     fun panelPermissionsAreTheExactSetEvenWhenItHasNoReadTopics() =
         runTest {
             val source = FakeReceptionSource().apply { permissions = setOf("frontdesk.stays.checkin") }
-            val panel = DayPanelState(source, backgroundScope)
+            val panel = DayPanelState(source, backgroundScope, source.permissions)
             runCurrent()
 
             assertEquals(setOf("frontdesk.stays.checkin"), panel.permissions)

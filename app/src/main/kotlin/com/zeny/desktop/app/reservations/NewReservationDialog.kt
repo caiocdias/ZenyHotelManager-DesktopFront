@@ -42,8 +42,10 @@ private val DIALOG_MAX_BODY = 480.dp
  * pedidos especiais, a diária negociada e, depois de [NewReservationState.done], o resultado.
  *
  * Quem abre é dono do [state] e o fecha em [onClose]. O Esc só fecha fora de uma escrita em curso e sem resultado
- * desconhecido; com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção). [onConfirmation] (nulo =
- * sem botão) recebe o id e o código da reserva criada para abrir a confirmação em PDF. Nenhum id nem código cru.
+ * desconhecido; com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção). Com
+ * [closeOnly][NewReservationState.closeOnly] não há o que repetir: as entradas travam, só resta "Fechar", e o Esc
+ * fecha. [onConfirmation] (nulo = sem botão) recebe o id e o código da reserva criada para abrir a confirmação em PDF.
+ * Nenhum id nem código cru.
  */
 @Composable
 internal fun NewReservationDialog(
@@ -53,7 +55,7 @@ internal fun NewReservationDialog(
 ) {
     val done = state.done
     AlertDialog(
-        onDismissRequest = { if (!state.busy && !state.unconfirmed && !state.picker.creating) onClose() },
+        onDismissRequest = { if (state.closesOnEscape) onClose() },
         properties = DialogProperties(dismissOnClickOutside = false),
         modifier = Modifier.widthIn(max = DIALOG_WIDTH).testTag("new-reservation-dialog"),
         title = { Text("Nova reserva") },
@@ -77,14 +79,14 @@ internal fun NewReservationDialog(
                     onClick = onClose,
                     enabled = !state.busy && !state.picker.creating,
                     modifier = Modifier.testTag("new-reservation-close"),
-                ) { Text(if (done != null) "Fechar" else "Cancelar") }
+                ) { Text(if (done != null || state.closeOnly) "Fechar" else "Cancelar") }
                 if (done != null && onConfirmation != null) {
                     Button(
                         onClick = { onConfirmation(done.reservationId, done.code) },
                         modifier = Modifier.testTag("new-reservation-confirmation"),
                     ) { Text("Ver confirmação") }
                 }
-                if (done == null) {
+                if (done == null && !state.closeOnly) {
                     Button(
                         onClick = state::confirm,
                         enabled = state.canConfirm,
@@ -95,6 +97,10 @@ internal fun NewReservationDialog(
         },
     )
 }
+
+/** O Esc fecha fora de uma escrita ou de um cadastro em curso e sem resultado a repetir (com [closeOnly], fecha). */
+internal val NewReservationState.closesOnEscape: Boolean
+    get() = !busy && (!unconfirmed || closeOnly) && !picker.creating
 
 @Composable
 private fun Summary(
@@ -135,7 +141,7 @@ private fun Done(done: NewReservationDone) {
 
 @Composable
 private fun Form(state: NewReservationState) {
-    val enabled = !state.busy && !state.unconfirmed
+    val enabled = !state.busy && !state.unconfirmed && !state.closeOnly
     Holder(state, enabled)
     Chips(ORIGIN_CHIPS, state.origin, enabled) { state.origin = it }
     Chips(SEGMENT_CHIPS, state.segment, enabled) { state.segment = it }
@@ -152,6 +158,7 @@ private fun Form(state: NewReservationState) {
         onValueChange = { state.nightlyRateText = it },
         label = "Diária negociada (opcional)",
         modifier = Modifier.fillMaxWidth().testTag("new-reservation-rate"),
+        enabled = enabled,
     )
     state.rateError?.let {
         Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("new-reservation-rate-error"))

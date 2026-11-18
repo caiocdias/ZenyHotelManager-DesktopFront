@@ -170,6 +170,48 @@ class TraceFormStateTest {
         }
 
     @Test
+    fun problem5xxGivesUnknownCreateResultAndReloads() =
+        runTest {
+            val s = source()
+            val f = forReservation(s)
+            f.fill()
+            s.failNext(TraceOp.CREATE, ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList()))
+            f.save()
+            runCurrent()
+            assertEquals(1, s.calls.filterIsInstance<TraceCall.Create>().size)
+            assertEquals(TraceText.UNKNOWN_CREATE_RESULT, f.error)
+            assertEquals(1, savedCount)
+            assertFalse(f.saved)
+        }
+
+    @Test
+    fun unexpected5xxGivesUnknownCreateResultAndReloads() =
+        runTest {
+            val s = source()
+            val f = forReservation(s)
+            f.fill()
+            s.failNext(TraceOp.CREATE, ApiError.Unexpected(502))
+            f.save()
+            runCurrent()
+            assertEquals(1, s.calls.filterIsInstance<TraceCall.Create>().size)
+            assertEquals(TraceText.UNKNOWN_CREATE_RESULT, f.error)
+            assertEquals(1, savedCount)
+        }
+
+    @Test
+    fun problem5xxOnEditKeepsTheMessage() =
+        runTest {
+            val s = source()
+            val f = edit(s)
+            val failure = ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList())
+            s.failNext(TraceOp.UPDATE, failure)
+            f.save()
+            runCurrent()
+            assertEquals(TraceText.message(failure), f.error)
+            assertEquals(0, savedCount)
+        }
+
+    @Test
     fun editLoadsCurrentValues() =
         runTest {
             val f = edit(source())

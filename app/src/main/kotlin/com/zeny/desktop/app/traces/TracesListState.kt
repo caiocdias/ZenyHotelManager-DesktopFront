@@ -59,7 +59,7 @@ data class TraceRow(
 }
 
 /**
- * Estado da aba "Recados" do painel (abertos por padrão) e da seção do detalhe da reserva ([fixedReservationId]:
+ * Estado da aba "Recados" do painel (abertos por padrão) e da seção do detalhe da reserva ([reservationId]:
  * todos os recados dela, sem filtro de situação). Escopo próprio, cancelado no [close]; com [busy], as ações são
  * no-op; resultado que chega depois do [close] é descartado.
  *
@@ -70,7 +70,9 @@ data class TraceRow(
 class TracesListState(
     private val source: TracesSource,
     scope: CoroutineScope,
-    private val fixedReservationId: String? = null,
+    /** As permissões efetivas da sessão, lidas pela casca (ADR 0013): decidem criar, editar e resolver. */
+    val permissions: Set<String>,
+    private val reservationId: String? = null,
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val stateScope = CoroutineScope(scope.coroutineContext + jobs)
@@ -88,7 +90,7 @@ class TracesListState(
     var departmentFilter by mutableStateOf<String?>(null)
         private set
     var statusFilter by mutableStateOf<TraceStatusFilter?>(
-        if (fixedReservationId == null) TraceStatusFilter.OPEN else null,
+        if (reservationId == null) TraceStatusFilter.OPEN else null,
     )
         private set
     var dueFilter by mutableStateOf(DueFilter.ANY)
@@ -103,8 +105,6 @@ class TracesListState(
     private var departmentsLoaded by mutableStateOf(false)
     private var departmentsLoading = false
 
-    var permissions by mutableStateOf<Set<String>>(emptySet())
-        private set
     var busy by mutableStateOf(false)
         private set
     private var actionError by mutableStateOf<ApiError?>(null)
@@ -121,10 +121,9 @@ class TracesListState(
 
     fun canResolve(row: TraceRow): Boolean = row.open && RESOLVE_PERMISSION in permissions
 
-    /** Lê permissões e setores e carrega a primeira página; cada parte falha sozinha. */
+    /** Lê os setores e carrega a primeira página; cada parte falha sozinha. */
     fun start() {
         if (closed) return
-        stateScope.launch { readPermissions() }
         loadDepartments()
         reloadTable()
     }
@@ -215,18 +214,6 @@ class TracesListState(
         }
     }
 
-    private suspend fun readPermissions() {
-        permissions =
-            try {
-                source.permissions()
-            } catch (
-                @Suppress("TooGenericExceptionCaught", "SwallowedException") e: Exception,
-            ) {
-                currentCoroutineContext().ensureActive()
-                emptySet()
-            }
-    }
-
     private fun loadDepartments() {
         if (departmentsLoading) return
         departmentsLoading = true
@@ -261,7 +248,7 @@ class TracesListState(
             apiErrors {
                 val dueOn =
                     if (due == DueFilter.TODAY) date ?: source.businessDay().date.also { date = it } else null
-                val filter = TraceFilter(department, dueOn, status, fixedReservationId)
+                val filter = TraceFilter(department, dueOn, status, reservationId)
                 rowsOf(source.page(filter, cursor, limit))
             }
         }
@@ -279,11 +266,11 @@ class TracesListState(
         }
 
     private suspend fun rowsOf(page: Page<TraceResponse>): Page<TraceRow> {
-        val codes = if (fixedReservationId == null) codesOf(page.items) else emptyMap()
+        val codes = if (reservationId == null) codesOf(page.items) else emptyMap()
         val rows =
             page.items.map { trace ->
                 val reservation = (trace.reservationId as? Option.Some)?.value?.toString()
-                val link = if (fixedReservationId == null) TraceText.link(trace, codes[reservation]) else ""
+                val link = if (reservationId == null) TraceText.link(trace, codes[reservation]) else ""
                 rowOf(trace, link, reservation)
             }
         return Page(rows, page.nextCursor)

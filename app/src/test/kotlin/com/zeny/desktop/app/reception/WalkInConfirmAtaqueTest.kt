@@ -448,12 +448,11 @@ class WalkInConfirmAtaqueTest {
             approver.cancel = true
             confirmNow(state)
 
-            assertTrue(state.unconfirmed)
-            assertEquals(WA_UNCONFIRMED, state.error)
+            assertFalse(state.unconfirmed)
+            assertEquals("Aprovação cancelada. O walk-in não foi concluído.", state.error)
             assertNull(state.done)
             assertFalse(state.busy)
-            state.departureText = "16/11/2026"
-            assertEquals("15/11/2026", state.departureText)
+            assertTrue(state.canConfirm, "formulário destravado: dá para concluir de novo")
 
             approver.cancel = false
             confirmNow(state)

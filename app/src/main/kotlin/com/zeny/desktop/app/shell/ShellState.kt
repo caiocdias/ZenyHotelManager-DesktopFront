@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import java.util.Set as JavaSet
 
 private const val UNCONFIGURED_HOTEL = "Hotel ainda não configurado"
 private const val UNKNOWN_HOTEL = "Hotel"
@@ -47,6 +48,13 @@ class ShellState(
     var selected by mutableStateOf<Area?>(null)
         private set
 
+    /**
+     * As permissões efetivas do `me` desta sessão, numa cópia imutável: a fonte única das áreas e do topo (ADR 0013).
+     * Nulas do início de cada `reload` até o `me` e a data darem certo, e com `error`.
+     */
+    var permissions by mutableStateOf<Set<String>?>(null)
+        private set
+
     private var load: Job? = null
     private var hotelRead: Job? = null
     private var closed = false
@@ -65,6 +73,7 @@ class ShellState(
         hotelRead?.cancel()
         loading = true
         error = null
+        permissions = null
         hotelRead = scope.launch { hotelName = readHotelName() }
         load =
             scope.launch {
@@ -73,15 +82,19 @@ class ShellState(
                     val date = connection.businessDate()
                     userName = me.name
                     areas = visibleAreas(me.permissions, IMPLEMENTED_AREAS, devMode)
+                    val read = JavaSet.copyOf(me.permissions)
                     businessDate = DateInput.format(date)
                     restoreArea?.let { selected = it }
                     restoreArea = null
                     if (selected !in openableAreas()) selected = null
+                    // Por último: nenhuma falha da carga deixa o conjunto ao lado do `error`.
+                    permissions = read
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
                 ) {
                     // Cancelamento desta carga se propaga; um vindo da chamada (tempo esgotado) é falha comum.
                     currentCoroutineContext().ensureActive()
+                    permissions = null
                     error = e as? ApiError ?: ApiError.Network(e)
                 }
                 loading = false

@@ -281,7 +281,7 @@ class StayActionDialogsAtaqueTest {
     private fun ComposeUiTest.screen(source: FakeReceptionSource) {
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(source, scope) }
+            val panel = remember { DayPanelState(source, scope, source.permissions) }
             val detail = remember { ReservationDetailState(source, scope) }
             val move: (String) -> RoomMoveState = { id ->
                 val approve: suspend (ApprovableAction<RoomMoveResponse>) -> ApiResponse<RoomMoveResponse>? =
@@ -628,7 +628,7 @@ class StayActionDialogsAtaqueTest {
         runComposeUiTest {
             val source = source()
             val conn = AdConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", source.permissions) } }
             waitForIdle()
             onNodeWithTag("row-$adResId").performClick()
             waitForIdle()
@@ -654,7 +654,7 @@ class StayActionDialogsAtaqueTest {
         runComposeUiTest {
             val source = source()
             val conn = AdConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", source.permissions) } }
             waitForIdle()
             onNodeWithTag("row-$adResId").performClick()
             waitForIdle()

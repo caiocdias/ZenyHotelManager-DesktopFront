@@ -32,8 +32,10 @@ private val DIALOG_WIDTH = 560.dp
  * opção de isentar a multa (ação sensível: a aprovação de superior, se o servidor pedir, vem do `ApprovalCoordinator`
  * por cima). Com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção);
  * se a leitura da reserva falhar, "Tentar de novo" ao lado do erro lê de novo. Depois do cancelamento, só
- * o texto e "Fechar". "Voltar"/"Fechar" (desabilitados enquanto escreve) encerram o [state] e chamam [onClose]; o Esc
- * só fecha fora de [busy][ReservationCancelState.busy] e de [unconfirmed][ReservationCancelState.unconfirmed]. Nenhum
+ * o texto e "Fechar"; com [closeOnly][ReservationCancelState.closeOnly] (a falha guardada no servidor), as entradas
+ * travam e também só resta "Fechar". "Voltar"/"Fechar" (desabilitados enquanto escreve) encerram o [state] e chamam
+ * [onClose]; o Esc só fecha fora de [busy][ReservationCancelState.busy] e de
+ * [unconfirmed][ReservationCancelState.unconfirmed], salvo com [closeOnly][ReservationCancelState.closeOnly]. Nenhum
  * id nem código cru.
  */
 @Composable
@@ -48,7 +50,7 @@ internal fun ReservationCancelDialog(
         onClose()
     }
     AlertDialog(
-        onDismissRequest = { if (!state.busy && !state.unconfirmed) close() },
+        onDismissRequest = { if (state.closesOnEscape) close() },
         modifier = Modifier.widthIn(max = DIALOG_WIDTH).testTag("cancel-dialog"),
         title = { Text(state.code?.let { "Cancelar a reserva $it" } ?: "Cancelar a reserva") },
         text = {
@@ -62,8 +64,8 @@ internal fun ReservationCancelDialog(
                     onClick = close,
                     enabled = !state.busy,
                     modifier = Modifier.testTag("cancel-close"),
-                ) { Text(if (done != null) "Fechar" else "Voltar") }
-                if (done == null) {
+                ) { Text(if (done != null || state.closeOnly) "Fechar" else "Voltar") }
+                if (done == null && !state.closeOnly) {
                     Button(
                         onClick = state::confirm,
                         enabled = state.canConfirm,
@@ -75,9 +77,12 @@ internal fun ReservationCancelDialog(
     )
 }
 
+/** O Esc fecha fora de uma escrita em curso e sem resultado a repetir (com [closeOnly], fecha). */
+internal val ReservationCancelState.closesOnEscape: Boolean get() = !busy && (!unconfirmed || closeOnly)
+
 @Composable
 private fun CancelForm(state: ReservationCancelState) {
-    val editable = !state.busy && !state.unconfirmed
+    val editable = !state.busy && !state.unconfirmed && !state.closeOnly
     if (state.loading) Text("Buscando a reserva...")
     state.terms?.let {
         Text(it, modifier = Modifier.testTag("cancel-terms"))

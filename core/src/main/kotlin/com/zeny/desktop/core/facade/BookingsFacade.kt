@@ -1,7 +1,6 @@
 package com.zeny.desktop.core.facade
 
 import com.zeny.desktop.core.http.ApiExecutor
-import com.zeny.desktop.core.http.CallOptions
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
@@ -15,7 +14,6 @@ import com.zeny.desktop.sdk.model.ReservationConfirmRequest
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationRequest
 import de.quati.kotlin.util.Option
-import de.quati.ogen.client.ktor.HttpResponseTyped
 import kotlin.uuid.Uuid
 
 /** Uma diária negociada: o valor da UH numa noite, como o usuário digitou. O servidor decide se é desconto. */
@@ -68,16 +66,6 @@ data class ReservationChangeInput(
             "roomTypeId=$roomTypeId, ratePlanId=$ratePlanId, segment=$segment, nightlyRates=$nightlyRates)"
 }
 
-/** `run(null)` tenta sem token; `run(token)` repete com o token e chave nova (decisão D2). */
-private fun <T : Any> approvable(
-    executor: ApiExecutor,
-    intent: Intent,
-    call: suspend (CallOptions) -> HttpResponseTyped<T>,
-): ApprovableAction<T> =
-    ApprovableAction { token ->
-        if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
-    }
-
 /**
  * O pedido de cancelamento. `reason` é o texto do enum do contrato; `EXPIRED` é do servidor e é recusado antes da
  * rede, como qualquer valor fora do enum. `notes` nulo ou em branco não vai. O `toString` não mostra `notes`: é texto
@@ -108,11 +96,8 @@ class BookingsFacade internal constructor(
         intent: Intent,
     ): ApprovableAction<BookingResponse> {
         val request = bookingRequestOf(input)
-        val call: suspend (CallOptions) -> HttpResponseTyped<BookingResponse> = {
+        return executor.approvable(intent) {
             reservations.createBooking(it.requireIdempotencyKey(), bookingRequest = request, block = it.headers)
-        }
-        return ApprovableAction { token ->
-            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
         }
     }
 
@@ -169,7 +154,7 @@ class BookingsFacade internal constructor(
     ): ApprovableAction<ReservationDetailResponse> {
         val reservationId = idOf(id, "reserva")
         val request = cancelRequestOf(input)
-        return approvable(executor, intent) {
+        return executor.approvable(intent) {
             reservations.cancelReservation(
                 reservationId,
                 it.requireIdempotencyKey(),
@@ -185,7 +170,7 @@ class BookingsFacade internal constructor(
         intent: Intent,
     ): ApprovableAction<ReservationDetailResponse> {
         val reservationId = idOf(id, "reserva")
-        return approvable(executor, intent) {
+        return executor.approvable(intent) {
             reservations.reactivateReservation(reservationId, it.requireIdempotencyKey(), block = it.headers)
         }
     }

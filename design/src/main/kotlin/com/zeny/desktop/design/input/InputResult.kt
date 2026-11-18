@@ -25,13 +25,14 @@ sealed interface InputResult<out T> {
     data object Empty : InputResult<Nothing>
 }
 
-/** Rótulo, erro do formulário e interpretação do texto de um [ParsedTextField]. */
+/** Rótulo, erro do formulário, interpretação do texto e habilitação de um [ParsedTextField]. */
 internal data class FieldSpec(
     val label: String,
     val error: String?,
     val parse: (String) -> InputResult<*>,
     val mask: ((String) -> String)? = null,
     val significant: (Char) -> Boolean = { true },
+    val enabled: Boolean = true,
 )
 
 /**
@@ -63,6 +64,7 @@ internal fun ParsedTextField(
             onValueChange = onValueChange,
             label = { Text(label) },
             singleLine = true,
+            enabled = spec.enabled,
             isError = shown != null,
             supportingText = shown?.let { { Text(it) } },
             modifier = focusModifier,
@@ -89,6 +91,7 @@ internal fun ParsedTextField(
             },
             label = { Text(label) },
             singleLine = true,
+            enabled = spec.enabled,
             isError = shown != null,
             supportingText = shown?.let { { Text(it) } },
             modifier = focusModifier,

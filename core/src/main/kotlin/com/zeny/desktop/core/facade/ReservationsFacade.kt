@@ -2,7 +2,6 @@ package com.zeny.desktop.core.facade
 
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.ApiExecutor
-import com.zeny.desktop.core.http.CallOptions
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -32,7 +31,6 @@ import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInRequest
 import com.zeny.desktop.sdk.model.WalkInResponse
 import de.quati.kotlin.util.Option
-import de.quati.ogen.client.ktor.HttpResponseTyped
 import java.time.temporal.ChronoUnit
 import kotlin.uuid.Uuid
 
@@ -244,8 +242,8 @@ class ReservationsFacade internal constructor(
     }
 
     /**
-     * O check-in da reserva. A `intent` da tela vale na tentativa e na repetição aprovada (decisão D2): sem token,
-     * `execute`; com token, `executeApproved`, que renova a chave.
+     * O check-in da reserva, pelo ajudante comum `approvable`: a `intent` da tela vale na tentativa e na repetição
+     * aprovada (decisão D2), e a repetição aprovada renova a chave.
      */
     fun checkIn(
         id: String,
@@ -266,11 +264,8 @@ class ReservationsFacade internal constructor(
                 guests = guests,
                 roomId = room?.let { Option.Some(it) } ?: Option.Undefined,
             )
-        val call: suspend (CallOptions) -> HttpResponseTyped<CheckInResponse> = {
+        return executor.approvable(intent) {
             frontdesk.checkInReservation(reservationId, it.requireIdempotencyKey(), request, it.headers)
-        }
-        return ApprovableAction { token ->
-            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
         }
     }
 
@@ -287,11 +282,8 @@ class ReservationsFacade internal constructor(
         val reservationId = uuidOf(id)
         val request = roomMoveRequestOf(input)
         require(etag.isNotBlank()) { "etag inválido" }
-        val call: suspend (CallOptions) -> HttpResponseTyped<RoomMoveResponse> = {
+        return executor.approvable(intent) {
             frontdesk.moveReservationRoom(reservationId, etag, it.requireIdempotencyKey(), request, it.headers)
-        }
-        return ApprovableAction { token ->
-            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
         }
     }
 
@@ -315,11 +307,8 @@ class ReservationsFacade internal constructor(
         intent: Intent,
     ): ApprovableAction<WalkInResponse> {
         val request = walkInRequestOf(input)
-        val call: suspend (CallOptions) -> HttpResponseTyped<WalkInResponse> = {
+        return executor.approvable(intent) {
             frontdesk.createWalkIn(it.requireIdempotencyKey(), request, it.headers)
-        }
-        return ApprovableAction { token ->
-            if (token == null) executor.execute(intent, call = call) else executor.executeApproved(intent, token, call)
         }
     }
 

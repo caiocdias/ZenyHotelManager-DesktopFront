@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.NewTrace
 import com.zeny.desktop.core.facade.TraceChange
@@ -58,9 +60,10 @@ private data class LoadedTrace(
  * Estado do formulário de recado (criação e edição). Escopo próprio, cancelado no [close]; com [busy], as entradas e
  * o [save] são no-op; resultado que chega depois do [close] é descartado.
  *
- * Criação: chama `create` uma vez. Falha de rede, resposta incompatível ou sessão encerrada deixa o resultado
- * desconhecido: avisa, atualiza a lista ([onSaved]) e não repete sozinha; o formulário fica livre para nova tentativa
- * só por clique (um recado duplicado custa pouco e se resolve na lista, ao contrário do walk-in, que trava).
+ * Criação: chama `create` uma vez. A falha que `classifyWriteFailure` não dá como definitiva deixa o resultado
+ * desconhecido: a criação não tem `Idempotency-Key`, então quer dizer "pode ter sido feito, confira". Avisa, atualiza
+ * a lista ([onSaved]) e não repete sozinha; o formulário fica livre para nova tentativa só por clique (um recado
+ * duplicado custa pouco e se resolve na lista, ao contrário do walk-in, que trava).
  *
  * Edição: guarda o `ETag` lido. No `412`, relê o recado, troca campos e `ETag` e avisa, sem salvar; se a releitura
  * falha ou traz o recado resolvido, o salvamento fica bloqueado. O vencimento só é conferido contra a data
@@ -312,7 +315,7 @@ class TraceFormState(
     private suspend fun fail(failure: ApiError) {
         val code = (failure as? ApiError.Problem)?.code
         when {
-            !editing && resultUnknown(failure) -> {
+            !editing && classifyWriteFailure(failure) != WriteFailure.DEFINITIVE -> {
                 error = TraceText.UNKNOWN_CREATE_RESULT
                 onSaved()
             }
@@ -355,9 +358,6 @@ class TraceFormState(
             RESERVATION_FIELD -> TraceText.message(problem("UNKNOWN_RESERVATION"))
             else -> null
         }
-
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network || failure is ApiError.IncompatibleResponse || failure is ApiError.SessionEnded
 
     // O texto do recado nunca vai a log nem a `toString`.
     override fun toString(): String = "TraceFormState(target=${target::class.simpleName}, busy=$busy, saved=$saved)"

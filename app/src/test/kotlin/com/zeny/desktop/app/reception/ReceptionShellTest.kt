@@ -13,6 +13,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.AppController
@@ -20,12 +21,15 @@ import com.zeny.desktop.app.AppRoot
 import com.zeny.desktop.app.AreaContent
 import com.zeny.desktop.app.rooms.FakeRoomsSource
 import com.zeny.desktop.app.rooms.RoomsSource
+import com.zeny.desktop.app.rooms.roomId
+import com.zeny.desktop.app.rooms.roomStatus
 import com.zeny.desktop.app.rooms.typeId
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.app.shell.Area
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
+import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
@@ -34,10 +38,13 @@ import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.theme.ZenyTheme
+import com.zeny.desktop.sdk.model.QuoteOfferResponse
+import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -45,6 +52,19 @@ import kotlin.uuid.Uuid
 
 private const val PANEL_DATE = "Data operacional: 13/11/2026"
 private const val CHECKIN = "frontdesk.stays.checkin"
+private const val GUESTS_MANAGE = "guests.profiles.manage"
+
+/** O que o botão do walk-in pede (`WALK_IN_PERMISSIONS` da tela), sem o cadastro de hóspede. */
+private val walkInPermissions =
+    setOf(
+        CHECKIN,
+        "reservations.reservations.manage",
+        "reservations.assignments.manage",
+        "reservations.availability.read",
+        "reservations.reservations.read",
+        "rooms.status.read",
+        "guests.profiles.read",
+    )
 
 private val holderUuid = Uuid.parse("30000000-0000-0000-0000-000000000001")
 private val reservationUuid = Uuid.parse("20000000-0000-0000-0000-000000000001")
@@ -74,6 +94,44 @@ private fun arrival() =
         status = "CONFIRMED",
         total = "500.00",
         version = 1,
+    )
+
+/** Um falso pronto para o walk-in até o passo do hóspede: uma oferta e uma UH vaga e pronta do tipo dela. */
+private fun receptionForWalkIn() =
+    FakeReceptionSource().apply {
+        businessDay = BusinessDay(BusinessDate.parse("2026-11-13"), ZoneId.of("America/Sao_Paulo"))
+        stayQuote =
+            QuoteResponse(
+                adults = 1,
+                arrival = "2026-11-13",
+                channel = "DIRECT",
+                childAges = emptyList(),
+                departure = "2026-11-15",
+                nights = 2,
+                offers = listOf(walkInOffer()),
+            )
+        roomStatusList += roomStatus(roomId(101), "101").copy(readyForCheckIn = true)
+    }
+
+private fun walkInOffer() =
+    QuoteOfferResponse(
+        accommodationTotal = "300.00",
+        additionalPackagesTotal = "0.00",
+        availableUnits = 1,
+        cancellationPolicyId = Uuid.random(),
+        category = QuoteOfferResponse.Category.NORMAL,
+        guaranteePolicyId = Uuid.random(),
+        includedPackagesTotal = "0.00",
+        mealPlan = "BREAKFAST",
+        nights = emptyList(),
+        ratePlanCode = "BAR",
+        ratePlanId = Uuid.random(),
+        ratePlanName = "Balcão",
+        roomTotal = "300.00",
+        roomTypeCode = "STD",
+        roomTypeId = Uuid.parse(typeId(1)),
+        roomTypeName = "Standard",
+        total = "300.00",
     )
 
 /** Um falso com uma chegada de titular fictício. */
@@ -118,7 +176,9 @@ class ReceptionShellTest {
             state.value = SessionState.LoggedOut
         }
 
-        override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", permissions)
+        // O menu segue o conjunto do teste; a Recepção, o que a porta falsa devolvia (ADR 0013: um `me` só).
+        override suspend fun me(): Me =
+            Me("u-1", "ana", "Ana Souza", permissions + (reception as? FakeReceptionSource)?.permissions.orEmpty())
 
         override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -215,7 +275,7 @@ class ReceptionShellTest {
         runComposeUiTest {
             val reception = FakeReceptionSource()
             val fake = Fake(reception = reception, initial = SessionState.LoggedOut)
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, fake) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, fake, null, reception.permissions) } }
             waitForIdle()
 
             onNodeWithText(PANEL_DATE).assertDoesNotExist()
@@ -289,7 +349,7 @@ class ReceptionShellTest {
             val window = Window()
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(Area.RECEPTION, fake) }
+                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", reception.permissions) }
                 }
             }
             waitForIdle()
@@ -309,5 +369,53 @@ class ReceptionShellTest {
 
             assertEquals(pages + DayList.entries.size, reception.dayPageCalls.size, "o ganho do foco não atualizou")
             assertEquals(2, reception.reservationCalls.size, "o ganho do foco não releu o detalhe")
+        }
+
+    @Test
+    fun walkInGetsTheShellSet() {
+        for (manage in listOf(true, false)) {
+            // A porta da Recepção não tem o walk-in: o conjunto do diálogo vem só do `me` da casca.
+            val reception = receptionForWalkIn().apply { permissions = emptySet() }
+            val me = if (manage) walkInPermissions + GUESTS_MANAGE else walkInPermissions
+            shell(Fake(permissions = me, reception = reception)) {
+                openReception()
+                onNodeWithTag("open-walk-in").performClick()
+                waitForIdle()
+                onNodeWithTag("walk-in-departure").performScrollTo().performTextInput("15/11/2026")
+                for (tag in listOf("walk-in-quote", "offer-choose-0", "room-choose-0", "swap-guest")) {
+                    onNodeWithTag(tag).performScrollTo().performClick()
+                    waitForIdle()
+                }
+
+                onNodeWithTag("tab-guest-name").assertExists()
+                if (manage) {
+                    onNodeWithTag("guest-create").assertExists()
+                } else {
+                    onNodeWithTag("guest-create").assertDoesNotExist()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun setChangeInTheSameSessionKeepsTheOpenDetail() =
+        runComposeUiTest {
+            val reception = receptionWithArrival().apply { permissions = emptySet() }
+            val fake = Fake(reception = reception, initial = SessionState.Active("u-1", "s-1", false))
+            var permissions by mutableStateOf(setOf(CHECKIN))
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", permissions) } }
+            waitForIdle()
+            onNodeWithTag("row-$reservationUuid").performClick()
+            waitForIdle()
+            onNodeWithTag("reservation-detail").assertExists()
+            assertEquals(0, reception.subscriptions)
+
+            // Só o conjunto muda: o painel renasce com ele, e o detalhe lembrado da sessão segue aberto.
+            permissions = setOf(CHECKIN, "rooms.status.read")
+            waitForIdle()
+
+            onNodeWithTag("reservation-detail").assertExists()
+            assertEquals(listOf(setOf("rooms")), reception.subscribedTopics, "o painel não renasceu com o conjunto")
+            assertEquals(1, reception.activeSubscriptions)
         }
 }

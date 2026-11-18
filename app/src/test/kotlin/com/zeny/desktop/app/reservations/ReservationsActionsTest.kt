@@ -4,7 +4,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -61,9 +60,6 @@ private const val TAB = "Disponibilidade e cotação"
 private const val CHANGE_BUTTON = "open-reservation-change"
 private const val CONFIRM_BUTTON = "open-reservation-confirm"
 private const val PDF_BUTTON = "open-reservation-confirmation"
-private const val NOTICE = "permissions-notice"
-private const val NOTICE_TEXT =
-    "Não foi possível ler as suas permissões. As ações desta área ficam indisponíveis até a leitura dar certo."
 private val arType = Uuid.parse("10000000-0000-0000-0000-000000000001")
 private val arPlan = Uuid.parse("20000000-0000-0000-0000-000000000001")
 private val arGuest = GuestPick("70000000-0000-0000-0000-000000000001", HolderSummary("Ana Teste", "CPF ***.***-01"))
@@ -165,30 +161,25 @@ private fun arBooking(): BookingResponse {
     )
 }
 
-/** A Recepção falsa com a leitura das permissões presa até o teste soltar o [gate] (o falso não a prende). */
-private class HeldPermissionsReception(
-    private val fake: FakeReceptionSource,
-) : ReceptionSource by fake {
-    var gate: CompletableDeferred<Unit>? = null
-
-    override suspend fun permissions(): Set<String> {
-        gate?.await()
-        return fake.permissions()
-    }
-}
-
-/** A conexão de mentira da área Reservas: cada porta é opcional, e as nulas não existem na conexão. */
+/**
+ * A conexão de mentira da área Reservas: cada porta é opcional, e as nulas não existem na conexão. O `me` devolve o
+ * menu, o [granted] e o conjunto programado em `reception.permissions`, lido a cada chamada; com [meGate], fica preso
+ * até o teste soltá-lo.
+ */
 @Suppress("LongParameterList") // uma porta opcional por parâmetro
 private class ActionsConnection(
-    val reception: ReceptionSource?,
+    val reception: FakeReceptionSource?,
     val search: FakeReservationSearchSource,
     val availability: FakeAvailabilitySource? = null,
     val newReservation: NewReservationSource? = null,
     val change: ReservationChangeSource? = null,
     val confirm: ReservationConfirmSource? = null,
     val confirmations: ReservationConfirmations? = null,
+    val granted: Set<String> = emptySet(),
 ) : ServerConnection {
     override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
+    var meCalls = 0
+    var meGate: CompletableDeferred<Unit>? = null
 
     override suspend fun login(
         login: String,
@@ -208,7 +199,12 @@ private class ActionsConnection(
         state.value = SessionState.LoggedOut
     }
 
-    override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", setOf(READ, "frontdesk.stays.checkin"))
+    override suspend fun me(): Me {
+        meCalls++
+        meGate?.await()
+        val programmed = granted + reception?.permissions.orEmpty()
+        return Me("u-1", "ana", "Ana Souza", setOf(READ, "frontdesk.stays.checkin") + programmed)
+    }
 
     override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -402,58 +398,19 @@ class ReservationsActionsTest {
     }
 
     @Test
-    fun noActionsWhenPermissionsCannotBeRead() {
-        val reservation = item("PROVISIONAL")
-        val rig = rig(reservation)
-        rig.reception.permissionsError = IOException("fora do ar")
-        val connection = ActionsConnection(rig.reception, rig.search, change = FakeReservationChangeSource())
-        shell(connection) {
-            openReservation("R-1")
-            assertFalse(hasTag(CHANGE_BUTTON))
-            onNodeWithTag(NOTICE).assertTextEquals(NOTICE_TEXT)
-            onNodeWithTag("permissions-retry").assertExists()
-        }
-    }
-
-    @Test
-    fun retryAfterFailedPermissionsRestoresActionsAndAvailabilityTab() {
+    fun meIsReadOncePerSessionForActionsAndAvailability() {
         val reservation = item("CONFIRMED")
         val rig = rig(reservation)
-        val granted = setOf(MANAGE, READ, AVAILABILITY_READ)
-        rig.reception.permissions = granted
-        rig.reception.permissionsError = IOException("fora do ar")
-        val availability = FakeAvailabilitySource().apply { permissions = granted }
-        val connection =
-            ActionsConnection(rig.reception, rig.search, availability, change = FakeReservationChangeSource())
+        rig.reception.permissions = setOf(MANAGE, READ, AVAILABILITY_READ)
+        val change = FakeReservationChangeSource()
+        val connection = ActionsConnection(rig.reception, rig.search, FakeAvailabilitySource(), change = change)
         shell(connection) {
-            openReservation("R-1")
-            assertTrue(hasTag(NOTICE))
-            assertFalse(hasTag(CHANGE_BUTTON))
-            assertFalse(hasText(TAB))
-
-            rig.reception.permissionsError = null
-            click("permissions-retry")
-
-            assertFalse(hasTag(NOTICE))
-            assertTrue(hasTag(CHANGE_BUTTON))
-            assertTrue(hasText(TAB))
-        }
-    }
-
-    @Test
-    fun permissionsAreReadOncePerSessionForActionsAndAvailability() {
-        val reservation = item("CONFIRMED")
-        val rig = rig(reservation)
-        val granted = setOf(MANAGE, READ, AVAILABILITY_READ)
-        rig.reception.permissions = granted
-        val availability = FakeAvailabilitySource().apply { permissions = granted }
-        shell(ActionsConnection(rig.reception, rig.search, availability, change = FakeReservationChangeSource())) {
             openReservation("R-1")
             assertTrue(hasTag(CHANGE_BUTTON))
             open(TAB)
             open("Busca")
 
-            assertEquals(1, rig.reception.permissionsCalls + availability.permissionsCalls)
+            assertEquals(1, connection.meCalls)
         }
     }
 
@@ -461,28 +418,25 @@ class ReservationsActionsTest {
     fun newSessionNeverUsesThePreviousGrant() {
         val reservation = item("CONFIRMED")
         val rig = rig(reservation)
-        val granted = setOf(MANAGE, READ, AVAILABILITY_READ)
-        rig.reception.permissions = granted
-        val reception = HeldPermissionsReception(rig.reception)
-        val availability = FakeAvailabilitySource().apply { permissions = granted }
-        val connection = ActionsConnection(reception, rig.search, availability, change = FakeReservationChangeSource())
+        rig.reception.permissions = setOf(MANAGE, READ, AVAILABILITY_READ)
+        val change = FakeReservationChangeSource()
+        val connection = ActionsConnection(rig.reception, rig.search, FakeAvailabilitySource(), change = change)
         shell(connection) {
             openReservation("R-1")
             assertTrue(hasTag(CHANGE_BUTTON))
             assertTrue(hasText(TAB))
 
-            val gate = CompletableDeferred<Unit>().also { reception.gate = it }
+            val gate = CompletableDeferred<Unit>().also { connection.meGate = it }
             connection.state.value = SessionState.Active("u-1", "s-2", false)
             waitForIdle()
-            onNodeWithText("R-1").performClick()
-            waitForIdle()
 
-            onNodeWithTag("reservation-detail").assertExists()
+            assertFalse(hasText("R-1"), "a área da sessão nova foi desenhada antes do me dela")
             assertFalse(hasTag(CHANGE_BUTTON))
             assertFalse(hasText(TAB))
-            assertFalse(hasTag(NOTICE))
 
             gate.complete(Unit)
+            waitForIdle()
+            onNodeWithText("R-1").performClick()
             waitForIdle()
 
             assertTrue(hasTag(CHANGE_BUTTON))
@@ -491,35 +445,17 @@ class ReservationsActionsTest {
     }
 
     @Test
-    fun noNoticeWhileLoadingNorWithoutPorts() {
-        val reservation = item("CONFIRMED")
-        val rig = rig(reservation)
-        rig.reception.permissions = setOf(MANAGE, READ)
-        val held = HeldPermissionsReception(rig.reception).apply { gate = CompletableDeferred() }
-        shell(ActionsConnection(held, rig.search, change = FakeReservationChangeSource())) {
-            openReservation("R-1")
-            onNodeWithTag("reservation-detail").assertExists()
-            assertFalse(hasTag(NOTICE))
-            assertFalse(hasTag(CHANGE_BUTTON))
-        }
-        shell(ActionsConnection(null, rig.search, change = FakeReservationChangeSource())) {
-            open("Reservas")
-            onNodeWithText("R-1").assertExists()
-            assertFalse(hasTag(NOTICE))
-        }
-    }
-
-    @Test
-    fun permissionsAreReadOncePerSession() {
+    fun meIsReadOncePerSession() {
         val first = item("CONFIRMED", "R-1")
         val second = item("CONFIRMED", "R-2")
         val rig = rig(first, second)
         rig.reception.permissions = setOf(MANAGE, READ)
-        shell(ActionsConnection(rig.reception, rig.search, change = FakeReservationChangeSource())) {
+        val connection = ActionsConnection(rig.reception, rig.search, change = FakeReservationChangeSource())
+        shell(connection) {
             openReservation("R-1")
             assertTrue(hasTag(CHANGE_BUTTON))
             openRow("R-2")
-            assertEquals(1, rig.reception.permissionsCalls)
+            assertEquals(1, connection.meCalls)
         }
     }
 
@@ -692,14 +628,10 @@ class ReservationsActionsTest {
         confirmations: ReservationConfirmations? = null,
     ): Reserve {
         val rig = rig(item("CONFIRMED"))
-        // Na produção as duas portas devolvem o mesmo conjunto: as permissões efetivas da sessão.
+        // O `me` da conexão falsa devolve este conjunto: as permissões efetivas da sessão, que a casca entrega.
         rig.reception.permissions = permissions
         rig.reception.guestsByName["Ana"] = listOf(arGuest)
-        val availability =
-            FakeAvailabilitySource().apply {
-                this.permissions = permissions
-                quote = quoteAnswer()
-            }
+        val availability = FakeAvailabilitySource().apply { quote = quoteAnswer() }
         val booking = FakeNewReservationSource().apply { response = arBooking() }
         val connection =
             ActionsConnection(
@@ -778,7 +710,13 @@ class ReservationsActionsTest {
     fun reserveHiddenWithoutTheReceptionPort() {
         val setup = reserve(setOf(MANAGE, READ, GUESTS_READ, AVAILABILITY_READ))
         val connection =
-            ActionsConnection(null, setup.rig.search, setup.availability, newReservation = setup.booking)
+            ActionsConnection(
+                null,
+                setup.rig.search,
+                setup.availability,
+                newReservation = setup.booking,
+                granted = setup.rig.reception.permissions,
+            )
         shell(connection) {
             open("Reservas")
             quoteTheStay()

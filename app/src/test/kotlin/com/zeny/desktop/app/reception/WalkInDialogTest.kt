@@ -162,7 +162,7 @@ class WalkInDialogTest {
     ) {
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(source, scope) }
+            val panel = remember { DayPanelState(source, scope, source.permissions) }
             val detail = remember { ReservationDetailState(source, scope) }
             val factory: (() -> WalkInState)? =
                 if (withWalkIn) {
@@ -377,6 +377,34 @@ class WalkInDialogTest {
             onNodeWithTag("swap-guest").assertIsNotEnabled()
             onNodeWithTag("offer-choose-0").assertIsNotEnabled()
             onNodeWithTag("walk-in-close").assertIsEnabled()
+        }
+
+    @Test
+    fun storedFailureOffersOnlyClose() =
+        runComposeUiTest {
+            val source = source()
+            source.walkInOutcomes += ApiError.Problem(500, "INTERNAL_ERROR", "detalhe do servidor", emptyList())
+            screen(source)
+            readyToConfirm()
+            clickFooter("walk-in-confirm")
+            onNodeWithText("O servidor não confirmou o walk-in.", substring = true).assertExists()
+            onNodeWithTag("walk-in-confirm").assertDoesNotExist()
+            onNodeWithText("Concluir walk-in").assertDoesNotExist()
+            onNodeWithText("Tentar de novo").assertDoesNotExist()
+            listOf(
+                "walk-in-departure",
+                "walk-in-adults",
+                "walk-in-children",
+                "walk-in-segment-LEISURE",
+                "walk-in-quote",
+                "offer-choose-0",
+                "room-choose-0",
+                "swap-guest",
+            ).forEach { onNodeWithTag(it).assertIsNotEnabled() }
+            onNodeWithTag("walk-in-close").assertIsEnabled()
+            clickFooter("walk-in-close")
+            onNodeWithTag("walk-in-dialog").assertDoesNotExist()
+            assertEquals(1, source.walkInRuns.size)
         }
 
     @Test

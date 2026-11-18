@@ -80,7 +80,8 @@ class TracesPanelAtaqueTest {
             val scope = rememberCoroutineScope()
             list =
                 remember {
-                    TracesListState(source, scope, if (compact) atReservation.toString() else null).also { it.start() }
+                    TracesListState(source, scope, source.permissions, if (compact) atReservation.toString() else null)
+                        .also { it.start() }
                 }
             ZenyTheme {
                 // Na tela, a seção compacta fica dentro do corpo rolável do detalhe.

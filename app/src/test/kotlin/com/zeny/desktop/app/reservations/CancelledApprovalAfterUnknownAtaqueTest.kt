@@ -454,4 +454,53 @@ class CancelledApprovalAfterUnknownAtaqueTest {
             assertFalse(state.unconfirmed)
             assertNotNull(state.done)
         }
+
+    // --- M4 E01: IDEMPOTENCY_KEY_IN_USE num 5xx é desconhecido, não guardado -------------------------------------
+    // Um estado que testasse `status >= 500` antes do `code` travaria em "só fechar" uma escrita que ainda está em
+    // curso sob a mesma chave; a repetição é o caminho certo e leva a mesma chave.
+
+    private fun keyInUse500() = ApiError.Problem(500, "IDEMPOTENCY_KEY_IN_USE", "em curso", emptyList())
+
+    @Test
+    fun newReservationKeyInUseWithStatus500IsNotCloseOnlyAndRetriesWithTheSameKey() =
+        runTest {
+            val source = newSource().apply { outcomes += keyInUse500() }
+            val state = newState(source)
+            go(state)
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            assertTrue(state.canConfirm)
+            go(state)
+            assertNotNull(state.done)
+            assertEquals(2, source.runs.size)
+            assertEquals(1, tokenless(source).toSet().size)
+        }
+
+    @Test
+    fun cancelKeyInUseWithStatus500IsNotCloseOnlyAndRetriesWithTheSameKey() =
+        runTest {
+            val source = cancelSource().apply { outcomes += keyInUse500() }
+            val state = cancelState(source)
+            go(state)
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            go(state)
+            assertNotNull(state.done)
+            assertEquals(2, source.runs.size)
+            assertEquals(1, tokenless(source).toSet().size)
+        }
+
+    @Test
+    fun reactivateKeyInUseWithStatus500IsNotCloseOnlyAndRetriesWithTheSameKey() =
+        runTest {
+            val source = reactivateSource().apply { outcomes += keyInUse500() }
+            val state = reactivateState(source)
+            go(state)
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            go(state)
+            assertNotNull(state.done)
+            assertEquals(2, source.runs.size)
+            assertEquals(1, tokenless(source).toSet().size)
+        }
 }

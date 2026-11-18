@@ -20,9 +20,10 @@ private val DIALOG_WIDTH = 560.dp
 
 /**
  * Diálogo que reativa uma reserva cancelada ou em no-show. Pergunta uma vez, com o código da reserva; a aprovação de
- * superior, se o servidor pedir, vem do `ApprovalCoordinator` por cima. Depois da reativação, só "Fechar". "Fechar"
+ * superior, se o servidor pedir, vem do `ApprovalCoordinator` por cima. Depois da reativação, e com
+ * [closeOnly][ReservationReactivateState.closeOnly] (a falha guardada no servidor), só "Fechar". "Fechar"
  * (desabilitado enquanto escreve) encerra o [state] e chama [onClose]; o Esc só fecha fora de [busy] e de
- * [unconfirmed]. Nenhum id nem código cru.
+ * [unconfirmed], salvo com [closeOnly][ReservationReactivateState.closeOnly]. Nenhum id nem código cru.
  */
 @Composable
 internal fun ReservationReactivateDialog(
@@ -35,7 +36,7 @@ internal fun ReservationReactivateDialog(
         onClose()
     }
     AlertDialog(
-        onDismissRequest = { if (!state.busy && !state.unconfirmed) close() },
+        onDismissRequest = { if (state.closesOnEscape) close() },
         modifier = Modifier.widthIn(max = DIALOG_WIDTH).testTag("reactivate-dialog"),
         title = { Text("Reativar reserva") },
         text = {
@@ -65,7 +66,7 @@ internal fun ReservationReactivateDialog(
                     enabled = !state.busy,
                     modifier = Modifier.testTag("reactivate-close"),
                 ) { Text("Fechar") }
-                if (done == null) {
+                if (done == null && !state.closeOnly) {
                     Button(
                         onClick = state::confirm,
                         enabled = !state.busy,
@@ -76,3 +77,6 @@ internal fun ReservationReactivateDialog(
         },
     )
 }
+
+/** O Esc fecha fora de uma escrita em curso e sem resultado a repetir (com [closeOnly], fecha). */
+internal val ReservationReactivateState.closesOnEscape: Boolean get() = !busy && (!unconfirmed || closeOnly)

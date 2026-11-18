@@ -26,7 +26,7 @@ class DayPanelStateInlineFetchTest {
     ) {
         val job = Job()
         val scope = CoroutineScope(Executor(Runnable::run).asCoroutineDispatcher() + job)
-        val state = DayPanelState(source, scope)
+        val state = DayPanelState(source, scope, source.permissions)
         try {
             block(state)
         } finally {

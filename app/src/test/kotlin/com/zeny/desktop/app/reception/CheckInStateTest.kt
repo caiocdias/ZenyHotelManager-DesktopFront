@@ -61,6 +61,7 @@ private const val ROOM_NOT_READY_TEXT =
     "A UH ainda não está pronta. Escolha uma UH pronta ou peça a liberação à governança."
 private const val TRANSITION_TEXT =
     "A reserva não está mais confirmada; o check-in pode já ter sido feito. Feche e confira o detalhe."
+private const val STORED_TEXT = "O servidor não confirmou o check-in. Feche e confira a reserva antes de refazer."
 private const val FEE_CHANGED_TEXT = "O valor do early check-in mudou. Confira a nova cotação e confirme de novo."
 private val allPermissions =
     setOf(
@@ -230,6 +231,7 @@ private class FakeApprover(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // um teste por regra: cotação, early, chave, falhas, aprovação, hóspede e cargas
 class CheckInStateTest {
     private val id = checkInResUuid.toString()
     private val holderId = checkInHolderUuid.toString()
@@ -471,7 +473,6 @@ class CheckInStateTest {
             val definitive =
                 listOf(
                     ApiError.PreconditionFailed(null),
-                    ApiError.Unexpected(500),
                     ciProblem("GUEST_DATA_INCOMPLETE"),
                     ciProblem("IDEMPOTENCY_KEY_REUSED", 422),
                 )
@@ -484,6 +485,77 @@ class CheckInStateTest {
                 val keys = source.checkInRuns.map { it.key }
                 assertNotEquals(keys[0], keys[1], "chave mantida depois de ${failure::class.simpleName}")
             }
+        }
+
+    @Test
+    fun problem5xxKeepsTheKeyAndSaysCloseAndCheck() =
+        runTest {
+            val source = source().apply { checkInOutcomes += ciProblem("INTERNAL_ERROR", 500) }
+            val state = started(source)
+
+            confirmNow(state)
+            assertEquals(STORED_TEXT, state.error)
+            assertNull(state.done)
+            assertTrue(state.canConfirm)
+            confirmNow(state)
+
+            val keys = source.checkInRuns.map { it.key }
+            assertEquals(2, keys.size)
+            assertEquals(keys[0], keys[1])
+        }
+
+    @Test
+    fun problem5xxWithRefusalCodeKeepsChoiceAndKey() =
+        runTest {
+            for (code in listOf("EARLY_LATE_FEE_CHANGED", "RESERVATION_TRANSITION_NOT_ALLOWED")) {
+                changes = 0
+                val source = source().apply { checkInOutcomes += ciProblem(code, 500) }
+                val state = started(source)
+                state.chargeEarly = true
+
+                confirmNow(state)
+
+                assertEquals(STORED_TEXT, state.error, code)
+                assertTrue(state.chargeEarly, code)
+                assertEquals(1, source.quoteCalls.size, code)
+                assertEquals(0, changes, code)
+                confirmNow(state)
+                val keys = source.checkInRuns.map { it.key }
+                assertEquals(2, keys.size, code)
+                assertEquals(keys[0], keys[1], code)
+            }
+        }
+
+    @Test
+    fun unexpected5xxKeepsTheKey() =
+        runTest {
+            for (failure in listOf(ApiError.Unexpected(500), ApiError.Unexpected(502))) {
+                val source = source().apply { checkInOutcomes += failure }
+                val state = started(source)
+                confirmNow(state)
+                assertEquals(ActionText.error(failure), state.error)
+                confirmNow(state)
+                val keys = source.checkInRuns.map { it.key }
+                assertEquals(2, keys.size)
+                assertEquals(keys[0], keys[1], "chave renovada depois de HTTP ${failure.status}")
+                assertNotNull(state.done)
+            }
+        }
+
+    @Test
+    fun networkStillKeepsTheKey() =
+        runTest {
+            val failure = ciNetwork()
+            val source = source().apply { checkInOutcomes += failure }
+            val state = started(source)
+
+            confirmNow(state)
+            assertEquals(ActionText.error(failure), state.error)
+            confirmNow(state)
+
+            val keys = source.checkInRuns.map { it.key }
+            assertEquals(2, keys.size)
+            assertEquals(keys[0], keys[1])
         }
 
     @Test

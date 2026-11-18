@@ -90,12 +90,22 @@ assert_not_contains "$kt" 'Secret' "nenhum Secret é tocado"
 # Lista fechada também para a config: as listas acima não pegam uma mensagem sem `$`, como
 # `fail(config.managerPin.value)`. Toda ocorrência de `config.` tem de ser `config.server`, e são exatamente duas
 # (a abertura da sessão do administrador, nos dois testes).
+#
+# M7 (M4 E01): contar `config.` deixava passar `config?.`, `config!!.`, `with(config)`, um alias, `config()` e um nome
+# que só começa com `config.server`. A regra passa a olhar a palavra `config` inteira: tirando as formas conhecidas
+# (`config.server` sem nada colado, `.open(config)`, `val config = config()`, `fun config(): SeedConfig` e
+# `parsed.config` sem nada colado), não pode sobrar nenhuma.
 config_violacoes() {
-  local texto="$1" total servidor
+  local texto="$1" total servidor sobra
   total="$(grep -oF 'config.' <<<"$texto" | wc -l)"
   servidor="$(grep -oF 'config.server' <<<"$texto" | wc -l)"
   [[ "$total" == "$servidor" ]] || echo "proibido: config. além de config.server"
+  servidor="$(grep -oP '\bconfig\.server(?![\w.?!])' <<<"$texto" | wc -l)"
   [[ "$servidor" == 2 ]] || echo "falta: config.server exatamente duas vezes (achou $servidor)"
+  sobra="$(perl -pe 's/\bconfig\.server(?![\w.?!])//g; s/\.open\(config\)//g;
+    s/\bval config = config\(\)(?![\w.?!])//g; s/\bfun config\(\): SeedConfig\b//g;
+    s/\bparsed\.config(?![\w.?!(])//g' <<<"$texto" | grep -oP '\bconfig\b' | wc -l)"
+  [[ "$sobra" == 0 ]] || echo "proibido: config fora das formas conhecidas ($sobra)"
 }
 assert_diferente() { [[ "$1" != "$2" ]] || _assert_fail "$3"; }
 assert_eq "" "$(config_violacoes "$kt")" "toda ocorrência de config. é config.server, e são duas"
@@ -105,5 +115,19 @@ assert_diferente "" "$(config_violacoes "$kt fail(config.managerPin.value)")" \
 assert_diferente "" "$(config_violacoes "${kt/config.server/config.managerPin.value}")" \
   "mutante: config.server trocado por config.managerPin.value é detectado"
 assert_diferente "" "$(config_violacoes "${kt/config.server/x}")" "mutante: uma config.server a menos é detectado"
+# M7 (M4 E01): contornos da contagem por `config.`: chamada segura, `!!`, `with`, um alias e um nome que só começa
+# com `config.server`. Cada um lê um segredo da config sem escrever `config.` seguido do campo.
+assert_diferente "" "$(config_violacoes "$kt fail(config?.managerPin?.value)")" \
+  "mutante: fail(config?.managerPin?.value) é detectado"
+assert_diferente "" "$(config_violacoes "$kt fail(config!!.managerPin.value)")" \
+  "mutante: fail(config!!.managerPin.value) é detectado"
+assert_diferente "" "$(config_violacoes "$kt with(config) { fail(managerPin.value) }")" \
+  "mutante: with(config) { fail(managerPin.value) } é detectado"
+assert_diferente "" "$(config_violacoes "$kt val c = config fail(c.managerPin.value)")" \
+  "mutante: um alias da config é detectado"
+assert_diferente "" "$(config_violacoes "${kt/config.server/config.serverPin}")" \
+  "mutante: config.server trocado por config.serverPin é detectado"
+assert_diferente "" "$(config_violacoes "${kt/.open(config)/.open(config).also { fail(config().managerPin.value) \}}")" \
+  "mutante: config().managerPin depois da abertura é detectado"
 
 finish

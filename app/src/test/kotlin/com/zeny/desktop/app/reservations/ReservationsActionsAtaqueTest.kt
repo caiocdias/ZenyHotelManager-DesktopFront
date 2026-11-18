@@ -31,7 +31,6 @@ import com.zeny.desktop.sdk.model.GuaranteeTermsResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.ReservationResponse
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 import kotlin.test.Test
@@ -86,25 +85,17 @@ private fun saDetail(item: ReservationListItemResponse) =
         restrictionAlerts = emptyList(),
     )
 
-/** A porta da Recepção com a leitura de permissões que o teste pode prender. */
-private class HeldPermissions(
-    private val inner: FakeReceptionSource,
-) : ReceptionSource by inner {
-    var gate: CompletableDeferred<Unit>? = null
-
-    override suspend fun permissions(): Set<String> {
-        gate?.await()
-        return inner.permissions()
-    }
-}
-
-/** A conexão de mentira da área Reservas, com a sessão trocável no lugar (sem passar pelo login). */
+/**
+ * A conexão de mentira da área Reservas, com a sessão trocável no lugar (sem passar pelo login). O `me` devolve o menu
+ * e o conjunto programado em `reception.permissions` (o que a porta da Recepção devolvia), lido a cada chamada.
+ */
 private class SessionConnection(
-    val reception: ReceptionSource,
+    val reception: FakeReceptionSource,
     val search: FakeReservationSearchSource,
     val change: ReservationChangeSource,
 ) : ServerConnection {
     override val state = MutableStateFlow<SessionState>(SessionState.LoggedOut)
+    var meCalls = 0
 
     override suspend fun login(
         login: String,
@@ -124,7 +115,10 @@ private class SessionConnection(
         state.value = SessionState.LoggedOut
     }
 
-    override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", setOf(SA_READ, "frontdesk.stays.checkin"))
+    override suspend fun me(): Me {
+        meCalls++
+        return Me("u-1", "ana", "Ana Souza", setOf(SA_READ, "frontdesk.stays.checkin") + reception.permissions)
+    }
 
     override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -153,7 +147,8 @@ private class SaSettings : LocalSettings {
 /**
  * Ataques à fiação das ações de Reservas (M3 E03) pela raiz do app: a troca de sessão no lugar fecha o diálogo aberto
  * e não deixa a permissão da sessão anterior valer enquanto a nova não foi lida; fechar a alteração depois de uma
- * recusa definitiva relê o detalhe.
+ * recusa definitiva relê o detalhe. Desde a M4 E06 (ADR 0013), o caso "a sessão nova com o `me` em voo" fica em
+ * `shell/ShellPermissionsAtaqueTest.heldMeOfSessionBHidesTheChangeActionUntilItAnswersAndThenGrantsIt`.
  */
 @OptIn(ExperimentalTestApi::class)
 class ReservationsActionsAtaqueTest {
@@ -216,29 +211,6 @@ class ReservationsActionsAtaqueTest {
     }
 
     @Test
-    fun previousSessionPermissionsDoNotApplyWhileTheNewReadIsPending() {
-        val held = HeldPermissions(fake)
-        val connection = SessionConnection(held, search, change)
-        shell(connection) {
-            assertTrue(hasTag(SA_CHANGE_BUTTON), "na 1ª sessão a Recepcionista tem manage")
-            val gate = CompletableDeferred<Unit>()
-            held.gate = gate
-
-            connection.state.value = SessionState.Active("u-1", "s-2", false)
-            waitForIdle()
-            // A área Reservas segue aberta na casca nova; o detalhe é outro, e a reserva é aberta de novo.
-            onNodeWithText("R-1").performClick()
-            waitForIdle()
-            assertTrue(hasTag("reservation-detail"), "o detalhe da sessão nova não abriu")
-            assertFalse(hasTag(SA_CHANGE_BUTTON), "a permissão da sessão anterior valeu na nova antes da leitura")
-
-            gate.complete(Unit)
-            waitForIdle()
-            assertTrue(hasTag(SA_CHANGE_BUTTON), "lida a permissão da sessão nova, o botão volta")
-        }
-    }
-
-    @Test
     fun newSessionWithoutManageHidesChange() {
         val connection = SessionConnection(fake, search, change)
         shell(connection) {
@@ -253,7 +225,7 @@ class ReservationsActionsAtaqueTest {
 
             assertTrue(hasTag("reservation-detail"))
             assertFalse(hasTag(SA_CHANGE_BUTTON))
-            assertEquals(2, fake.permissionsCalls)
+            assertEquals(2, connection.meCalls)
         }
     }
 

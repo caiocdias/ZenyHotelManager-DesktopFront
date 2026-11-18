@@ -232,4 +232,47 @@ class NewReservationFlowAtaqueTest {
             assertEquals("tok", sent.last().token)
             assertNotNull(state.done)
         }
+
+    // M6 (M4 E01): a tentativa aprovada perde a resposta; o "Tentar de novo" leva a chave girada e o token da
+    // aprovação, o servidor pede aprovação de novo e o usuário cancela. Nada mais sai, e a tela destrava sem texto.
+    @Test
+    fun approvedAttemptWithUnknownResultThenCancelledApprovalSendsNothingMoreAndUnlocks() =
+        withFlow {
+            answers += Answer(403, approvalJson)
+            answers += badGateway
+            answers += Answer(403, approvalJson)
+            val state = state()
+
+            state.confirm()
+            awaitUntil("o primeiro pedido de aprovação") { approvals.pending != null }
+            approvals.login = "gerente"
+            approvals.pin = "1234"
+            approvals.reason = "Autorizado pelo gerente"
+            approvals.confirm()
+            settled(state)
+            assertTrue(state.unconfirmed, "a tentativa aprovada sem resposta fica não confirmada")
+            assertFalse(state.closeOnly, "502 de proxy não é guardado: Tentar de novo continua")
+            assertEquals(2, posts().size)
+
+            state.confirm()
+            awaitUntil("o segundo pedido de aprovação") { approvals.pending != null }
+            approvals.cancel()
+            settled(state)
+
+            assertFalse(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            assertNull(state.error)
+            assertNull(state.done)
+            assertTrue(state.canConfirm, "a ação seguinte é possível")
+            assertNull(approvals.pending)
+            delay(200)
+            val (plain, approved, retried) = posts()
+            assertEquals(3, posts().size, "aprovação cancelada não manda nada")
+            assertNull(plain.token)
+            assertEquals("tok", approved.token)
+            assertNotEquals(plain.key, approved.key, "a repetição aprovada gira a chave")
+            assertEquals(approved.key, retried.key, "o Tentar de novo da tentativa aprovada repete a chave girada")
+            assertEquals("tok", retried.token, "e leva o token da aprovação")
+            assertEquals(approved.body, retried.body)
+        }
 }

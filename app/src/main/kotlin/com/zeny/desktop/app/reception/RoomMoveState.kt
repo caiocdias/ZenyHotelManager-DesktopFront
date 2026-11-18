@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.app.rooms.NaturalOrder
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
@@ -24,8 +26,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 private const val IN_HOUSE = "IN_HOUSE"
-private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
 private const val TRANSITION_NOT_ALLOWED = "RESERVATION_TRANSITION_NOT_ALLOWED"
+private const val SERVER_UNCONFIRMED_TEXT =
+    "O servidor não confirmou a troca de UH. Feche e confira a reserva antes de refazer."
 private const val CONFLICT = 409
 private val MOVE_REASONS = setOf("GUEST_REQUEST", "OUT_OF_ORDER", "ROOM_ISSUE", "OPERATIONAL")
 private val MOVE_TARIFFS = setOf("KEEP", "RECALCULATE")
@@ -62,9 +65,9 @@ private data class MoveLoad(
  * Estado do diálogo de troca de UH: lê a reserva com o `ETag`, o dia operacional e as UHs do mesmo tipo prontas e
  * livres nas noites que restam, e confirma com `If-Match` e uma `Idempotency-Key` por intenção.
  *
- * A mesma `Intent` vale enquanto o resultado é desconhecido (rede, resposta incompatível, sessão encerrada,
- * `IDEMPOTENCY_KEY_IN_USE`) ou a aprovação foi cancelada; qualquer resposta definitiva, ou a mudança de UH, motivo,
- * tarifa ou `ETag`, gera outra. A repetição aprovada é do [approve] (decisão D2): o estado não rotaciona por causa
+ * A mesma `Intent` vale enquanto o resultado é desconhecido (`classifyWriteFailure`; no `5xx` guardado, o texto pede
+ * fechar e conferir) ou a aprovação foi cancelada; qualquer resposta definitiva, ou a mudança de UH, motivo, tarifa ou
+ * `ETag`, gera outra. A repetição aprovada é do [approve] (decisão D2): o estado não rotaciona por causa
  * do token. Um `412` refaz a carga inteira. Como o `WalkInState`: as mutações correm no escopo da UI (uma thread
  * só), [close] cancela só o que é daqui, e uma carga velha não sobrescreve a mais nova.
  */
@@ -182,11 +185,16 @@ class RoomMoveState(
         onChanged()
     }
 
+    /** Na falha desconhecida, a intenção fica: a troca pode ter sido feita, e a repetição leva a mesma chave. */
     private fun fail(failure: ApiError) {
-        if (!resultUnknown(failure)) dropIntent()
-        val text = ActionText.moveError(failure)
+        val outcome = classifyWriteFailure(failure)
+        if (outcome == WriteFailure.DEFINITIVE) dropIntent()
+        val stored = outcome == WriteFailure.UNKNOWN_STORED
+        val text = if (stored) SERVER_UNCONFIRMED_TEXT else ActionText.moveError(failure)
         val code = (failure as? ApiError.Problem)?.code
         error = text
+        // Só a recusa definitiva mexe na escolha e relê: um 5xx com esses códigos é desconhecido, e a intenção fica.
+        if (outcome != WriteFailure.DEFINITIVE) return
         when {
             failure is ApiError.PreconditionFailed -> {
                 load(text)
@@ -203,13 +211,6 @@ class RoomMoveState(
             }
         }
     }
-
-    /** O servidor pode ter feito a troca sem a resposta chegar: a repetição leva a mesma chave. */
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network ||
-            failure is ApiError.IncompatibleResponse ||
-            failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && failure.code == KEY_IN_USE)
 
     /** A carga inteira; a mais nova vence. Com [notice], ele continua na tela, salvo se a própria carga falhar. */
     private fun load(notice: String?) {

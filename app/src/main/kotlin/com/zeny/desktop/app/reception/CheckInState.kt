@@ -4,6 +4,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.CheckInGuest
 import com.zeny.desktop.core.facade.CheckInInput
@@ -28,7 +30,8 @@ internal const val RESTRICTION_PREFIX = "Hóspede com restrição: "
 private const val EARLY_WINDOW_ENDED = "A janela do early check-in terminou. Confira e confirme de novo."
 private const val FEE_CHANGED = "EARLY_LATE_FEE_CHANGED"
 private const val TRANSITION_NOT_ALLOWED = "RESERVATION_TRANSITION_NOT_ALLOWED"
-private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
+private const val SERVER_UNCONFIRMED_TEXT =
+    "O servidor não confirmou o check-in. Feche e confira a reserva antes de refazer."
 private val HOLDER_UNAVAILABLE = setOf(403, 404)
 
 /** O check-in feito: a UH e os alertas de restrição dos hóspedes (dado sensível, fora do `toString`). */
@@ -49,7 +52,7 @@ private data class IntentInputs(
 /**
  * Estado do diálogo de check-in: compõe a alocação de UH e a escolha do hóspede principal, oferece o early check-in
  * pela cotação e confirma com uma `Idempotency-Key` por intenção. A mesma `Intent` vale enquanto o resultado é
- * desconhecido (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`) ou a aprovação foi
+ * desconhecido (`classifyWriteFailure`; no `5xx` guardado, o texto pede fechar e conferir) ou a aprovação foi
  * cancelada; qualquer resposta definitiva, ou a troca de UH, hóspede ou cobrança do early, gera outra.
  *
  * Como o `RoomAllocationState`: as mutações correm no escopo da UI (uma thread só); [close] cancela só o que é daqui.
@@ -228,9 +231,13 @@ class CheckInState(
         onChanged()
     }
 
+    /** Na falha desconhecida, a intenção fica: o check-in pode ter sido feito, e a repetição leva a mesma chave. */
     private suspend fun fail(failure: ApiError) {
-        if (!resultUnknown(failure)) dropIntent()
-        error = ActionText.error(failure)
+        val outcome = classifyWriteFailure(failure)
+        if (outcome == WriteFailure.DEFINITIVE) dropIntent()
+        error = if (outcome == WriteFailure.UNKNOWN_STORED) SERVER_UNCONFIRMED_TEXT else ActionText.error(failure)
+        // Só a recusa definitiva mexe nas escolhas: um 5xx com esses códigos é desconhecido, e a intenção fica.
+        if (outcome != WriteFailure.DEFINITIVE) return
         when ((failure as? ApiError.Problem)?.code) {
             FEE_CHANGED -> {
                 chargeEarly = false
@@ -242,13 +249,6 @@ class CheckInState(
             }
         }
     }
-
-    /** O servidor pode ter feito o check-in sem a resposta chegar: a repetição leva a mesma chave. */
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network ||
-            failure is ApiError.IncompatibleResponse ||
-            failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && failure.code == KEY_IN_USE)
 
     private fun currentInputs() = IntentInputs(allocation.currentRoomId, primary?.id, chargeEarly)
 

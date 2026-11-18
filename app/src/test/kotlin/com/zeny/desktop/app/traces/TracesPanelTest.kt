@@ -66,7 +66,7 @@ class TracesPanelTest {
             val scope = rememberCoroutineScope()
             list =
                 remember {
-                    TracesListState(source, scope).also {
+                    TracesListState(source, scope, source.permissions).also {
                         setup(it)
                         it.start()
                     }

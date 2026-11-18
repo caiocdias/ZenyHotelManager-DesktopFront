@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.shell
 
+import androidx.compose.runtime.snapshots.Snapshot
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
@@ -16,8 +17,10 @@ import kotlinx.coroutines.test.runTest
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -372,5 +375,115 @@ class ShellStateTest {
             advanceUntilIdle()
 
             assertNull(state.selected)
+        }
+
+    @Test
+    fun permissionsFollowTheSuccessfulMe() =
+        runTest {
+            val connection = FakeConnection(me = { Me("u-1", "rec", "Recepcionista", receptionist) })
+            val state = ShellState(connection, devMode = false, scope = this)
+            assertNull(state.permissions, "conjunto antes da leitura")
+
+            advanceUntilIdle()
+
+            assertEquals(receptionist, state.permissions)
+        }
+
+    @Test
+    fun reloadClearsPermissionsBeforeTheAnswer() =
+        runTest {
+            val connection = FakeConnection(me = { Me("u-1", "rec", "Recepcionista", receptionist) })
+            val state = loaded(connection)
+            assertEquals(receptionist, state.permissions)
+            val gate = CompletableDeferred<Me>()
+            connection.me = { gate.await() }
+
+            state.reload()
+            assertNull(state.permissions, "o conjunto velho sobreviveu ao início do reload")
+            advanceUntilIdle()
+            assertNull(state.permissions, "o conjunto velho voltou com o me em voo")
+
+            gate.complete(Me("u-1", "rec", "Recepcionista", setOf("rooms.status.read")))
+            advanceUntilIdle()
+            assertEquals(setOf("rooms.status.read"), state.permissions)
+        }
+
+    @Test
+    fun failedMeLeavesPermissionsNull() =
+        runTest {
+            val connection = FakeConnection(me = { throw ApiError.Network(RuntimeException("sem rede")) })
+            val state = loaded(connection)
+            assertTrue(state.error != null)
+            assertNull(state.permissions)
+
+            // A data que falha também deixa o conjunto nulo, mesmo com o me bom (e depois de um conjunto lido).
+            connection.me = { Me("u-1", "rec", "Recepcionista", receptionist) }
+            state.reload()
+            advanceUntilIdle()
+            assertEquals(receptionist, state.permissions)
+            connection.businessDate = { throw ApiError.Problem(500, null, null, emptyList()) }
+            state.reload()
+            advanceUntilIdle()
+            assertTrue(state.error != null)
+            assertNull(state.permissions)
+        }
+
+    @Test
+    fun errorNeverComesWithPermissions() =
+        runTest {
+            val connection = FakeConnection(me = { Me("u-1", "rec", "Recepcionista", receptionist) })
+            val state = loaded(connection)
+            assertEquals(receptionist, state.permissions)
+
+            // O me e a data respondem, mas um passo da carga falha depois de o conjunto existir: a primeira escrita
+            // de estado com o conjunto já visível lança (o observador de escrita do snapshot faz as vezes de qualquer
+            // falha tardia, como a da formatação da data ou da área restaurada).
+            var armed = false
+            var thrown = false
+            val snapshot =
+                Snapshot.takeMutableSnapshot(writeObserver = {
+                    if (armed && !thrown && state.permissions != null) {
+                        thrown = true
+                        error("falha depois do conjunto")
+                    }
+                })
+            try {
+                snapshot.enter {
+                    state.reload()
+                    armed = true
+                    advanceUntilIdle()
+
+                    assertTrue(thrown, "a carga não chegou a ter o conjunto")
+                    assertNotNull(state.error, "a carga que falhou depois do me não deu erro")
+                    assertNull(state.permissions, "o conjunto ficou junto com o erro")
+                }
+            } finally {
+                snapshot.dispose()
+            }
+        }
+
+    @Test
+    fun emptyPermissionsReadWithSuccessAreAnEmptySetNotNull() =
+        runTest {
+            val state = loaded(FakeConnection(me = { Me("u-1", "ana", "Ana Souza", emptySet()) }))
+
+            assertNull(state.error)
+            assertEquals(emptySet(), state.permissions)
+        }
+
+    @Test
+    fun permissionsAreAnImmutableCopy() =
+        runTest {
+            val read = mutableSetOf("reservations.reservations.read")
+            val state = loaded(FakeConnection(me = { Me("u-1", "ana", "Ana Souza", read) }))
+            val permissions = assertNotNull(state.permissions)
+
+            read += "reservations.reservations.manage"
+
+            assertEquals(setOf("reservations.reservations.read"), state.permissions)
+            assertFailsWith<UnsupportedOperationException> {
+                (permissions as MutableSet<String>).add("reservations.reservations.manage")
+            }
+            assertEquals(setOf("reservations.reservations.read"), state.permissions)
         }
 }

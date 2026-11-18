@@ -281,7 +281,7 @@ class ReservationReactivateLabelAtaqueTest {
             val source =
                 source().apply {
                     outcomes += ApiError.Network(IOException("a"))
-                    outcomes += ApiError.Problem(502, "BAD_GATEWAY", "x", emptyList())
+                    outcomes += ApiError.Unexpected(502)
                 }
             dialog(source)
 
@@ -299,6 +299,37 @@ class ReservationReactivateLabelAtaqueTest {
                     .toSet()
                     .size,
             )
+        }
+
+    @Test
+    fun aStoredProblem5xxAfterAnUnknownResultOffersOnlyCloseAndNeverCallsAgain() =
+        runComposeUiTest {
+            val source =
+                source().apply {
+                    outcomes += ApiError.Network(IOException("a"))
+                    outcomes += ApiError.Problem(502, "BAD_GATEWAY", "x", emptyList())
+                }
+            dialog(source)
+            click("reactivate-submit")
+            click("reactivate-submit")
+
+            onNodeWithTag("reactivate-submit").assertDoesNotExist()
+            onNodeWithTag("reactivate-close").assertExists()
+            onNodeWithText("BAD_GATEWAY", substring = true).assertDoesNotExist()
+            assertEquals(2, source.runs.size)
+            assertEquals(
+                1,
+                source.runs
+                    .map { it.key }
+                    .toSet()
+                    .size,
+            )
+            // Fechar está habilitado e fecha de fato, sem outra chamada.
+            onNodeWithTag("reactivate-close").assertIsEnabled()
+            assertEquals(0, closes)
+            click("reactivate-close")
+            assertEquals(1, closes)
+            assertEquals(2, source.runs.size)
         }
 
     @Test

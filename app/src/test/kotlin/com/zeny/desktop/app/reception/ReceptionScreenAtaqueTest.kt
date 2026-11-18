@@ -208,7 +208,7 @@ class ReceptionScreenAtaqueTest {
         lateinit var detail: ReservationDetailState
         setContent {
             val scope = rememberCoroutineScope()
-            panel = remember { DayPanelState(source, scope) }
+            panel = remember { DayPanelState(source, scope, source.permissions) }
             detail = remember { ReservationDetailState(source, scope) }
             ZenyTheme { ReceptionScreen(panel, detail) }
         }

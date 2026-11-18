@@ -283,7 +283,7 @@ class RegistrationCardScreenTest {
         setContent {
             val scope = rememberCoroutineScope()
             val key = session()
-            val panel = remember(key) { DayPanelState(source, scope) }
+            val panel = remember(key) { DayPanelState(source, scope, source.permissions) }
             val detail = remember(key) { ReservationDetailState(source, scope) }
             panelAndDetail(panel, detail)
             val checkIn: (CheckInSeed) -> CheckInState = { seed ->
