@@ -315,10 +315,11 @@ Em **Login**, digite `recepcao`; em **Senha**, a senha da Recepção (item 3 da 
 **Resultado esperado:**
 
 - No topo: "Pousada Zeny Demonstração", "Data operacional: dd/mm/aaaa" (a data operacional do servidor, a de hoje num servidor recém-criado), o usuário "Recepção da Demo" e o botão "Sair".
+- No topo, o indicador do caixa: "Sem turno aberto" (ou "Turno <número> aberto · <ponto>", se a Recepção já tiver um turno aberto).
 - No menu lateral, exatamente estas áreas, nesta ordem:
   1. Recepção
   2. Reservas
-  3. Contas e caixa (em breve)
+  3. Contas e caixa
   4. Hóspedes (em breve)
   5. Governança
 - Não aparece "Gestão".
@@ -336,7 +337,7 @@ Em **Login**, digite `gerente`; em **Senha**, a senha do Gerente (item 2 da folh
 - No menu lateral, exatamente estas áreas, nesta ordem:
   1. Recepção
   2. Reservas
-  3. Contas e caixa (em breve)
+  3. Contas e caixa
   4. Hóspedes (em breve)
   5. Governança
   6. Gestão (em breve)
