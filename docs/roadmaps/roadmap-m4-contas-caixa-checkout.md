@@ -207,9 +207,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E06 | Fonte única de permissões | #concluida | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
-| E01 | Regra única do resultado desconhecido | #em-andamento | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
+| E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
 | E07 | Turno de caixa | #pendente | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
-| E02 | Conta da hospedagem | #pendente | E06, E01 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
+| E02 | Conta da hospedagem | #pendente | E06, E01, E07 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
 | E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E05 | Gate do marco M4 | #pendente | E04 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
@@ -319,7 +319,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E01 — Regra única do resultado desconhecido — #em-andamento
+## E01 — Regra única do resultado desconhecido — #concluida
 
 **Objetivo:** a regra do "resultado desconhecido" vira uma função única do `core` (D1), antes da primeira escrita de dinheiro, e leva junto os achados da M3 E06 que dependem dela.
 
@@ -353,18 +353,18 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] **Função única:** existe no `core` uma função pública que classifica a falha de uma escrita idempotente nos três casos do escopo. Testes do `core` cobrem cada caso de `ApiError`:
+- [x] **Função única:** existe no `core` uma função pública que classifica a falha de uma escrita idempotente nos três casos do escopo. Testes do `core` cobrem cada caso de `ApiError`:
   - `Network`, `IncompatibleResponse` e `SessionEnded`;
   - `Problem` com `IDEMPOTENCY_KEY_IN_USE`;
   - `Problem` 5xx e `Unexpected` 5xx;
   - pelo menos um `Problem` 4xx definitivo.
-- [ ] **Nenhuma cópia no `app`:** `grep -rnE 'fun resultUnknown|IDEMPOTENCY_KEY_IN_USE' app/src/main` não devolve linha. Os 8 estados do escopo usam a função do `core`. Em `CheckInState`, `RoomMoveState` e `TraceFormState`, um teste prova que um `Problem` 5xx agora dá resultado desconhecido.
-- [ ] **`approvable` único:** `grep -n 'private fun <T : Any> approvable' core/src/main/kotlin/com/zeny/desktop/core/facade/BookingsFacade.kt` não devolve linha, e `createBooking` usa o ajudante comum.
-- [ ] **`B-M2a`:** com o 5xx guardado, o diálogo mostra o texto de fechar e conferir e não oferece "Tentar de novo". Há teste nos estados que têm esse texto no `dbeacff`: walk-in, nova reserva, cancelar e reativar.
-- [ ] **`WalkInState`:** um teste prova que resultado desconhecido, seguido de "Tentar de novo" com `APPROVAL_REQUIRED` e da aprovação cancelada, deixa um texto na tela e não trava o formulário.
-- [ ] **Criação sem reserva:** um teste prova que a resposta de criação sem reserva vira `ApiError.IncompatibleResponse`, com texto próprio em pt-BR, e não deixa o estado em "resultado desconhecido".
-- [ ] **M1, M2 e M5:** o handoff dá a cada um um destino com commit: corrigido, ou resolvido pela remoção do `AreaPermissionsState` na E06 (commit citado no handoff dela). A leitura do `me` que ficou, no `ShellState`, não engole o cancelamento alheio (usa `ensureActive()`) e não pega `Throwable`.
-- [ ] **M4, M6 e M7, pelo testador:**
+- [x] **Nenhuma cópia no `app`:** `grep -rnE 'fun resultUnknown|IDEMPOTENCY_KEY_IN_USE' app/src/main` não devolve linha. Os 8 estados do escopo usam a função do `core`. Em `CheckInState`, `RoomMoveState` e `TraceFormState`, um teste prova que um `Problem` 5xx agora dá resultado desconhecido.
+- [x] **`approvable` único:** `grep -n 'private fun <T : Any> approvable' core/src/main/kotlin/com/zeny/desktop/core/facade/BookingsFacade.kt` não devolve linha, e `createBooking` usa o ajudante comum.
+- [x] **`B-M2a`:** com o 5xx guardado, o diálogo mostra o texto de fechar e conferir e não oferece "Tentar de novo". Há teste nos estados que têm esse texto no `dbeacff`: walk-in, nova reserva, cancelar e reativar.
+- [x] **`WalkInState`:** um teste prova que resultado desconhecido, seguido de "Tentar de novo" com `APPROVAL_REQUIRED` e da aprovação cancelada, deixa um texto na tela e não trava o formulário.
+- [x] **Criação sem reserva:** um teste prova que a resposta de criação sem reserva vira `ApiError.IncompatibleResponse`, com texto próprio em pt-BR, e não deixa o estado em "resultado desconhecido".
+- [x] **M1, M2 e M5:** o handoff dá a cada um um destino com commit: corrigido, ou resolvido pela remoção do `AreaPermissionsState` na E06 (commit citado no handoff dela). A leitura do `me` que ficou, no `ShellState`, não engole o cancelamento alheio (usa `ensureActive()`) e não pega `Throwable`.
+- [x] **M4, M6 e M7, pelo testador:**
   - os dois testes de `NewReservationDialogEtapaAtaqueTest` apontados no M4 têm nome e asserção fortalecidos;
   - `NewReservationFlowAtaqueTest` tem o caso "tentativa aprovada com resultado desconhecido, depois aprovação cancelada" (M6);
   - um mutante que explora o contorno da trava do `config.` em `tests/test_live_seed_availability_limpeza_ataque.sh` (linhas 95–101 no `dbeacff`) fica vermelho (M7).
@@ -402,12 +402,43 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e01.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e01.md). Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (7 Importantes) e na rodada 1 (2 Importantes novos), aprovado com notas na rodada 2 (`d202c0d`).
+- Commits (`MERGE_BASE` `ff17059`, HEAD `e18142f`):
+  - Task 1, a função única no `core`, o `approvable` único e os três estados de outra variante: `37de7c3` (desenvolvedor) e `c00382c` (testador, os três testes de ataque quebrados de propósito). Revisão de fatia: aprovada, 0 Críticos e 0 Importantes.
+  - Task 2, os cinco estados da variante completa, o `B-M2a`, o walk-in e a criação sem reserva: `e3dc3be` (desenvolvedor) e `70de043` (testador, seis testes quebrados de propósito). Revisão de fatia: aprovada, 0 Críticos e 0 Importantes.
+  - Testador de etapa: `6ad217f`, `2ad6d7a`, `96fda01`, `8ec2ae7` e `bc5a23f` (M4, M6, M7, pendências da E06, ataques às bordas da função e ao `approvable`; achou o D1).
+  - Correções do fim da etapa: `533f98d` (D1: o `MoneyField` ganhou `enabled` e a diária negociada trava no caso guardado; os ramos por `code` do check-in e da troca de UH só rodam na falha definitiva; `start()` do cancelamento respeita o `closeOnly`; KDoc do recado) e `e18142f` (o gate ficou vermelho por `DocumentsFacadeAtaqueTest.networkFailureMidBodyIsNetworkWithoutPartialBytes`, que falhava 3 de 4 isolado; causa raiz de produção: no Ktor 3.6.1, ler um canal já fechado com causa devolve 0 bytes sem lançar, e o corpo vazio virava "não é um PDF"; o `executeBytes` passa a relançar o `closedCause`, que vira `Network`, com teste determinístico).
+- Revisão final (`revisor-seguranca`, fable, `code-reviewer.md`, `ff17059..70de043`): 0 Críticos, 1 Importante de processo (abaixo, decisão 2) e 8 Menores. A re-revisão escopada de `70de043..e18142f` (testes do testador e as duas rodadas) saiu "Ready to merge: Yes", com 0 Críticos, 0 Importantes e 5 Menores de registro.
+- Gate no HEAD `e18142f`: `./gradlew build` → BUILD SUCCESSFUL, com `:app:test` (2615 testes, 0 falhas, 45 pulados, que são os checks ao vivo), `:core:test` (1193, 0 falhas, 1 pulado) e `:design:test` (372, 0 falhas) executados; `bash tests/run.sh` → 60 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- Scanner: `osv-scanner --recursive --no-ignore ./` no `70de043` → 6 lockfiles do Gradle, "No issues found". Depois dele nenhum commit mexe em dependência.
+- Integridade: `check_test_integrity.py --base ff17059` no `e18142f` → exit 1, 17 `ASSERCAO_REMOVIDA`, sem avisos. Todas justificadas pelas revisões: trocas autorizadas pelo plano (a mesma `Intent` na segunda chamada vira "nenhuma segunda chamada" com `closeOnly`), mudanças de comportamento por critério (a criação sem reserva e a aprovação cancelada no walk-in) e uma mensagem corrigida.
+- Critérios verificados:
+  1. **Função única:** `core/.../error/WriteFailure.kt` (`WriteFailure` e `classifyWriteFailure`), com `WriteFailureTest` (um caso por linha da regra) e `WriteFailureAtaqueTest` (bordas 499/500/599, `code` com caixa ou espaços, `when` exaustivo sobre os subtipos de `ApiError`).
+  2. **Nenhuma cópia no `app`:** no `e18142f`, `grep -rnE 'fun resultUnknown|IDEMPOTENCY_KEY_IN_USE' app/src/main` e `grep -rnE 'SERVER_ERROR|status >= 5' app/src/main` não devolvem linha. O 5xx que passa a desconhecido: `problem5xxKeepsTheKeyAndSaysCloseAndCheck` (check-in e troca de UH) e `problem5xxGivesUnknownCreateResultAndReloads` (recado).
+  3. **`approvable` único:** o grep do critério não devolve linha, e `grep -rn 'executeApproved(' core/src/main/kotlin/com/zeny/desktop/core/facade` devolve só `Approval.kt:29`. `createBooking`, cancelar, reativar, check-in, troca e walk-in usam o ajudante comum; `BookingsFacadeAtaqueTest` prova o token e a chave pelo cliente HTTP real.
+  4. **`B-M2a`:** `problem5xxIsStoredAndCloseOnly`, `unexpected502IsUnknownNotCloseOnly` e `confirmIsNoOpWhenCloseOnly` nos estados do walk-in, da nova reserva, de cancelar e de reativar; `storedFailureOffersOnlyClose` nos quatro diálogos.
+  5. **`WalkInState`:** `WalkInStateTest.unknownThenApprovalCancelledLeavesTextAndUnlocks`, com o texto "Aprovação cancelada. O walk-in não foi concluído.".
+  6. **Criação sem reserva:** cumprido no comportamento, não no tipo. O estado trata o 201 sem reserva como falha definitiva, com o texto "O servidor confirmou a criação, mas não devolveu a reserva. Feche e confira na busca de reservas.", `closeOnly` e nenhum `createBooking` a mais (`creationWithoutReservationIsIncompatibleAndCloseOnly`, `creationWithoutReservationNeverCreatesAgain`). Não se constrói um `ApiError.IncompatibleResponse`: a função única classifica esse tipo como desconhecido, e só o estado sabe que o 201 chegou sem reserva.
+  7. **M1, M2 e M5:** resolvidos pela remoção do `AreaPermissionsState` na E06, commit `bca85f1`. A leitura que ficou (`ShellState.reload()`) usa `catch (e: Exception)` com `ensureActive()` (`ShellState.kt:96` e `:125`) e não pega `Throwable`.
+  8. **M4, M6 e M7, pelo testador:** M4 e M6 em `96fda01` (`NewReservationDialogEtapaAtaqueTest` com os dois testes renomeados e fortalecidos; `NewReservationFlowAtaqueTest` com o caso de ponta a ponta), M7 em `2ad6d7a` (seis mutantes do contorno da trava do `config.` ficam vermelhos com a trava nova, que olha a palavra inteira).
+- **Semântica de `classifyWriteFailure`** (registro pedido pela revisão de arquitetura, na falta de `ARCHITECTURE.md`): `Network`, `IncompatibleResponse` e `SessionEnded` → `UNKNOWN`; `Problem` com `IDEMPOTENCY_KEY_IN_USE` → `UNKNOWN` em qualquer status; `Problem` 5xx → `UNKNOWN_STORED` (o `IdempotencyFilter` do servidor guarda a resposta sob a chave qualquer que seja o status); `Unexpected` 5xx → `UNKNOWN` (502/504 de proxy não são guardados); o resto → `DEFINITIVE`. Numa escrita sem chave (o recado), `UNKNOWN` quer dizer "pode ter sido feito, confira". Alternativas descartadas: manter as três variantes por estado (o D1 decidiu pela única); pôr a criação sem reserva no `core` (o `IncompatibleResponse` é desconhecido pela regra); `closeOnly` também no check-in, na troca de UH e no recado (lá a repetição só devolve a resposta guardada, e o texto novo já manda conferir).
+- **Correção da spec:** a nota "conservadora (não duplica)" vale para o check-in e a troca de UH, que têm chave. O recado não é escrita idempotente (o contrato do `createTrace` não declara `Idempotency-Key`): nele o desconhecido relê a lista para conferir.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **Divisão da E01.** O plano não cabia em três fatias: só a regra única somava 15 arquivos de produção, e o turno sozinho chegava a 12, com mais de 60 min. O roadmap mandava parar e dividir numa sessão do arquiteto; pelo pedido do usuário de decidir as intervenções pela recomendada, o orquestrador dividiu pela mitigação que a própria etapa previa. A E01 ficou com a regra única e os achados da M3 E06, e entrou a **E07, "Turno de caixa"**, com os critérios do turno sem mudança. A E03 passou a depender da E07, e a E02 também (a área "Contas e caixa" nasce na E07). Custo se errado: reorganizar o índice numa sessão do arquiteto.
+  2. **Testador por tarefa (Importante de processo da revisão final).** A nota "Risco" antiga da E01 pedia testador por tarefa nas escritas e na extração, e a divisão a tirou. O ciclo do orquestrador usa um testador de etapa sobre o diff inteiro, mais despachos escopados do testador dentro da fatia quando a mudança quebra testes dele de propósito. Isso diverge do item 2 do [ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), e o usuário decide se emenda o ADR. Nesta etapa o testador de etapa achou um defeito (D1) que a revisão de fatia não pegou.
+  3. **Correção fora do escopo (`e18142f`).** O defeito do `executeBytes` não era da E01, mas deixava o gate vermelho, e a causa raiz foi achada; foi corrigido na rodada 2, com teste determinístico.
+  4. **Antecipação parcial do `A-M7`.** O `MoneyField` já tem `enabled` (D1, `533f98d`). Na E03 continuam o `enabled` do `DateField` e o sinal da colagem acima de 1000 caracteres nos dois campos.
+  5. **Rótulo "Fechar" com `closeOnly`.** Nos diálogos de nova reserva e de cancelar, com o caso guardado, "Cancelar" e "Voltar" viram "Fechar": eles sugeririam desistir do que pode ter sido feito.
+  6. **Casca e o `Error`** (vem da E06): um `Error` da JVM no `me` deixa a casca em "carregando", sem conceder nada.
+- Notas para a próxima etapa (E07):
+  - Toda escrita do turno classifica a falha com `classifyWriteFailure` e mantém a intenção fora do `DEFINITIVE`. Se o diálogo tiver texto de "feche e confira", ele expõe `closeOnly` como os quatro estados da Task 2 (confirmar vira no-op, entradas travadas, só "Fechar").
+  - O `MoneyField` aceita `enabled`: use-o no formulário de sangria, suprimento e contagem.
+  - Use o `ApiExecutor.approvable` (`core/.../facade/Approval.kt`) para escrita com aprovação; não monte `ApprovableAction` em linha.
+  - Os ramos por `code` de uma falha só rodam com `outcome == WriteFailure.DEFINITIVE` (correção do M1 da revisão final).
+  - Para o testador: `WalkInConfirmAtaqueTest` afirma o destravamento só por `canConfirm`, que não depende de `unconfirmed` (a prova real está em `WalkInStateTest`); `ReservationRetryDialogsAtaqueTest.labelStaysRetryAcrossRepeatedUnknownResults` tem a asserção vestigial de `BAD_GATEWAY`; o comentário acima de `afterAStoredFailureTheNegotiatedRateFieldIsDisabledLikeTheOtherInputs` ainda diz que o `MoneyField` não tem `enabled`; sem ataque, a "aprovada perdida" no `moveRoom` e no `walkIn` e o `IDEMPOTENCY_KEY_IN_USE` 500 no `WalkInState`.
+  - `AuthPluginAttackTest.refresherUsingTheSameClientNeitherRecursesNorReusesARotatedRefreshToken` falhou uma vez no build cheio e não reproduziu (hipótese: 20 chamadas concorrentes num `runTest` de 5 s sob carga). Se voltar, vai ao testador.
+  - No `executeBytes`, uma causa de fechamento que não é `IOException` sai sem tipagem (Menor da re-revisão); improvável.
+  - A trava do M7 (`tests/test_live_seed_availability_limpeza_ataque.sh`) depende de `perl` e de `grep -P`; sem eles ela falha fechada.
 
 ---
 
@@ -452,7 +483,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - "Turno cego" e a notificação de diferença foram validados no gate do M3 do servidor (histórico do `docs/roadmaps/README.md` do servidor, 2026-10-20).
 - **Ordem:** as leituras do turno (pontos de caixa, turno corrente e relatório) não dependem das escritas e podem vir antes delas.
 - **Risco:** cálculo de valor monetário e concorrência estão na lista fechada.
-- **A área nova** segue o padrão da E06: recebe o conjunto e o `sessionId` da casca pelo `AreaContent`, desenha só com o `sessionId` ativo igual ao da casca, e os *holders* nascem com `remember(source, sessionId, permissions)`, cada um com o próprio `DisposableEffect` (handoff da E06).
+- **A área nova** segue o padrão da E06: recebe o conjunto e o `sessionId` da casca pelo `AreaContent`, desenha só com o `sessionId` ativo igual ao da casca, e os *holders* nascem com `remember(source, sessionId, permissions)`, cada um com o próprio `DisposableEffect` (handoff da E06). As notas da E06 que dizem "o caixa (E01)" ou "indicador de turno no topo (E01)" são anteriores à divisão e valem para esta etapa.
+- **Da E01:** escritas com `classifyWriteFailure`, `closeOnly` onde houver "feche e confira", `ApiExecutor.approvable` e `MoneyField(enabled)` (handoff da E01, "Notas para a próxima etapa").
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -477,7 +509,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Por que agora:** a conta é o centro financeiro da hospedagem e pré-requisito do check-out.
 
-**Dependências:** E06 (fonte de permissões) e E01 (as escritas da conta usam a função única do resultado desconhecido, D1).
+**Dependências:** E06 (fonte de permissões), E01 (as escritas da conta usam a função única do resultado desconhecido, D1) e E07 (a área "Contas e caixa", onde a conta também abre, nasce no turno).
 
 **Escopo:**
 
@@ -559,7 +591,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
   - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`;
   - `GET /api/v1/card-pre-authorizations/expiring`.
-- **Campos do `design` (`A-M7` da M3 E06):** o `MoneyField` e o `DateField` passam a aceitar `enabled`, e a colagem acima de 1000 caracteres deixa de ser recusada em silêncio. Esta é a primeira tela que recebe valor em dinheiro.
+- **Campos do `design` (`A-M7` da M3 E06):** o `MoneyField` e o `DateField` passam a aceitar `enabled`, e a colagem acima de 1000 caracteres deixa de ser recusada em silêncio. Esta é a primeira tela que recebe valor em dinheiro. O `enabled` do `MoneyField` já entrou na E01 (`533f98d`); aqui ficam o do `DateField` e a colagem nos dois.
 
 **Fora de escopo:** Pix, TEF e cartão integrados, que não existem no servidor.
 
@@ -743,3 +775,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - As restrições ganharam o resultado desconhecido e as permissões, e "Hipóteses e decisões em aberto" ganhou D1 e D2.
 - 2026-11-18 — a E06 fecha `#concluida` (`claude --agent orquestrador`): a casca é a fonte única das permissões; o `AreaPermissionsState` saiu em `bca85f1`.
 - 2026-11-18 — a E01 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela mitigação que ela mesma previa: o plano não cabia em três fatias (a regra única passa de 12 arquivos de produção, e o turno sozinho também). A E01 fica com a regra única do resultado desconhecido (D1) e os achados da M3 E06; entra a **E07, "Turno de caixa"**, com o resto do escopo e os critérios do turno sem mudança, dependente da E06 e da E01. A E03 passa a depender da E07. O roadmap previa a divisão numa sessão do arquiteto; o usuário autorizou, para este lote, decidir as intervenções pela opção recomendada, e a divisão está nas "Decisões para o usuário" do handoff da E01.
+- 2026-11-18 — a E01 fecha `#concluida` (`claude --agent orquestrador`): a regra única do resultado desconhecido está no `core` (`WriteFailure`/`classifyWriteFailure`). A E02 passa a depender também da E07, onde nasce a área "Contas e caixa" (Menor da revisão final), e a E03 registra que o `enabled` do `MoneyField` já entrou.
