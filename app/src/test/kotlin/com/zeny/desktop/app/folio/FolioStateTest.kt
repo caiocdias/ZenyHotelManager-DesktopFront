@@ -77,6 +77,31 @@ class FolioStateTest {
         }
 
     @Test
+    fun chargeOfANonItemStaysInTheTable() =
+        runTest {
+            val source = FakeFolioSource()
+            val item = Uuid.random()
+            val charge = Uuid.random()
+            source.postings = {
+                listOf(
+                    postingOf(item, "Restaurante", "100.00"),
+                    postingOf(charge, "Taxa", "10.00", type = "SERVICE_CHARGE", serviceChargeFor = item),
+                    postingOf(description = "Taxa da taxa", type = "SERVICE_CHARGE", serviceChargeFor = charge),
+                    postingOf(description = "Órfã", type = "SERVICE_CHARGE", serviceChargeFor = Uuid.random()),
+                )
+            }
+
+            val state = started(source)
+
+            assertEquals(
+                listOf("Restaurante", "Taxa", "Taxa da taxa", "Órfã"),
+                state.postings.map { it.description },
+            )
+            // Só a taxa sob o item vem recuada; as que voltaram ao nível de cima, não.
+            assertEquals(listOf(false, true, false, false), state.postings.map { it.serviceCharge })
+        }
+
+    @Test
     fun unknownTypeShowsAsOther() =
         runTest {
             val source = FakeFolioSource()

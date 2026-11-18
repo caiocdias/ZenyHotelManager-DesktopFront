@@ -476,5 +476,35 @@ class FolioScreenTest {
             assertEquals(listOf<String?>(null), source.reverseRuns.map { it.token })
         }
 
+    @Test
+    fun actionsMenuFollowsThePostingNotThePosition() =
+        runComposeUiTest {
+            val frigobar = Uuid.random()
+            val source = folios().apply { postings = { listOf(postingOf(frigobar, "Frigobar")) } }
+            lateinit var state: FolioState
+            setContent {
+                val scope = rememberCoroutineScope()
+                state =
+                    remember {
+                        FolioState(
+                            wiringOf(source, setOf(READ, CREATE)),
+                            scope,
+                            FOLIO_ID.toString(),
+                        ).also { it.start() }
+                    }
+                ZenyTheme { FolioPanel(state) }
+            }
+            waitForIdle()
+            click("posting-actions-0")
+            onNodeWithTag("posting-reverse-0").assertExists()
+
+            source.postings = { listOf(postingOf(description = "Bar"), postingOf(frigobar, "Frigobar")) }
+            state.reload()
+            waitForIdle()
+
+            onNodeWithTag("posting-reverse-0").assertDoesNotExist()
+            onNodeWithTag("posting-reverse-1").assertExists()
+        }
+
     private fun reversalApproval() = ApiError.ApprovalRequired("POSTING_REVERSAL", REVERSE, "posting", null, null)
 }

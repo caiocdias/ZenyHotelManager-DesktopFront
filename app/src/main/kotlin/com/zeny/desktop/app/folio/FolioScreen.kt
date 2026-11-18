@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -256,7 +257,10 @@ private fun Postings(state: FolioState) {
     Text("Lançamentos", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
     if (rows.isEmpty()) Text(FolioText.NO_POSTINGS)
     rows.forEachIndexed { index, row ->
-        PostingLine(index, row, onReverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null)
+        // A chave é o lançamento: o menu aberto segue a linha dele quando a tabela relida muda de ordem.
+        key(row.id) {
+            PostingLine(index, row, onReverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null)
+        }
     }
 }
 

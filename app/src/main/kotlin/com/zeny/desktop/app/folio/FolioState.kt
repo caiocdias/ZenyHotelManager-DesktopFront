@@ -36,7 +36,8 @@ data class FolioView(
 
 /**
  * Um lançamento na tabela; o [id] serve às ações e nunca aparece. A taxa de serviço vem logo abaixo do item dela.
- * [reversible]: um `REGULAR` ainda não estornado (só esse oferece "Estornar").
+ * [serviceCharge]: a taxa que vem recuada sob o item dela. [reversible]: um `REGULAR` ainda não estornado (só esse
+ * oferece "Estornar").
  */
 data class PostingRow(
     val id: String,
@@ -86,13 +87,15 @@ data class StatementView(
  * `billing.postings.create` ou `billing.postings.reverse`, num `REGULAR` não estornado) abrem um diálogo por vez, com
  * a porta e a aprovação do [wiring], e nunca com a conta encerrada. Depois do sucesso, e no `FOLIO_CLOSED`, a conta é
  * relida; fechar um diálogo sem resultado conhecido também a relê, para conferir. O lançamento que o servidor roteou
- * para outra conta deixa o [notice] com o número dela.
+ * para outra conta deixa o [notice] com o número dela. [onWritten] avisa quem lista as contas (a aba "Contas") depois
+ * de cada releitura dessas, para a lista também reler saldo, limite e situação.
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os dois diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
     private val wiring: FolioWiring,
     scope: CoroutineScope,
     val folioId: String,
+    private val onWritten: () -> Unit = {},
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
@@ -249,7 +252,9 @@ class FolioState(
         if (!canPost || dialogOpen) return
         notice = null
         posting =
-            PostingFormState(wiring.source, ownScope, folioId, ::posted, onFolioClosed = ::reload).also { it.start() }
+            PostingFormState(wiring.source, ownScope, folioId, ::posted, onFolioClosed = ::rereadAfterWrite).also {
+                it.start()
+            }
     }
 
     /** "Voltar" ou "Fechar" do lançamento; sem resultado conhecido, a conta é relida para conferir. */
@@ -258,7 +263,7 @@ class FolioState(
         if (form.busy) return
         form.close()
         posting = null
-        if (form.unconfirmed || form.closeOnly) reload()
+        if (form.unconfirmed || form.closeOnly) rereadAfterWrite()
     }
 
     /** Abre "Estornar" para o lançamento [postingId] da tabela; fora das regras ou com outro diálogo aberto, nada. */
@@ -276,7 +281,7 @@ class FolioState(
         form.close()
         reversal = null
         reversing = null
-        if (form.unconfirmed || form.closeOnly) reload()
+        if (form.unconfirmed || form.closeOnly) rereadAfterWrite()
     }
 
     fun close() {
@@ -291,7 +296,7 @@ class FolioState(
     private fun posted(response: PostingResponse) {
         posting?.close()
         posting = null
-        afterWrite()
+        rereadAfterWrite()
         val target = response.folioId.toString()
         if (target != folioId) readRoutedNumber(target)
     }
@@ -304,13 +309,18 @@ class FolioState(
             reversal = null
             reversing = null
         }
-        afterWrite()
+        rereadAfterWrite()
     }
 
-    /** Saldo, taxa e lançamentos novos vêm do servidor; o extrato à vista também é relido. */
-    private fun afterWrite() {
+    /**
+     * Depois de uma escrita (feita, recusada com a conta encerrada ou sem resultado conhecido): saldo, taxa e
+     * lançamentos vêm do servidor, o extrato à vista é relido, e a lista das contas também.
+     */
+    private fun rereadAfterWrite() {
+        if (closed) return
         reload()
         if (statementShown) showStatement()
+        onWritten()
     }
 
     private fun readRoutedNumber(target: String) {
@@ -345,29 +355,38 @@ private fun viewOf(folio: FolioResponse) =
         closed = folio.status == FolioResponse.Status.CLOSED,
     )
 
-/** Os lançamentos na ordem do servidor, com cada taxa de serviço logo abaixo do item a que pertence. */
+/**
+ * Os lançamentos na ordem do servidor, com cada taxa de serviço logo abaixo do item a que pertence. Os itens do topo
+ * são os que não são taxa de um lançamento presente; a taxa que aponta outra taxa (ou um lançamento ausente) fica no
+ * topo, nunca some.
+ */
 private fun rowsOf(postings: List<PostingResponse>): List<PostingRow> {
     val ids = postings.map { it.id }.toSet()
-    val charges = postings.filter { it.chargedItem() in ids }.groupBy { it.chargedItem() }
+    val items = postings.filter { it.chargedItem() !in ids }.map { it.id }.toSet()
+    val charges = postings.filter { it.chargedItem() in items }.groupBy { it.chargedItem() }
     return postings
-        .filter { it.chargedItem() !in ids }
-        .flatMap { item -> listOf(rowOf(item)) + charges[item.id].orEmpty().map(::rowOf) }
+        .filter { it.chargedItem() !in items }
+        .flatMap { item ->
+            listOf(rowOf(item, nested = false)) + charges[item.id].orEmpty().map { rowOf(it, nested = true) }
+        }
 }
 
 private fun PostingResponse.chargedItem() = (serviceChargeForPostingId as? Option.Some)?.value
 
-private fun rowOf(posting: PostingResponse) =
-    PostingRow(
-        id = posting.id.toString(),
-        date = FolioText.date(posting.businessDate),
-        description = posting.description,
-        type = FolioText.postingType(posting.type),
-        quantity = FolioText.quantity(posting.quantity),
-        amount = FolioText.money(posting.amount),
-        reversed = posting.isReversed(),
-        serviceCharge = posting.chargedItem() != null,
-        reversible = posting.type == REGULAR && !posting.isReversed(),
-    )
+private fun rowOf(
+    posting: PostingResponse,
+    nested: Boolean,
+) = PostingRow(
+    id = posting.id.toString(),
+    date = FolioText.date(posting.businessDate),
+    description = posting.description,
+    type = FolioText.postingType(posting.type),
+    quantity = FolioText.quantity(posting.quantity),
+    amount = FolioText.money(posting.amount),
+    reversed = posting.isReversed(),
+    serviceCharge = nested,
+    reversible = posting.type == REGULAR && !posting.isReversed(),
+)
 
 private fun PostingResponse.isReversed() = (reversedBy as? Option.Some)?.value != null
 

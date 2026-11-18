@@ -24,17 +24,21 @@ data class FolioRow(
 
 /**
  * As contas abertas, uma página por vez pelo `CursorPager` sobre `openFolioPage`: [start] lê a primeira e [loadMore]
- * a seguinte, enquanto [hasMore]. Uma leitura por vez; [close] cancela a em voo e descarta a resposta tardia.
+ * a seguinte, enquanto [hasMore]. [refresh] recomeça da primeira página (depois de uma escrita na conta aberta, para o
+ * saldo, o "Limite excedido" e as encerradas virem do servidor). Uma leitura por vez: a de [refresh] descarta a que
+ * estava em voo; [close] cancela a em voo e descarta a resposta tardia.
  */
 class FolioListState(
-    source: FolioSource,
+    private val source: FolioSource,
     scope: CoroutineScope,
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
-    private val pager = CursorPager(PAGE_SIZE) { cursor, limit -> source.openFolioPage(cursor, limit) }
+    private var pager = newPager()
     private var started = false
     private var closed = false
+    private var generation = 0
+    private var loadJob: Job? = null
 
     var rows by mutableStateOf<List<FolioRow>>(emptyList())
         private set
@@ -57,25 +61,46 @@ class FolioListState(
 
     fun loadMore() {
         if (closed || loading) return
+        load(reset = false)
+    }
+
+    /** Relê a primeira página com um pager novo; as linhas são trocadas quando ela chega. */
+    fun refresh() {
+        if (closed) return
+        started = true
+        loadJob?.cancel()
+        pager = newPager()
+        load(reset = true)
+    }
+
+    private fun load(reset: Boolean) {
+        val mine = ++generation
+        val current = pager
         loading = true
         error = null
-        ownScope.launch {
-            try {
-                val page = pager.next()
-                currentCoroutineContext().ensureActive()
-                rows = rows + page.map(::folioRowOf)
-                hasMore = pager.hasMore
-            } catch (
-                @Suppress("TooGenericExceptionCaught") e: Exception,
-            ) {
-                currentCoroutineContext().ensureActive()
-                error = apiErrorOf(e).userMessage
-                hasMore = pager.hasMore
-            } finally {
-                loading = false
+        loadJob =
+            ownScope.launch {
+                try {
+                    val page = current.next().map(::folioRowOf)
+                    currentCoroutineContext().ensureActive()
+                    if (mine != generation) return@launch
+                    rows = if (reset) page else rows + page
+                    hasMore = current.hasMore
+                } catch (
+                    @Suppress("TooGenericExceptionCaught") e: Exception,
+                ) {
+                    currentCoroutineContext().ensureActive()
+                    if (mine == generation) {
+                        error = apiErrorOf(e).userMessage
+                        hasMore = current.hasMore
+                    }
+                } finally {
+                    if (mine == generation) loading = false
+                }
             }
-        }
     }
+
+    private fun newPager() = CursorPager(PAGE_SIZE) { cursor, limit -> source.openFolioPage(cursor, limit) }
 
     fun close() {
         closed = true
@@ -148,7 +173,8 @@ class ReservationFoliosState(
 
 /**
  * A aba "Contas" de uma sessão: a lista das contas abertas e a conta escolhida nela. Quem a cria (com a chave da sessão
- * e do conjunto da casca) a fecha ao sair da área; escolher outra conta fecha a anterior.
+ * e do conjunto da casca) a fecha ao sair da área; escolher outra conta fecha a anterior. Uma escrita na conta aberta
+ * (ou a conta que o servidor disse encerrada) relê a lista.
  */
 class FolioAccounts(
     private val wiring: FolioWiring,
@@ -162,7 +188,7 @@ class FolioAccounts(
     fun select(folioId: String) {
         if (open?.folioId == folioId) return
         open?.close()
-        open = FolioState(wiring, scope, folioId).also { it.start() }
+        open = FolioState(wiring, scope, folioId, onWritten = list::refresh).also { it.start() }
     }
 
     fun close() {
