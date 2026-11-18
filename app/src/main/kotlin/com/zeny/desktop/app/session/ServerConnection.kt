@@ -1,6 +1,7 @@
 package com.zeny.desktop.app.session
 
 import com.zeny.desktop.app.cashier.CashierSource
+import com.zeny.desktop.app.folio.FolioSource
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
@@ -36,10 +37,13 @@ import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
+import com.zeny.desktop.core.facade.PdfDocument
+import com.zeny.desktop.core.facade.PostingInput
 import com.zeny.desktop.core.facade.ReservationChangeInput
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
+import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.facade.TraceChange
 import com.zeny.desktop.core.facade.TraceFilter
 import com.zeny.desktop.core.facade.TraceVersion
@@ -59,7 +63,10 @@ import com.zeny.desktop.sdk.model.CashierShiftResponse
 import com.zeny.desktop.sdk.model.CheckInResponse
 import com.zeny.desktop.sdk.model.DepositShortfallResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
+import com.zeny.desktop.sdk.model.FolioResponse
+import com.zeny.desktop.sdk.model.FolioStatementResponse
 import com.zeny.desktop.sdk.model.PendingGuaranteeResponse
+import com.zeny.desktop.sdk.model.PostingResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReallocationRequiredResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
@@ -72,6 +79,7 @@ import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
 import com.zeny.desktop.sdk.model.TraceResponse
+import com.zeny.desktop.sdk.model.TransactionCodeResponse
 import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
@@ -151,6 +159,9 @@ interface ServerConnection : AutoCloseable {
 
     /** O turno de caixa; `null` quando a conexão não o oferece. */
     fun cashierSource(): CashierSource? = null
+
+    /** As contas da hospedagem; `null` quando a conexão não as oferece. */
+    fun folioSource(): FolioSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -525,6 +536,49 @@ class CoreConnection(
 
     /** O turno de caixa sobre `core.cashier`. */
     override fun cashierSource(): CashierSource = cashier
+
+    private val folios =
+        object : FolioSource {
+            override suspend fun openFolioPage(
+                cursor: String?,
+                limit: Int,
+            ): Page<FolioResponse> = core.folios.openFolioPage(cursor, limit)
+
+            override suspend fun reservationFolios(reservationId: String): List<FolioResponse> =
+                core.folios.reservationFolios(reservationId)
+
+            override suspend fun folio(folioId: String): FolioResponse = core.folios.folio(folioId)
+
+            override suspend fun postings(folioId: String): List<PostingResponse> = core.folios.postings(folioId)
+
+            override suspend fun transactionCodes(): List<TransactionCodeResponse> = core.folios.transactionCodes()
+
+            override suspend fun post(
+                folioId: String,
+                input: PostingInput,
+                intent: Intent,
+            ): PostingResponse = core.folios.post(folioId, input, intent)
+
+            override fun reverse(
+                folioId: String,
+                postingId: String,
+                reason: String,
+                intent: Intent,
+            ): ApprovableAction<PostingResponse> = core.folios.reverse(folioId, postingId, reason, intent)
+
+            override suspend fun statement(
+                folioId: String,
+                audience: StatementAudience,
+            ): FolioStatementResponse = core.folios.statement(folioId, audience)
+
+            override suspend fun statementPdf(
+                folioId: String,
+                audience: StatementAudience,
+            ): PdfDocument = core.documents.folioStatement(folioId, audience)
+        }
+
+    /** As contas da hospedagem sobre `core.folios` e `core.documents`. */
+    override fun folioSource(): FolioSource = folios
 
     override fun close() = core.close()
 }

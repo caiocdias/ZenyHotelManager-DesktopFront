@@ -207,6 +207,27 @@ class DocumentsFacadeTest {
         }
 
     @Test
+    fun folioStatementSendsAudienceAndValidatesPdf() =
+        runTest {
+            val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
+            core { binary(PDF) }.use { core ->
+                core.documents.folioStatement(folio, StatementAudience.GUEST)
+                core.documents.folioStatement(folio, StatementAudience.INTERNAL)
+                assertTrue(requests.all { it.url.encodedPath.endsWith("/folios/$folio/statement/pdf") })
+                assertEquals(listOf("GUEST", "INTERNAL"), requests.map { it.url.parameters["audience"] })
+                assertEquals("application/pdf", requests[0].headers[HttpHeaders.Accept])
+            }
+            core { binary("<html>não é pdf</html>".encodeToByteArray(), contentType = "text/html") }.use { core ->
+                assertFailsWith<ApiError.IncompatibleResponse> {
+                    core.documents.folioStatement(folio, StatementAudience.GUEST)
+                }
+                assertFailsWith<IllegalArgumentException> {
+                    core.documents.folioStatement("nao-uuid", StatementAudience.GUEST)
+                }
+            }
+        }
+
+    @Test
     fun toStringHidesBytes() {
         val text = PdfDocument(PDF, "ficha-$SECRET.pdf").toString()
         assertEquals("PdfDocument(${PDF.size} bytes)", text)

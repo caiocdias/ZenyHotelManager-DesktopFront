@@ -38,6 +38,18 @@ enum class PdfKind(
         "Não foi possível abrir a confirmação.",
         "A reserva não foi encontrada. Refaça a busca.",
     ),
+    FOLIO_STATEMENT_GUEST(
+        "Extrato — ",
+        "extrato",
+        "Não foi possível abrir o extrato.",
+        "A conta não foi encontrada. Atualize a conta.",
+    ),
+    FOLIO_STATEMENT_INTERNAL(
+        "Extrato interno — ",
+        "extrato-interno",
+        "Não foi possível abrir o extrato interno.",
+        "A conta não foi encontrada. Atualize a conta.",
+    ),
 }
 
 /** O que o visualizador mostra: um documento já aberto (nunca vazio) e as ações de salvar e imprimir. */

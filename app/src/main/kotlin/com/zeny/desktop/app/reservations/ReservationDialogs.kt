@@ -6,6 +6,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.zeny.desktop.app.folio.ReservationFolioDialog
 import com.zeny.desktop.app.reception.CardTarget
 import com.zeny.desktop.app.reception.DetailActions
 import com.zeny.desktop.app.reception.RegistrationCardUi
@@ -52,11 +53,11 @@ private fun <T> Hosted(
 }
 
 /**
- * Os botões "Alterar", "Confirmar reserva", "Confirmação (PDF)", "Cancelar reserva" e "Reativar" do detalhe da reserva
- * (da busca ou das pendências) e os diálogos que eles abrem. Os botões dependem da reserva aberta, das permissões e da
- * fábrica da ação; o servidor continua decidindo. Cada diálogo é da reserva que estava aberta ao pedir: trocar de
- * reserva, fechar o detalhe ou sair da composição (área, sessão) o fecha. Fechar um diálogo relê o detalhe: uma recusa
- * definitiva deixa o diálogo aberto sem avisar a tela de fundo.
+ * Os botões "Alterar", "Confirmar reserva", "Confirmação (PDF)", "Cancelar reserva", "Reativar" e "Conta" do detalhe
+ * da reserva (da busca ou das pendências) e os diálogos que eles abrem. Os botões dependem da reserva aberta, das
+ * permissões e da fábrica da ação (o "Conta", do portador da conta); o servidor continua decidindo. Cada diálogo é da
+ * reserva que estava aberta ao pedir: trocar de reserva, fechar o detalhe ou sair da composição (área, sessão) o
+ * fecha. Fechar um diálogo relê o detalhe: uma recusa definitiva deixa o diálogo aberto sem avisar a tela de fundo.
  */
 @Stable
 internal class ReservationDialogs(
@@ -67,6 +68,7 @@ internal class ReservationDialogs(
     private var confirm by mutableStateOf<Opened<ReservationConfirmState>?>(null)
     private var cancel by mutableStateOf<Opened<ReservationCancelState>?>(null)
     private var reactivate by mutableStateOf<Opened<ReservationReactivateState>?>(null)
+    private var folio by mutableStateOf<Opened<String>?>(null)
     private val card = RegistrationCardUi(detail) { actions()?.confirmation }
 
     /** Os botões da reserva aberta no detalhe; nenhum sem ações, sem reserva carregada ou sem a permissão. */
@@ -104,6 +106,7 @@ internal class ReservationDialogs(
                 current.reactivate
                     ?.takeIf { manage && status in REACTIVABLE_STATUSES }
                     ?.let { make -> { openReactivate(make, id, reservation.code) } },
+            onFolio = current.folio?.let { { folio = Opened(detail.openId, id, reservation.code) } },
         )
     }
 
@@ -172,6 +175,10 @@ internal class ReservationDialogs(
             }
         }
         card.Show()
+        val wiring = actions()?.folio
+        Hosted(folio?.takeIf { wiring != null }, detail.openId, { if (folio === it) folio = null }, {}) {
+            if (wiring != null) ReservationFolioDialog(wiring, it.state, it.code) { folio = null }
+        }
     }
 
     @Composable

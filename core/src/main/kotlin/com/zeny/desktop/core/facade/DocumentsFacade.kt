@@ -4,14 +4,16 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.ApiExecutor
 import com.zeny.desktop.core.http.BinaryResponse
 import com.zeny.desktop.core.http.ResponseFormatException
+import com.zeny.desktop.sdk.client.BillingApi
 import com.zeny.desktop.sdk.client.FrontdeskApi
 import com.zeny.desktop.sdk.client.ReservationsApi
+import com.zeny.desktop.sdk.model.GetFolioStatementPdfParamAudience
 import io.ktor.http.ContentDisposition
 import io.ktor.http.ContentType
 import java.io.ByteArrayOutputStream
 import kotlin.uuid.Uuid
 
-/** Teto de um PDF do servidor: acima disso a resposta não é a ficha nem a confirmação. */
+/** Teto de um PDF do servidor: acima disso a resposta não é a ficha, a confirmação nem o extrato da conta. */
 private const val MAX_PDF_BYTES = 20L * 1024 * 1024
 private val PDF_MAGIC = "%PDF-".encodeToByteArray()
 private const val PDF_EXTENSION = ".pdf"
@@ -42,6 +44,7 @@ class PdfDocument(
 class DocumentsFacade internal constructor(
     private val frontdesk: FrontdeskApi,
     private val reservations: ReservationsApi,
+    private val billing: BillingApi,
     private val executor: ApiExecutor,
 ) {
     /**
@@ -66,6 +69,20 @@ class DocumentsFacade internal constructor(
         return pdfOf(
             executor.executeBytes(MAX_PDF_BYTES) {
                 reservations.prepareGetReservationConfirmationPdf(id, ContentType.Application.Pdf, it.headers)
+            },
+        )
+    }
+
+    /** O extrato da conta em PDF para a audiência, com a mesma validação das outras (tipo, assinatura, tamanho). */
+    suspend fun folioStatement(
+        folioId: String,
+        audience: StatementAudience,
+    ): PdfDocument {
+        val id = Uuid.parseOrNull(folioId) ?: throw IllegalArgumentException("id de conta inválido")
+        val wire = GetFolioStatementPdfParamAudience.fromSerial(audience.name)
+        return pdfOf(
+            executor.executeBytes(MAX_PDF_BYTES) {
+                billing.prepareGetFolioStatementPdf(id, wire, ContentType.Application.Pdf, it.headers)
             },
         )
     }

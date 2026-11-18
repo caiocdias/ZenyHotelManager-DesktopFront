@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import com.zeny.desktop.app.folio.FolioWiring
+import com.zeny.desktop.app.folio.ReservationFolioDialog
 import com.zeny.desktop.app.traces.TraceFormDialog
 import com.zeny.desktop.app.traces.TraceFormState
 import com.zeny.desktop.app.traces.TraceRow
@@ -81,6 +83,7 @@ fun ReceptionScreen(
     undoCheckIn: ((String) -> UndoCheckInState)? = null,
     traces: ReceptionTraces? = null,
     registrationCard: ((reservationId: String, code: String) -> RegistrationCardState)? = null,
+    folio: FolioWiring? = null,
 ) {
     val currentCard by rememberUpdatedState(registrationCard)
     val card = rememberRegistrationCard(detail) { currentCard }
@@ -98,6 +101,7 @@ fun ReceptionScreen(
     val currentUndo by rememberUpdatedState(undoCheckIn)
     val stay = remember { StayDialogs({ currentMove }, { currentUndo }) }
     val tracesUi = rememberReceptionTracesUi(traces, detail)
+    val folioUi = remember(detail) { FolioDialogUi(detail) }
     val canCheckIn =
         checkIn != null &&
             detail.reservation?.reservation?.status == "CONFIRMED" &&
@@ -117,6 +121,7 @@ fun ReceptionScreen(
                         onMove = stay.moveAction(detail, panel.permissions),
                         onUndo = stay.undoAction(detail, panel.permissions),
                         onCard = card.action(panel.permissions),
+                        onFolio = folioUi.action(folio),
                     ),
                     traces = { tracesUi.Section(detail) },
                 )
@@ -127,6 +132,7 @@ fun ReceptionScreen(
     card.Show()
     stay.Show(detail)
     tracesUi.ShowForm()
+    folioUi.Show(folio)
     walkInState?.let { state ->
         WalkInDialog(state) {
             state.close()
@@ -174,6 +180,40 @@ private class CheckInUi {
                     }
                 },
         )
+    }
+}
+
+/** A reserva (id e código) de que a conta foi pedida e a reserva do detalhe em que o diálogo abriu. */
+private class OpenFolio(
+    val ownerId: String?,
+    val reservationId: String,
+    val code: String,
+)
+
+/**
+ * O diálogo "Conta" aberto. Ele é da reserva que estava aberta no detalhe ao pedir: trocar de reserva, fechar o detalhe
+ * ou sair da composição (área, sessão) o fecha, e o diálogo encerra os estados dele. Sem o portador, nada.
+ */
+@Stable
+private class FolioDialogUi(
+    private val detail: ReservationDetailState,
+) {
+    private var current by mutableStateOf<OpenFolio?>(null)
+
+    fun action(folio: FolioWiring?): (() -> Unit)? {
+        val reservation = detail.reservation?.reservation?.takeIf { folio != null }
+        return reservation?.let { { current = OpenFolio(detail.openId, it.id.toString(), it.code) } }
+    }
+
+    @Composable
+    fun Show(folio: FolioWiring?) {
+        val shown = current?.takeIf { it.ownerId == detail.openId && folio != null }
+        DisposableEffect(shown) {
+            onDispose { if (current === shown) current = null }
+        }
+        if (shown != null && folio != null) {
+            ReservationFolioDialog(folio, shown.reservationId, shown.code) { current = null }
+        }
     }
 }
 
