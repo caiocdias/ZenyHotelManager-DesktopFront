@@ -182,6 +182,14 @@ class MovementForm internal constructor(
             typedAmount()?.takeIf { it.amount.signum() <= 0 }?.let { CashierText.AMOUNT_REQUIRED }
 
     override fun refusal(): String? =
+        when (val typed = MoneyInput.parse(amountText)) {
+            // O texto do formato é o mesmo que o MoneyField mostra embaixo do campo.
+            is InputResult.Invalid -> typed.message
+
+            else -> reasonOrAmountRefusal()
+        }
+
+    private fun reasonOrAmountRefusal(): String? =
         when {
             positiveAmount() == null -> CashierText.AMOUNT_REQUIRED
             reasonText.isBlank() -> CashierText.REASON_REQUIRED

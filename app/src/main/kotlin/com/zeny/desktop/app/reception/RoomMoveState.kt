@@ -161,6 +161,8 @@ class RoomMoveState(
         ownScope.launch {
             try {
                 val response = approve(source.moveRoom(reservationId, input, tag, current))
+                // A resposta que chega depois do close() (o job cancelado) não é aplicada nem avisa a tela.
+                currentCoroutineContext().ensureActive()
                 if (response == null) error = previousError else finish(response.value)
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,

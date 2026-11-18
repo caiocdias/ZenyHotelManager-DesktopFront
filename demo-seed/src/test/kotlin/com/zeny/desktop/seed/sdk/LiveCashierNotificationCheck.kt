@@ -39,7 +39,7 @@ private val NOTIFICATION_PAUSE = 3.seconds
  *
  * Gera a própria prova: como a Recepcionista, reaproveita o turno corrente ou abre um (fundo de R$ 100,00), fecha com
  * o dinheiro declarado zero e exige `hasDifference` no relatório; como o Gerente, exige em `GET /api/v1/notifications`
- * uma `billing.cashier-shift-difference` cujo título cite o número desse turno (nunca "a mais recente").
+ * uma `billing.cashier-shift-difference` cujo título termine com o número desse turno (nunca "a mais recente").
  *
  * **Escreve na demo e não desfaz: fecha o turno da Recepcionista**, que a H2 e a E05 esperam aberto. O comando
  * genérico dos checks do módulo (`ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*Live*'`) agora inclui este
@@ -100,7 +100,7 @@ class LiveCashierNotificationCheck {
                 Page(page.items, (page.nextCursor as? Option.Some)?.value)
             }
         while (pager.hasMore) {
-            pager.next().firstOrNull { it.type == DIFFERENCE_TYPE && number in it.title }?.let { return it }
+            pager.next().firstOrNull { it.type == DIFFERENCE_TYPE && it.title.endsWith(number) }?.let { return it }
         }
         return null
     }

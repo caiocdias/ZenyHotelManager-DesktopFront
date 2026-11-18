@@ -535,6 +535,19 @@ class CashierStateTest {
             supply.confirm()
             runCurrent()
             assertEquals(1, source.movementCalls.size)
+            // O texto é o do formato, o mesmo que o MoneyField mostra, e não o de "maior que zero".
+            assertEquals("Use no máximo 2 casas decimais.", supply.message)
+
+            supply.amount = "abc"
+            supply.confirm()
+            runCurrent()
+            assertEquals(1, source.movementCalls.size)
+            assertEquals("Valor inválido. Use o formato 1.234,56.", supply.message)
+
+            supply.amount = ""
+            supply.confirm()
+            runCurrent()
+            assertEquals(1, source.movementCalls.size)
             assertEquals("Informe um valor maior que zero.", supply.message)
         }
 
@@ -599,6 +612,23 @@ class CashierStateTest {
             assertEquals(2, source.currentCalls, "não releu o turno corrente")
             assertNull(state.shift)
             assertEquals(1, changes, "a releitura que tirou o turno não avisou a casca")
+        }
+
+    @Test
+    fun closedShiftWithFailedRereadStillNotifiesOnce() =
+        runTest {
+            val (source, state) = withShift()
+            source.recorder = { _, _, _ -> throw problem(409, "CASHIER_SHIFT_CLOSED") }
+            val form = state.withdrawal()
+            source.current = { throw ApiError.Network(RuntimeException("sem rede")) }
+
+            form.confirm()
+            runCurrent()
+
+            assertNull(state.movement)
+            assertEquals("O turno de caixa já está fechado.", state.message)
+            assertNotNull(state.loadError, "a releitura que falhou não deixou o erro")
+            assertEquals(1, changes, "o servidor disse que o turno fechou e o topo não foi avisado")
         }
 
     @Test

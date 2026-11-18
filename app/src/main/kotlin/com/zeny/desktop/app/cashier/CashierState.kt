@@ -90,6 +90,10 @@ class CashierState(
     private var floatText by mutableStateOf("")
     private var unconfirmed by mutableStateOf(false)
     private var loaded by mutableStateOf(false)
+    private var cashPointsForbidden by mutableStateOf(false)
+
+    /** O servidor disse que o turno fechou: a próxima releitura avisa a casca, dê certo ou falhe (uma vez só). */
+    private var shiftEnded = false
     private var closed = false
     private var generation = 0
     private var intent: Intent? = null
@@ -139,7 +143,7 @@ class CashierState(
 
     /** A lista de pontos falhou por um motivo que repetir pode resolver (o `403` não). */
     val cashPointsRetryable: Boolean
-        get() = cashPointsError != null && cashPointsError != CashierText.CASH_POINTS_FORBIDDEN
+        get() = cashPointsError != null && !cashPointsForbidden
 
     val showsOpenForm: Boolean
         get() = canOperate && loaded && !loading && loadError == null && shift == null
@@ -169,7 +173,10 @@ class CashierState(
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
                 currentCoroutineContext().ensureActive()
-                if (mine == generation) loadError = apiErrorOf(e).userMessage
+                if (mine == generation) {
+                    loadError = apiErrorOf(e).userMessage
+                    if (consumeShiftEnded()) onShiftChanged()
+                }
             } finally {
                 if (mine == generation) loading = false
             }
@@ -275,6 +282,7 @@ class CashierState(
             if (mine != generation) return
             cashPoints = points
             cashPointsError = null
+            cashPointsForbidden = false
             if (points.none { it.id == chosenPoint }) chosenPoint = null
         } catch (
             @Suppress("TooGenericExceptionCaught") e: Exception,
@@ -284,18 +292,14 @@ class CashierState(
             val error = apiErrorOf(e)
             cashPoints = emptyList()
             chosenPoint = null
-            cashPointsError =
-                if (error is ApiError.Problem && error.status == FORBIDDEN) {
-                    CashierText.CASH_POINTS_FORBIDDEN
-                } else {
-                    error.userMessage
-                }
+            cashPointsForbidden = error is ApiError.Problem && error.status == FORBIDDEN
+            cashPointsError = if (cashPointsForbidden) CashierText.CASH_POINTS_FORBIDDEN else error.userMessage
         }
     }
 
     private fun applyRead(view: ShiftView?) {
         // A primeira leitura também avisa: o topo pode estar em "não verificado" ou velho.
-        val changed = !loaded || view?.id != shift?.id
+        val changed = consumeShiftEnded() || !loaded || view?.id != shift?.id
         shift?.id?.takeIf { it != view?.id }?.let { lastShiftId = it }
         shift = view
         loaded = true
@@ -342,9 +346,12 @@ class CashierState(
                 movement = null
                 closing = null
                 message = text
+                shiftEnded = true
                 reload()
             },
         )
+
+    private fun consumeShiftEnded(): Boolean = shiftEnded.also { shiftEnded = false }
 
     /** O fechamento deu certo: o relatório do servidor na tela, o topo avisado e, sem turno, a abertura relida. */
     private fun afterClose(
