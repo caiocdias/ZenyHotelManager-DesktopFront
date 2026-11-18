@@ -42,6 +42,8 @@ private val mvR103 = Uuid.parse("50000000-0000-0000-0000-000000000103")
 private val mvR110 = Uuid.parse("50000000-0000-0000-0000-000000000110")
 private val mvR201 = Uuid.parse("50000000-0000-0000-0000-000000000201")
 private const val MV_ETAG = "\"v3\""
+private const val MV_STORED_TEXT =
+    "O servidor não confirmou a troca de UH. Feche e confira a reserva antes de refazer."
 
 private fun mvAssignment(
     arrival: String,
@@ -373,6 +375,56 @@ class RoomMoveStateTest {
             assertEquals(3, keys.size)
             assertEquals(1, keys.toSet().size)
             assertNotNull(state.done)
+        }
+
+    @Test
+    fun problem5xxKeepsTheKeyAndSaysCloseAndCheck() =
+        runTest {
+            val source = source()
+            val state = ready(source)
+            source.moveOutcomes += mvProblem(500, "INTERNAL_ERROR")
+            confirmNow(state)
+            assertEquals(MV_STORED_TEXT, state.error)
+            assertNull(state.done)
+            assertTrue(state.canConfirm)
+            confirmNow(state)
+
+            val keys = source.moveRuns.map { it.key }
+            assertEquals(2, keys.size)
+            assertEquals(keys[0], keys[1])
+        }
+
+    @Test
+    fun unexpected5xxKeepsTheKey() =
+        runTest {
+            for (failure in listOf(ApiError.Unexpected(500), ApiError.Unexpected(502))) {
+                val source = source()
+                val state = ready(source)
+                source.moveOutcomes += failure
+                confirmNow(state)
+                assertEquals(ActionText.moveError(failure), state.error)
+                confirmNow(state)
+                val keys = source.moveRuns.map { it.key }
+                assertEquals(2, keys.size)
+                assertEquals(keys[0], keys[1], "chave renovada depois de HTTP ${failure.status}")
+                assertNotNull(state.done)
+            }
+        }
+
+    @Test
+    fun networkStillKeepsTheKey() =
+        runTest {
+            val source = source()
+            val state = ready(source)
+            val failure = ApiError.Network(RuntimeException("rede"))
+            source.moveOutcomes += failure
+            confirmNow(state)
+            assertEquals(ActionText.moveError(failure), state.error)
+            confirmNow(state)
+
+            val keys = source.moveRuns.map { it.key }
+            assertEquals(2, keys.size)
+            assertEquals(keys[0], keys[1])
         }
 
     @Test
