@@ -31,7 +31,10 @@ import kotlin.test.assertEquals
 private const val OPERATE = "billing.cashier.operate"
 private const val SHIFTS_READ = "billing.shifts.read"
 
-/** Ataque à tela do caixa: o seletor do fechamento cego, o `403` dos pontos, a troca de sessão e a forma desconhecida. */
+/**
+ * Ataque à tela do caixa: o seletor do fechamento cego, o `403` dos pontos, a troca de sessão e a forma
+ * desconhecida.
+ */
 @OptIn(ExperimentalTestApi::class)
 class CashierScreenAtaqueTest {
     private class Connection(

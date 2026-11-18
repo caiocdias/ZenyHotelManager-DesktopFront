@@ -162,7 +162,13 @@ class CashierStateAtaqueTest {
             runCurrent()
 
             assertEquals(3, source.openCalls.size, "o duplo clique no \"Tentar de novo\" abriu duas vezes")
-            assertEquals(1, source.openCalls.map { it.key }.toSet().size)
+            assertEquals(
+                1,
+                source.openCalls
+                    .map { it.key }
+                    .toSet()
+                    .size,
+            )
             assertEquals(Money.parse("100.00"), source.openCalls.last().openingFloat)
         }
 
@@ -239,7 +245,13 @@ class CashierStateAtaqueTest {
             runCurrent()
 
             assertEquals(2, source.closeCalls.size)
-            assertEquals(1, source.closeCalls.map { it.key }.toSet().size)
+            assertEquals(
+                1,
+                source.closeCalls
+                    .map { it.key }
+                    .toSet()
+                    .size,
+            )
             assertNull(state.report)
             assertEquals(0, changes, "o fechamento sem resultado avisou a casca")
         }
