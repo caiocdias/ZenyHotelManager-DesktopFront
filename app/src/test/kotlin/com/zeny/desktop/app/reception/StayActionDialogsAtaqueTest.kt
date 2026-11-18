@@ -628,7 +628,7 @@ class StayActionDialogsAtaqueTest {
         runComposeUiTest {
             val source = source()
             val conn = AdConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", emptySet()) } }
             waitForIdle()
             onNodeWithTag("row-$adResId").performClick()
             waitForIdle()
@@ -654,7 +654,7 @@ class StayActionDialogsAtaqueTest {
         runComposeUiTest {
             val source = source()
             val conn = AdConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", emptySet()) } }
             waitForIdle()
             onNodeWithTag("row-$adResId").performClick()
             waitForIdle()

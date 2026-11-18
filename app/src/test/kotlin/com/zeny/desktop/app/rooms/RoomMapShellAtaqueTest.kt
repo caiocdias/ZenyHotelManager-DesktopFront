@@ -292,7 +292,7 @@ class RoomMapShellAtaqueTest {
             val rooms = BroadcastRoomsSource()
             val fake = Fake(rooms = rooms, initial = SessionState.Active("u-ana", "s-1", false))
             var area by mutableStateOf(Area.HOUSEKEEPING)
-            setContent { ZenyTheme { AreaContent(area, fake) } }
+            setContent { ZenyTheme { AreaContent(area, fake, "s-1", emptySet()) } }
             waitForIdle()
             emit(rooms, RealtimeEvent.Ready)
             tile(1).assertExists()
@@ -323,7 +323,7 @@ class RoomMapShellAtaqueTest {
             val rooms = BroadcastRoomsSource()
             val fake = Fake(rooms = rooms, initial = SessionState.Active("u-ana", "s-1", false))
             var shown by mutableStateOf(true)
-            setContent { ZenyTheme { if (shown) AreaContent(Area.HOUSEKEEPING, fake) } }
+            setContent { ZenyTheme { if (shown) AreaContent(Area.HOUSEKEEPING, fake, "s-1", emptySet()) } }
             waitForIdle()
             emit(rooms, RealtimeEvent.Ready)
             assertEquals(1, rooms.statusesStarted)
@@ -347,7 +347,7 @@ class RoomMapShellAtaqueTest {
         runComposeUiTest {
             val rooms = BroadcastRoomsSource()
             val fake = Fake(rooms = rooms, initial = SessionState.Ended("Sua sessão foi encerrada. Entre novamente."))
-            setContent { ZenyTheme { AreaContent(Area.HOUSEKEEPING, fake) } }
+            setContent { ZenyTheme { AreaContent(Area.HOUSEKEEPING, fake, null, emptySet()) } }
             waitForIdle()
             onNodeWithText("Mapa de UHs").assertDoesNotExist()
             assertEquals(0, rooms.subscriptions)

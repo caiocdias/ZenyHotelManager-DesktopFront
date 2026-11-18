@@ -278,7 +278,7 @@ class ReceptionShellAtaqueTest {
             val window = Window(start = true)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(Area.RECEPTION, fake) }
+                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", emptySet()) }
                 }
             }
             waitForIdle()
@@ -311,7 +311,7 @@ class ReceptionShellAtaqueTest {
             val window = Window(start = false)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(Area.RECEPTION, fake) }
+                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", emptySet()) }
                 }
             }
             waitForIdle()
@@ -332,7 +332,7 @@ class ReceptionShellAtaqueTest {
             var area by mutableStateOf(Area.RECEPTION)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(area, fake) }
+                    ZenyTheme { AreaContent(area, fake, "s-1", emptySet()) }
                 }
             }
             waitForIdle()

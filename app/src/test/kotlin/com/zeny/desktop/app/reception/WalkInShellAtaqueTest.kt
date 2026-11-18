@@ -318,7 +318,7 @@ class WalkInShellAtaqueTest {
         runComposeUiTest {
             val source = wsSource()
             val conn = WsConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", emptySet()) } }
             waitForIdle()
             onNodeWithTag("open-walk-in").performClick()
             waitForIdle()
@@ -333,7 +333,7 @@ class WalkInShellAtaqueTest {
         runComposeUiTest {
             val source = wsSource().apply { walkInRequiresApproval = wsRequired }
             val conn = WsConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", emptySet()) } }
             waitForIdle()
             onNodeWithTag("open-walk-in").performClick()
             waitForIdle()

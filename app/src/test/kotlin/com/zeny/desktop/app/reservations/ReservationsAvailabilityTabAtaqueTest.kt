@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.reservations
 
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -119,6 +120,7 @@ class ReservationsAvailabilityTabAtaqueTest {
         private val search: ReservationSearchSource?,
         private val reception: ReceptionSource?,
         private val availability: AvailabilitySource?,
+        val permissions: Set<String> = setOf(READ),
     ) : ServerConnection {
         override val state = MutableStateFlow<SessionState>(SessionState.Active("u-1", "s-1", false))
 
@@ -138,7 +140,7 @@ class ReservationsAvailabilityTabAtaqueTest {
             state.value = SessionState.LoggedOut
         }
 
-        override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", emptySet())
+        override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", permissions)
 
         override suspend fun hotel(): HotelInfo = HotelInfo("Hotel", configured = true)
 
@@ -174,11 +176,15 @@ class ReservationsAvailabilityTabAtaqueTest {
             }
         }
 
-    private fun availability(permissions: Set<String> = setOf(READ)) =
-        FakeAvailabilitySource().apply { this.permissions = permissions }
+    private fun availability() = FakeAvailabilitySource()
 
+    /** A área como a casca a chama: com a sessão ativa da conexão e o conjunto do `me` dela. */
     private fun ComposeUiTest.area(conn: Conn) {
-        setContent { ZenyTheme { AreaContent(Area.RESERVATIONS, conn) } }
+        setContent {
+            val session by conn.state.collectAsState()
+            val sessionId = (session as? SessionState.Active)?.sessionId
+            ZenyTheme { AreaContent(Area.RESERVATIONS, conn, sessionId, conn.permissions) }
+        }
         waitForIdle()
     }
 
@@ -200,35 +206,9 @@ class ReservationsAvailabilityTabAtaqueTest {
     }
 
     @Test
-    fun tabHiddenWhilePermissionsNotRead() =
-        runComposeUiTest {
-            val source = availability()
-            val gate = source.hold(FakeAvailabilitySource.Op.PERMISSIONS)
-            area(Conn(search(), null, source))
-
-            assertSearchOnly()
-            assertEquals(0, source.availabilityCalls.size)
-            gate.complete(Unit)
-            waitForIdle()
-            onNodeWithText(TAB).assertExists()
-            onNodeWithText("Busca").assertExists()
-            assertEquals(0, source.availabilityCalls.size, "carregou o calendário sem a aba aberta")
-        }
-
-    @Test
-    fun tabHiddenWhenPermissionsFail() =
-        runComposeUiTest {
-            val source = availability()
-            source.failures[FakeAvailabilitySource.Op.PERMISSIONS] = IllegalStateException("falhou")
-            area(Conn(search(), null, source))
-
-            assertSearchOnly()
-        }
-
-    @Test
     fun unrelatedPermissionDoesNotShowTab() =
         runComposeUiTest {
-            area(Conn(search(), null, availability(setOf("reservations.availability.write"))))
+            area(Conn(search(), null, availability(), setOf("reservations.availability.write")))
 
             assertSearchOnly()
         }
@@ -254,9 +234,9 @@ class ReservationsAvailabilityTabAtaqueTest {
         runComposeUiTest {
             val search = search()
             val reception = receptionFor(search)
-            // Na produção as duas portas devolvem o mesmo conjunto (as permissões efetivas da sessão).
+            // Na produção a área recebe da casca as permissões efetivas da sessão.
             reception.permissions += READ
-            area(Conn(search, reception, availability(reception.permissions)))
+            area(Conn(search, reception, availability(), reception.permissions))
             onNodeWithText("R-1").performClick()
             waitForIdle()
             onNodeWithTag("reservation-detail").assertExists()
@@ -299,7 +279,7 @@ class ReservationsAvailabilityTabAtaqueTest {
             val gate = source.hold(FakeAvailabilitySource.Op.QUOTE)
             val conn = Conn(search(), null, source)
             var shown by mutableStateOf(true)
-            setContent { ZenyTheme { if (shown) AreaContent(Area.RESERVATIONS, conn) } }
+            setContent { ZenyTheme { if (shown) AreaContent(Area.RESERVATIONS, conn, "s-1", conn.permissions) } }
             waitForIdle()
             click(TAB)
             quote()
@@ -324,7 +304,7 @@ class ReservationsAvailabilityTabAtaqueTest {
             val gate = source.hold(FakeAvailabilitySource.Op.AVAILABILITY)
             val conn = Conn(search(), null, source)
             var shown by mutableStateOf(true)
-            setContent { ZenyTheme { if (shown) AreaContent(Area.RESERVATIONS, conn) } }
+            setContent { ZenyTheme { if (shown) AreaContent(Area.RESERVATIONS, conn, "s-1", conn.permissions) } }
             waitForIdle()
             click(TAB)
             assertEquals(1, source.availabilityCalls.size)
@@ -359,21 +339,20 @@ class ReservationsAvailabilityTabAtaqueTest {
         runComposeUiTest {
             val source = availability()
             val conn = Conn(search(), null, source)
-            area(conn)
+            // A casca: o `sessionId` dela e o conjunto lido nela; a da sessão nova só chega depois do `me` dela.
+            var shell by mutableStateOf("s-1" to conn.permissions)
+            setContent { ZenyTheme { AreaContent(Area.RESERVATIONS, conn, shell.first, shell.second) } }
+            waitForIdle()
             click(TAB)
             assertEquals(1, source.availabilityCalls.size)
 
-            source.permissions = emptySet()
-            val permissionsBefore = source.permissionsCalls
-            val gate = source.hold(FakeAvailabilitySource.Op.PERMISSIONS)
             conn.state.value = SessionState.Active("u-1", "s-2", false)
             waitForIdle()
 
             assertEquals(1, source.availabilityCalls.size, "carregou o calendário na sessão nova sem ler a permissão")
-            gate.complete(Unit)
+            shell = "s-2" to emptySet()
             waitForIdle()
             assertSearchOnly()
             assertEquals(1, source.availabilityCalls.size)
-            assertEquals(permissionsBefore + 1, source.permissionsCalls)
         }
 }

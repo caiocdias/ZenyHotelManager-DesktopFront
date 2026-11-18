@@ -366,8 +366,6 @@ class CoreConnection(
 
     private val availability =
         object : AvailabilitySource {
-            override suspend fun permissions(): Set<String> = core.account.me().permissions
-
             override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
 
             override suspend fun availability(
@@ -384,7 +382,7 @@ class CoreConnection(
                 core.reservations.quoteStay(arrival, departure, adults, childAges, includeUnavailable = true)
         }
 
-    /** A disponibilidade e a cotação sobre `core.account`, `core.hotel` e `core.reservations`. */
+    /** A disponibilidade e a cotação sobre `core.hotel` e `core.reservations`. */
     override fun availabilitySource(): AvailabilitySource = availability
 
     private val registrationCards = RegistrationCards { id -> core.documents.registrationCard(id) }

@@ -215,7 +215,7 @@ class ReceptionShellTest {
         runComposeUiTest {
             val reception = FakeReceptionSource()
             val fake = Fake(reception = reception, initial = SessionState.LoggedOut)
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, fake) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, fake, null, emptySet()) } }
             waitForIdle()
 
             onNodeWithText(PANEL_DATE).assertDoesNotExist()
@@ -289,7 +289,7 @@ class ReceptionShellTest {
             val window = Window()
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(Area.RECEPTION, fake) }
+                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", emptySet()) }
                 }
             }
             waitForIdle()

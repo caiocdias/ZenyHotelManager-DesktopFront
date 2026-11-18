@@ -159,7 +159,9 @@ private class LifecycleConnection(
         state.value = SessionState.LoggedOut
     }
 
-    override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", setOf(READ, "frontdesk.stays.checkin"))
+    // O conjunto que a porta da Recepção devolvia vai no `me`, que a casca lê e entrega à área (ADR 0013).
+    override suspend fun me(): Me =
+        Me("u-1", "ana", "Ana Souza", setOf(READ, "frontdesk.stays.checkin") + reception?.permissions.orEmpty())
 
     override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -228,9 +230,8 @@ class ReservationsLifecycleTest {
                 FakeReservationReactivateSource(),
                 FakeAvailabilitySource(),
             )
-        // Na produção as duas portas devolvem o mesmo conjunto: as permissões efetivas da sessão.
+        // O `me` da conexão falsa devolve este conjunto: as permissões efetivas da sessão, que a casca entrega.
         rig.reception.permissions = permissions
-        rig.availability.permissions = permissions
         items.forEach { item ->
             val holder = HolderSummary("Hóspede ${item.code}", null)
             val id = item.id.toString()

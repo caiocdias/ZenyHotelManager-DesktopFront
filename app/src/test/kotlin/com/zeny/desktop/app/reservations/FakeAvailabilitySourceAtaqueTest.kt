@@ -12,7 +12,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertSame
-import kotlin.test.assertTrue
 
 /** Contrato do falso que as Tasks 3 a 7 usam. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -25,31 +24,8 @@ class FakeAvailabilitySourceAtaqueTest {
             val fake = FakeAvailabilitySource()
             fake.hold(Op.QUOTE)
             fake.availability(d("2026-11-16"), d("2026-11-18"))
-            fake.permissions()
             fake.businessDay()
             assertEquals(0, fake.quoteCalls.size)
-        }
-
-    @Test
-    fun heldCallsReturnTheValueAtReleaseTimeAndGateHoldsWithoutConsuming() =
-        runTest {
-            val fake = FakeAvailabilitySource()
-            fake.permissions = setOf("antes")
-            val gate = fake.hold(Op.PERMISSIONS)
-            val results = mutableListOf<Set<String>>()
-            val first = launch { results += fake.permissions() }
-            val second = launch { results += fake.permissions() }
-            runCurrent()
-            assertEquals(2, fake.permissionsCalls)
-            assertTrue(results.isEmpty())
-
-            fake.permissions = setOf("depois")
-            gate.complete(Unit)
-            first.join()
-            second.join()
-
-            assertEquals(listOf(setOf("depois"), setOf("depois")), results)
-            assertEquals(setOf("depois"), fake.permissions())
         }
 
     @Test

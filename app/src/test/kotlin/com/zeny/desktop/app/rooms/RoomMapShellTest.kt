@@ -127,7 +127,7 @@ class RoomMapShellTest {
             val rooms = FakeRoomsSource()
             val fake = Fake(rooms = rooms, initial = SessionState.Active("u-1", "s-1", false))
             var area by mutableStateOf(Area.GUESTS)
-            setContent { ZenyTheme { AreaContent(area, fake) } }
+            setContent { ZenyTheme { AreaContent(area, fake, "s-1", emptySet()) } }
             waitForIdle()
             assertEquals(0, rooms.subscriptions, "outra área assinou o mapa")
 
@@ -148,7 +148,7 @@ class RoomMapShellTest {
         runComposeUiTest {
             val rooms = FakeRoomsSource()
             val fake = Fake(rooms = rooms, initial = SessionState.LoggedOut)
-            setContent { ZenyTheme { AreaContent(Area.HOUSEKEEPING, fake) } }
+            setContent { ZenyTheme { AreaContent(Area.HOUSEKEEPING, fake, null, emptySet()) } }
             waitForIdle()
 
             onNodeWithText("Mapa de UHs").assertDoesNotExist()

@@ -149,7 +149,9 @@ private class RaConnection(
         state.value = SessionState.LoggedOut
     }
 
-    override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", setOf(READ, "frontdesk.stays.checkin"))
+    // O conjunto que a porta da Recepção devolvia vai no `me`, que a casca lê e entrega à área (ADR 0013).
+    override suspend fun me(): Me =
+        Me("u-1", "ana", "Ana Souza", setOf(READ, "frontdesk.stays.checkin") + reception?.permissions.orEmpty())
 
     override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -215,7 +217,6 @@ class ReservationsPendingRefreshAtaqueTest {
     ): Rig {
         val rig = Rig()
         rig.reception.permissions = WITH_AVAILABILITY
-        rig.availability.permissions = WITH_AVAILABILITY
         items.forEach { item ->
             val holder = HolderSummary("Hóspede ${item.code}", null)
             val id = item.id.toString()

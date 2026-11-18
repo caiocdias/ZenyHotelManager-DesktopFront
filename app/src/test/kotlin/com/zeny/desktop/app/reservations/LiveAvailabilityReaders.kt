@@ -57,8 +57,6 @@ internal class RecordingSource(
         }
     }
 
-    override suspend fun permissions(): Set<String> = record("permissions", "") { delegate.permissions() }
-
     override suspend fun businessDay(): BusinessDay = record("businessDay", "") { delegate.businessDay() }
 
     override suspend fun availability(
