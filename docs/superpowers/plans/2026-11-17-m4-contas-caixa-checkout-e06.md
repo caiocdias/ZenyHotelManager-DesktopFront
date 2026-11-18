@@ -53,6 +53,12 @@ Valem para as duas tarefas; os nomes são fixos.
 - `TracesListState(source: TracesSource, scope: CoroutineScope, permissions: Set<String>, reservationId: String? = null)` — `val permissions: Set<String>`; sai `readPermissions()`.
 - Saem: `ReceptionSource.permissions()`, `AvailabilitySource.permissions()`, `TracesSource.permissions()` e as implementações em `CoreConnection`; `reservations/AreaPermissions.kt` inteiro (`AreaPermissions`, `AreaPermissionsState`, `PermissionsNotice`); `reservationsPermissions` em `AppRoot.kt`.
 
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 1 (rodada 0: bloqueado, com 3 Importantes e 5 Menores, todos corrigidos em `371baac`).
+- **Revisor:** `revisor-arquitetura`, modelo opus.
+- **Notas Menores:** N1 — a amarração sessão × conjunto da Recepção ganhou teste próprio (`receptionWithForeignSessionDrawsNothing`, Task 2); N2 — não há `ARCHITECTURE.md` no repositório, e o plano argumenta com o roadmap, os ADRs 0008, 0010, 0012 e 0013, o design §6.2 e o código.
+
 ---
 
 ### Task 1: A casca guarda e entrega o conjunto; as Reservas o consomem
@@ -83,6 +89,7 @@ Valem para as duas tarefas; os nomes são fixos.
 **Critérios de aceite:**
 - `DayPanelStateTest`: `subscribesTopicsFromTheReceivedSet` — com `rooms.status.read` no conjunto, assina o tópico `rooms`; com `endofday.runs.read`, o `end-of-day`; sem nenhuma, não chama `events`. A porta falsa não tem mais leitura de permissões. Verifica: `--tests 'com.zeny.desktop.app.reception.DayPanelState*'`.
 - Teste de UI (`ReceptionShellTest` ou arquivo novo em `reception/`): `walkInGetsTheShellSet` — o `WalkInState` aberto pelo cabeçalho recebe o mesmo conjunto da casca (com `guests.profiles.manage` no `me`, "criar hóspede" disponível; sem ela, não). Verifica: `--tests 'com.zeny.desktop.app.reception.*Shell*'`.
+- `receptionWithForeignSessionDrawsNothing` (no nível do `AreaContent`, como o da Task 1): com `sessionId = "A"` e a conexão já ativa em `"B"`, a Recepção não desenha e `events` não é chamado; com `"B"`, desenha e assina. Verifica: `--tests 'com.zeny.desktop.app.shell.*'`.
 - `TracesListStateTest`: `canEdit` e `canResolve` seguem o conjunto do construtor (`frontdesk.traces.manage` e `frontdesk.traces.resolve`), sem chamada à porta. Verifica: `--tests 'com.zeny.desktop.app.traces.*'`.
 - Teste de UI, arquivo novo `app/src/test/kotlin/com/zeny/desktop/app/shell/ShellMeReadCountTest.kt`: `oneMeReadAcrossAreas` — conexão falsa que conta as chamadas a `me()`; abrir a casca, depois a Recepção (com os Recados visíveis), as Reservas e de novo a Recepção registra `1`. Verifica: `--tests 'com.zeny.desktop.app.shell.ShellMeReadCountTest'`.
 - Editar e resolver recado só com as permissões de cada ação: os testes existentes continuam verdes com o conjunto entregue pela casca. Verifica: `--tests 'com.zeny.desktop.app.reception.*' --tests 'com.zeny.desktop.app.traces.*' --tests 'com.zeny.desktop.app.shell.*' --tests 'com.zeny.desktop.app.AppRoot*' --tests 'com.zeny.desktop.app.reservations.*' --tests 'com.zeny.desktop.app.rooms.*Shell*'`.
