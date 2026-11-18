@@ -184,7 +184,7 @@ class ReceptionScreenTest {
     private fun ComposeUiTest.screen(source: FakeReceptionSource) {
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(source, scope) }
+            val panel = remember { DayPanelState(source, scope, source.permissions) }
             val detail = remember { ReservationDetailState(source, scope) }
             ZenyTheme { ReceptionScreen(panel, detail) }
         }

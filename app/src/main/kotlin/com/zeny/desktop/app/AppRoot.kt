@@ -199,8 +199,8 @@ private fun SessionState.activeSessionId(): String? = (this as? SessionState.Act
 
 /**
  * A tela da área aberta na casca: a Recepção é o painel do dia; as Reservas, a busca de reservas; a Governança, o mapa
- * de UHs; as demais ainda mostram só o nome. [sessionId] e [permissions] são os da casca (ADR 0013): a área que os
- * recebe só desenha quando a sessão ativa da conexão é a mesma [sessionId].
+ * de UHs; as demais ainda mostram só o nome. [sessionId] e [permissions] são os da casca (ADR 0013): a Recepção e as
+ * Reservas, que os recebem, só desenham quando a sessão ativa da conexão é a mesma [sessionId].
  */
 @Composable
 internal fun AreaContent(
@@ -210,7 +210,7 @@ internal fun AreaContent(
     permissions: Set<String>,
 ) {
     when (area) {
-        Area.RECEPTION -> ReceptionArea(connection)
+        Area.RECEPTION -> ReceptionArea(connection, sessionId, permissions)
         Area.RESERVATIONS -> ReservationsArea(connection, sessionId, permissions)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
@@ -219,23 +219,30 @@ internal fun AreaContent(
 
 /**
  * O painel do dia e o detalhe da reserva vivem enquanto a Recepção está aberta na mesma sessão, como o mapa de UHs:
- * nascem com a chave do `sessionId` vigente (o cache de titulares é da sessão) e fecham ao sair da área, da casca ou
- * da sessão, o que cancela a assinatura de tempo real. Sem sessão `Active` o quadro fica vazio de propósito. O ganho
- * de foco da janela atualiza o painel e relê a reserva aberta; a perda só o registra no painel.
+ * nascem com a chave do [sessionId] da casca e das [permissions] dela (o cache de titulares é da sessão) e fecham ao
+ * sair da área, da casca ou da sessão, o que cancela a assinatura de tempo real. Enquanto a sessão ativa da conexão
+ * não é a [sessionId] da casca, o quadro fica vazio de propósito: as [permissions] de uma sessão nunca valem na outra,
+ * e uma assinatura aberta sem sessão esperaria pela próxima. O painel, o check-in, o walk-in e os recados usam o
+ * conjunto da casca (ADR 0013). O ganho de foco da janela atualiza o painel e relê a reserva aberta; a perda só o
+ * registra no painel.
  */
 @Composable
-private fun ReceptionArea(connection: ServerConnection) {
+private fun ReceptionArea(
+    connection: ServerConnection,
+    sessionId: String?,
+    permissions: Set<String>,
+) {
     val source = remember(connection) { connection.receptionSource() }
     val session by connection.state.collectAsState()
-    val sessionId = (session as? SessionState.Active)?.sessionId
+    val activeSessionId = (session as? SessionState.Active)?.sessionId
     val scope = rememberCoroutineScope()
     when {
         source == null -> {
             Unavailable("Recepção indisponível nesta conexão.")
         }
 
-        sessionId != null -> {
-            val panel = remember(source, sessionId) { DayPanelState(source, scope) }
+        sessionId != null && sessionId == activeSessionId -> {
+            val panel = remember(source, sessionId, permissions) { DayPanelState(source, scope, permissions) }
             val detail = remember(source, sessionId) { ReservationDetailState(source, scope) }
             DisposableEffect(panel, detail) {
                 onDispose {
@@ -243,7 +250,7 @@ private fun ReceptionArea(connection: ServerConnection) {
                     detail.close()
                 }
             }
-            val traces = receptionTraces(connection.tracesSource(), sessionId, scope)
+            val traces = receptionTraces(connection.tracesSource(), sessionId, permissions, scope)
             val window = LocalWindowInfo.current
             LaunchedEffect(panel, detail, window) {
                 snapshotFlow { window.isWindowFocused }.collect { focused ->
@@ -639,18 +646,19 @@ private fun pdfFactory(
 }
 
 /**
- * Os recados da recepção, ou nulo sem porta de recados nesta conexão. A lista da aba nasce com a chave do `sessionId`,
- * é iniciada ao entrar e fecha no `onDispose`, como o painel; a seção de cada reserva e o formulário são criados pela
- * tela com estas fábricas.
+ * Os recados da recepção, ou nulo sem porta de recados nesta conexão. A lista da aba nasce com a chave do `sessionId`
+ * e das [permissions] da casca, é iniciada ao entrar e fecha no `onDispose`, como o painel; a seção de cada reserva e
+ * o formulário são criados pela tela com estas fábricas, com o mesmo conjunto.
  */
 @Composable
 private fun receptionTraces(
     source: TracesSource?,
     sessionId: String,
+    permissions: Set<String>,
     scope: CoroutineScope,
 ): ReceptionTraces? {
     source ?: return null
-    val list = remember(source, sessionId) { TracesListState(source, scope) }
+    val list = remember(source, sessionId, permissions) { TracesListState(source, scope, permissions) }
     DisposableEffect(list) {
         list.start()
         onDispose { list.close() }
@@ -658,7 +666,7 @@ private fun receptionTraces(
     return remember(list) {
         ReceptionTraces(
             list = list,
-            forReservation = { id -> TracesListState(source, scope, id) },
+            forReservation = { id -> TracesListState(source, scope, permissions, id) },
             form = { target, onSaved ->
                 TraceFormState(source, scope, target, list.departments, list.departmentsDenied, onSaved)
             },

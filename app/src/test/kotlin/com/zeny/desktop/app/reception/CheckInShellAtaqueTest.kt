@@ -330,7 +330,7 @@ class CheckInShellAtaqueTest {
         runComposeUiTest {
             val source = shSource()
             val conn = ShConn(source, SessionState.Active("u-1", "s-1", false))
-            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", emptySet()) } }
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, conn, "s-1", source.permissions) } }
             waitForIdle()
             onNodeWithTag("row-$shResId").performClick()
             waitForIdle()

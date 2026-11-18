@@ -197,8 +197,6 @@ class CoreConnection(
     @Suppress("TooManyFunctions") // adaptador que repassa cada operação da porta ao `core`
     private val reception =
         object : ReceptionSource {
-            override suspend fun permissions(): Set<String> = core.account.me().permissions
-
             override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
 
             override suspend fun dayPage(
@@ -299,8 +297,6 @@ class CoreConnection(
     @Suppress("TooManyFunctions") // adaptador que repassa cada operação da porta ao `core`
     private val traces =
         object : TracesSource {
-            override suspend fun permissions(): Set<String> = core.account.me().permissions
-
             override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
 
             override suspend fun page(

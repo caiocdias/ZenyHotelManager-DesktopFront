@@ -425,50 +425,32 @@ class FakeReceptionActionsAtaqueTest {
         runTest {
             val source = FakeReceptionSource()
 
-            assertTrue(source.permissions().isNotEmpty())
-            assertEquals(1, source.permissionsCalls)
-            source.permissionsError = ApiError.Network(IOException("off"))
-            assertFailsWith<ApiError.Network> { source.permissions() }
-            assertEquals(2, source.permissionsCalls)
+            // A porta não lê mais permissões (ADR 0013): o falso só guarda o conjunto que a casca entregaria.
+            assertTrue(source.permissions.isNotEmpty())
             assertEquals(0, source.checkInRuns.size)
             assertEquals(0, source.roomTypesCalls)
-        }
-
-    @Test
-    fun panelPermissionsStayEmptyWhenPermissionsFails() =
-        runTest {
-            val source =
-                FakeReceptionSource().apply { permissionsError = ApiError.Network(IOException("off")) }
-            val panel = DayPanelState(source, backgroundScope)
-
-            assertEquals(emptySet(), panel.permissions)
-            runCurrent()
-
-            assertEquals(emptySet(), panel.permissions)
-            assertEquals(1, source.permissionsCalls)
-            assertEquals(0, source.subscriptions)
         }
 
     @Test
     fun panelPermissionsStayEmptyWhileTheReadIsPendingAndNeverCallPermissionsTwice() =
         runTest {
             val source = FakeReceptionSource().apply { permissions = setOf("guests.profiles.read") }
-            val panel = DayPanelState(source, backgroundScope)
+            val panel = DayPanelState(source, backgroundScope, source.permissions)
             runCurrent()
             panel.refresh()
             runCurrent()
             panel.refresh()
             advanceUntilIdle()
 
+            // Sem leitura própria (ADR 0013): o conjunto é o do construtor, e as atualizações não o mudam.
             assertEquals(setOf("guests.profiles.read"), panel.permissions)
-            assertEquals(1, source.permissionsCalls)
         }
 
     @Test
     fun panelPermissionsAreTheExactSetEvenWhenItHasNoReadTopics() =
         runTest {
             val source = FakeReceptionSource().apply { permissions = setOf("frontdesk.stays.checkin") }
-            val panel = DayPanelState(source, backgroundScope)
+            val panel = DayPanelState(source, backgroundScope, source.permissions)
             runCurrent()
 
             assertEquals(setOf("frontdesk.stays.checkin"), panel.permissions)

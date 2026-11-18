@@ -201,14 +201,16 @@ class ReceptionTracesAtaqueTest {
     ) {
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(reception(), scope) }
+            val panel = remember { reception().let { DayPanelState(it, scope, it.permissions) } }
             val detail = remember { ReservationDetailState(reception(), scope) }
             val wired =
                 remember {
-                    val list = TracesListState(traces, scope).also { it.start() }
+                    val list = TracesListState(traces, scope, traces.permissions).also { it.start() }
                     ReceptionTraces(
                         list,
-                        forReservation = { id -> TracesListState(traces, scope, id).also { sections += it } },
+                        forReservation = { id ->
+                            TracesListState(traces, scope, traces.permissions, id).also { sections += it }
+                        },
                         form = { target, onSaved ->
                             TraceFormState(traces, scope, target, list.departments, list.departmentsDenied, onSaved)
                                 .also { forms += it }

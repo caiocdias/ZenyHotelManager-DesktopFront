@@ -250,14 +250,12 @@ class ReceptionSourceAtaqueTest {
     fun fakeConfiguredErrorsAreThrownAndStillCounted() =
         runTest {
             val fake = FakeReceptionSource()
-            fake.permissionsError = IllegalStateException("a")
             fake.businessDayError = IllegalStateException("b")
             fake.roomTypesError = IllegalStateException("c")
 
-            assertFailsWith<IllegalStateException> { fake.permissions() }
             assertFailsWith<IllegalStateException> { fake.businessDay() }
             assertFailsWith<IllegalStateException> { fake.roomTypes() }
-            assertEquals(listOf(1, 1, 1), listOf(fake.permissionsCalls, fake.businessDayCalls, fake.roomTypesCalls))
+            assertEquals(listOf(1, 1), listOf(fake.businessDayCalls, fake.roomTypesCalls))
         }
 
     @Test

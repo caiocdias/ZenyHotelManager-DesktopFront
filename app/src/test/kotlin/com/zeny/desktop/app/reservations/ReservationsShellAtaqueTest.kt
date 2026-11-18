@@ -107,8 +107,8 @@ private fun SemanticsNodeInteraction.assertFieldEmpty() {
 }
 
 /**
- * A `AreaContent` como a casca a chama: com o `sessionId` ativo da conexão e o conjunto do `me` da conexão falsa
- * (vazio), para que a troca de sessão destes ataques chegue à área como chega pela casca (ADR 0013).
+ * A `AreaContent` como a casca a chama: com o `sessionId` ativo da conexão e o conjunto que a porta da Recepção falsa
+ * devolvia, para que a troca de sessão destes ataques chegue à área como chega pela casca (ADR 0013).
  */
 @Composable
 private fun SessionAreaContent(
@@ -116,7 +116,8 @@ private fun SessionAreaContent(
     connection: ServerConnection,
 ) {
     val session by connection.state.collectAsState()
-    AreaContent(area, connection, (session as? SessionState.Active)?.sessionId, emptySet())
+    val permissions = (connection.receptionSource() as? FakeReceptionSource)?.permissions.orEmpty()
+    AreaContent(area, connection, (session as? SessionState.Active)?.sessionId, permissions)
 }
 
 /** Ataques ao isolamento entre sessões e ao foco da área Reservas, pela `AreaContent` com sessão controlada. */

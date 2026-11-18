@@ -103,7 +103,7 @@ class DayPanelStateTest {
 
     /** O estado vive no `backgroundScope`, como o mapa de UHs: a assinatura não segura o fim do teste. */
     private fun TestScope.panel(source: FakeReceptionSource) =
-        DayPanelState(source, backgroundScope).also { runCurrent() }
+        DayPanelState(source, backgroundScope, source.permissions).also { runCurrent() }
 
     private fun DayPanelState.rows(list: DayList) = tabs.getValue(list).rows
 
@@ -417,7 +417,7 @@ class DayPanelStateTest {
         }
 
     @Test
-    fun subscribesOnlyPermittedTopics() =
+    fun subscribesTopicsFromTheReceivedSet() =
         runTest {
             val cases =
                 listOf(
@@ -425,20 +425,17 @@ class DayPanelStateTest {
                     setOf("endofday.runs.read") to listOf(setOf("end-of-day")),
                     setOf("rooms.status.read", "endofday.runs.read") to listOf(setOf("rooms", "end-of-day")),
                     setOf("reservations.reservations.read") to emptyList(),
+                    emptySet<String>() to emptyList(),
                 )
             for ((permissions, expected) in cases) {
-                val source = source().apply { this.permissions = permissions }
-                val state = panel(source)
+                val source = source()
+                val state = DayPanelState(source, backgroundScope, permissions).also { runCurrent() }
                 assertEquals(expected, source.subscribedTopics, "permissões $permissions")
+                if (expected.isEmpty()) assertEquals(0, source.subscriptions, "events chamado com $permissions")
+                assertEquals(permissions, state.permissions)
                 assertEquals(BusinessDay(date, null), state.day)
                 state.close()
             }
-
-            val failing = source().apply { permissionsError = network() }
-            val state = panel(failing)
-            assertEquals(0, failing.subscriptions)
-            assertNull(state.error)
-            assertEquals(BusinessDay(date, null), state.day)
         }
 
     @Test

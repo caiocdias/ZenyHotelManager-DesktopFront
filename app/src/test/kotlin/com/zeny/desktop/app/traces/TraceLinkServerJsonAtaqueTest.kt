@@ -104,7 +104,8 @@ class TraceLinkServerJsonAtaqueTest {
             // Sem código registrado no falso, a leitura falha com UNKNOWN_RESERVATION.
             val reservation = decode(""""reservationId": "$ATK_RES", "roomId": null, "roomNumber": null,""")
             val room = decode(extras, "50000000-0000-0000-0000-00000000000a")
-            val state = TracesListState(source(reservation, room), backgroundScope, null)
+            val src = source(reservation, room)
+            val state = TracesListState(src, backgroundScope, src.permissions, null)
             state.start()
             runCurrent()
             val rows = state.table.rows

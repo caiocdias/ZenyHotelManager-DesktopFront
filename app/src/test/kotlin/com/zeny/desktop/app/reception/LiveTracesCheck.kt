@@ -279,19 +279,20 @@ class LiveTracesCheck {
     private fun withScreen(block: DesktopComposeUiTest.(Screen) -> Unit) =
         withViewer { connection ->
             val receptionSource = connection.receptionSource()
+            val permissions = runBlocking { connection.me().permissions }
             val tracesSource = checkNotNull(connection.tracesSource()) { "a conexão não tem recados" }
             val screen = Screen(tracesSource)
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 setContent {
                     screen.scope = rememberCoroutineScope()
-                    screen.panel = remember { DayPanelState(receptionSource, screen.scope) }
+                    screen.panel = remember { DayPanelState(receptionSource, screen.scope, permissions) }
                     screen.detail = remember { ReservationDetailState(receptionSource, screen.scope) }
                     screen.traces =
                         remember {
-                            val list = TracesListState(tracesSource, screen.scope)
+                            val list = TracesListState(tracesSource, screen.scope, permissions)
                             ReceptionTraces(
                                 list = list,
-                                forReservation = { id -> TracesListState(tracesSource, screen.scope, id) },
+                                forReservation = { id -> TracesListState(tracesSource, screen.scope, permissions, id) },
                                 form = { target, onSaved ->
                                     TraceFormState(
                                         tracesSource,

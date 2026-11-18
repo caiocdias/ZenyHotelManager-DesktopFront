@@ -324,10 +324,11 @@ class LiveStayActionsCheck {
         val screen = Screen()
         val source = connection.receptionSource()
         val rooms = checkNotNull(connection.roomsSource())
+        val permissions = runBlocking { connection.me().permissions }
         runDesktopComposeUiTest(WIDTH, HEIGHT) {
             setContent {
                 screen.scope = rememberCoroutineScope()
-                screen.panel = remember { DayPanelState(source, screen.scope) }
+                screen.panel = remember { DayPanelState(source, screen.scope, permissions) }
                 screen.detail = remember { ReservationDetailState(source, screen.scope) }
                 screen.map = remember { RoomMapState(rooms, screen.scope) }
                 screen.approvals = remember { ApprovalCoordinator(connection::grant, emptyFlow(), screen.scope) }

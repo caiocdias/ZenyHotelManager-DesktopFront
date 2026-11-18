@@ -18,7 +18,6 @@ import kotlin.uuid.Uuid
 
 /** As operações em que o falso aceita uma falha injetada. */
 enum class TraceOp {
-    PERMISSIONS,
     BUSINESS_DAY,
     PAGE,
     TRACE,
@@ -79,6 +78,7 @@ fun traceNotFound() = ApiError.Problem(404, "TRACE_NOT_FOUND", null, emptyList()
  */
 @Suppress("TooManyFunctions") // espelha a porta
 class FakeTracesSource : TracesSource {
+    /** O conjunto que a casca entregaria aos recados destes testes; a porta não lê mais permissões (ADR 0013). */
     var permissions: Set<String> = emptySet()
     var businessDay: BusinessDay = BusinessDay(BusinessDate(LocalDate.of(2026, 11, 14)), null)
     var departments: List<Department> = emptyList()
@@ -143,11 +143,6 @@ class FakeTracesSource : TracesSource {
         val next = old.copy(text = text, version = old.version + 1)
         traces[id] = next
         return TraceVersion(next, bump(id))
-    }
-
-    override suspend fun permissions(): Set<String> {
-        fail(TraceOp.PERMISSIONS)
-        return permissions
     }
 
     override suspend fun businessDay(): BusinessDay {

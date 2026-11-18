@@ -21,8 +21,6 @@ data class RoomOption(
  */
 @Suppress("TooManyFunctions") // porta que espelha as operações de recado sobre o `core`
 interface TracesSource {
-    suspend fun permissions(): Set<String>
-
     suspend fun businessDay(): BusinessDay
 
     suspend fun page(

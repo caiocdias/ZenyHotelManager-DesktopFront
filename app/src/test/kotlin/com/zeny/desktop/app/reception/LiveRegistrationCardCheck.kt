@@ -174,6 +174,7 @@ class LiveRegistrationCardCheck {
     private fun withScreen(block: DesktopComposeUiTest.(Screen) -> Unit) =
         withViewer { connection ->
             val receptionSource = connection.receptionSource()
+            val permissions = runBlocking { connection.me().permissions }
             val real = checkNotNull(connection.registrationCards()) { "a conexão não tem fichas" }
             val screen = Screen()
 
@@ -183,7 +184,7 @@ class LiveRegistrationCardCheck {
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 setContent {
                     screen.scope = rememberCoroutineScope()
-                    screen.panel = remember { DayPanelState(receptionSource, screen.scope) }
+                    screen.panel = remember { DayPanelState(receptionSource, screen.scope, permissions) }
                     screen.detail = remember { ReservationDetailState(receptionSource, screen.scope) }
                     ZenyTheme {
                         ReceptionScreen(

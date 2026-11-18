@@ -178,8 +178,9 @@ class CoreTracesSourceAtaqueTest {
 
     @Test
     fun permissionsAreTheCodesOfMe() =
-        withServer({ Reply(200, me()) }) { source, _ ->
-            assertEquals(setOf("frontdesk.traces.read", "staff.departments.read"), source.permissions())
+        withServer({ Reply(200, me()) }) { _, connection ->
+            // A porta não lê mais permissões (ADR 0013): o conjunto dos recados é o `me` que a casca lê da conexão.
+            assertEquals(setOf("frontdesk.traces.read", "staff.departments.read"), connection.me().permissions)
             assertEquals(listOf("/api/v1/auth/me"), seen.map { it.path })
         }
 

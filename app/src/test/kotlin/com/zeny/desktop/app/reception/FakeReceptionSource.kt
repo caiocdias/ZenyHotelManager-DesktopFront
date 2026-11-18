@@ -144,6 +144,10 @@ data class QuoteStayCall(
  */
 @Suppress("TooManyFunctions") // falso da porta, que espelha as operações dela
 class FakeReceptionSource : ReceptionSource {
+    /**
+     * O conjunto que a casca entregaria à Recepção destes testes: a porta não lê mais permissões (ADR 0013), e quem
+     * cria o estado o passa ao construtor (ou ao `me` da conexão falsa).
+     */
     var permissions: Set<String> =
         setOf(
             "reservations.reservations.read",
@@ -163,7 +167,6 @@ class FakeReceptionSource : ReceptionSource {
     val ratePlans = mutableMapOf<String, String>()
     val types = mutableListOf<RoomTypeResponse>()
 
-    var permissionsError: Exception? = null
     var businessDayError: Exception? = null
     var dayPageError: Exception? = null
 
@@ -203,7 +206,6 @@ class FakeReceptionSource : ReceptionSource {
     val assignmentCalls = mutableListOf<String>()
     val holderCalls = mutableListOf<String>()
     val ratePlanCalls = mutableListOf<String>()
-    var permissionsCalls = 0
     var businessDayCalls = 0
     var roomTypesCalls = 0
 
@@ -341,12 +343,6 @@ class FakeReceptionSource : ReceptionSource {
         channel.close(error)
         // A assinatura seguinte (um `retry`) recebe um canal novo.
         channel = Channel(Channel.UNLIMITED)
-    }
-
-    override suspend fun permissions(): Set<String> {
-        permissionsCalls++
-        permissionsError?.let { throw it }
-        return permissions
     }
 
     override suspend fun businessDay(): BusinessDay {

@@ -123,7 +123,9 @@ class ReceptionShellAtaqueTest {
             state.value = SessionState.LoggedOut
         }
 
-        override suspend fun me(): Me = Me("u-1", "ana", "Ana Souza", permissions)
+        // O menu segue o conjunto do teste; a Recepção, o que a porta falsa devolvia (ADR 0013: um `me` só).
+        override suspend fun me(): Me =
+            Me("u-1", "ana", "Ana Souza", permissions + (reception as? FakeReceptionSource)?.permissions.orEmpty())
 
         override suspend fun hotel(): HotelInfo = HotelInfo("Hotel Mar Azul", configured = true)
 
@@ -278,7 +280,7 @@ class ReceptionShellAtaqueTest {
             val window = Window(start = true)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", emptySet()) }
+                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", reception.permissions) }
                 }
             }
             waitForIdle()
@@ -311,7 +313,7 @@ class ReceptionShellAtaqueTest {
             val window = Window(start = false)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", emptySet()) }
+                    ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", reception.permissions) }
                 }
             }
             waitForIdle()
@@ -332,7 +334,7 @@ class ReceptionShellAtaqueTest {
             var area by mutableStateOf(Area.RECEPTION)
             setContent {
                 CompositionLocalProvider(LocalWindowInfo provides window) {
-                    ZenyTheme { AreaContent(area, fake, "s-1", emptySet()) }
+                    ZenyTheme { AreaContent(area, fake, "s-1", reception.permissions) }
                 }
             }
             waitForIdle()

@@ -213,7 +213,6 @@ class FakeTracesSourceAtaqueTest {
                     .toString()
             val ops: Map<TraceOp, suspend () -> Unit> =
                 mapOf(
-                    TraceOp.PERMISSIONS to { fake.permissions() },
                     TraceOp.BUSINESS_DAY to { fake.businessDay() },
                     TraceOp.PAGE to {
                         fake.page(

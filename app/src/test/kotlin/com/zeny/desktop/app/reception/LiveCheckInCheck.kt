@@ -296,9 +296,8 @@ class LiveCheckInCheck {
         source: ReceptionSource,
         seed: CheckInSeed,
     ): CheckInState {
-        val permissions = runBlocking { source.permissions() }
         val approve: suspend (ApprovableAction<CheckInResponse>) -> ApiResponse<CheckInResponse>? = { it.run(null) }
-        return CheckInState(source, screen.scope, seed, permissions, approve, Clock.systemUTC()::instant) {
+        return CheckInState(source, screen.scope, seed, screen.panel.permissions, approve, Clock.systemUTC()::instant) {
             screen.panel.refresh()
             screen.detail.reload()
         }
@@ -382,10 +381,11 @@ class LiveCheckInCheck {
         val screen = Screen()
         val source = connection.receptionSource()
         val rooms = checkNotNull(connection.roomsSource())
+        val permissions = runBlocking { connection.me().permissions }
         runDesktopComposeUiTest(WIDTH, HEIGHT) {
             setContent {
                 screen.scope = rememberCoroutineScope()
-                screen.panel = remember { DayPanelState(source, screen.scope) }
+                screen.panel = remember { DayPanelState(source, screen.scope, permissions) }
                 screen.detail = remember { ReservationDetailState(source, screen.scope) }
                 screen.map = remember { RoomMapState(rooms, screen.scope) }
                 ZenyTheme {

@@ -411,7 +411,6 @@ class ReservationsActionsTest {
             open("Busca")
 
             assertEquals(1, connection.meCalls)
-            assertEquals(0, rig.reception.permissionsCalls, "a área leu as permissões pela porta da Recepção")
         }
     }
 

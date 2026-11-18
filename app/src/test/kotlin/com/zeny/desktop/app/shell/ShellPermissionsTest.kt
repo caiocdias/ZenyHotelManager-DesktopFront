@@ -52,6 +52,9 @@ private const val AVAILABILITY_READ = "reservations.availability.read"
 private const val TAB = "Disponibilidade e cotação"
 private const val CHANGE = "open-reservation-change"
 private const val HOLDER = "30000000-0000-0000-0000-000000000003"
+private const val CHECKIN = "frontdesk.stays.checkin"
+private const val ROOMS_STATUS_READ = "rooms.status.read"
+private const val PANEL_DATE = "Data operacional: 13/11/2026"
 
 /**
  * A casca é a fonte única das permissões das áreas (ADR 0013): sem um `me` bom desta sessão, nenhuma área é
@@ -171,6 +174,26 @@ class ShellPermissionsTest {
         }
 
     @Test
+    fun failedMeDrawsNoReceptionAndRetryGrants() =
+        runComposeUiTest {
+            val conn = Conn(me = { throw ApiError.Network(RuntimeException("sem rede")) })
+            shell(conn)
+
+            onNodeWithText("Tentar de novo").assertExists()
+            assertFalse(hasText("Recepção"), "menu sem leitura boa")
+            assertFalse(hasTag("tab-ARRIVALS"), "painel desenhado sem leitura boa")
+            assertEquals(0, conn.reception.businessDayCalls, "a Recepção leu sem leitura boa do me")
+            assertEquals(0, conn.reception.subscriptions, "o painel assinou sem leitura boa do me")
+
+            conn.me = { me(CHECKIN, ROOMS_STATUS_READ) }
+            click("Tentar de novo")
+            click("Recepção")
+
+            onNodeWithTag("tab-ARRIVALS").assertExists()
+            assertEquals(listOf(setOf("rooms")), conn.reception.subscribedTopics, "o retry não deu o conjunto lido")
+        }
+
+    @Test
     fun newSessionAreaNeverSeesThePreviousSet() =
         runComposeUiTest {
             val conn = Conn(me = { me(READ, AVAILABILITY_READ) })
@@ -235,5 +258,28 @@ class ShellPermissionsTest {
 
             onNodeWithText("R-1").assertExists()
             assertTrue(hasText(TAB))
+        }
+
+    @Test
+    fun receptionWithForeignSessionDrawsNothing() =
+        runComposeUiTest {
+            val conn = Conn(me = { error("a área não lê o me") }, SessionState.Active("u-1", "B", false))
+            var sessionId by mutableStateOf("A")
+            setContent {
+                ZenyTheme { AreaContent(Area.RECEPTION, conn, sessionId, setOf(CHECKIN, ROOMS_STATUS_READ)) }
+            }
+            waitForIdle()
+
+            assertFalse(hasText(PANEL_DATE), "a Recepção desenhou com o conjunto de outra sessão")
+            assertEquals(0, conn.reception.subscriptions, "events chamado com o conjunto de outra sessão")
+            assertEquals(0, conn.reception.businessDayCalls, "a porta da Recepção foi chamada")
+            assertEquals(0, conn.reception.dayPageCalls.size)
+
+            sessionId = "B"
+            waitForIdle()
+
+            onNodeWithText(PANEL_DATE).assertExists()
+            assertEquals(listOf(setOf("rooms")), conn.reception.subscribedTopics)
+            assertEquals(1, conn.reception.activeSubscriptions)
         }
 }

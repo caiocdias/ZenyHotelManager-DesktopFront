@@ -162,7 +162,7 @@ class WalkInDialogTest {
     ) {
         setContent {
             val scope = rememberCoroutineScope()
-            val panel = remember { DayPanelState(source, scope) }
+            val panel = remember { DayPanelState(source, scope, source.permissions) }
             val detail = remember { ReservationDetailState(source, scope) }
             val factory: (() -> WalkInState)? =
                 if (withWalkIn) {

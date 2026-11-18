@@ -863,7 +863,7 @@ private class LifecyclePorts(
     val cancel = connection.reservationCancelSource()
     val reactivate = connection.reservationReactivateSource()
     val pending = connection.pendingSource()
-    val permissions: Set<String> = runBlocking { reception.permissions() }
+    val permissions: Set<String> = runBlocking { connection.me().permissions }
 }
 
 /** A oferta STD do BALCAO na estadia, com unidade; sem ela, `NEED_SEED`. */
