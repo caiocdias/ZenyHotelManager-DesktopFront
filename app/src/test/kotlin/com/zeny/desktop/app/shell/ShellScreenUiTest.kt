@@ -7,6 +7,9 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.zeny.desktop.app.cashier.CashierSource
+import com.zeny.desktop.app.cashier.FakeCashierSource
+import com.zeny.desktop.app.cashier.shiftOf
 import com.zeny.desktop.app.session.ServerConnection
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
@@ -19,11 +22,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalTestApi::class)
 class ShellScreenUiTest {
     private class FakeConnection(
         var me: () -> Me = { Me("u-1", "ana", "Ana Souza", setOf("rooms.status.read", "guests.profiles.read")) },
+        private val cashier: CashierSource? = null,
     ) : ServerConnection {
         override val state = MutableStateFlow<SessionState>(SessionState.Active("u-1", "s-1", false))
 
@@ -51,6 +56,8 @@ class ShellScreenUiTest {
             required: ApiError.ApprovalRequired,
             input: ApprovalInput,
         ): String = error("não usado")
+
+        override fun cashierSource(): CashierSource? = cashier
 
         override fun close() = Unit
     }
@@ -119,5 +126,48 @@ class ShellScreenUiTest {
 
             onNodeWithText("Tentar de novo").assertDoesNotExist()
             onNodeWithText("Ana Souza").assertExists()
+        }
+
+    @Test
+    fun shiftTextForEachIndicator() {
+        assertEquals("Turno CX-0001 aberto · Recepção", shiftText(ShiftIndicator.Open("CX-0001", "Recepção")))
+        assertEquals("Sem turno aberto", shiftText(ShiftIndicator.None))
+        assertEquals("Turno não verificado", shiftText(ShiftIndicator.Unknown))
+        assertNull(shiftText(ShiftIndicator.Hidden))
+    }
+
+    @Test
+    fun headerShowsTheShiftOfTheOperator() =
+        runComposeUiTest {
+            val cashier = FakeCashierSource()
+            cashier.current = { shiftOf(number = "CX-0002", cashPointName = "Bar") }
+            val operator = { Me("u-1", "ana", "Ana Souza", setOf("rooms.status.read", "billing.cashier.operate")) }
+            shell(FakeConnection(me = operator, cashier = cashier), devMode = false)
+
+            onNodeWithText("Turno CX-0002 aberto · Bar").assertExists()
+        }
+
+    @Test
+    fun headerSaysUnverifiedWhenTheShiftReadFails() =
+        runComposeUiTest {
+            val cashier = FakeCashierSource()
+            cashier.current = { throw ApiError.Network(RuntimeException("sem rede")) }
+            val operator = { Me("u-1", "ana", "Ana Souza", setOf("rooms.status.read", "billing.cashier.operate")) }
+            shell(FakeConnection(me = operator, cashier = cashier), devMode = false)
+
+            onNodeWithText("Turno não verificado").assertExists()
+            onNodeWithText("Governança").assertExists()
+            onNodeWithText("Tentar de novo").assertDoesNotExist()
+        }
+
+    @Test
+    fun headerHidesTheShiftWithoutOperate() =
+        runComposeUiTest {
+            val cashier = FakeCashierSource()
+            cashier.current = { shiftOf() }
+            shell(FakeConnection(cashier = cashier), devMode = false)
+
+            onNodeWithText("Turno", substring = true).assertDoesNotExist()
+            assertEquals(0, cashier.currentCalls)
         }
 }
