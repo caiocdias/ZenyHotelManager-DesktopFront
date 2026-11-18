@@ -36,7 +36,7 @@ private const val SHIFT_REQUIRED = "CASHIER_SHIFT_REQUIRED"
  * (`classifyWriteFailure`), com as entradas travadas; resposta definitiva gera outra. O `5xx` guardado sob a chave
  * deixa o estado [closeOnly]. O sucesso vai a [onChanged] com a resposta (o troco vem dela); o `FOLIO_CLOSED` mostra a
  * mensagem e chama [onFolioClosed]. O `CASHIER_SHIFT_REQUIRED` mostra a mensagem do catálogo e, com [openShift], o
- * atalho ([shiftRequired], [openShiftAndClose]). [close] cancela o que é daqui. O `toString()` não mostra o digitado.
+ * atalho ([offersOpenShift], [openShiftAndClose]). [close] cancela o que é daqui. O `toString()` não mostra o digitado.
  */
 @Suppress("LongParameterList") // a porta, a conta, a sugestão do servidor e os três avisos para o painel
 class PaymentFormState(
@@ -88,7 +88,7 @@ class PaymentFormState(
     val locked: Boolean get() = closed || busy || unconfirmed || closeOnly
 
     /** O servidor pediu um turno aberto e há o atalho "Abrir turno"; sem [openShift], só o texto aparece. */
-    val shiftRequired: Boolean get() = shiftRefused && openShift != null
+    val offersOpenShift: Boolean get() = shiftRefused && openShift != null
 
     override val canConfirm: Boolean get() = !closed && !busy && !closeOnly
 
@@ -147,7 +147,7 @@ class PaymentFormState(
 
     /** "Abrir turno": quem criou o diálogo o fecha e leva ao caixa. Sem o atalho, nada. */
     fun openShiftAndClose() {
-        if (shiftRequired) openShift?.invoke()
+        if (offersOpenShift) openShift?.invoke()
     }
 
     fun close() {

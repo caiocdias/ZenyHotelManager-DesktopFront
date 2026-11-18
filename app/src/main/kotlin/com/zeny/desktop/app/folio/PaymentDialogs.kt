@@ -34,7 +34,7 @@ internal fun PaymentDialog(
         WriteDialogTexts("payment", "Receber pagamento", "Receber"),
         onLeave,
         afterMessage = {
-            if (form.shiftRequired) {
+            if (form.offersOpenShift) {
                 OutlinedButton(onClick = form::openShiftAndClose, modifier = Modifier.testTag("open-shift")) {
                     Text("Abrir turno")
                 }

@@ -170,7 +170,7 @@ class FolioPaymentsStateTest {
             form.amount = "10,00"
             form.confirm()
             runCurrent()
-            assertTrue(form.shiftRequired)
+            assertTrue(form.offersOpenShift)
 
             form.openShiftAndClose()
 

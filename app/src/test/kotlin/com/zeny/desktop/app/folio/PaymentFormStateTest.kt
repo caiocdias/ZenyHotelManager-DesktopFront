@@ -30,7 +30,7 @@ private const val CARD_LIKE = "4111 1111 1111 1111"
 /** As propriedades públicas previstas do formulário: nenhuma de número de cartão nem de CVV. */
 private val PAYMENT_CODES = setOf("nsu", "authorizationCode")
 private val FIELDS = setOf("method", "amount", "deposit", "tendered", "cardBrand", "cardLast4") + PAYMENT_CODES
-private val SHOWN = setOf("showsTendered", "showsCard", "showsCodes", "errors", "locked", "shiftRequired")
+private val SHOWN = setOf("showsTendered", "showsCard", "showsCodes", "errors", "locked", "offersOpenShift")
 private val FORM_STATUS = setOf("busy", "unconfirmed", "closeOnly", "message", "canConfirm", "closesOnEscape")
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -312,7 +312,7 @@ class PaymentFormStateTest {
             runCurrent()
 
             assertEquals(SHIFT_TEXT, form.message)
-            assertTrue(form.shiftRequired)
+            assertTrue(form.offersOpenShift)
             assertFalse(form.locked, "a recusa definitiva destrava o formulário")
             assertFalse(form.unconfirmed)
             form.openShiftAndClose()
@@ -321,7 +321,7 @@ class PaymentFormStateTest {
             source.receive = { paymentOf() }
             form.confirm()
             runCurrent()
-            assertFalse(form.shiftRequired)
+            assertFalse(form.offersOpenShift)
             assertTrue(
                 source.receiveCalls[0].intent.key != source.receiveCalls[1].intent.key,
                 "a recusa descarta a intenção",
@@ -332,7 +332,7 @@ class PaymentFormStateTest {
             alone.confirm()
             runCurrent()
             assertEquals(SHIFT_TEXT, alone.message)
-            assertFalse(alone.shiftRequired, "sem openShift, só o texto")
+            assertFalse(alone.offersOpenShift, "sem openShift, só o texto")
             alone.openShiftAndClose()
         }
 
