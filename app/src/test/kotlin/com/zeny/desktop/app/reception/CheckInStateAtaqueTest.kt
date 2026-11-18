@@ -323,9 +323,7 @@ class CheckInStateAtaqueTest {
                     ciaProblem("EARLY_LATE_NOT_OFFERED"),
                     ciaProblem("PERMISSION_DENIED", 403),
                     ciaProblem("FUTURE_CODE_UNKNOWN_TO_CLIENT", 409),
-                    ciaProblem(null, 500),
                     ApiError.PreconditionFailed(null),
-                    ApiError.Unexpected(502),
                 )
             for (failure in definitive) {
                 changes = 0
@@ -342,6 +340,33 @@ class CheckInStateAtaqueTest {
                 confirmNow(state)
                 assertNotSame(source.checkInCalls[0].intent, source.checkInCalls[1].intent, "Intent mantida: $name")
                 assertNotEquals(source.keys()[0], source.keys()[1], "chave mantida depois de $name")
+            }
+        }
+
+    @Test
+    fun serverFailuresKeepKeyAndIntentAndTextDependsOnWhoAnswered() =
+        runTest {
+            val stored = "O servidor não confirmou o check-in. Feche e confira a reserva antes de refazer."
+            val cases =
+                listOf(
+                    Triple("Problem 500 sem código", ciaProblem(null, 500), stored),
+                    Triple("Problem 503 com código", ciaProblem("INTERNAL", 503), stored),
+                    Triple("Unexpected 502", ApiError.Unexpected(502), ActionText.error(ApiError.Unexpected(502))),
+                    Triple("Unexpected 504", ApiError.Unexpected(504), ActionText.error(ApiError.Unexpected(504))),
+                )
+            for ((name, failure, text) in cases) {
+                changes = 0
+                val source = source().apply { checkInOutcomes += failure }
+                val state = started(source)
+                confirmNow(state)
+                assertEquals(text, state.error, "texto de $name")
+                assertNull(state.done, "done depois de $name")
+                assertFalse(state.busy, name)
+                assertEquals(0, changes, "onChanged depois de $name")
+
+                confirmNow(state)
+                assertSame(source.checkInCalls[0].intent, source.checkInCalls[1].intent, "Intent trocada: $name")
+                assertEquals(source.keys()[0], source.keys()[1], "chave renovada depois de $name")
             }
         }
 

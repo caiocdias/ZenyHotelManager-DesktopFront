@@ -450,7 +450,7 @@ class RoomMoveStateAtaqueTest {
     @Test
     fun definitiveResponsesRenewKey() =
         runTest {
-            val codes = listOf(500 to "INTERNAL", 403 to "FORBIDDEN", 422 to "ROOM_MOVE_INVALID", 404 to "NOT_FOUND")
+            val codes = listOf(403 to "FORBIDDEN", 422 to "ROOM_MOVE_INVALID", 404 to "NOT_FOUND")
             codes.forEach { (status, code) ->
                 val source = source()
                 val state = ready(source)
@@ -464,11 +464,45 @@ class RoomMoveStateAtaqueTest {
         }
 
     @Test
+    fun problemServerErrorsKeepKeyAndAskToCheckBeforeRedoing() =
+        runTest {
+            val text = "O servidor não confirmou a troca de UH. Feche e confira a reserva antes de refazer."
+            listOf(500 to "INTERNAL", 503 to null).forEach { (status, code) ->
+                val source = source()
+                val state = ready(source)
+                source.moveOutcomes += atProblem(status, code)
+                confirmNow(state)
+                assertEquals(text, state.error, "texto de $status")
+                confirmNow(state)
+                val keys = source.moveRuns.map { it.key }
+                assertEquals(2, keys.size, "$status")
+                assertEquals(keys[0], keys[1], "chave renovada depois de $status")
+            }
+        }
+
+    @Test
+    fun unexpectedServerErrorKeepsKeyWithGenericText() =
+        runTest {
+            listOf(502, 504).forEach { status ->
+                val failure = ApiError.Unexpected(status)
+                val source = source()
+                val state = ready(source)
+                source.moveOutcomes += failure
+                confirmNow(state)
+                assertEquals(ActionText.moveError(failure), state.error, "texto de $status")
+                confirmNow(state)
+                val keys = source.moveRuns.map { it.key }
+                assertEquals(2, keys.size, "$status")
+                assertEquals(keys[0], keys[1], "chave renovada depois de $status")
+            }
+        }
+
+    @Test
     fun definitiveResponseWithoutCodeRenewsKey() =
         runTest {
             val source = source()
             val state = ready(source)
-            source.moveOutcomes += ApiError.Unexpected(502)
+            source.moveOutcomes += ApiError.Unexpected(418)
             confirmNow(state)
             confirmNow(state)
             val keys = source.moveRuns.map { it.key }
