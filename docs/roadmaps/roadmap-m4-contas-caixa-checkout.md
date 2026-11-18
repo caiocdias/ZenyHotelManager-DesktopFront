@@ -494,12 +494,38 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado: Aguardando verificação ao vivo.** O código, o testador de etapa e a revisão final estão prontos e limpos; faltam só os critérios que pedem o `zeny-front` e as credenciais da folha de senhas, que ficam com o usuário. A etapa fecha `#concluida` quando as duas verificações abaixo passarem. Até lá ela não entra na `main` (o merge do lote foi até a E01).
+- Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e07.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e07.md). Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado nas rodadas 0 (6 Importantes) e 1 (1 Importante), aprovado com notas na rodada 2 (`1262670`).
+- Commits (`MERGE_BASE` `16a3cc4`, HEAD de código `6a631ee`):
+  - Task 1, a fachada no `core`: `4382d70`. Revisão de fatia aprovada.
+  - Task 2, a área, a abertura e o indicador do topo: `c8b3bcb` (desenvolvedor) e `ae3a575` (testador, os testes dele quebrados de propósito pela área nova). Revisão de fatia aprovada.
+  - Task 3, movimentos, fechamento cego, relatório e as duas verificações ao vivo: `7edd357`. Revisão de fatia aprovada.
+  - Roteiros m1–m3 com a área e o indicador: `2b0b14b` e `f2356c4` (orquestrador).
+  - Testador de etapa: `1e7a056` e `1831526` (bordas de valor, repetição, fechamento cego com controle positivo, respostas atrasadas com a porta `LateAnswer`, trava `tests/test_live_cashier_ataque.sh` contra credencial impressa, pendências da E01).
+  - Correção do fim da etapa: `6a631ee` (aviso à casca no `CASHIER_SHIFT_CLOSED` com releitura falha, texto de valor mal formado, motivo do 403 num booleano, `endsWith` no título da notificação e `ensureActive()` depois do sucesso no `RoomMoveState`).
+- Revisão final (`revisor-seguranca`, fable, `16a3cc4..2b0b14b`): 0 Críticos, 1 Importante de processo (o risco "dado pessoal ou segredo" faltava no plano; acrescentado e levado ao testador) e 7 Menores. Re-revisão escopada de `2b0b14b..6a631ee`: "Ready to merge: Yes".
+- Gate no `6a631ee`: `./gradlew build` → BUILD SUCCESSFUL (app 2704 testes, 46 pulados, 0 falhas; core 1210, 1, 0; design 372, 0, 0; demo-seed 696, 10, 0); `bash tests/run.sh` → 61 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- Scanner: `osv-scanner --recursive --no-ignore ./` no `2b0b14b` → 6 lockfiles do Gradle, "No issues found"; a etapa não muda dependência.
+- Integridade: `check_test_integrity.py --base 16a3cc4` no `6a631ee` → exit 1, 2 `ASSERCAO_REMOVIDA`, as trocas previstas (`AreasTest`, o conjunto implementado com quatro áreas; `RoomMapShellAtaqueTest`, "Contas e caixa" sem "(em breve)"), com asserção de força igual ou maior.
+- Critérios:
+  1. **Abrir como Recepcionista, indicador no topo, reabrir com mensagem:** testado com portas falsas (`CashierStateTest`, `CashierScreenTest`, `ShellStateTest`: `openCreatesShiftAndNotifies`, `alreadyOpenShowsMessageAndReloads`, `shiftIndicatorFollowsTheRead`, o texto "Turno … aberto · …" no topo). **Ao vivo: pendente** (`LiveCashierCheck`).
+  2. **Sangria e suprimento sem duplicar:** `doubleSubmitRecordsOnce`, `retryAfterNetworkKeepsTheKey`, `sameIntentKeepsTheKey` (fachada, pelo cliente HTTP). **Ao vivo: pendente** (`LiveCashierCheck`, com a resposta perdida de propósito).
+  3. **Fechamento cego e diferença em BRL:** `closeFormNeverExposesExpected`, o controle positivo `closeDialogSelectorFindsTheDialogChildrenButNotThePanelBehind`, `closeShowsReportWithDifferences` (valores do servidor, sem cálculo). Verificado nos testes; ao vivo também no `LiveCashierCheck`.
+  4. **Notificação ao Gerente:** **ao vivo: pendente** (`LiveCashierNotificationCheck`, que exige a notificação `billing.cashier-shift-difference` com o número do turno no título).
+  5. **Função única e conjunto da casca:** os greps da E01 sem linha; a área segue a amarração da E06 e lê permissões só do parâmetro (revisões de fatia e final).
+- **Como verificar ao vivo** (com o arquivo de ambiente da folha de senhas; as duas **fecham o turno da Recepcionista** na demo, e a H2 e a E05 esperam um turno aberto: rode depois de recriar ou reabra o turno à mão):
+  1. `(set -a; . <arquivo>; set +a; ZENY_LIVE_CASHIER=1 ./gradlew :app:test --tests '*LiveCashierCheck*' --rerun)` — Recepcionista por `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD`.
+  2. `(set -a; . <arquivo>; set +a; ZENY_SEED_LIVE=1 ./gradlew :demo-seed:test --tests '*CashierNotification*' --rerun)` — `ZENY_SEED_SERVER`, `ZENY_SEED_RECEPTIONIST_PASSWORD` e `ZENY_SEED_MANAGER_PASSWORD`. O comando genérico `--tests '*Live*'` do `demo-seed` agora também a inclui.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **Verificação ao vivo com o usuário.** As credenciais estão na folha de senhas; o orquestrador não procurou segredos na máquina. A etapa fica `#em-andamento` até a execução.
+  2. **Escopo reduzido:** `GET /api/v1/cashier-shifts` (lista dos turnos) e `GET /api/v1/cashier-shifts/{id}` ficaram fora: nenhum critério os usa, e "Ver relatório" alcança só o turno recém-fechado. Uma lista de turnos anteriores entra quando uma tela gerencial a pedir.
+  3. **Fechar com todas as formas vazias** declara zero em tudo num clique (o plano manda "vazia vale zero e não vai"). A escrita é irreversível e a diferença notifica o Gerente: pedir confirmação ou exigir ao menos o dinheiro é decisão de produto.
+  4. **Limites do servidor** (teto de R$ 1.000.000,00; dinheiro negativo na contagem) ficam com o servidor, que responde com o texto do catálogo.
+  5. **Notificações no `demo-seed`:** o check usa a `NotificationsApi` do `sdk` cru reaproveitando o cliente autenticado; quando a tela de notificações (M6) trouxer uma fachada, o check passa a usá-la.
+  6. **Roteiros m1–m3** atualizados pelo orquestrador: a área "Contas e caixa" sem "(em breve)" e o indicador do caixa nos passos da Recepcionista e do Gerente.
+- Notas para a próxima etapa:
+  - Para o testador: `ensureActive()` depois do `approve(...)` falta em `WalkInState`, `NewReservationState`, `ReservationCancelState`, `ReservationChangeState` e `ReservationReactivateState` (sem conferir se outra guarda cobre); `CashierStateTest.closeDropsTheLateAnswer` e `ShellStateTest.lateShiftAnswerAfter*` esperam de forma cancelável (a cobertura real está nos `late*` com `LateAnswer`); a asserção `BAD_GATEWAY` de `labelStaysRetryAcrossRepeatedUnknownResults` não pode falhar; a regra de `println` com credencial em `tests/test_live_cashier_ataque.sh` usa `grep -oP` (sem PCRE ela abre); `LateAnswer` mora em `cashier/` e é usada pela recepção e pela casca.
+  - A E02 abre a conta também pela área "Contas e caixa", que agora existe; as escritas da conta seguem a E01 e o `closeOnly`.
 
 ---
 
@@ -776,3 +802,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E06 fecha `#concluida` (`claude --agent orquestrador`): a casca é a fonte única das permissões; o `AreaPermissionsState` saiu em `bca85f1`.
 - 2026-11-18 — a E01 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela mitigação que ela mesma previa: o plano não cabia em três fatias (a regra única passa de 12 arquivos de produção, e o turno sozinho também). A E01 fica com a regra única do resultado desconhecido (D1) e os achados da M3 E06; entra a **E07, "Turno de caixa"**, com o resto do escopo e os critérios do turno sem mudança, dependente da E06 e da E01. A E03 passa a depender da E07. O roadmap previa a divisão numa sessão do arquiteto; o usuário autorizou, para este lote, decidir as intervenções pela opção recomendada, e a divisão está nas "Decisões para o usuário" do handoff da E01.
 - 2026-11-18 — a E01 fecha `#concluida` (`claude --agent orquestrador`): a regra única do resultado desconhecido está no `core` (`WriteFailure`/`classifyWriteFailure`). A E02 passa a depender também da E07, onde nasce a área "Contas e caixa" (Menor da revisão final), e a E03 registra que o `enabled` do `MoneyField` já entrou.
+- 2026-11-18 — a E07 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa e revisão final limpos; faltam as duas verificações ao vivo, que pedem as credenciais do usuário. A E02 e as seguintes esperam por ela.
