@@ -610,6 +610,9 @@ class AuthPluginAttackTest {
     @Test
     fun refresherUsingTheSameClientNeitherRecursesNorReusesARotatedRefreshToken() =
         runTest(timeout = 5.seconds) {
+            // O refresh do servidor gira o par na mesma sessão:
+            // o par inicial tem o sessionId que o refresh falso devolve.
+            store.set(Tokens("A1", "R1", id, id, false))
             val validRefresh = AtomicReference("R1")
             val generation = AtomicInteger(1)
             val refreshHits = CopyOnWriteArrayList<String>()
@@ -664,7 +667,73 @@ class AuthPluginAttackTest {
 
             assertEquals(List(20) { 200 }, statuses)
             assertEquals(listOf("R1"), refreshHits.toList())
+            assertEquals(20, requests.count { it.authorization == listOf("Bearer A2") })
             assertNull(requests.single { it.url.encodedPath.endsWith("/auth/refresh") }.authorization)
+            assertTrue(ended.isEmpty())
+        }
+
+    @Test
+    fun unauthenticatedArrivingAfterTheSameClientRefreshRotatedTheStoreRetriesWithTheNewPair() =
+        runTest(timeout = 5.seconds) {
+            // Mesma sessão antes e depois do refresh, como no servidor (TokenRefreshService gira o par na sessão).
+            store.set(Tokens("A1", "R1", id, id, false))
+            val unauthenticatedArrivals = AtomicInteger()
+            val bothSent = CompletableDeferred<Unit>()
+            val retryServed = CompletableDeferred<Unit>()
+            val refreshHits = CopyOnWriteArrayList<String>()
+            lateinit var iam: IamApi
+            refresher =
+                TokenRefresher { current ->
+                    val body = iam.refreshTokens(RefreshRequest(current.refreshToken)).body()
+                    Tokens(
+                        body.accessToken,
+                        body.refreshToken,
+                        body.sessionId.toString(),
+                        body.userId.toString(),
+                        false,
+                    )
+                }
+            val base =
+                api { request ->
+                    if (request.url.encodedPath.endsWith("/auth/refresh")) {
+                        val sent = Json.parseToJsonElement(String(request.body.toByteArray())).jsonObject
+                        refreshHits += sent.getValue("refreshToken").jsonPrimitive.content
+                        json(
+                            """{"accessToken":"A2","accessTokenExpiresAt":"2026-11-11T13:00:00Z",""" +
+                                """"passwordChangeRequired":false,"refreshToken":"R2",""" +
+                                """"refreshTokenExpiresAt":"2026-11-12T13:00:00Z","sessionId":"$id",""" +
+                                """"tokenType":"Bearer","userId":"$id"}""",
+                        )
+                    } else if (request.authorization == listOf("Bearer A2")) {
+                        json(hotelJson).also { retryServed.complete(Unit) }
+                    } else {
+                        // A 2a chamada com A1 só recebe o 401 depois que a repetição da 1a, já com A2, foi atendida:
+                        // ela chega ao Authenticator com o store já girado e sem voo para acompanhar.
+                        if (unauthenticatedArrivals.incrementAndGet() == 2) {
+                            bothSent.complete(Unit)
+                            retryServed.await()
+                        } else {
+                            bothSent.await()
+                        }
+                        problem("UNAUTHENTICATED")
+                    }
+                }
+            iam = IamApi(base)
+            val hotel = HotelApi(base)
+
+            val statuses =
+                List(2) {
+                    async(Dispatchers.Default) {
+                        hotel
+                            .getHotel()
+                            .raw.status.value
+                    }
+                }.awaitAll()
+
+            assertEquals(listOf(200, 200), statuses)
+            assertEquals(listOf("R1"), refreshHits.toList())
+            assertEquals(2, requests.count { it.authorization == listOf("Bearer A2") })
+            assertEquals("A2", store.current()?.accessToken)
             assertTrue(ended.isEmpty())
         }
 
