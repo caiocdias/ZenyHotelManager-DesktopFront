@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.PaymentInput
 import com.zeny.desktop.core.facade.RefundInput
@@ -48,14 +49,35 @@ data class ReceiveCall(
     val intent: Intent,
 )
 
+/** Um reembolso pedido ao falso (a criação da ação): a conta, o pagamento, a entrada e a `Intent` da tela. */
+data class RefundCall(
+    val folioId: String,
+    val paymentId: String,
+    val input: RefundInput,
+    val intent: Intent,
+)
+
+/** Uma execução (`run`) de uma ação de reembolso: a `Intent.key` em uso e o token, se houve. */
+data class RefundRun(
+    val key: String,
+    val token: String?,
+)
+
 /** Servidor de mentira dos pagamentos: as respostas são lambdas trocáveis, e cada chamada é registrada. */
 class FakePaymentSource : PaymentSource {
     var payments: suspend (String) -> List<PaymentResponse> = { emptyList() }
     var receive: suspend (PaymentInput) -> PaymentResponse = { paymentOf(amount = it.amount.toApi()) }
+
+    /** O reembolso: sem token e com [requiresApproval], falha; senão, o próximo de [refundOutcomes] ou [refund]. */
     var refund: suspend () -> PaymentResponse = { paymentOf(type = "REFUND") }
+    var requiresApproval: ApiError.ApprovalRequired? = null
+    val refundOutcomes = ArrayDeque<Throwable?>()
 
     val paymentCalls = mutableListOf<String>()
     val receiveCalls = mutableListOf<ReceiveCall>()
+    val refundCalls = mutableListOf<RefundCall>()
+    val refundRuns = mutableListOf<RefundRun>()
+    val refundActions = mutableListOf<ApprovableAction<PaymentResponse>>()
 
     override suspend fun payments(folioId: String): List<PaymentResponse> {
         paymentCalls += folioId
@@ -76,5 +98,17 @@ class FakePaymentSource : PaymentSource {
         paymentId: String,
         input: RefundInput,
         intent: Intent,
-    ): ApprovableAction<PaymentResponse> = ApprovableAction { ApiResponse(refund(), null, 201) }
+    ): ApprovableAction<PaymentResponse> {
+        refundCalls += RefundCall(folioId, paymentId, input, intent)
+        val action =
+            ApprovableAction { token ->
+                refundRuns += RefundRun(intent.key, token)
+                val approval = requiresApproval
+                if (token == null && approval != null) throw approval
+                refundOutcomes.removeFirstOrNull()?.let { throw it }
+                ApiResponse(refund(), null, 201)
+            }
+        refundActions += action
+        return action
+    }
 }

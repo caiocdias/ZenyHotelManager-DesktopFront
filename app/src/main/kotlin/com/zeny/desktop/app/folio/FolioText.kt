@@ -49,6 +49,14 @@ object FolioText {
     const val PAYMENT_SERVER_UNCONFIRMED =
         "O servidor não confirmou o recebimento. Feche e confira a conta antes de receber de novo."
     const val PAYMENT_RECORDED = "Pagamento registrado."
+    const val REFUNDED = "Reembolsado"
+    const val REFUND_UNCONFIRMED =
+        "Não foi possível confirmar o reembolso. Reembolse de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de refazer."
+    const val REFUND_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o reembolso. Feche e confira a conta antes de refazer."
+    const val REFUND_APPROVAL_CANCELLED = "Aprovação cancelada. O reembolso não foi feito."
+    const val REFUND_RECORDED = "Reembolso registrado."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -140,6 +148,9 @@ object FolioText {
     /** O aviso do recebimento feito, com o troco que o servidor devolveu quando é maior que zero. */
     fun received(change: String?): String =
         if (change == null) PAYMENT_RECORDED else "$PAYMENT_RECORDED Troco: $change."
+
+    /** O reembolsável que o servidor devolveu, já formatado. */
+    fun refundable(value: String): String = "Reembolsável: $value"
 
     /** O dono da conta pelo rótulo do tipo, nunca pelo id. */
     fun owner(type: FolioOwnerDto.Type?): String =

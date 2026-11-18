@@ -234,6 +234,7 @@ fun FolioPanel(
     state.pdf?.let { RegistrationCardDialog(it, onClose = state::closePdf) }
     state.posting?.let { PostingDialog(it, onLeave = state::dismissPosting) }
     state.payment?.let { PaymentDialog(it, onLeave = state::finishPayment) }
+    state.refund?.let { RefundDialog(it, onLeave = state::finishRefund) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
@@ -322,14 +323,19 @@ private fun Payments(state: FolioState) {
     }
     if (state.paymentsError == null && state.payments.isEmpty()) Text(FolioText.NO_PAYMENTS)
     state.payments.forEachIndexed { index, row ->
-        key(row.id) { PaymentLine(index, row) }
+        // A chave é o pagamento: "Reembolsar" segue a linha dele quando a lista relida muda de ordem.
+        key(row.id) {
+            PaymentLine(index, row, onRefund = if (state.canRefund(row)) ({ state.startRefund(row) }) else null)
+        }
     }
 }
 
+/** Uma linha dos pagamentos; com [onRefund], o botão "Reembolsar". */
 @Composable
 private fun PaymentLine(
     index: Int,
     row: PaymentRow,
+    onRefund: (() -> Unit)?,
 ) {
     Row(
         Modifier.fillMaxWidth().testTag("payment-$index"),
@@ -339,7 +345,10 @@ private fun PaymentLine(
         Text(listOfNotNull(row.date, row.type, row.method, row.card).joinToString(" · "), Modifier.weight(1f))
         Text(row.amount)
         if (row.deposit) Text(FolioText.DEPOSIT, color = MaterialTheme.colorScheme.secondary)
-        row.refunded?.let { Text("Reembolsado $it", color = MaterialTheme.colorScheme.secondary) }
+        row.refunded?.let { Text("${FolioText.REFUNDED} $it", color = MaterialTheme.colorScheme.secondary) }
+        if (onRefund != null) {
+            TextButton(onClick = onRefund, modifier = Modifier.testTag("refund-$index")) { Text("Reembolsar") }
+        }
     }
 }
 

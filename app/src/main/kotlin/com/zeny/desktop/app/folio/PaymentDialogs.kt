@@ -19,6 +19,8 @@ import com.zeny.desktop.core.facade.PaymentMethod
 import com.zeny.desktop.core.facade.PaymentProblem
 import com.zeny.desktop.design.input.MoneyField
 
+private const val REASON_MAX = 200
+
 /**
  * "Receber": a forma, o valor, "Depósito (sinal)" e os campos que a forma mostra (o valor entregue no dinheiro; a
  * bandeira e os 4 últimos dígitos no cartão; o NSU e a autorização fora do dinheiro). Nenhum campo de número de cartão
@@ -33,14 +35,77 @@ internal fun PaymentDialog(
         form,
         WriteDialogTexts("payment", "Receber pagamento", "Receber"),
         onLeave,
-        afterMessage = {
-            if (form.offersOpenShift) {
-                OutlinedButton(onClick = form::openShiftAndClose, modifier = Modifier.testTag("open-shift")) {
-                    Text("Abrir turno")
-                }
-            }
-        },
+        afterMessage = { OpenShiftButton(form.offersOpenShift, form::openShiftAndClose) },
     ) { PaymentFields(form) }
+}
+
+/**
+ * "Reembolsar" o recebimento do [form]: o valor (sugerido com o reembolsável do servidor), o motivo e, fora do
+ * dinheiro, o NSU e a autorização da devolução. O servidor pode pedir aprovação de superior, que abre o diálogo da
+ * casca; com o turno fechado e o atalho, "Abrir turno" fecha o diálogo e leva ao caixa.
+ */
+@Composable
+internal fun RefundDialog(
+    form: RefundState,
+    onLeave: () -> Unit,
+) {
+    val row = form.payment
+    WriteDialog(
+        form,
+        WriteDialogTexts("refund", "Reembolsar pagamento", "Reembolsar"),
+        onLeave,
+        afterMessage = { OpenShiftButton(form.offersOpenShift, form::openShiftAndClose) },
+    ) {
+        Text(listOf(row.date, row.method, row.amount).joinToString(" · "))
+        form.refundable?.let { Text(it, modifier = Modifier.testTag("refund-refundable")) }
+        MoneyField(
+            value = form.amount,
+            onValueChange = { form.amount = it },
+            label = "Valor",
+            error = form.errors[PaymentProblem.AMOUNT],
+            modifier = Modifier.fillMaxWidth().testTag("refund-amount"),
+            enabled = !form.locked,
+        )
+        val reasonError = form.errors[PaymentProblem.REASON]
+        OutlinedTextField(
+            value = form.reason,
+            onValueChange = { form.reason = it },
+            label = { Text("Motivo") },
+            isError = reasonError != null,
+            supportingText = { Text(reasonError ?: "${form.reason.length}/$REASON_MAX") },
+            enabled = !form.locked,
+            modifier = Modifier.fillMaxWidth().testTag("refund-reason"),
+        )
+        if (form.showsCodes) {
+            ShortTextField(
+                form.nsu,
+                { form.nsu = it },
+                "NSU (opcional)",
+                form.errors[PaymentProblem.NSU],
+                form.locked,
+                "refund-nsu",
+            )
+            ShortTextField(
+                form.authorizationCode,
+                { form.authorizationCode = it },
+                "Autorização (opcional)",
+                form.errors[PaymentProblem.AUTHORIZATION_CODE],
+                form.locked,
+                "refund-authorization_code",
+            )
+        }
+    }
+}
+
+/** "Abrir turno", logo abaixo da mensagem do turno fechado, só quando o diálogo oferece o atalho. */
+@Composable
+private fun OpenShiftButton(
+    offered: Boolean,
+    onClick: () -> Unit,
+) {
+    if (offered) {
+        OutlinedButton(onClick = onClick, modifier = Modifier.testTag("open-shift")) { Text("Abrir turno") }
+    }
 }
 
 @Composable
@@ -104,15 +169,26 @@ private fun PaymentFields(form: PaymentFormState) {
     }
 }
 
-/** Um campo curto de texto, travado com o formulário, com o texto do [problem] dele embaixo. */
+/** Um campo curto do recebimento, com a tag `payment-<problema>`. */
 @Composable
 private fun PaymentFormState.CodeField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
     problem: PaymentProblem,
+) = ShortTextField(value, onValueChange, label, errors[problem], locked, "payment-${problem.name.lowercase()}")
+
+/** Um campo curto de texto, travado com o formulário, com o texto do [error] embaixo. */
+@Suppress("LongParameterList") // o valor, a edição, o rótulo, o aviso, a trava e a tag de cada campo
+@Composable
+private fun ShortTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    error: String?,
+    locked: Boolean,
+    tag: String,
 ) {
-    val error = errors[problem]
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
@@ -121,6 +197,6 @@ private fun PaymentFormState.CodeField(
         isError = error != null,
         supportingText = error?.let { { Text(it) } },
         enabled = !locked,
-        modifier = Modifier.fillMaxWidth().testTag("payment-${problem.name.lowercase()}"),
+        modifier = Modifier.fillMaxWidth().testTag(tag),
     )
 }

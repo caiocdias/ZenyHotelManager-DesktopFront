@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 private const val CREATE = "billing.postings.create"
 private const val REVERSE = "billing.postings.reverse"
 private const val RECEIVE = "billing.payments.receive"
+private const val REFUND = "billing.payments.refund"
 private const val REGULAR = "REGULAR"
 private const val PAYMENT = "PAYMENT"
 
@@ -119,7 +120,9 @@ data class StatementView(
  *
  * Com a porta dos pagamentos no [wiring], os pagamentos são relidos junto da conta; a falha deles não esconde a conta.
  * "Receber" ([startPayment], com `billing.payments.receive` e a conta aberta) sugere o saldo do servidor quando
- * positivo. O atalho "Abrir turno" que o diálogo recebe fecha o diálogo antes de chamar o do [wiring].
+ * positivo. "Reembolsar" ([startRefund], com `billing.payments.receive` ou `billing.payments.refund`, num
+ * recebimento com reembolsável e a conta aberta) passa pela aprovação do reembolso do [wiring]. O atalho "Abrir turno"
+ * que os dois diálogos recebem fecha o diálogo antes de chamar o do [wiring].
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
@@ -190,6 +193,10 @@ class FolioState(
     var payment by mutableStateOf<PaymentFormState?>(null)
         private set
 
+    /** O diálogo "Reembolsar" aberto. */
+    var refund by mutableStateOf<RefundState?>(null)
+        private set
+
     /** O saldo da conta como o servidor o devolveu, para sugerir o valor do recebimento (nunca calculado). */
     private var balance: Money? = null
 
@@ -208,8 +215,11 @@ class FolioState(
     private val canReverseAny = canCreate || REVERSE in wiring.permissions
 
     private val canReceiveAny = RECEIVE in wiring.permissions && wiring.payments != null
+    private val canRefundAny =
+        (RECEIVE in wiring.permissions || REFUND in wiring.permissions) && wiring.payments != null
 
-    private val dialogOpen: Boolean get() = posting != null || reversal != null || payment != null
+    private val dialogOpen: Boolean
+        get() = posting != null || reversal != null || payment != null || refund != null
 
     /** "Lançar": com `billing.postings.create` e a conta aberta. */
     val canPost: Boolean get() = !closed && canCreate && view?.closed == false
@@ -222,6 +232,9 @@ class FolioState(
 
     /** "Receber": com a porta dos pagamentos, `billing.payments.receive` e a conta aberta. */
     val canReceive: Boolean get() = !closed && canReceiveAny && view?.closed == false
+
+    /** "Reembolsar" na linha: um recebimento com reembolsável, com uma das duas permissões e a conta aberta. */
+    fun canRefund(row: PaymentRow): Boolean = !closed && canRefundAny && view?.closed == false && row.refundable != null
 
     /** O extrato em PDF aberto (o visualizador da ficha). */
     var pdf by mutableStateOf<RegistrationCardState?>(null)
@@ -363,7 +376,7 @@ class FolioState(
         val source = wiring.payments
         if (!canReceive || dialogOpen || source == null) return
         notice = null
-        val shortcut = wiring.openShift?.let { open -> { closeThenOpenShift(open) } }
+        val shortcut = wiring.openShift?.let { open -> { closeThenOpenShift(::finishPayment, open) } }
         payment = PaymentFormState(source, ownScope, folioId, balance, shortcut, ::received, ::rereadAfterWrite)
     }
 
@@ -376,19 +389,50 @@ class FolioState(
         if (form.unconfirmed || form.closeOnly) rereadAfterWrite()
     }
 
+    /** Abre "Reembolsar" para o recebimento [row], com o reembolsável sugerido; com outro diálogo aberto, nada. */
+    fun startRefund(row: PaymentRow) {
+        val source = wiring.payments
+        if (!canRefund(row) || dialogOpen || source == null) return
+        notice = null
+        val shortcut = wiring.openShift?.let { open -> { closeThenOpenShift(::finishRefund, open) } }
+        refund =
+            RefundState(source, ownScope, folioId, row, wiring.approveRefund, shortcut, ::refunded, ::rereadAfterWrite)
+    }
+
+    /** "Voltar" ou "Fechar" do reembolso (e o atalho do turno); sem resultado conhecido, a conta é relida. */
+    fun finishRefund() {
+        val form = refund ?: return
+        if (form.busy) return
+        form.close()
+        refund = null
+        if (form.unconfirmed || form.closeOnly) rereadAfterWrite()
+    }
+
     fun close() {
         closed = true
         jobs.cancel()
         posting?.close()
         reversal?.close()
         payment?.close()
+        refund?.close()
         closePdf()
     }
 
     /** O diálogo sai antes do atalho: voltando à conta, não há diálogo morto. */
-    private fun closeThenOpenShift(open: () -> Unit) {
-        finishPayment()
+    private fun closeThenOpenShift(
+        finish: () -> Unit,
+        open: () -> Unit,
+    ) {
+        finish()
         open()
+    }
+
+    /** O reembolso deu certo: o diálogo sai, a conta e os pagamentos são relidos, e o aviso diz que foi feito. */
+    private fun refunded() {
+        refund?.close()
+        refund = null
+        rereadAfterWrite()
+        notice = FolioText.REFUND_RECORDED
     }
 
     /** O recebimento deu certo: o diálogo sai, a conta é relida e o aviso traz o troco que o servidor devolveu. */
