@@ -19,6 +19,29 @@ class FakeAvailabilitySourceAtaqueTest {
     private fun d(text: String) = BusinessDate.parse(text)
 
     @Test
+    fun heldAvailabilityCallsReturnTheValueAtReleaseTimeAndTheGateDoesNotHoldAfterwards() =
+        runTest {
+            val fake = FakeAvailabilitySource()
+            val before = fake.availability
+            val after = before.copy(to = "2026-11-30")
+            val gate = fake.hold(Op.AVAILABILITY)
+            val results = mutableListOf<Any>()
+            val first = launch { results += fake.availability(d("2026-11-16"), d("2026-11-18")) }
+            val second = launch { results += fake.availability(d("2026-11-16"), d("2026-11-18")) }
+            runCurrent()
+            assertEquals(2, fake.availabilityCalls.size)
+            assertEquals(emptyList(), results)
+
+            fake.availability = after
+            gate.complete(Unit)
+            first.join()
+            second.join()
+
+            assertEquals(listOf<Any>(after, after), results)
+            assertSame(after, fake.availability(d("2026-11-16"), d("2026-11-18")))
+        }
+
+    @Test
     fun gateOnOneOperationDoesNotHoldTheOthers() =
         runTest {
             val fake = FakeAvailabilitySource()

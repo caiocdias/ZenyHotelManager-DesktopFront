@@ -147,7 +147,8 @@ private class SaSettings : LocalSettings {
 /**
  * Ataques à fiação das ações de Reservas (M3 E03) pela raiz do app: a troca de sessão no lugar fecha o diálogo aberto
  * e não deixa a permissão da sessão anterior valer enquanto a nova não foi lida; fechar a alteração depois de uma
- * recusa definitiva relê o detalhe.
+ * recusa definitiva relê o detalhe. Desde a M4 E06 (ADR 0013), o caso "a sessão nova com o `me` em voo" fica em
+ * `shell/ShellPermissionsAtaqueTest.heldMeOfSessionBHidesTheChangeActionUntilItAnswersAndThenGrantsIt`.
  */
 @OptIn(ExperimentalTestApi::class)
 class ReservationsActionsAtaqueTest {
