@@ -32,7 +32,7 @@ Não há `ARCHITECTURE.md` no repositório. A semântica pública de `classifyWr
 - **Mudança intencional de comportamento nos testes existentes.** A regra nova muda dois casos de propósito: nos três estados da Task 1, o `Problem` 5xx e o `Unexpected` 5xx passam de definitivos (chave nova) a desconhecidos (mesma chave); nos quatro estados com `closeOnly` da Task 2, depois de um `Problem` 5xx a segunda ação não chama mais a porta. Um teste existente que fixa o comportamento antigo:
   - **em arquivo do desenvolvedor** (contagem `Soul: testador` zero): a troca autorizada é mover o caso para o comportamento novo, com asserção de força igual ou maior ("chave nova" vira "mesma chave" mais o texto; "segunda chamada com a mesma `Intent`" vira "nenhuma segunda chamada", `calls.size == 1`), sem apagar o caso. O relatório lista cada troca (arquivo, teste, asserção antiga, asserção nova);
   - **em arquivo do testador:** segue a regra abaixo.
-- **Arquivos do testador (`C-M6`):** antes de alterar um arquivo de teste, confira `git log --format=%B -- <arquivo> | grep -c '^Soul: testador'`. Com contagem maior que zero, não o altere. Se um teste do testador quebrar porque o comportamento mudou de propósito, reporte `DONE_WITH_CONCERNS` com o arquivo, o teste, a saída e o comportamento novo esperado, sem mexer nele: o orquestrador leva ao testador antes da revisão. As quebras já previstas estão na Task 2.
+- **Arquivos do testador (`C-M6`):** antes de alterar um arquivo de teste, confira `git log --format=%B -- <arquivo> | grep -c '^Soul: testador'`. Com contagem maior que zero, não o altere. Se um teste do testador quebrar porque o comportamento mudou de propósito, reporte `DONE_WITH_CONCERNS` com o arquivo, o teste, a saída e o comportamento novo esperado, sem mexer nele: o orquestrador leva ao testador antes da revisão. As quebras já previstas estão nas Tasks 1 e 2.
 - **Verificação da tarefa:** `timeout 1500 ./gradlew :core:test --tests '<filtro core>' :core:ktlintCheck :core:detekt :core:detektMain :core:detektTest :app:test --tests '<filtro app>' :app:ktlintCheck :app:detekt :app:detektMain :app:detektTest`, com os filtros da tarefa (`--tests` repetido). Nunca `./gradlew --stop`; "daemon disappeared" → repita uma vez; nenhum laço de espera; todo comando longo com `timeout`.
 - **Commits:** em pt-BR, no estilo do histórico, com `Soul: desenvolvedor` e `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` no último parágrafo.
 
@@ -60,6 +60,12 @@ Não há `ARCHITECTURE.md` no repositório. A semântica pública de `classifyWr
   - as entradas do formulário ficam travadas;
   - o diálogo não mostra o botão de confirmar nem "Tentar de novo", e o botão de fechar fecha mesmo com `unconfirmed`. Os três diálogos de reservas também fecham com Esc; o `WalkInDialog` continua sem fechar com Esc (`onDismissRequest = {}`), só pelo botão "Fechar".
 
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 2 (rodada 0: bloqueado, 7 Importantes e 6 Menores; rodada 1: bloqueado, 2 Importantes novos e 2 Menores; todos corrigidos em `cdc0ae4` e `10735f2`).
+- **Revisor:** `revisor-arquitetura`, modelo opus.
+- **Notas Menores:** a regra do testador cita as quebras das Tasks 1 e 2; no recado, a troca autorizada afirma o texto e o `onSaved()`, não chave (as duas incorporadas). Não há `ARCHITECTURE.md`: a semântica de `classifyWriteFailure` e as alternativas descartadas vão ao handoff.
+
 ---
 
 ### Task 1: A função única no `core`, o `approvable` único e os três estados que mudam de variante
@@ -76,7 +82,7 @@ Não há `ARCHITECTURE.md` no repositório. A semântica pública de `classifyWr
 - `CheckInStateTest` e `RoomMoveStateTest` (do desenvolvedor): `problem5xxKeepsTheKeyAndSaysCloseAndCheck` — `Problem(500)` mostra o texto novo literal, a repetição sem mudar nada leva a mesma chave (a porta falsa grava a chave); `networkStillKeepsTheKey` continua como hoje. Verifica: `:app:test --tests 'com.zeny.desktop.app.reception.CheckInState*' --tests 'com.zeny.desktop.app.reception.RoomMoveState*'`.
 - `TraceFormStateTest` (do desenvolvedor): `problem5xxGivesUnknownCreateResultAndReloads` — `Problem(500)` dá `TraceText.UNKNOWN_CREATE_RESULT` e chama `onSaved()` uma vez. Verifica: `--tests 'com.zeny.desktop.app.traces.TraceFormState*'`.
 - `grep -nE 'fun resultUnknown|IDEMPOTENCY_KEY_IN_USE' app/src/main/kotlin/com/zeny/desktop/app/reception/CheckInState.kt app/src/main/kotlin/com/zeny/desktop/app/reception/RoomMoveState.kt app/src/main/kotlin/com/zeny/desktop/app/traces/TraceFormState.kt` não devolve linha.
-- **Trocas previstas em arquivos do desenvolvedor** (regra da Global Constraint): `CheckInStateTest.definitiveFailuresRenewKey` tira o `Unexpected(500)` da lista de definitivos, e um caso novo prova que ele mantém a chave; o mesmo critério vale para qualquer caso de `Problem` 5xx ou `Unexpected` 5xx tratado como definitivo em `CheckInStateTest`, `RoomMoveStateTest` e `TraceFormStateTest`.
+- **Trocas previstas em arquivos do desenvolvedor** (regra da Global Constraint): `CheckInStateTest.definitiveFailuresRenewKey` tira o `Unexpected(500)` da lista de definitivos, e um caso novo prova que ele mantém a chave; o mesmo critério vale para qualquer caso de `Problem` 5xx ou `Unexpected` 5xx tratado como definitivo em `CheckInStateTest`, `RoomMoveStateTest` e `TraceFormStateTest`. No recado não há chave: a asserção de força igual é o texto `TraceText.UNKNOWN_CREATE_RESULT` mais `onSaved()` chamado uma vez.
 - **Quebras previstas em arquivos do testador** (reportadas, não corrigidas): `CheckInStateAtaqueTest` (laço de definitivos com `ciaProblem(null, 500)` e `Unexpected(502)`), `RoomMoveStateAtaqueTest.definitiveResponsesRenewKey` (`500 to "INTERNAL"`) e `RoomMoveStateAtaqueTest.definitiveResponseWithoutCodeRenewsKey` (`Unexpected(502)`), e qualquer outro que quebrar pela mesma mudança.
 - Fora as quebras previstas, os testes do `app` que passam pelas fachadas do `ReservationsFacade` (check-in, troca, walk-in) e pelos três estados continuam verdes. Verifica: `--tests 'com.zeny.desktop.app.reception.*' --tests 'com.zeny.desktop.app.traces.*'`.
 
