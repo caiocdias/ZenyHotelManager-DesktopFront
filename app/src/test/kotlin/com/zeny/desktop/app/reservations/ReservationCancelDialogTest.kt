@@ -26,6 +26,7 @@ import de.quati.kotlin.util.Option
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -38,6 +39,9 @@ private const val CD_TERMS =
 private const val CD_UNCONFIRMED_TEXT =
     "Não foi possível confirmar o cancelamento. Conclua de novo sem mudar nada; " +
         "se fechar, confira a reserva na Busca antes de refazer."
+
+private const val CD_SERVER_UNCONFIRMED_TEXT =
+    "O servidor não confirmou o cancelamento. Feche e confira a reserva na Busca antes de refazer."
 
 private fun cdCancelled(
     amount: String,
@@ -232,7 +236,7 @@ class ReservationCancelDialogTest {
     fun unconfirmedOffersRetry() =
         runComposeUiTest {
             val source = source().apply { outcomes += ApiError.Network(IOException("caiu")) }
-            dialog(source)
+            val state = dialog(source)
 
             click("cancel-submit")
 
@@ -241,6 +245,7 @@ class ReservationCancelDialogTest {
             onNodeWithText("Cancelar reserva").assertDoesNotExist()
             onNodeWithTag("cancel-submit").assertIsEnabled()
             onNodeWithTag("cancel-close").assertIsEnabled()
+            assertFalse(state.closesOnEscape)
             click("cancel-submit")
             onNodeWithTag("cancel-done").assertExists()
             assertSame(source.calls[0].intent, source.calls[1].intent)
@@ -272,5 +277,30 @@ class ReservationCancelDialogTest {
 
             onNodeWithTag("cancel-error").assertTextEquals(CD_UNCONFIRMED_TEXT)
             onNodeWithTag("cancel-reload").assertDoesNotExist()
+        }
+
+    @Test
+    fun storedFailureOffersOnlyClose() =
+        runComposeUiTest {
+            val source =
+                source().apply { outcomes += ApiError.Problem(500, "INTERNAL_ERROR", "detalhe", emptyList()) }
+            val state = dialog(source)
+
+            click("cancel-submit")
+
+            onNodeWithTag("cancel-error").assertTextEquals(CD_SERVER_UNCONFIRMED_TEXT)
+            onNodeWithTag("cancel-submit").assertDoesNotExist()
+            onNodeWithText("Tentar de novo").assertDoesNotExist()
+            onNodeWithText("Cancelar reserva").assertDoesNotExist()
+            onNodeWithTag("cancel-reload").assertDoesNotExist()
+            listOf("cancel-reason-DUPLICATE", "cancel-notes", "cancel-waive").forEach {
+                onNodeWithTag(it).assertIsNotEnabled()
+            }
+            onNodeWithTag("cancel-close").assertIsEnabled()
+            onNodeWithTag("cancel-close").assertTextEquals("Fechar")
+            assertTrue(state.closesOnEscape)
+            click("cancel-close")
+            assertEquals(1, closes)
+            assertEquals(1, source.calls.size)
         }
 }

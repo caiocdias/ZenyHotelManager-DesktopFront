@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.app.reception.ReceptionText
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.CancelInput
 import com.zeny.desktop.core.http.ApiResponse
@@ -41,8 +43,6 @@ val CANCEL_REASONS: List<Pair<String, String>> =
     )
 
 private const val MAX_NOTES_LENGTH = 500
-private const val SERVER_ERROR = 500
-private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
 private const val UNCONFIRMED_TEXT =
     "Não foi possível confirmar o cancelamento. Conclua de novo sem mudar nada; " +
         "se fechar, confira a reserva na Busca antes de refazer."
@@ -59,9 +59,10 @@ private const val SERVER_UNCONFIRMED_TEXT =
  *   (o [error] mostra, e [start] tenta de novo), nada vai à rede.
  * - Como o `WalkInState`: as mutações correm no escopo da UI (uma thread só) e [close] cancela só o que é daqui. A
  *   conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
- *   (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`, erro 5xx) ou a aprovação foi
- *   cancelada; resposta definitiva ou mudança de motivo, observação ou isenção gera outra. Depois de um resultado
- *   desconhecido o estado fica [unconfirmed] e, como com [busy] ou depois de [done], as entradas viram no-op.
+ *   (`classifyWriteFailure`) ou a aprovação foi cancelada; resposta definitiva ou mudança de motivo, observação ou
+ *   isenção gera outra. Depois de um resultado desconhecido o estado fica [unconfirmed] e, como com [busy] ou depois de
+ *   [done], as entradas viram no-op. No `5xx` guardado sob a chave, o estado fica [closeOnly]: [confirm] também vira
+ *   no-op, e só resta fechar e conferir.
  * - A isenção da multa é ação sensível: o `APPROVAL_REQUIRED` vai ao `approve`, e a aprovação cancelada deixa o
  *   diálogo aberto, sem cancelar a reserva.
  */
@@ -124,6 +125,10 @@ class ReservationCancelState(
     /** O último resultado é desconhecido: as entradas ficam travadas até uma resposta definitiva. */
     var unconfirmed by mutableStateOf(false)
         private set
+
+    /** A falha ficou guardada no servidor sob a chave: repetir não adianta, só fechar e conferir. */
+    var closeOnly by mutableStateOf(false)
+        private set
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -138,10 +143,10 @@ class ReservationCancelState(
     private var intent: Intent? = null
 
     val canConfirm: Boolean
-        get() = !closed && terms != null && !loading && !busy && done == null
+        get() = !closed && terms != null && !loading && !busy && !closeOnly && done == null
 
-    /** Com o estado ocupado, não confirmado ou concluído, as entradas viram no-op. */
-    private val locked: Boolean get() = closed || busy || unconfirmed || done != null
+    /** Com o estado ocupado, não confirmado, só para fechar ou concluído, as entradas viram no-op. */
+    private val locked: Boolean get() = closed || busy || unconfirmed || closeOnly || done != null
 
     /** Lê a reserva e os termos; de novo, tenta outra vez depois de uma falha. */
     fun start() {
@@ -231,25 +236,17 @@ class ReservationCancelState(
     }
 
     private fun fail(failure: ApiError) {
-        if (resultUnknown(failure)) {
+        val outcome = classifyWriteFailure(failure)
+        if (outcome != WriteFailure.DEFINITIVE) {
             unconfirmed = true
-            // O servidor guarda o 5xx sob a chave e o repete: refazer não adianta; 502/504 de proxy não são guardados.
-            val stored = failure is ApiError.Problem && failure.status >= SERVER_ERROR
-            error = if (stored) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
+            closeOnly = outcome == WriteFailure.UNKNOWN_STORED
+            error = if (closeOnly) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
             return
         }
         unconfirmed = false
         dropIntent()
         error = failure.userMessage
     }
-
-    /** O servidor pode ter cancelado sem a resposta chegar: a repetição leva a mesma chave. */
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network ||
-            failure is ApiError.IncompatibleResponse ||
-            failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && (failure.code == KEY_IN_USE || failure.status >= SERVER_ERROR)) ||
-            (failure is ApiError.Unexpected && failure.status >= SERVER_ERROR)
 
     private fun dropIntent() {
         intent = null

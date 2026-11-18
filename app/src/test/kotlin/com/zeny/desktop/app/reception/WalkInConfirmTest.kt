@@ -706,22 +706,34 @@ class WalkInConfirmTest {
     @Test
     fun serverErrorLocksAndKeepsKey() =
         runTest {
-            val outcomes: List<ApiError> =
-                listOf(
-                    wcProblem(500, "INTERNAL_ERROR"),
-                    ApiError.Unexpected(502),
-                    ApiError.Unexpected(504),
-                )
+            // O 5xx do servidor fica guardado sob a chave: só fechar e conferir, sem segunda chamada.
+            val stored = source().apply { walkInOutcomes += wcProblem(500, "INTERNAL_ERROR") }
+            val storedState = ready(stored)
+            confirmNow(storedState)
+            assertTrue(storedState.unconfirmed)
+            assertTrue(storedState.closeOnly)
+            assertEquals(SERVER_UNCONFIRMED_TEXT, storedState.error)
+            storedState.picker.pick(wcOtherGuest)
+            storedState.segment = "EVENT"
+            assertEquals(wcGuest, storedState.primary)
+            assertEquals("LEISURE", storedState.segment)
+            confirmNow(storedState)
+            assertEquals(1, stored.walkInCalls.size)
+            assertEquals(1, stored.walkInRuns.size)
+            assertNull(storedState.done)
+            assertTrue(storedState.closeOnly)
+
+            val outcomes: List<ApiError> = listOf(ApiError.Unexpected(502), ApiError.Unexpected(504))
             for (outcome in outcomes) {
-                val label = outcome::class.simpleName + (outcome as? ApiError.Problem)?.status
+                val label = outcome::class.simpleName + (outcome as ApiError.Unexpected).status
                 val source = source().apply { walkInOutcomes += outcome }
                 val state = ready(source)
 
                 confirmNow(state)
 
                 assertTrue(state.unconfirmed, label)
-                val expected = if (outcome is ApiError.Problem) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
-                assertEquals(expected, state.error, label)
+                assertFalse(state.closeOnly, label)
+                assertEquals(UNCONFIRMED_TEXT, state.error, label)
                 assertNull(state.done, label)
                 state.picker.pick(wcOtherGuest)
                 state.segment = "EVENT"

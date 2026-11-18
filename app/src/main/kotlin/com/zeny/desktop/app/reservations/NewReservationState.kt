@@ -9,6 +9,8 @@ import com.zeny.desktop.app.reception.RESTRICTION_PREFIX
 import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reception.ReceptionText
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.BookingInput
 import com.zeny.desktop.core.facade.NightlyRateInput
@@ -71,8 +73,6 @@ private data class NewReservationIntentInputs(
 )
 
 private const val MAX_REQUESTS_LENGTH = 1000
-private const val SERVER_ERROR = 500
-private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
 private const val PROVISIONAL = "PROVISIONAL"
 private const val RATE_TEXT = "Informe um valor válido para a diária."
 private const val UNCONFIRMED_TEXT =
@@ -82,16 +82,20 @@ private const val UNCONFIRMED_TEXT =
 private const val SERVER_UNCONFIRMED_TEXT =
     "O servidor não confirmou a reserva. Feche e confira na Busca antes de refazer."
 
+private const val WITHOUT_RESERVATION_TEXT =
+    "O servidor confirmou a criação, mas não devolveu a reserva. Feche e confira na busca de reservas."
+
 /**
  * Estado da nova reserva a partir de uma oferta da cotação: o titular, a origem, o segmento, os pedidos especiais, a
  * diária negociada e a conclusão. A estadia, o tipo e o plano vêm da cotação e não mudam aqui.
  *
  * Como o `WalkInState`: as mutações correm no escopo da UI (uma thread só) e [close] cancela só o que é daqui. A
- * conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido (rede,
- * resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`, erro 5xx) ou a aprovação foi cancelada; resposta
- * definitiva ou mudança de qualquer entrada gera outra. Depois de um resultado desconhecido o estado fica
- * [unconfirmed] e, como com [busy] ou depois de [done], as entradas viram no-op. O front não calcula preço: a diária
- * negociada vai como foi digitada, em todas as noites, e o total mostrado é o do servidor.
+ * conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
+ * (`classifyWriteFailure`) ou a aprovação foi cancelada; resposta definitiva ou mudança de qualquer entrada gera outra.
+ * Depois de um resultado desconhecido o estado fica [unconfirmed] e, como com [busy] ou depois de [done], as entradas
+ * viram no-op. No `5xx` guardado sob a chave, e na criação respondida sem reserva, o estado fica [closeOnly]: a
+ * conclusão também vira no-op, e só resta fechar e conferir. O front não calcula preço: a diária negociada vai como foi
+ * digitada, em todas as noites, e o total mostrado é o do servidor.
  */
 @Suppress("LongParameterList", "TooManyFunctions") // dependências do fluxo; entradas, conclusão e a chave
 class NewReservationState(
@@ -168,6 +172,13 @@ class NewReservationState(
     /** O último resultado é desconhecido: as entradas ficam travadas até uma resposta definitiva. */
     var unconfirmed by mutableStateOf(false)
         private set
+
+    /**
+     * Só resta fechar e conferir na Busca: a falha ficou guardada no servidor sob a chave, ou a criação foi respondida
+     * sem a reserva. Repetir não adianta.
+     */
+    var closeOnly by mutableStateOf(false)
+        private set
     var error by mutableStateOf<String?>(null)
         private set
 
@@ -178,14 +189,14 @@ class NewReservationState(
         private set
 
     val canConfirm: Boolean
-        get() = holder != null && !busy && !picker.creating && done == null && !closed
+        get() = holder != null && !busy && !picker.creating && !closeOnly && done == null && !closed
 
     private var closed = false
     private var intent: Intent? = null
     private var intentInputs: NewReservationIntentInputs? = null
 
-    /** Com o estado ocupado, não confirmado ou concluído, as entradas viram no-op. */
-    private val locked: Boolean get() = closed || busy || unconfirmed || done != null
+    /** Com o estado ocupado, não confirmado, só para fechar ou concluído, as entradas viram no-op. */
+    private val locked: Boolean get() = closed || busy || unconfirmed || closeOnly || done != null
 
     fun confirm() {
         if (!canConfirm) return
@@ -207,6 +218,8 @@ class NewReservationState(
                     // Aprovação cancelada: o servidor respondeu APPROVAL_REQUIRED, nada foi feito sob a chave.
                     // Destrava as entradas e mantém a intenção (a chave não muda).
                     unconfirmed = false
+                } else if (approved.value.reservations.isEmpty()) {
+                    createdWithoutReservation()
                 } else {
                     finish(approved.value)
                 }
@@ -306,12 +319,26 @@ class NewReservationState(
             null
         }
 
+    /**
+     * A criação respondida com sucesso e sem reserva é uma resposta incompatível (`ApiError.IncompatibleResponse`),
+     * tratada aqui como definitiva: o servidor confirmou a escrita e guardou a resposta sob a chave, então repetir só
+     * devolveria a mesma resposta vazia. A intenção acaba e o estado fica [closeOnly]; a lista não é avisada, porque a
+     * tela não viu reserva.
+     */
+    private fun createdWithoutReservation() {
+        dropIntent()
+        unconfirmed = false
+        closeOnly = true
+        fieldErrors = emptyList()
+        error = WITHOUT_RESERVATION_TEXT
+    }
+
     private fun fail(failure: ApiError) {
-        if (resultUnknown(failure)) {
+        val outcome = classifyWriteFailure(failure)
+        if (outcome != WriteFailure.DEFINITIVE) {
             unconfirmed = true
-            // O servidor guarda o 5xx sob a chave e o repete: refazer não adianta; 502/504 de proxy não são guardados.
-            val stored = failure is ApiError.Problem && failure.status >= SERVER_ERROR
-            error = if (stored) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
+            closeOnly = outcome == WriteFailure.UNKNOWN_STORED
+            error = if (closeOnly) SERVER_UNCONFIRMED_TEXT else UNCONFIRMED_TEXT
             return
         }
         unconfirmed = false
@@ -319,14 +346,6 @@ class NewReservationState(
         fieldErrors = (failure as? ApiError.Problem)?.fieldErrors?.map { it.message }.orEmpty()
         error = failure.userMessage
     }
-
-    /** O servidor pode ter criado a reserva sem a resposta chegar: a repetição leva a mesma chave. */
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network ||
-            failure is ApiError.IncompatibleResponse ||
-            failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && (failure.code == KEY_IN_USE || failure.status >= SERVER_ERROR)) ||
-            (failure is ApiError.Unexpected && failure.status >= SERVER_ERROR)
 
     private fun currentInputs() =
         NewReservationIntentInputs(

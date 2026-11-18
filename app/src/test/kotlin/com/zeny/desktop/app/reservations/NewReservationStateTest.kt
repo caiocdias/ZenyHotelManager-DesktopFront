@@ -53,6 +53,9 @@ private const val NR_SERVER_UNCONFIRMED_TEXT =
 
 private const val NR_RATE_TEXT = "Informe um valor válido para a diária."
 
+private const val NR_WITHOUT_RESERVATION_TEXT =
+    "O servidor confirmou a criação, mas não devolveu a reserva. Feche e confira na busca de reservas."
+
 private val nrOffer =
     QuoteOfferResponse(
         accommodationTotal = "300.00",
@@ -177,6 +180,7 @@ private class BookingApprover(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // um teste por regra: entradas, conclusão, chave, aprovação, falha guardada e sem reserva
 class NewReservationStateTest {
     private val approver = BookingApprover()
     private var changes = 0
@@ -590,7 +594,8 @@ class NewReservationStateTest {
             assertTrue(state.unconfirmed)
             assertEquals(NR_SERVER_UNCONFIRMED_TEXT, state.error)
             confirmNow(state)
-            assertSame(source.calls[0].intent, source.calls[1].intent)
+            assertEquals(1, source.calls.size)
+            assertTrue(state.closeOnly)
         }
 
     @Test
@@ -817,5 +822,98 @@ class NewReservationStateTest {
             val text = assertNotNull(state.done).toString()
             assertFalse(text.contains("Fumou"))
             assertTrue(text.contains("R-90"))
+        }
+
+    @Test
+    fun problem5xxIsStoredAndCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += nrProblem(500, "INTERNAL_ERROR") }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertTrue(state.closeOnly)
+            assertEquals(NR_SERVER_UNCONFIRMED_TEXT, state.error)
+            assertFalse(state.canConfirm)
+        }
+
+    @Test
+    fun unexpected502IsUnknownNotCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += ApiError.Unexpected(502) }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            assertEquals(NR_UNCONFIRMED_TEXT, state.error)
+            assertTrue(state.canConfirm)
+        }
+
+    @Test
+    fun confirmIsNoOpWhenCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += nrProblem(500, "INTERNAL_ERROR") }
+            val state = ready(source)
+            confirmNow(state)
+            assertTrue(state.closeOnly)
+
+            confirmNow(state)
+            state.specialRequests = "Andar alto"
+            state.picker.pick(nrOtherGuest)
+            confirmNow(state)
+
+            assertEquals(1, source.calls.size)
+            assertEquals(1, source.runs.size)
+            assertEquals("", state.specialRequests)
+            assertEquals(nrGuest, state.holder)
+            assertNull(state.done)
+        }
+
+    @Test
+    fun creationWithoutReservationIsIncompatibleAndCloseOnly() =
+        runTest {
+            val source = FakeNewReservationSource().apply { response = nrResponse().copy(reservations = emptyList()) }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertFalse(state.unconfirmed)
+            assertTrue(state.closeOnly)
+            assertEquals(NR_WITHOUT_RESERVATION_TEXT, state.error)
+            assertTrue(state.fieldErrors.isEmpty())
+            assertNull(state.done)
+            assertFalse(state.busy)
+            assertFalse(state.canConfirm)
+            assertEquals(0, changes)
+        }
+
+    @Test
+    fun creationWithoutReservationNeverCreatesAgain() =
+        runTest {
+            val source = FakeNewReservationSource().apply { response = nrResponse().copy(reservations = emptyList()) }
+            val state = ready(source)
+            confirmNow(state)
+            source.response = nrResponse()
+
+            confirmNow(state)
+            state.origin = "PHONE"
+            state.segment = "EVENT"
+            state.specialRequests = "outro"
+            state.nightlyRateText = "10"
+            state.picker.pick(nrOtherGuest)
+            confirmNow(state)
+
+            assertEquals(1, source.calls.size)
+            assertEquals(1, source.runs.size)
+            assertEquals("FRONT_DESK", state.origin)
+            assertEquals("LEISURE", state.segment)
+            assertEquals("", state.specialRequests)
+            assertEquals("", state.nightlyRateText)
+            assertEquals(nrGuest, state.holder)
+            assertNull(state.done)
+            assertEquals(0, changes)
         }
 }

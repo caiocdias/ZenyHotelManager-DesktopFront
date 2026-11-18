@@ -224,7 +224,8 @@ class ReservationReactivateStateTest {
             assertTrue(state.unconfirmed)
             assertEquals(RA_SERVER_UNCONFIRMED_TEXT, state.error)
             confirmNow(state)
-            assertSame(source.calls[0].intent, source.calls[1].intent)
+            assertEquals(1, source.calls.size)
+            assertTrue(state.closeOnly)
         }
 
     @Test
@@ -326,6 +327,49 @@ class ReservationReactivateStateTest {
             confirmNow(state)
             assertEquals(1, changes)
         }
+
+    @Test
+    fun problem5xxIsStoredAndCloseOnly() =
+        runTest {
+            val source = raSource().apply { outcomes += raProblem(500, "INTERNAL_ERROR") }
+            val state = state(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertTrue(state.closeOnly)
+            assertEquals(RA_SERVER_UNCONFIRMED_TEXT, state.error)
+        }
+
+    @Test
+    fun unexpected502IsUnknownNotCloseOnly() =
+        runTest {
+            val source = raSource().apply { outcomes += ApiError.Unexpected(502) }
+            val state = state(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            assertEquals(RA_UNCONFIRMED_TEXT, state.error)
+        }
+
+    @Test
+    fun confirmIsNoOpWhenCloseOnly() =
+        runTest {
+            val source = raSource().apply { outcomes += raProblem(500, "INTERNAL_ERROR") }
+            val state = state(source)
+            confirmNow(state)
+            assertTrue(state.closeOnly)
+
+            confirmNow(state)
+            confirmNow(state)
+
+            assertEquals(1, source.calls.size)
+            assertEquals(1, source.runs.size)
+            assertNull(state.done)
+            assertEquals(0, changes)
+        }
 }
 
 @OptIn(ExperimentalTestApi::class)
@@ -418,13 +462,14 @@ class ReservationReactivateDialogTest {
     fun unconfirmedKeepsRetryAndClose() =
         runComposeUiTest {
             val source = raSource().apply { outcomes += ApiError.Network(IOException("caiu")) }
-            dialog(source)
+            val state = dialog(source)
 
             click("reactivate-submit")
 
             onNodeWithTag("reactivate-error").assertTextEquals(RA_UNCONFIRMED_TEXT)
             onNodeWithTag("reactivate-submit").assertIsEnabled()
             onNodeWithTag("reactivate-close").assertIsEnabled()
+            assertFalse(state.closesOnEscape)
             click("reactivate-submit")
             onNodeWithTag("reactivate-done").assertExists()
             assertSame(source.calls[0].intent, source.calls[1].intent)
@@ -454,5 +499,24 @@ class ReservationReactivateDialogTest {
             click("reactivate-submit")
 
             onNodeWithTag("reactivate-submit").assertTextEquals("Tentar de novo")
+        }
+
+    @Test
+    fun storedFailureOffersOnlyClose() =
+        runComposeUiTest {
+            val source = raSource().apply { outcomes += raProblem(500, "INTERNAL_ERROR") }
+            val state = dialog(source)
+
+            click("reactivate-submit")
+
+            onNodeWithTag("reactivate-error").assertTextEquals(RA_SERVER_UNCONFIRMED_TEXT)
+            onNodeWithTag("reactivate-submit").assertDoesNotExist()
+            onNodeWithText("Tentar de novo").assertDoesNotExist()
+            onNodeWithText("Reativar").assertDoesNotExist()
+            onNodeWithTag("reactivate-close").assertIsEnabled()
+            assertTrue(state.closesOnEscape)
+            click("reactivate-close")
+            assertEquals(1, closes)
+            assertEquals(1, source.calls.size)
         }
 }

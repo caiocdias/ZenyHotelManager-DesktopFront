@@ -5,6 +5,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.zeny.desktop.app.reception.ReceptionText
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.error.WriteFailure
+import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import de.quati.kotlin.util.Option
@@ -15,8 +17,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
-private const val KEY_IN_USE = "IDEMPOTENCY_KEY_IN_USE"
-private const val SERVER_ERROR = 500
 private const val DEFAULT_GUARANTEE = "CARD"
 
 /** O que a confirmação da pré-reserva usa de um servidor: a leitura da reserva e a confirmação com a garantia. */
@@ -35,8 +35,8 @@ interface ReservationConfirmSource {
  * confirma com `CARD` ou `DEPOSIT`.
  *
  * A confirmação leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
- * (rede, resposta incompatível, sessão encerrada, `IDEMPOTENCY_KEY_IN_USE`, erro 5xx); qualquer resposta definitiva,
- * ou trocar a garantia, gera outra. Não há aprovação de superior nesta operação.
+ * (`classifyWriteFailure`); qualquer resposta definitiva, ou trocar a garantia, gera outra. Não há aprovação de
+ * superior nesta operação.
  *
  * Como o `UndoCheckInState`: as mutações correm no escopo da UI (uma thread só), [close] cancela só o que é daqui e a
  * resposta que chega depois dele é descartada. [onChanged] só roda quando a confirmação deu certo.
@@ -168,17 +168,9 @@ class ReservationConfirmState(
 
     private fun fail(failure: ApiError) {
         // Resultado desconhecido: a repetição leva a mesma chave. Resposta definitiva: a próxima é outra intenção.
-        if (!resultUnknown(failure)) dropIntent()
+        if (classifyWriteFailure(failure) == WriteFailure.DEFINITIVE) dropIntent()
         error = failure.userMessage
     }
-
-    /** O servidor pode ter confirmado sem a resposta chegar: a repetição leva a mesma chave. */
-    private fun resultUnknown(failure: ApiError): Boolean =
-        failure is ApiError.Network ||
-            failure is ApiError.IncompatibleResponse ||
-            failure is ApiError.SessionEnded ||
-            (failure is ApiError.Problem && (failure.code == KEY_IN_USE || failure.status >= SERVER_ERROR)) ||
-            (failure is ApiError.Unexpected && failure.status >= SERVER_ERROR)
 
     private fun currentIntent(chosen: String): Intent {
         dropIntentIfChanged()

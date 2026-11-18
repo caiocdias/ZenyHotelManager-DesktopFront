@@ -34,6 +34,8 @@ import de.quati.kotlin.util.Option
 import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
 
 private val ndType = Uuid.parse("10000000-0000-0000-0000-000000000001")
@@ -374,6 +376,7 @@ class NewReservationDialogTest {
             submit()
             onNodeWithTag("new-reservation-submit").assertTextContains("Tentar de novo")
             onNodeWithTag("new-reservation-submit").assertIsEnabled()
+            assertFalse(state.closesOnEscape)
             submit()
             onNodeWithTag("new-reservation-done").assertExists()
             assertEquals(2, source.runs.size)
@@ -387,5 +390,34 @@ class NewReservationDialogTest {
             onNodeWithTag("new-reservation-close").assertTextContains("Cancelar")
             onNodeWithTag("new-reservation-close").performClick()
             assertEquals(1, closes)
+        }
+
+    @Test
+    fun storedFailureOffersOnlyClose() =
+        runComposeUiTest {
+            val source =
+                source().apply { outcomes += ApiError.Problem(500, "INTERNAL_ERROR", "detalhe", emptyList()) }
+            val state = dialog(source)
+            choose(state)
+            submit()
+
+            onNodeWithTag("new-reservation-error")
+                .assertTextContains("O servidor não confirmou a reserva.", substring = true)
+            onNodeWithTag("new-reservation-submit").assertDoesNotExist()
+            onNodeWithText("Tentar de novo").assertDoesNotExist()
+            onNodeWithText("Criar reserva").assertDoesNotExist()
+            listOf(
+                "new-reservation-requests",
+                "new-reservation-swap-holder",
+                "new-reservation-origin-PHONE",
+                "new-reservation-segment-EVENT",
+            ).forEach { onNodeWithTag(it).assertIsNotEnabled() }
+            onNodeWithTag("new-reservation-close").assertIsEnabled()
+            onNodeWithTag("new-reservation-close").assertTextContains("Fechar")
+            assertTrue(state.closesOnEscape)
+            onNodeWithTag("new-reservation-close").performClick()
+            waitForIdle()
+            assertEquals(1, closes)
+            assertEquals(1, source.runs.size)
         }
 }

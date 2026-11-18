@@ -513,7 +513,8 @@ class ReservationCancelStateTest {
             assertTrue(state.unconfirmed)
             assertEquals(RX_SERVER_UNCONFIRMED_TEXT, state.error)
             confirmNow(state)
-            assertSame(source.calls[0].intent, source.calls[1].intent)
+            assertEquals(1, source.calls.size)
+            assertTrue(state.closeOnly)
         }
 
     @Test
@@ -696,5 +697,55 @@ class ReservationCancelStateTest {
             state.notes = "hóspede com problema de saúde"
 
             assertFalse(state.toString().contains("saúde"))
+        }
+
+    @Test
+    fun problem5xxIsStoredAndCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += rxProblem(500, "INTERNAL_ERROR") }
+            val state = started(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertTrue(state.closeOnly)
+            assertEquals(RX_SERVER_UNCONFIRMED_TEXT, state.error)
+            assertFalse(state.canConfirm)
+        }
+
+    @Test
+    fun unexpected502IsUnknownNotCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += ApiError.Unexpected(502) }
+            val state = started(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            assertEquals(RX_UNCONFIRMED_TEXT, state.error)
+            assertTrue(state.canConfirm)
+        }
+
+    @Test
+    fun confirmIsNoOpWhenCloseOnly() =
+        runTest {
+            val source = source().apply { outcomes += rxProblem(500, "INTERNAL_ERROR") }
+            val state = started(source)
+            confirmNow(state)
+            assertTrue(state.closeOnly)
+
+            confirmNow(state)
+            state.reason = "DUPLICATE"
+            state.notes = "outra"
+            state.waivePenalty = true
+            confirmNow(state)
+
+            assertEquals(1, source.calls.size)
+            assertEquals(1, source.runs.size)
+            assertEquals("GUEST_REQUEST", state.reason)
+            assertEquals("", state.notes)
+            assertFalse(state.waivePenalty)
+            assertNull(state.done)
         }
 }

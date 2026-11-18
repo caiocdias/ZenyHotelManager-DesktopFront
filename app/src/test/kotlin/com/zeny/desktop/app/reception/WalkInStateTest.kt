@@ -1,14 +1,18 @@
 package com.zeny.desktop.app.reception
 
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.model.QuoteOfferResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.RoomStatusResponse
+import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -25,6 +29,13 @@ private val room201 = Uuid.parse("50000000-0000-0000-0000-000000000201")
 
 private const val NIGHT_TEXT = "O walk-in é de pernoite: a saída precisa ser depois de hoje."
 private const val NO_STATUS_TEXT = "Sem permissão para ver o status das UHs."
+private const val UNCONFIRMED_TEXT =
+    "Não foi possível confirmar o walk-in. Conclua de novo sem mudar nada; " +
+        "se fechar, confira em Hospedados antes de refazer."
+private const val SERVER_UNCONFIRMED_TEXT =
+    "O servidor não confirmou o walk-in. Feche e confira em Hospedados antes de refazer."
+private const val APPROVAL_CANCELLED_TEXT = "Aprovação cancelada. O walk-in não foi concluído."
+private val walkInGuest = GuestPick("70000000-0000-0000-0000-000000000001", HolderSummary("Ana Teste", null))
 private const val NO_READY_TEXT =
     "Nenhuma UH desse tipo está pronta e livre agora. " +
         "Escolha outra oferta ou peça a liberação à governança."
@@ -112,6 +123,41 @@ class WalkInStateTest {
         source: FakeReceptionSource,
         permissions: Set<String> = setOf("reservations.availability.read"),
     ) = WalkInState(source, backgroundScope, permissions, { null }, {})
+
+    private var cancelApproval = false
+
+    /** Como o `ApprovalCoordinator`: sem token e, no `APPROVAL_REQUIRED`, repete com token ou desiste (`null`). */
+    private suspend fun approve(action: ApprovableAction<WalkInResponse>): ApiResponse<WalkInResponse>? =
+        try {
+            action.run(null)
+        } catch (_: ApiError.ApprovalRequired) {
+            if (cancelApproval) null else action.run("tok")
+        }
+
+    /** Estadia cotada, oferta Standard, a primeira UH e a hóspede principal escolhidas: pronto para concluir. */
+    private fun TestScope.ready(source: FakeReceptionSource): WalkInState =
+        WalkInState(
+            source,
+            backgroundScope,
+            setOf("reservations.availability.read", "guests.profiles.read"),
+            ::approve,
+            {},
+        ).also {
+            it.start()
+            runCurrent()
+            it.departureText = "15/11/2026"
+            it.quote()
+            runCurrent()
+            it.chooseOffer(standard)
+            runCurrent()
+            it.chooseRoom(it.rooms.first())
+            it.picker.pick(walkInGuest)
+        }
+
+    private fun TestScope.confirmNow(state: WalkInState) {
+        state.confirm()
+        runCurrent()
+    }
 
     private fun TestScope.started(source: FakeReceptionSource): WalkInState =
         state(source).also {
@@ -469,5 +515,77 @@ class WalkInStateTest {
             state.quote()
             runCurrent()
             assertEquals(1, source.quoteStayCalls.size)
+        }
+
+    @Test
+    fun problem5xxIsStoredAndCloseOnly() =
+        runTest {
+            val source = source().apply { walkInOutcomes += problem(500, "INTERNAL_ERROR") }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertTrue(state.closeOnly)
+            assertEquals(SERVER_UNCONFIRMED_TEXT, state.error)
+            assertFalse(state.canConfirm)
+        }
+
+    @Test
+    fun unexpected502IsUnknownNotCloseOnly() =
+        runTest {
+            val source = source().apply { walkInOutcomes += ApiError.Unexpected(502) }
+            val state = ready(source)
+
+            confirmNow(state)
+
+            assertTrue(state.unconfirmed)
+            assertFalse(state.closeOnly)
+            assertEquals(UNCONFIRMED_TEXT, state.error)
+            assertTrue(state.canConfirm)
+        }
+
+    @Test
+    fun confirmIsNoOpWhenCloseOnly() =
+        runTest {
+            val source = source().apply { walkInOutcomes += problem(500, "INTERNAL_ERROR") }
+            val state = ready(source)
+            confirmNow(state)
+            assertTrue(state.closeOnly)
+
+            confirmNow(state)
+            state.segment = "EVENT"
+            confirmNow(state)
+
+            assertEquals(1, source.walkInCalls.size)
+            assertEquals(1, source.walkInRuns.size)
+            assertEquals("LEISURE", state.segment)
+            assertTrue(state.closeOnly)
+            assertNull(state.done)
+        }
+
+    @Test
+    fun unknownThenApprovalCancelledLeavesTextAndUnlocks() =
+        runTest {
+            val source = source().apply { walkInOutcomes += ApiError.Network(IOException("offline")) }
+            val state = ready(source)
+            confirmNow(state)
+            assertTrue(state.unconfirmed)
+            source.walkInRequiresApproval = ApiError.ApprovalRequired("WALK_IN", "x", "res", null, null)
+            cancelApproval = true
+
+            confirmNow(state)
+
+            assertFalse(state.unconfirmed)
+            assertFalse(state.busy)
+            assertFalse(state.closeOnly)
+            assertEquals(APPROVAL_CANCELLED_TEXT, state.error)
+            assertNull(state.done)
+            assertTrue(state.canConfirm)
+            val keys = source.walkInRuns.map { it.key }
+            assertEquals(2, keys.size)
+            assertEquals(keys[0], keys[1], "o APPROVAL_REQUIRED veio na mesma chave")
+            state.segment = "EVENT"
+            assertEquals("EVENT", state.segment)
         }
 }
