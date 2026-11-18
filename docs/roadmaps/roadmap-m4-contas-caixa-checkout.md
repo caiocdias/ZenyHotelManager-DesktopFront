@@ -208,7 +208,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 |---|---|---|---|---|
 | E06 | Fonte única de permissões | #concluida | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
-| E07 | Turno de caixa | #pendente | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
+| E07 | Turno de caixa | #em-andamento | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #pendente | E06, E01, E07 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
 | E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
@@ -442,7 +442,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E07 — Turno de caixa — #pendente
+## E07 — Turno de caixa — #em-andamento
 
 **Objetivo:** a operadora abre o próprio turno num ponto de caixa e vê o turno corrente. Ela registra sangria e suprimento e fecha às cegas, informando o contado. O app mostra o relatório de fechamento com as diferenças, e o topo indica se há turno aberto.
 
