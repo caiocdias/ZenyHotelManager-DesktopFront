@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.folio
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,12 +63,14 @@ private val BETWEEN_DIGITS = Regex("(?<=\\d)[.,](?=\\d)")
  * aprovação do Gerente, pelo `CoreConnection` real, pelos estados reais (`FolioState`, `PostingFormState`,
  * `ReversalState`), pelo painel real e pelo `ApprovalCoordinator` real. Numa conta aberta de reserva do seed:
  * - lança um consumo com um código que tem taxa de serviço, com dois "Lançar" seguidos, e exige um item e uma taxa a
- *   mais, com o saldo e a taxa da tela iguais aos de `folio()` e `postings()` relidos;
+ *   mais, com o saldo e a taxa da tela iguais aos de `folio()` e `postings()` relidos; se o servidor rotear o consumo
+ *   (a resposta vem com outro `folioId`), exige a origem intacta e o aviso de roteamento, e o resto segue na conta de
+ *   destino;
  * - estorna o item como a Recepcionista, exige que a aprovação foi pedida, aprova como o Gerente e exige o estorno
  *   como lançamento novo, com o original intacto;
  * - lê o extrato `GUEST` (nenhuma linha com o bloco interno) e o `INTERNAL`, com o saldo igual ao da conta;
- * - baixa o extrato em PDF das duas audiências e exige, pelo texto do PDFBox (só em memória, nunca em log), os
- *   dígitos do saldo da conta.
+ * - baixa o extrato em PDF das duas audiências e exige, pelo texto do PDFBox (só em memória, nunca em log), o número
+ *   da conta e o saldo dela como número inteiro no texto.
  *
  * **Escreve na demo e não desfaz:** cada execução deixa na conta um consumo de R$ 10,00 com a taxa de serviço dele e
  * o estorno do consumo (a taxa fica como o servidor decidir). Por isso tem opt-in próprio: pulada sem
@@ -92,12 +95,14 @@ class LiveFolioCheck {
         override fun toString(): String = "Approver(***)"
     }
 
+    /** O painel mostra a conta [folioId]; trocá-la (o consumo que o servidor roteou) monta o painel da outra. */
     private class Screen(
         val source: FolioSource,
-        val folioId: String,
+        folioId: String,
     ) {
         lateinit var scope: CoroutineScope
         lateinit var approvals: ApprovalCoordinator
+        var folioId by mutableStateOf(folioId)
         var shown by mutableStateOf<FolioState?>(null)
         val folio: FolioState get() = checkNotNull(shown) { "o painel da conta não foi montado" }
     }
@@ -141,18 +146,34 @@ class LiveFolioCheck {
         waitUntil("o lançamento", LOAD_TIMEOUT_MILLIS) { folio.posting == null || (!form.busy && form.message != null) }
         assertNull(folio.posting, "o lançamento falhou: ${form.message}")
         waitUntil("a conta relida", LOAD_TIMEOUT_MILLIS) {
-            !folio.loading && folio.postings.any { it.description == description }
+            !folio.loading && (folio.postings.any { it.description == description } || folio.notice != null)
         }
 
+        val origin = runBlocking { screen.source.postings(screen.folioId) }
+        val routed = origin.none { it.description == description }
+        if (routed) {
+            // O servidor roteou o consumo: a origem fica como estava, e o resto segue na conta de destino.
+            assertEquals(before.size, origin.size, "o consumo roteado mudou a conta de origem")
+            val notice = assertNotNull(folio.notice, "o consumo sumiu da conta sem o aviso de roteamento")
+            val target = routedFolio(screen.source, notice)
+            println("LiveFolioCheck: consumo roteado pelo servidor para a conta ${target.number}")
+            runOnUiThread { screen.folioId = target.id.toString() }
+            waitUntil("a conta de destino", LOAD_TIMEOUT_MILLIS) {
+                screen.shown?.folioId == screen.folioId && screen.shown?.view != null && !screen.folio.loading
+            }
+        } else {
+            assertEquals(before.size + 2, origin.size, "dois \"Lançar\" seguidos não deram um item e uma taxa")
+        }
+
+        val shown = screen.folio
         val after = runBlocking { screen.source.postings(screen.folioId) }
         val reread = runBlocking { screen.source.folio(screen.folioId) }
-        assertEquals(before.size + 2, after.size, "dois \"Lançar\" seguidos não deram um item e uma taxa")
         val item = after.single { it.description == description }
         val charge =
             after.singleOrNull { (it.serviceChargeForPostingId as? Option.Some)?.value == item.id }
                 ?: fail("o consumo lançado não trouxe a taxa de serviço")
-        assertEquals(FolioText.money(reread.balance), folio.view?.balance, "o saldo da tela não é o do servidor")
-        val chargeRow = folio.postings.single { it.id == charge.id.toString() }
+        assertEquals(FolioText.money(reread.balance), shown.view?.balance, "o saldo da tela não é o do servidor")
+        val chargeRow = shown.postings.single { it.id == charge.id.toString() }
         assertEquals(FolioText.money(charge.amount), chargeRow.amount, "a taxa da tela não é a do servidor")
         assertTrue(chargeRow.serviceCharge, "a taxa não aparece como taxa de serviço")
         println(
@@ -241,15 +262,21 @@ class LiveFolioCheck {
         println("LiveFolioCheck: extratos GUEST e INTERNAL com o saldo da conta ${FolioText.money(balance)}")
     }
 
-    /** O PDF das duas audiências (pelo adaptador do portador) traz os dígitos do saldo da conta. */
+    /**
+     * O PDF das duas audiências (pelo adaptador do portador) traz o número da conta e o saldo dela como um número
+     * inteiro no texto (os dígitos do saldo sem outro dígito colado antes ou depois): com o saldo zero, "000" dentro
+     * de outro valor ou de uma data não basta.
+     */
     private fun pdfs(screen: Screen) {
-        val balance = runBlocking { screen.source.folio(screen.folioId) }.balance
-        val digits = balance.filter(Char::isDigit)
+        val folio = runBlocking { screen.source.folio(screen.folioId) }
+        val balance = folio.balance
+        val wholeBalance = Regex("(?<!\\d)" + Regex.escape(balance.filter(Char::isDigit)) + "(?!\\d)")
         listOf(StatementAudience.GUEST, StatementAudience.INTERNAL).forEach { audience ->
             val pdf = runBlocking { screen.source.statementCards(audience).registrationCard(screen.folioId) }
             val text = Loader.loadPDF(pdf.bytes).use { PDFTextStripper().getText(it) }
+            assertTrue(text.contains(folio.number), "o PDF ${audience.name} não traz o número da conta")
             val joined = text.replace(BETWEEN_DIGITS, "")
-            assertTrue(joined.contains(digits), "o PDF ${audience.name} não traz os dígitos do saldo da conta")
+            assertTrue(wholeBalance.containsMatchIn(joined), "o PDF ${audience.name} não traz o saldo da conta")
         }
         println("LiveFolioCheck: PDFs GUEST e INTERNAL com os dígitos do saldo ${FolioText.money(balance)}")
     }
@@ -269,11 +296,10 @@ class LiveFolioCheck {
                 setContent {
                     screen.scope = rememberCoroutineScope()
                     screen.approvals = remember { ApprovalCoordinator(connection::grant, emptyFlow(), screen.scope) }
-                    val state =
-                        remember {
-                            val wiring = FolioWiring(source, permissions, { screen.approvals.run(it) }, null, null)
-                            FolioState(wiring, screen.scope, screen.folioId).also { it.start() }
-                        }
+                    val wiring = remember { FolioWiring(source, permissions, { screen.approvals.run(it) }, null, null) }
+                    val id = screen.folioId
+                    val state = remember(id) { FolioState(wiring, screen.scope, id).also { it.start() } }
+                    DisposableEffect(state) { onDispose { state.close() } }
                     screen.shown = state
                     ZenyTheme {
                         FolioPanel(state)
@@ -324,3 +350,16 @@ private fun serviceChargeCode(source: FolioSource): TransactionCodeResponse =
     runBlocking { source.transactionCodes() }.firstOrNull {
         it.active && it.serviceChargeApplies && it.kind == TransactionCodeResponse.Kind.CHARGE
     } ?: fail(NO_CODE)
+
+/** A conta aberta que o aviso de roteamento da tela nomeia ("Lançado na conta <número> pelo roteamento."). */
+private fun routedFolio(
+    source: FolioSource,
+    notice: String,
+): FolioResponse =
+    runBlocking {
+        val pager = CursorPager(OPEN_PAGE_SIZE) { cursor, limit -> source.openFolioPage(cursor, limit) }
+        while (pager.hasMore) {
+            pager.next().firstOrNull { FolioText.routedTo(it.number) == notice }?.let { return@runBlocking it }
+        }
+        fail("o aviso de roteamento não nomeia uma conta aberta: $notice")
+    }
