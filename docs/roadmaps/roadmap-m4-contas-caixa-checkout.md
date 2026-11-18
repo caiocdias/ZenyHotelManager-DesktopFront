@@ -212,8 +212,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #concluida | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
-| E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
-| E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
+| E03 | Pagamentos | #em-andamento | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
+| E09 | Cauções | #pendente | E07, E02, E03 | Registrar, capturar e liberar caução, cauções a vencer |
+| E04 | Check-out | #pendente | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
 | E05 | Gate do marco M4 | #pendente | E04, E08 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
@@ -635,9 +636,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Pagamentos e cauções — #pendente
+## E03 — Pagamentos — #em-andamento
 
-**Objetivo:** na conta, a operadora recebe um pagamento manual, com forma e valor, dentro do turno aberto. Ela reembolsa com aprovação, registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra e acompanha as cauções a vencer.
+**Objetivo:** na conta, a operadora recebe um pagamento manual, com forma e valor, dentro do turno aberto, e reembolsa com aprovação. Registrar, capturar e liberar caução e as cauções a vencer passaram à E09 (divisão de 2026-11-18, no histórico).
 
 **Por que agora:** zerar o saldo é a condição do check-out.
 
@@ -646,21 +647,18 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Escopo:**
 
 - **Pagamentos:** `GET`/`POST /api/v1/folios/{folioId}/payments` e `POST /api/v1/folios/{folioId}/payments/{paymentId}/refund`.
-- **Cauções:**
-  - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
-  - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`;
-  - `GET /api/v1/card-pre-authorizations/expiring`.
 - **Campos do `design` (`A-M7` da M3 E06):** o `MoneyField` e o `DateField` passam a aceitar `enabled`, e a colagem acima de 1000 caracteres deixa de ser recusada em silêncio. Esta é a primeira tela que recebe valor em dinheiro. O `enabled` do `MoneyField` já entrou na E01 (`533f98d`); aqui ficam o do `DateField` e a colagem nos dois.
 
-**Fora de escopo:** Pix, TEF e cartão integrados, que não existem no servidor.
+**Fora de escopo:**
+
+- Pix, TEF e cartão integrados, que não existem no servidor;
+- as cauções (E09).
 
 **Critérios de aceite:**
 
 - [ ] Receber sem turno aberto mostra a mensagem do `code` em pt-BR e o atalho "abrir turno".
 - [ ] Receber o saldo de uma conta do seed zera o saldo, e o pagamento aparece no turno.
 - [ ] Teste: repetir o recebimento após falha de rede usa a mesma `Idempotency-Key`, e o servidor não duplica.
-- [ ] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
-- [ ] Liberar a sobra da caução muda a situação e o saldo conforme a API.
 - [ ] **`A-M7`, `enabled`:** com `enabled = false`, o `MoneyField` e o `DateField` não aceitam digitação nem colagem (teste no `design`). O formulário de pagamento os desabilita enquanto `busy` e no resultado desconhecido (teste do *state holder*).
 - [ ] **`A-M7`, colagem:** colar mais de 1000 caracteres no `MoneyField` e no `DateField` deixa um sinal visível em pt-BR, e não só ignora a colagem (teste no `design`). A forma do sinal é decidida no plano.
 
@@ -674,11 +672,64 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Notas para o plano:**
 
 - Partes independentes, para as ondas do plano: pagamentos (`…/payments`) e cauções (`…/card-pre-authorizations`) usam operações distintas do contrato. O único vínculo é do servidor: a captura da caução gera um pagamento (`capturePaymentIds`), que a lista de pagamentos só lê. A lista de cauções a vencer (`GET /api/v1/card-pre-authorizations/expiring`) é leitura à parte.
+- **Divisão (2026-11-18):** o escopo original não cabia em três fatias de até 60 min e 12 arquivos de produção (os pagamentos com o reembolso, o atalho e os campos do `design` já ocupam três; as cauções somam quatro operações e uma tela de cauções a vencer). As cauções e os critérios delas foram para a E09.
+- **Conferência (2026-11-18):** no `a1cde4b`, nem o `MoneyField` nem o `DateField` têm limite de tamanho: o texto colado entra inteiro e só fica inválido depois que o campo perde o foco. O critério da colagem continua valendo como está: o plano cria o limite de 1000 caracteres com o sinal visível.
 - **`A-M7`:** os campos estão em `design/.../input/MoneyInput.kt` e `DateInput.kt`. A mudança no `design` é usada pelo `app`: a verificação rápida cobre os dois módulos, e as telas do M2 e do M3 que usam os campos continuam verdes. O ajuste dos campos não depende de pagamentos nem de cauções e pode abrir a primeira onda.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
 **Riscos e mitigação:** nenhum além da idempotência, coberta pelo critério.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E09 — Cauções — #pendente
+
+**Objetivo:** na conta, a operadora registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra e acompanha as cauções a vencer.
+
+**Por que agora:** saiu da E03 na divisão de 2026-11-18 (histórico). O check-out (E04) confere e libera as cauções, por isso vem antes dele.
+
+**Dependências:** E07 (a captura exige turno aberto), E02 (a tela da conta) e E03 (a porta dos pagamentos e a lista de pagamentos, onde a captura aparece). O ID é o próximo livre; a posição no índice segue a dependência.
+
+**Escopo:**
+
+- **Cauções:**
+  - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
+  - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`;
+  - `GET /api/v1/card-pre-authorizations/expiring`.
+
+**Fora de escopo:** Pix, TEF e cartão integrados, que não existem no servidor.
+
+**Critérios de aceite:**
+
+- [ ] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
+- [ ] Liberar a sobra da caução muda a situação e o saldo conforme a API.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- A captura gera um pagamento (`capturePaymentIds`) e exige turno aberto (`CASHIER_SHIFT_REQUIRED`): o atalho "abrir turno" da E03 serve aqui também. A liberação não exige turno e vale com a conta encerrada.
+- A validade (`expiresAt`) é um instante em UTC, de agora até 90 dias; o plano decide como a tela a recebe (o `DateField` ganha o `enabled` na E03).
+- A lista de cauções a vencer (`GET /api/v1/card-pre-authorizations/expiring`) é leitura à parte, paginada pelo `CursorPager`.
+- **Risco:** cálculo de valor monetário, concorrência e dado pessoal ou segredo (dados do cartão) estão na lista fechada.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além da idempotência e do cartão, cobertos pelas restrições.
 
 **Evidências e handoff:**
 
@@ -697,7 +748,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Por que agora:** fecha o ciclo da hospedagem na demo. Saiu da recepção (M2) porque depende de conta e caixa (design §7.1).
 
-**Dependências:** E03.
+**Dependências:** E03 e E09 (a liberação da caução).
 
 **Escopo:**
 
@@ -705,7 +756,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - leitura das contas da reserva;
   - cotação de late check-out (`GET /api/v1/reservations/{id}/early-late-quote`);
   - recebimento (E03);
-  - liberação de cauções (E03);
+  - liberação de cauções (E09);
   - encerramento das contas (`POST /api/v1/folios/{id}/close`);
   - `POST /api/v1/reservations/{id}/check-out`.
 - **Erros:** com pendências, mensagens em pt-BR por `code`.
@@ -904,3 +955,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E02 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E02 fica com a leitura da conta (lançamentos, saldo e taxa separada), lançar, estornar e o extrato na tela e em PDF, com os critérios dela sem mudança. Entra a **E08, "Correções da conta e multa de cancelamento"**, com ajustar, dividir, transferir, remover a taxa a pedido, o pagador e o limite de crédito, e os critérios do `B-M5` e da isenção ao vivo, que saíram da E02. A E08 depende da E02 e vem depois da E04 no índice; a E05 passa a depender também dela. A E02 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E02.
 - 2026-11-18 — a E02 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`). O código, o testador de etapa e a revisão final estão limpos no `12ab199`. Faltam os critérios que a `LiveFolioCheck` confere contra o `zeny-front`, que pedem as credenciais do usuário. A E03 e a E08 esperam por ela.
 - 2026-11-18 — a E02 fecha `#concluida` (`claude --agent orquestrador`). A primeira execução da `LiveFolioCheck` mostrou que a demo não tinha taxa de serviço (o padrão do hotel nasce em 0%). O seed passou a defini-la em 10% (`6c4b66d`). Depois de rodar o seed, o usuário rodou a verificação, que passou. A E03 e a E08 ficam elegíveis.
+- 2026-11-18 — a E03 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01 e a E02: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E03, "Pagamentos", fica com receber e reembolsar, o atalho "abrir turno" e o `A-M7`, com os critérios dela sem mudança. Entra a **E09, "Cauções"**, com registrar, capturar e liberar caução e as cauções a vencer, e os dois critérios da caução, que saíram da E03. A E09 depende da E07, da E02 e da E03 e vem logo depois da E03 no índice; a E04 passa a depender também dela. A E03 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E03.
