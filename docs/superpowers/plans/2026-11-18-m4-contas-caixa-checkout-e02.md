@@ -68,7 +68,7 @@ Não há `ARCHITECTURE.md` no repositório.
       val internalPdf: ((folioId: String, number: String) -> RegistrationCardState)?,
   )
   ```
-  No `AppRoot`, `folioWiring(connection, permissions, scope, approval, window): FolioWiring?` devolve `null` sem `folioSource()` ou sem `billing.folios.read` no conjunto; `approve = { approveAction(approval, it) }`; os PDFs pelo `pdfFactory` existente, cada um com um adaptador `RegistrationCards { source.statementPdf(it, <audiência>) }` e o seu `PdfKind`. A Task 2 já o monta completo (com o `approve`), e a Task 3 só o consome.
+  No `AppRoot`, `folioWiring(connection, permissions, scope, approval, window): FolioWiring?` devolve `null` sem `folioSource()` ou sem `billing.folios.read` no conjunto; `approve = { approveAction(approval, it) }`; os PDFs pelo `pdfFactory` existente, cada um com um adaptador `RegistrationCards { source.statementPdf(it, <audiência>) }` e o seu `PdfKind`. O adaptador do PDF interno descarta o nome de arquivo do servidor (`PdfDocument(bytes, null)`), porque o servidor dá `extrato-<número>.pdf` às duas audiências e o nome dele ganharia do `filePrefix`; assim o interno sai `extrato-interno-<número>.pdf`. O wiring é lembrado com `remember(source, sessionId, permissions)` na área, e os *holders* usam a chave da E06, nunca a identidade do wiring. A Task 2 já o monta completo (com o `approve`), e a Task 3 só o consome.
 - `FolioState(wiring: FolioWiring, scope: CoroutineScope, folioId: String)` — a conta, os lançamentos e o extrato na tela; `fun reload()`, `fun close()`, `var audience: StatementAudience` (padrão `INTERNAL`, só para a tela), `fun showStatement()`.
 - `FolioListState(source: FolioSource, scope: CoroutineScope)` — as contas abertas, com `loadMore()` pelo `CursorPager` sobre `openFolioPage`.
 - `ReservationFoliosState(source: FolioSource, scope: CoroutineScope, reservationId: String)` — as contas da reserva para o diálogo do botão "Conta" (pode viver no mesmo arquivo do `FolioListState`).
@@ -78,7 +78,9 @@ Não há `ARCHITECTURE.md` no repositório.
 
 ## Revisão de arquitetura
 
-(pendente)
+- **Veredito:** aprovado com notas, na rodada 1 (rodada 0: bloqueado, 2 Importantes e 13 Menores; corrigidos em `01beb04`).
+- **Revisor:** `revisor-arquitetura`, modelo opus.
+- **Notas Menores (incorporadas):** N1, o nome de arquivo do PDF interno (o adaptador descarta o nome do servidor); N2, a chave do `FolioWiring` (`remember(source, sessionId, permissions)`, *holders* com a chave da E06). O `TableState` do `design` na lista de contas ficou opcional (M13). Não há `ARCHITECTURE.md`.
 
 ---
 
@@ -107,7 +109,8 @@ Não há `ARCHITECTURE.md` no repositório.
 
 **Critérios de aceite:**
 - `FolioStateTest` (novo, porta falsa): `loadsFolioAndPostings` (o saldo do servidor formatado em BRL, sem conta no front); `serviceChargeSitsUnderItsItem`; `unknownTypeShowsAsOther`; `reversedPostingIsMarked`; `guestStatementShowsOnlyWhatServerSends` (a linha `GUEST` sem `internal` não expõe motivo nem usuário; a `INTERNAL` expõe o motivo que veio); `statementBalanceIsTheServerBalance`; `unknownStatementKindShowsAsOther`; `ownerShowsTheTypeLabelNeverTheId`; `closedFolioSaysSo`; `loadFailureShowsErrorAndRetryReloads`; `lateAnswerAfterCloseIsDropped`.
-- `FolioWiringTest` (ou no teste de UI): `guestPdfAsksGuestAndSaysGuest` e `internalPdfAsksInternalAndSaysInternal` (a porta falsa registra a audiência; o título do visualizador é "Extrato — <número>" ou "Extrato interno — <número>").
+- `FolioWiringTest` (ou no teste de UI): `guestPdfAsksGuestAndSaysGuest` e `internalPdfAsksInternalAndSaysInternal` (a porta falsa registra a audiência; o título do visualizador é "Extrato — <número>" ou "Extrato interno — <número>"; o nome sugerido do interno é `extrato-interno-<número>.pdf` mesmo com o servidor mandando `extrato-<número>.pdf`).
+- Teste de UI: recompor a área com a conta aberta mantém o mesmo `FolioState` (o wiring lembrado não recria o *holder*).
 - `FolioListStateTest` (novo): `loadMoreFollowsTheCursor` (duas páginas, a segunda com o cursor da primeira); `reservationWithoutFolioSaysSo`; `reservationWithSeveralFoliosOffersTheChoice`.
 - Teste de UI (`FolioScreenTest`, novo, montando a casca como o `AppRoot` monta): a aba "Caixa" continua a padrão; sem `billing.folios.read` não há aba "Contas"; com ela, escolher uma conta mostra os lançamentos e o saldo; "Conta" no detalhe da reserva só aparece com `billing.folios.read` e abre o diálogo, na Recepção e nas Reservas; trocar de reserva no detalhe fecha o diálogo; "Extrato em PDF (hóspede)" abre o visualizador sem criar arquivo (o mesmo modo de prova dos testes da ficha de registro); a área com `sessionId` de outra sessão não desenha.
 - Os testes que montam o `AppRoot`, a Recepção, as Reservas e o caixa continuam verdes; quebra em arquivo do testador segue a regra do `C-M6`: `:app:test --tests 'com.zeny.desktop.app.AppRoot*' --tests 'com.zeny.desktop.app.ShellRoot*' --tests 'com.zeny.desktop.app.cashier.*' --tests 'com.zeny.desktop.app.reception.*' --tests 'com.zeny.desktop.app.reservations.*'`. Verifica: `:app:test --tests 'com.zeny.desktop.app.folio.*'` mais esse filtro.
