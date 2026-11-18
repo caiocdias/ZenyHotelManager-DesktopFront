@@ -83,6 +83,36 @@ class FolioListStateTest {
         }
 
     @Test
+    fun retryAfterAFailedRefreshReplacesTheRows() =
+        runTest {
+            val source = FakeFolioSource()
+            source.pages = { cursor ->
+                if (cursor == null) {
+                    Page(listOf(folioOf(number = "F-1", balance = "10.00")), "c-2")
+                } else {
+                    Page(listOf(folioOf(OTHER_FOLIO_ID, number = "F-2")), null)
+                }
+            }
+            val list = FolioListState(source, backgroundScope)
+            list.start()
+            runCurrent()
+            list.loadMore()
+            runCurrent()
+            source.pages = { throw ApiError.Network(RuntimeException("sem rede")) }
+            list.refresh()
+            runCurrent()
+            assertNotNull(list.error)
+
+            source.pages = { Page(listOf(folioOf(number = "F-1", balance = "99.00")), null) }
+            list.loadMore()
+            runCurrent()
+
+            assertEquals(listOf(FOLIO_ID.toString()), list.rows.map { it.id }, "a primeira página relida foi anexada")
+            assertEquals("R$ 99,00", list.rows.single().balance)
+            assertFalse(list.hasMore)
+        }
+
+    @Test
     fun postingInThePanelRefreshesTheListRow() =
         runTest {
             val source = FakeFolioSource()

@@ -40,6 +40,9 @@ class FolioListState(
     private var generation = 0
     private var loadJob: Job? = null
 
+    /** Um [refresh] pediu a troca das linhas: só uma página que chega a desliga (a falha a mantém para o retry). */
+    private var replacePending = false
+
     var rows by mutableStateOf<List<FolioRow>>(emptyList())
         private set
 
@@ -59,9 +62,10 @@ class FolioListState(
         loadMore()
     }
 
+    /** A página seguinte; depois de um [refresh] que falhou, a primeira relida, que troca as linhas. */
     fun loadMore() {
         if (closed || loading) return
-        load(reset = false)
+        load()
     }
 
     /** Relê a primeira página com um pager novo; as linhas são trocadas quando ela chega. */
@@ -70,10 +74,11 @@ class FolioListState(
         started = true
         loadJob?.cancel()
         pager = newPager()
-        load(reset = true)
+        replacePending = true
+        load()
     }
 
-    private fun load(reset: Boolean) {
+    private fun load() {
         val mine = ++generation
         val current = pager
         loading = true
@@ -84,7 +89,8 @@ class FolioListState(
                     val page = current.next().map(::folioRowOf)
                     currentCoroutineContext().ensureActive()
                     if (mine != generation) return@launch
-                    rows = if (reset) page else rows + page
+                    rows = if (replacePending) page else rows + page
+                    replacePending = false
                     hasMore = current.hasMore
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
