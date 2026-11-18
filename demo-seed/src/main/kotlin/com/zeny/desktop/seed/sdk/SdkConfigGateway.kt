@@ -21,9 +21,11 @@ import com.zeny.desktop.sdk.model.RoomRequest
 import com.zeny.desktop.sdk.model.RoomStatusResponse
 import com.zeny.desktop.sdk.model.RoomTypeRequest
 import com.zeny.desktop.sdk.model.SeasonRequest
+import com.zeny.desktop.sdk.model.TaxSettingsDto
 import com.zeny.desktop.seed.config.ConfigGateway
 import com.zeny.desktop.seed.config.HousekeepingTransition
 import com.zeny.desktop.seed.config.RoomState
+import com.zeny.desktop.seed.config.TaxSettings
 import com.zeny.desktop.seed.data.AreaSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
 import com.zeny.desktop.seed.data.CashPointSpec
@@ -104,6 +106,32 @@ class SdkConfigGateway(
                 tradeName = spec.tradeName,
             )
         executor.execute { hotelApi.updateHotel(etag, request, it.headers) }
+    }
+
+    /** Sem `ETag` (ausente ou em branco) falha com `ApiError.IncompatibleResponse`: o `PUT` exige o `If-Match`. */
+    override suspend fun taxSettings(): TaxSettings {
+        val current = executor.execute { hotelApi.getHotelTaxSettings(it.headers) }
+        val etag =
+            current.etag
+                ?.takeIf { it.isNotBlank() }
+                ?: throw ApiError.IncompatibleResponse(IllegalStateException("GET das taxas do hotel sem ETag"))
+        val dto = current.value
+        return TaxSettings(
+            issRate = dto.issRate,
+            serviceChargeRate = dto.serviceChargeRate,
+            tourismFeePerPersonNight = (dto.tourismFeePerPersonNight as? Option.Some)?.value,
+            etag = etag,
+        )
+    }
+
+    override suspend fun updateTaxSettings(settings: TaxSettings) {
+        val dto =
+            TaxSettingsDto(
+                issRate = settings.issRate,
+                serviceChargeRate = settings.serviceChargeRate,
+                tourismFeePerPersonNight = Option.Some(settings.tourismFeePerPersonNight),
+            )
+        executor.execute { hotelApi.updateHotelTaxSettings(settings.etag, dto, it.headers) }
     }
 
     override suspend fun guaranteePolicyId(name: String): String? =

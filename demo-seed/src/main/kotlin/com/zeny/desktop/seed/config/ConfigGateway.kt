@@ -88,6 +88,12 @@ interface ConfigGateway {
     /** `true` se criou; `false` se o servidor respondeu `409 CASH_POINT_NAME_ALREADY_IN_USE` (já existe). */
     suspend fun createCashPoint(spec: CashPointSpec): Boolean
 
+    /** Taxas do hotel como estão agora, com o `ETag` da leitura (o servidor exige o `If-Match` na gravação). */
+    suspend fun taxSettings(): TaxSettings
+
+    /** Grava as taxas com `If-Match` = `settings.etag`; os campos vão como estão em `settings`. */
+    suspend fun updateTaxSettings(settings: TaxSettings)
+
     suspend fun seasonIds(): Map<String, String>
 
     suspend fun createSeason(spec: SeasonSpec): String
@@ -111,3 +117,11 @@ interface ConfigGateway {
         extraAdult: BigDecimal,
     )
 }
+
+/** Taxas do hotel; percentuais em pontos (`10` = 10%), como decimal exato em texto (nunca `Double`). */
+data class TaxSettings(
+    val issRate: String,
+    val serviceChargeRate: String,
+    val tourismFeePerPersonNight: String?,
+    val etag: String,
+)

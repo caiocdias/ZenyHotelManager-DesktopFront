@@ -3,6 +3,7 @@ package com.zeny.desktop.seed.sdk
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.seed.config.HousekeepingTransition
+import com.zeny.desktop.seed.config.TaxSettings
 import com.zeny.desktop.seed.data.AddressSpec
 import com.zeny.desktop.seed.data.CancellationPolicySpec
 import com.zeny.desktop.seed.data.CashPointSpec
@@ -23,6 +24,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -344,6 +346,61 @@ class SdkConfigGatewayTest {
                     json("""{"code":"OTHER",$PROBLEM_TAIL""", HttpStatusCode.Conflict)
                 }
             assertFailsWith<ApiError.Problem> { gateway.createCashPoint(CashPointSpec("Recepção", true)) }
+        }
+
+    @Test
+    fun taxSettingsReadReturnsTheEtagAndEveryField() =
+        runTest {
+            val gateway =
+                gateway {
+                    json(
+                        """{"issRate":"3.5","serviceChargeRate":"0","tourismFeePerPersonNight":"7.50"}""",
+                        etag = "\"t1\"",
+                    )
+                }
+            val settings = gateway.taxSettings()
+            assertEquals(TaxSettings("3.5", "0", "7.50", "\"t1\""), settings)
+            assertEquals(listOf(HttpMethod.Get), requests.map { it.method })
+            assertEquals("/api/v1/hotel/tax-settings", requests.single().url.encodedPath)
+        }
+
+    @Test
+    fun taxSettingsWithoutTourismFeeReadsNull() =
+        runTest {
+            val gateway = gateway { json("""{"issRate":"3.5","serviceChargeRate":"0"}""", etag = "\"t1\"") }
+            assertNull(gateway.taxSettings().tourismFeePerPersonNight)
+        }
+
+    @Test
+    fun taxSettingsWithoutEtagFailsBeforeAnyWrite() =
+        runTest {
+            val gateway = gateway { json("""{"issRate":"3.5","serviceChargeRate":"0"}""", etag = " ") }
+            assertFailsWith<ApiError.IncompatibleResponse> { gateway.taxSettings() }
+        }
+
+    @Test
+    fun updateTaxSettingsPutsWithIfMatchAndPreservedFields() =
+        runTest {
+            val gateway = gateway { json("""{"issRate":"3.5","serviceChargeRate":"10"}""") }
+            gateway.updateTaxSettings(TaxSettings("3.5", "10", "7.50", "\"t1\""))
+            val request = requests.single()
+            assertEquals(HttpMethod.Put, request.method)
+            assertEquals("/api/v1/hotel/tax-settings", request.url.encodedPath)
+            assertEquals("\"t1\"", request.headers[HttpHeaders.IfMatch])
+            val body = Json.parseToJsonElement(bodies.single()).jsonObject
+            assertEquals("3.5", body.getValue("issRate").jsonPrimitive.content)
+            assertEquals("10", body.getValue("serviceChargeRate").jsonPrimitive.content)
+            assertEquals("7.50", body.getValue("tourismFeePerPersonNight").jsonPrimitive.content)
+        }
+
+    @Test
+    fun updateTaxSettingsKeepsAnAbsentTourismFeeNull() =
+        runTest {
+            val gateway = gateway { json("""{"issRate":"3.5","serviceChargeRate":"10"}""") }
+            gateway.updateTaxSettings(TaxSettings("3.5", "10", null, "\"t1\""))
+            val body = Json.parseToJsonElement(bodies.single()).jsonObject
+            val fee = body["tourismFeePerPersonNight"]
+            assertTrue(fee == null || fee is JsonNull)
         }
 
     @Test

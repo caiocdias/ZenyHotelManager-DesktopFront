@@ -5,6 +5,7 @@ import com.zeny.desktop.seed.data.DemoData
 import com.zeny.desktop.seed.data.HousekeepingTarget
 import com.zeny.desktop.seed.data.SeedItem
 import com.zeny.desktop.seed.data.SeedReport
+import java.math.BigDecimal
 import java.time.LocalDate
 
 object HousekeepingPlan {
@@ -80,6 +81,7 @@ class ConfigSeeder(
         businessDate: LocalDate,
     ): SeededConfig {
         seedHotel(data)
+        seedServiceCharge(data)
         val guaranteeId = seedGuaranteePolicy(data)
         val cancellationId = seedCancellationPolicy(data)
         val typeIds = seedRoomTypes(data)
@@ -112,6 +114,14 @@ class ConfigSeeder(
                 )
             }
         }
+    }
+
+    /** O padrão do hotel nasce 0% e um código com taxa de serviço sem percentual próprio passaria sem a taxa. */
+    private suspend fun seedServiceCharge(data: DemoData) {
+        val current = gateway.taxSettings()
+        val defined = BigDecimal(current.serviceChargeRate).signum() == 0
+        if (defined) gateway.updateTaxSettings(current.copy(serviceChargeRate = data.serviceChargeRate))
+        report.serviceCharge(data.serviceChargeRate, defined)
     }
 
     private suspend fun seedGuaranteePolicy(data: DemoData): String {
