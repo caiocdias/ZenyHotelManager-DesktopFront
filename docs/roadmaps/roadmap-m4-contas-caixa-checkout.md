@@ -63,7 +63,8 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 - check-out;
 - extrato, na tela e em PDF, no visualizador da M2 E07;
 - seed ampliado;
-- roteiro do M4.
+- roteiro do M4;
+- as dívidas da M3 E06 que o usuário mandou resolver antes do dinheiro: a fonte única de permissões (D2, E06) e a regra única do resultado desconhecido (D1, E01). Os demais achados da M3 E06 que o handoff dela destinou a este marco também entram, cada um na etapa nomeada.
 
 **Fora de escopo:**
 
@@ -83,6 +84,8 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 - **Idempotência:** toda operação financeira leva `Idempotency-Key` por intenção. Repetir depois de erro de rede ou de aprovação reaproveita a chave. Nenhum duplo clique gera dois lançamentos.
 - **Cartão:** nenhum campo de número de cartão no app. Na caução, só os dados que o contrato pede (token ou referência, bandeira e últimos dígitos).
 - **Aprovação de superior:** ação recusada com `APPROVAL_REQUIRED` passa pelo diálogo do M1.
+- **Resultado desconhecido (D1):** toda escrita idempotente do marco classifica a falha pela função única do `core` criada na primeira tarefa da E01. Nenhum estado novo copia a regra.
+- **Permissões (D2, [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md)):** as áreas e o topo da casca usam o conjunto de permissões que o `ShellState` leu na sessão vigente, recebido por parâmetro. Nenhuma área lê o `me` por conta própria, e a falha dessa leitura é a falha da casca.
 - **Servidor:** só leitura, e o commit fixado não muda no marco.
 - **Idioma:** UI em pt-BR, código em inglês.
 
@@ -92,6 +95,8 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 |---|---|---|---|
 | H1 | O check-out do servidor devolve erro tipado (`code`) quando há saldo, caução ou conta aberta. Com isso o front monta uma lista de pendências antes de confirmar | O assistente de check-out passa a conferir a conta por leitura antes de chamar o check-out | E04 |
 | H2 | O seed consegue abrir um turno para a Recepcionista e lançar consumos nas contas dos hospedados pela API | O roteiro abre o turno à mão no início | E05 |
+| D1 | **Decidida pelo usuário em 2026-11-17** (D4 do M3, na entrevista do fim do lote da M3 E06, pela opção recomendada). A regra do "resultado desconhecido" (`A-M10`/`B-M7`) está copiada em 8 estados, com 3 variantes. Ela vira uma função única no `core`, na **primeira tarefa da E01**, antes da primeira escrita de dinheiro. Vão junto o `B-M2a`, o `WalkInState`, a criação sem reserva como `IncompatibleResponse` e os Menores M1, M2 e M4 a M7 da revisão final da M3 E06 | Sem a extração, o M4 cria mais cópias em telas de dinheiro | E01 |
+| D2 | **Decidida pelo usuário em 2026-11-17** (D5 do M3; desenho fechado por entrevista na sessão do arquiteto, as quatro respostas pela opção recomendada): **uma fonte de permissões por sessão**, registrada no [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md). O estado fica no `ShellState` e vai às áreas por parâmetro. A falha e o "Tentar de novo" são os da casca. O valor vive no `ShellState` da sessão, recriado a cada `sessionId`. A migração das áreas existentes é uma etapa própria (E06), antes da E01 | Sem a fonte, cada área do M4 repetiria a leitura e o estado de falha | E06, E01, E02 |
 
 ## Definição global de pronto
 
@@ -100,6 +105,20 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 - [ ] Roteiro `docs/demo/roteiro-m4.md`, acumulando os anteriores, executado pelo usuário no Windows.
 - [ ] Teste de idempotência em toda operação financeira do marco.
 - [ ] Nenhuma etapa depende de pedido ao servidor.
+
+## Notas de máquina e de processo
+
+Vêm do handoff da M3 E06 ("Notas para a próxima etapa (M4 E01)") e valem para todas as etapas deste marco. Quem planeja leva cada uma às Global Constraints do plano ou ao despacho das tarefas.
+
+- **Testes de UI rolam até a linha antes do clique.** Um teste que procura por texto uma linha que não é a primeira de uma lista ou tabela chama `performScrollToNode` antes do clique. Com o detalhe aberto, a lista fica com 96 px na janela de teste, e o resultado passa a depender das métricas da fonte da máquina. Exemplo no repositório: `ReservationsActionsTest.kt` (correção `45c4ce4`).
+- **`detektMain` e `detektTest` por tarefa.** A `verificação rápida` do `CLAUDE.md` roda `detekt`, mas não `detektMain` nem `detektTest`, que têm resolução de tipos e só rodam no `check` ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), Consequências). Nas tarefas de Kotlin, o despacho pede `:<módulo>:detektMain` e `:<módulo>:detektTest` junto da verificação rápida, para o achado não esperar o gate.
+- **Conferência do `C-M6`.** Antes de mandar o desenvolvedor a um arquivo de teste, confira se o testador o endureceu: `git log --format=%B -- <arquivo> | grep -c '^Soul: testador'`. Com contagem maior que zero, a mudança vai ao testador.
+- **Ubuntu novo (WSL):**
+  - o locale do sistema é só `C.UTF-8`;
+  - o `awk` é o gawk;
+  - a configuração global do git tem `core.autocrlf = input`.
+
+  Os scripts de `tests/` já não dependem disso (`58b6f2d`: `[[:alpha:]]`, `ENVIRON` no awk e independência do `core.autocrlf`). Script novo segue as mesmas formas, e uma falha que só aparece nesta máquina é tratada no teste, sem reconfigurar o sistema (ruling da M3 E06). O `busybox` não está instalado (recomendado: `sudo apt install busybox-static`), e o caso do busybox em `test_gen_env_ataque.sh` fica pulado até lá. A imagem do oasdiff já está baixada.
 
 ## Protocolo de execução
 
@@ -187,35 +206,149 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Turno de caixa | #pendente | — | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório |
-| E02 | Conta da hospedagem | #pendente | — | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
+| E06 | Fonte única de permissões | #pendente | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
+| E01 | Turno de caixa | #pendente | E06 | Regra única do "resultado desconhecido" no `core` (D1); abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório |
+| E02 | Conta da hospedagem | #pendente | E06, E01 | Conta com lançamentos, lançar, estornar, ajustar, dividir, transferir, taxa de serviço, pagador e extrato |
 | E03 | Pagamentos e cauções | #pendente | E01, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E05 | Gate do marco M4 | #pendente | E04 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
-## E01 — Turno de caixa — #pendente
+## E06 — Fonte única de permissões — #pendente
 
-**Objetivo:** a operadora abre o próprio turno num ponto de caixa e vê o turno corrente. Registra sangria e suprimento e fecha às cegas, informando o contado. O app mostra o relatório de fechamento com as diferenças. O topo indica se há turno aberto.
+**Objetivo:** as áreas do app usam o conjunto de permissões do `me` que a casca leu na sessão vigente, conforme o [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md). Nenhuma área lê o `me` por conta própria, e a falha da leitura passa a ser a falha da casca, com o "Tentar de novo" dela. A Recepção e os Recados deixam de esconder ações por falha silenciosa.
 
-**Por que agora:** o pagamento (E03) e o check-out (E04) exigem turno aberto.
+**Por que agora:** D2 (D5 do M3). A etapa vem antes da E01 para o caixa (E01) e a conta (E02) já nascerem usando a fonte. Sem ela, cada área do M4 repetiria a leitura e o estado de falha (ADR 0013, item 5).
 
-**Dependências:** nenhuma dentro deste roadmap (exige o gate do M3).
+**Dependências:** nenhuma dentro deste roadmap (exige o gate do M3). O ID é o próximo livre; a posição no índice segue a dependência.
 
 **Escopo:**
 
+- **Casca:** o `ShellState` guarda o conjunto de permissões do `me` que deu certo, numa cópia imutável. Ele atribui o conjunto junto com o menu e o zera no início de cada `reload()` (ADR 0013, itens 1 e 4).
+- **Entrega:** o conjunto vai por parâmetro do `AreaContent` às áreas Reservas, Recepção (painel do dia e walk-in) e Recados, e aos *state holders* delas pelo construtor (ADR 0013, item 2).
+- **Remoção:**
+  - o `AreaPermissionsState` e o `PermissionsNotice`;
+  - as portas `permissions()` de `ReceptionSource`, `AvailabilitySource` e `TracesSource`, com as implementações delas em `ServerConnection`;
+  - o fallback "falha vira conjunto vazio" do `DayPanelState` e do `TracesListState`.
+- **Testes:** os testes e as portas falsas afetados são reescritos ou removidos (ADR 0013, Consequências), sem afrouxar as asserções do comportamento por permissão que a M3 deixou.
+
+**Fora de escopo:**
+
+- releitura das permissões no meio da sessão (ADR 0013, item 4);
+- mudança no `core`: a fachada `account.me()` fica como está;
+- área nova (o caixa é da E01).
+
+**Critérios de aceite:**
+
+- [ ] Só a casca lê o `me`. `grep -rn 'fun permissions' app/src/main` não devolve linha, e `grep -rn 'account\.me()' app/src/main` devolve só a implementação de `ServerConnection.me()`, chamada só pelo `ShellState`.
+- [ ] `grep -rnE 'AreaPermissionsState|PermissionsNotice' app/src/main` não devolve linha.
+- [ ] Teste: com uma porta falsa que conta as chamadas ao `me`, abrir a casca e depois a Recepção, as Reservas e os Recados, em sequência, registra uma leitura só.
+- [ ] Teste: com o `me` falhando, a casca mostra o `ErrorState`, e nenhuma área é desenhada. O "Tentar de novo" relê, e com o `me` dando certo na repetição as ações da área aberta seguem as permissões lidas.
+- [ ] Teste: na troca de `sessionId`, as áreas da sessão nova nunca recebem o conjunto da anterior, nem com a leitura da sessão nova ainda em voo. Do início do `reload()` até a resposta, o `ShellState` não expõe o conjunto velho.
+- [ ] Teste: o `DayPanelState` assina os tópicos do tempo real pelo conjunto recebido da casca, e o `WalkInState` recebe o mesmo conjunto.
+- [ ] O comportamento por permissão da M3 continua verde com o conjunto entregue pela casca:
+  - a aba de disponibilidade só com `reservations.availability.read`;
+  - as ações da reserva só com `reservations.reservations.manage`;
+  - editar e resolver recado só com as permissões de cada ação.
+
+  Toda `ASSERCAO_REMOVIDA` de `check_test_integrity.py` na etapa tem justificativa da revisão, com a asserção nova de força igual ou maior.
+- [ ] O handoff registra o commit que removeu o `AreaPermissionsState`, que a E01 cita no destino dos Menores M1, M2 e M5 da M3 E06.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`: entrar como Recepcionista e como Governanta do seed e abrir cada área que o menu mostra. As ações seguem as permissões, e não aparece aviso de permissões na área.
+
+**Revisão humana:** não. O desenho foi decidido pelo usuário (ADR 0013), a revisão de arquitetura do plano confere a aderência a ele, e a etapa não muda o que o servidor autoriza: o servidor continua decidindo cada ação.
+
+**Notas para o plano:**
+
+- **Risco:** autorização está na lista fechada de `Risco: alto` (ADR 0012). Por isso, testador nas tarefas que mexem na entrega do conjunto.
+- **Arquivos do testador (`C-M6`).** Muitos dos testes afetados foram endurecidos pelo testador. No `dbeacff`, a contagem de `Soul: testador` era maior que zero, entre outros, em:
+  - `FakeReceptionSource.kt` (4) e `FakeTracesSource.kt` (2);
+  - `ReservationsPermissionsAtaqueTest.kt` (2) e `AreaPermissionsStateAtaqueTest.kt` (1);
+  - `FakeAvailabilitySourceAtaqueTest.kt`, `ReceptionSourceAtaqueTest.kt`, `CoreReceptionSourceAtaqueTest.kt`, `CoreTracesSourceAtaqueTest.kt` e `FakeTracesSourceAtaqueTest.kt` (1 cada).
+
+  Confira de novo com o comando de "Notas de máquina e de processo" no momento do plano.
+- **Ondas:** a casca (guardar e entregar o conjunto) vem primeiro. A migração de cada área depende dela, e as três são independentes entre si. O ajuste das portas falsas pode ser um commit próprio (nota N2 da revisão de arquitetura da M3 E06).
+- **Código que sai e achados da M3 E06.** Os Menores M1, M2 e M5 da revisão final da M3 E06 (destino: E01) apontam para o `AreaPermissionsState` e um teste dele. Esta etapa não os corrige à parte: remove o código e registra o commit.
+- Os testes de UI que montam o `AppRoot` com portas falsas mudam de forma. Rode também os filtros dos outros testes que passam pelo `AppRoot` (nota N3 da mesma revisão).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- A troca mexe em muitos arquivos de teste de três áreas. Mitigação: as ondas acima e as fixtures num commit próprio.
+- Uma asserção do comportamento por permissão se perde na reescrita. Mitigação: o critério da `check_test_integrity.py` e o testador de etapa atacando a entrega do conjunto.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E01 — Turno de caixa — #pendente
+
+**Objetivo:** a primeira tarefa transforma a regra do "resultado desconhecido" numa função única do `core` (D1), antes da primeira escrita de dinheiro, e leva junto os achados da M3 E06 que dependem dela. Depois, a operadora abre o próprio turno num ponto de caixa e vê o turno corrente. Ela registra sangria e suprimento e fecha às cegas, informando o contado. O app mostra o relatório de fechamento com as diferenças, e o topo indica se há turno aberto.
+
+**Por que agora:** o pagamento (E03) e o check-out (E04) exigem turno aberto. A sangria, o suprimento e o fechamento são as primeiras escritas de dinheiro do app, e o usuário decidiu que a regra única vem antes delas (D1).
+
+**Dependências:** E06 (a área de caixa e o indicador do topo usam a fonte de permissões).
+
+**Escopo:**
+
+- **Regra do resultado desconhecido (D1, primeira tarefa):**
+  - **A função:** uma função pública do `core` classifica a falha de uma escrita idempotente em três casos:
+    - definitiva;
+    - desconhecida, que admite repetir com a mesma chave;
+    - desconhecida e guardada pelo servidor (o 5xx sob a chave, que repetir não resolve).
+  - **Os estados:** os 8 estados que copiam a regra no `dbeacff` passam a usar a função:
+    - `CheckInState`, `RoomMoveState`, `WalkInState` e `TraceFormState`;
+    - `NewReservationState`, `ReservationConfirmState`, `ReservationCancelState` e `ReservationReactivateState`.
+
+    Os textos de cada ação continuam com o estado.
+  - **`createBooking`:** usa o ajudante `approvable` comum do `core` (parte do `A-M10`).
+  - **`B-M2a`:** com o 5xx guardado, o texto manda fechar, e o diálogo não oferece "Tentar de novo".
+  - **`WalkInState`:** resultado desconhecido seguido de aprovação cancelada não deixa o formulário travado e sem texto (o desenho do `A-M1`, corrigido nos três estados de reservas pela Task 6 da M3 E06).
+  - **Criação sem reserva:** uma resposta de criação sem reserva vira `ApiError.IncompatibleResponse`, com texto próprio, e não "resultado desconhecido".
+  - **Menores da revisão final da M3 E06:**
+    - M1 e M2 (no `AreaPermissionsState`: o cancelamento alheio e o `catch (e: Throwable)`);
+    - M4, M5, M6 e M7 (testes e trava; ver as notas).
 - **Pontos de caixa:** `GET /api/v1/cash-points` (só leitura).
 - **Turno:**
   - `GET`/`POST /api/v1/cashier-shifts` e `GET /api/v1/cashier-shifts/current`;
   - `POST /api/v1/cashier-shifts/{id}/movements` e `/close`;
   - `GET /api/v1/cashier-shifts/{id}/report`.
-- **Topo da casca:** indicador de turno.
+- **Topo da casca:** indicador de turno. A área de caixa e o indicador usam o conjunto de permissões do `ShellState` (ADR 0013).
 
-**Fora de escopo:** cadastro de pontos de caixa (M7).
+**Fora de escopo:**
+
+- cadastro de pontos de caixa (M7);
+- o cursor duplicado entre fachadas, citado na mesma linha do `A-M10`/`B-M7`. Não é a regra do resultado desconhecido; a nota da E02 cuida de não criar outra cópia.
 
 **Critérios de aceite:**
 
+- [ ] **Função única:** existe no `core` uma função pública que classifica a falha de uma escrita idempotente nos três casos do escopo. Testes do `core` cobrem cada caso de `ApiError`:
+  - `Network`, `IncompatibleResponse` e `SessionEnded`;
+  - `Problem` com `IDEMPOTENCY_KEY_IN_USE`;
+  - `Problem` 5xx e `Unexpected` 5xx;
+  - pelo menos um `Problem` 4xx definitivo.
+- [ ] **Nenhuma cópia no `app`:** `grep -rnE 'fun resultUnknown|IDEMPOTENCY_KEY_IN_USE' app/src/main` não devolve linha. Os 8 estados do escopo e as escritas desta etapa usam a função do `core`. Em `CheckInState`, `RoomMoveState` e `TraceFormState`, um teste prova que um `Problem` 5xx agora dá resultado desconhecido.
+- [ ] **`approvable` único:** `grep -n 'private fun <T : Any> approvable' core/src/main/kotlin/com/zeny/desktop/core/facade/BookingsFacade.kt` não devolve linha, e `createBooking` usa o ajudante comum.
+- [ ] **`B-M2a`:** com o 5xx guardado, o diálogo mostra o texto de fechar e conferir e não oferece "Tentar de novo". Há teste nos estados que têm esse texto no `dbeacff`: walk-in, nova reserva, cancelar e reativar.
+- [ ] **`WalkInState`:** um teste prova que resultado desconhecido, seguido de "Tentar de novo" com `APPROVAL_REQUIRED` e da aprovação cancelada, deixa um texto na tela e não trava o formulário.
+- [ ] **Criação sem reserva:** um teste prova que a resposta de criação sem reserva vira `ApiError.IncompatibleResponse`, com texto próprio em pt-BR, e não deixa o estado em "resultado desconhecido".
+- [ ] **M1, M2 e M5:** o handoff dá a cada um um destino com commit: corrigido, ou resolvido pela remoção do `AreaPermissionsState` na E06 (commit citado no handoff dela). A leitura do `me` que ficou, no `ShellState`, não engole o cancelamento alheio (usa `ensureActive()`) e não pega `Throwable`.
+- [ ] **M4, M6 e M7, pelo testador:**
+  - os dois testes de `NewReservationDialogEtapaAtaqueTest` apontados no M4 têm nome e asserção fortalecidos;
+  - `NewReservationFlowAtaqueTest` tem o caso "tentativa aprovada com resultado desconhecido, depois aprovação cancelada" (M6);
+  - um mutante que explora o contorno da trava do `config.` em `tests/test_live_seed_availability_limpeza_ataque.sh` (linhas 95–101 no `dbeacff`) fica vermelho (M7).
 - [ ] Abrir o turno como Recepcionista do seed: o indicador aparece no topo, e reabrir com um turno já aberto mostra mensagem em pt-BR.
 - [ ] Sangria e suprimento aparecem no turno, e repetir após erro de rede não duplica (`Idempotency-Key`, se a operação exigir).
 - [ ] O fechamento cego não mostra o esperado antes de informar o contado. O relatório mostra a diferença em BRL.
@@ -228,11 +361,33 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** "turno cego" e a notificação de diferença foram validados no gate do M3 do servidor (histórico do `docs/roadmaps/README.md` do servidor, 2026-10-20).
+**Notas para o plano:**
+
+- "Turno cego" e a notificação de diferença foram validados no gate do M3 do servidor (histórico do `docs/roadmaps/README.md` do servidor, 2026-10-20).
+- **Fonte dos itens do D1:**
+  - a tabela "Destino dos achados que este plano não corrige" de `docs/superpowers/plans/2026-11-17-m3-reservas-e06.md`;
+  - o handoff da M3 E06 em `docs/roadmaps/roadmap-m3-reservas.md` ("Destino dos achados" e "Notas para a próxima etapa (M4 E01)").
+
+  A correção do `A-M1` nos três estados de reservas é a Task 6 daquele plano (`03542f0`), e é o modelo para o `WalkInState`.
+- **As 3 variantes da regra**, no `dbeacff`. Todas tratam como desconhecidos `Network`, `IncompatibleResponse` e `SessionEnded`. A diferença está no resto:
+  - **completa**, em `WalkInState`, `NewReservationState`, `ReservationConfirmState`, `ReservationCancelState` e `ReservationReactivateState`: também `IDEMPOTENCY_KEY_IN_USE`, `Problem` 5xx e `Unexpected` 5xx;
+  - **sem o 5xx**, em `CheckInState` e `RoomMoveState`: também `IDEMPOTENCY_KEY_IN_USE`;
+  - **mínima**, em `TraceFormState`: só as três comuns.
+
+  A função única adota a variante completa. Nos três estados das outras variantes, um 5xx (e, nos recados, o `IDEMPOTENCY_KEY_IN_USE`) passa de definitivo a desconhecido. A mudança é intencional, conservadora (não duplica), e tem teste em cada um desses estados. O servidor guarda a resposta sob a chave qualquer que seja o status (KDoc do `IdempotencyFilter` do servidor, linhas 55–60, citado no `B-M2a`), e os 502/504 de proxy não são guardados (comentário em `WalkInState.fail`). A função preserva essa distinção no caso "guardado".
+- **Ordem e ondas:** a extração e as correções que dependem dela vêm antes de qualquer escrita do turno. As leituras do turno (pontos de caixa, turno corrente e relatório) não dependem da extração e podem ir na mesma onda dela.
+- **Testador:**
+  - O M4, o M6 e o M7 são do testador (arquivos dele; conferência do `C-M6`).
+  - O M5 (o nome de `leavingWhileReadIsHeldDropsTheLateAnswer`) é de um teste do `AreaPermissionsState`, que a E06 remove. Se o teste ainda existir, ele também é do testador.
+- **Risco:** cálculo de valor monetário e concorrência estão na lista fechada de `Risco: alto` (ADR 0012). Por isso, testador por tarefa nas escritas do turno e na extração.
+- **Módulos tocados:** a extração mexe no `core`, e a verificação rápida cobre o `core` e o `app`. Uma mudança na trava do seed (M7) roda também `bash tests/run.sh tests/test_live_seed_availability_limpeza_ataque.sh`.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** nenhum relevante.
+**Riscos e mitigação:**
+
+- A extração toca 8 estados de três áreas antes da tela nova, e o plano pode passar de três fatias. Mitigação: a extração e os achados ficam numa fatia, e o turno na outra. Se não couber, o orquestrador para e relata, e a divisão da etapa é feita numa sessão do arquiteto.
+- Uma variante da regra muda de comportamento sem querer. Mitigação: os testes existentes dos 8 estados ficam sem afrouxar asserção (`check_test_integrity.py`), e o testador ataca a função nova.
 
 **Evidências e handoff:**
 
@@ -251,7 +406,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Por que agora:** a conta é o centro financeiro da hospedagem e pré-requisito do check-out.
 
-**Dependências:** nenhuma dentro deste roadmap.
+**Dependências:** E06 (fonte de permissões) e E01 (as escritas da conta usam a função única do resultado desconhecido, D1).
 
 **Escopo:**
 
@@ -264,11 +419,15 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - **Extrato:** `GET /api/v1/folios/{id}/statement` na tela e `GET /api/v1/folios/{id}/statement/pdf` no visualizador da M2 E07 (em memória, "Salvar como…" e impressão local, ADR 0009), com a mesma escolha de `audience`.
 - **Aprovação de superior:** diálogo onde o servidor exigir.
 - **Atalho:** "Conta" no detalhe da reserva.
+- **Multa de cancelamento (achados da M3 E06):**
+  - `B-M5`: os textos da multa numa reserva cancelada mais de uma vez;
+  - a isenção da multa, verificada ao vivo. Na M3 E04 o diálogo oferece "Isentar a multa", mas a isenção nunca foi verificada ao vivo.
 
 **Fora de escopo:**
 
 - encerrar e reabrir a conta, que ficam no check-out (E04) ou num atalho gerencial registrado no handoff;
-- pagamento (E03).
+- pagamento (E03);
+- a prévia da multa antes de cancelar, que depende do pedido não bloqueante `PF-04` (D2 do M3).
 
 **Critérios de aceite:**
 
@@ -278,17 +437,23 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] O extrato `GUEST` não mostra os lançamentos internos que o servidor omite.
 - [ ] O extrato em PDF abre no visualizador com o mesmo saldo do extrato na tela, para `GUEST` e para `INTERNAL`, e nenhum arquivo é criado sem "Salvar como…".
 - [ ] Um tipo de lançamento desconhecido aparece como "Outro (VALOR)".
+- [ ] **`B-M5`:** cancelar, reativar e cancelar de novo uma reserva do seed. O texto da multa no diálogo de cancelamento e a multa que a conta mostra batem com os lançamentos da API. No segundo cancelamento o servidor não cobrou de novo na verificação ao vivo da M3 E04 (critério 2), e o texto não diz que cobrou. Isso vale num teste do estado e na verificação ao vivo.
+- [ ] **Isenção ao vivo:** uma verificação ao vivo contra o `zeny-front` cancela uma reserva do seed com "Isentar a multa", com a aprovação do Gerente se o servidor pedir. A conta da reserva fica sem a multa, ou com o lançamento que a API devolver para a isenção, e a tela diz o mesmo que a conta.
+- [ ] As ações da conta usam o conjunto de permissões da casca (ADR 0013), e as escritas usam a função única do resultado desconhecido (D1): o grep do critério da E01 continua sem linha.
 
 **Validação obrigatória:**
 
 - Comandos oficiais de build, teste e lint → verdes.
 - Inspeção manual contra `zeny-front`.
+- Verificação ao vivo da multa e da isenção, com as credenciais só no ambiente do subshell, como as da M3 E04.
 
 **Revisão humana:** não
 
 **Notas para o plano:**
 
 - O `type` do lançamento foi o primeiro `x-extensible-enum` do servidor (ARCHITECTURE §7).
+- **Fonte do `B-M5`:** a descrição está só na tabela de destinos do plano da M3 E06 (`docs/superpowers/plans/2026-11-17-m3-reservas-e06.md`). O planejador lê o texto da multa no `ReservationCancelState` e no diálogo e o compara com o que a conta mostra. A verificação ao vivo da multa e da reativação é a `LiveReservationLifecycleCheck` (M3 E04), e a isenção pode entrar nela ou numa verificação ao lado. Ela escreve na demo, como a da M3 E04 (decisão 5 do handoff dela).
+- **Cursor:** as listas de contas e lançamentos são as primeiras fachadas paginadas do M4. O `core` já tem `CursorPager` (`core/.../http/CursorPager.kt`), e o `A-M10`/`B-M7` apontou o cursor duplicado entre fachadas. A fachada nova usa o `CursorPager` e não cria outra cópia.
 - Partes independentes, para as ondas do plano: o extrato (`…/statement` na tela e `…/statement/pdf` no visualizador) só lê a conta e não depende das ações sobre os lançamentos. A troca do pagador e do limite de crédito (`PUT /api/v1/folios/{id}`) também não depende delas.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
@@ -323,6 +488,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
   - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`;
   - `GET /api/v1/card-pre-authorizations/expiring`.
+- **Campos do `design` (`A-M7` da M3 E06):** o `MoneyField` e o `DateField` passam a aceitar `enabled`, e a colagem acima de 1000 caracteres deixa de ser recusada em silêncio. Esta é a primeira tela que recebe valor em dinheiro.
 
 **Fora de escopo:** Pix, TEF e cartão integrados, que não existem no servidor.
 
@@ -333,6 +499,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Teste: repetir o recebimento após falha de rede usa a mesma `Idempotency-Key`, e o servidor não duplica.
 - [ ] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
 - [ ] Liberar a sobra da caução muda a situação e o saldo conforme a API.
+- [ ] **`A-M7`, `enabled`:** com `enabled = false`, o `MoneyField` e o `DateField` não aceitam digitação nem colagem (teste no `design`). O formulário de pagamento os desabilita enquanto `busy` e no resultado desconhecido (teste do *state holder*).
+- [ ] **`A-M7`, colagem:** colar mais de 1000 caracteres no `MoneyField` e no `DateField` deixa um sinal visível em pt-BR, e não só ignora a colagem (teste no `design`). A forma do sinal é decidida no plano.
 
 **Validação obrigatória:**
 
@@ -341,7 +509,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** partes independentes, para as ondas do plano: pagamentos (`…/payments`) e cauções (`…/card-pre-authorizations`) usam operações distintas do contrato. O único vínculo é do servidor: a captura da caução gera um pagamento (`capturePaymentIds`), que a lista de pagamentos só lê. A lista de cauções a vencer (`GET /api/v1/card-pre-authorizations/expiring`) é leitura à parte.
+**Notas para o plano:**
+
+- Partes independentes, para as ondas do plano: pagamentos (`…/payments`) e cauções (`…/card-pre-authorizations`) usam operações distintas do contrato. O único vínculo é do servidor: a captura da caução gera um pagamento (`capturePaymentIds`), que a lista de pagamentos só lê. A lista de cauções a vencer (`GET /api/v1/card-pre-authorizations/expiring`) é leitura à parte.
+- **`A-M7`:** os campos estão em `design/.../input/MoneyInput.kt` e `DateInput.kt`. A mudança no `design` é usada pelo `app`: a verificação rápida cobre os dois módulos, e as telas do M2 e do M3 que usam os campos continuam verdes. O ajuste dos campos não depende de pagamentos nem de cauções e pode abrir a primeira onda.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -377,6 +548,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - `POST /api/v1/reservations/{id}/check-out`.
 - **Erros:** com pendências, mensagens em pt-BR por `code`.
 - **Reabrir conta encerrada:** `POST /api/v1/folios/{id}/reopen`, com aprovação.
+- **Duplicação com o `DayPanelState` (estacionado da M3 E01, destino da M3 E06):** o assistente parte de uma saída do painel do dia. Por isso, a duplicação entre o `DayPanelState` e o `ReservationSearchState` sai nesta etapa: as colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares. O destino previsto na M3 E01 era `reservationColumns()` e um leitor de página compartilhado em `ReservationRows.kt`.
 
 **Fora de escopo:**
 
@@ -389,6 +561,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Check-out com caução ainda capturável mostra a pendência e não conclui até a liberação.
 - [ ] Se o servidor recusar o check-out, a mensagem vem em pt-BR e nada fica pela metade na tela (recarga do estado).
 - [ ] Late check-out cotado aparece como lançamento na conta antes do saldo final, se a política lançar.
+- [ ] **Duplicação:** `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
 
 **Validação obrigatória:**
 
@@ -397,7 +570,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** a M5 E04 do servidor define o check-out (saldo zero, cauções liberadas, contas encerradas, UH Vago + Sujo, late check-out). Leia o handoff dela e a H14 do roadmap do M5 do servidor.
+**Notas para o plano:**
+
+- A M5 E04 do servidor define o check-out (saldo zero, cauções liberadas, contas encerradas, UH Vago + Sujo, late check-out). Leia o handoff dela e a H14 do roadmap do M5 do servidor.
+- **Duplicação:** no `dbeacff`, `readRoomTypeNames` está em `reception/DayPanelState.kt` e em `reservations/ReservationSearchState.kt`. A origem é a decisão 2 do handoff da M3 E01. Essa extração não depende do assistente e pode ir na primeira onda. Se um teste da tabela procura por texto uma linha que não é a primeira, vale a nota de rolar até a linha.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -429,7 +605,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - seed ampliado (design §7.2, H2);
 - `docs/demo/roteiro-m4.md` (a criar), acumulando os anteriores e contando a hospedagem de ponta a ponta (reserva, check-in, consumo, pagamento, check-out);
 - pacote atualizado;
-- verificação num clone limpo.
+- verificação num clone limpo;
+- **achados da M3 E06 no `demo-seed`**, que esta etapa amplia:
+  - `B-M4`/`C-M2`: o `SdkPendingGateway` propaga a quem chama o `detail` do servidor, e o KDoc do `cancelReservation` está impreciso;
+  - `B-M8`: o fora de ordem da UH 208 usa a data operacional do dia, e o `untouched` do `PendingSeeder` tem o nome invertido;
+  - `C-M8`: os opt-ins ao vivo do `demo-seed` ficam fora do estado da tarefa de teste do Gradle.
 
 **Fora de escopo:** funcionalidade nova.
 
@@ -438,6 +618,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Clone limpo: build, teste e lint verdes.
 - [ ] `smokeTest` verde, e o seed termina em menos de 2 minutos.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
+- [ ] **`B-M4`/`C-M2`:** um teste do `SdkPendingGateway` com um `detail` marcado do servidor prova que o texto marcado não aparece na mensagem nem na causa da exceção que sai do adaptador. O KDoc do `cancelReservation` descreve o que o adaptador devolve.
+- [ ] **`B-M8`:** o `untouched` do `PendingSeeder` tem nome que diz o que guarda, e os testes do seeder seguem verdes. O KDoc do seeder e o `roteiro-m4.md` dizem que o fora de ordem da UH 208 depende da data operacional do dia da recriação. O handoff registra se o planejador mudou o cálculo da data, e por quê.
+- [ ] **`C-M8`:** os opt-ins ao vivo do `demo-seed` são entradas da tarefa de teste do Gradle. Mudar um opt-in invalida o resultado em cache da tarefa, e um teste estático ou de script prova isso.
 
 **Validação obrigatória:**
 
@@ -447,7 +630,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** sim. Gate do marco e a primeira build com o ciclo completo da hospedagem.
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- **Origem dos três achados:** a tabela de destinos do plano da M3 E06. O `B-M4` também cita a última fronteira do seed, que já redige (a revisão seguiu o `detail` até a saída). Mexer no adaptador pede nova verificação ao vivo do seed, e esta etapa a ganha com o `C-M8`.
+- **Arquivos do testador:** `SdkPendingGatewayCancelAtaqueTest.kt` e as travas ao vivo do seed em `tests/` passam pela conferência do `C-M6`.
+- **Recriação no dia:** o motivo do destino do `B-M8` é a regra 5 do README: o roteiro manda recriar a demo no mesmo dia. A descrição do achado está só na linha da tabela; o planejador lê o `PendingSeeder` (`untouched` na linha 161 no `dbeacff`) antes de decidir se o cálculo muda.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -469,3 +656,17 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`).
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`): a E02 ganha o extrato em PDF, no visualizador da M2 E07 ([ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)). A impressão pela fila do servidor fica com a M7 E12, e o fechamento do dia com a M6 E08. Nenhuma tag mudou.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. O pré-requisito do marco passa a exigir também a M3 E06 (a revisão adiada, paga antes do M4 por decisão do usuário). A E02 e a E03 ganharam, em "Notas para o plano", as partes que não dependem uma da outra, para o plano formar ondas. Objetivo, escopo e critérios de aceite não mudaram, e nenhuma tag mudou.
+- 2026-11-17 — decisões do fim do M3 levadas ao marco, antes da primeira execução (`claude --agent arquiteto`, `development-roadmap` em modo atualização). Nenhuma tag mudou.
+  - **D2 (D5 do M3):** o desenho da fonte única de permissões foi fechado com o usuário por entrevista e registrado no [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md). Entra a **E06, "Fonte única de permissões"**, antes da E01 no índice (ID novo, posição pela dependência). A E01 e a E02 passam a depender dela.
+  - **D1 (D4 do M3):** a E01 ganha a primeira tarefa, a regra única do resultado desconhecido no `core`, com o `B-M2a`, o `WalkInState`, a criação sem reserva como `IncompatibleResponse` e os Menores M1, M2 e M4 a M7. Ela também ganha os critérios de aceite. A E02 passa a depender da E01, porque as escritas da conta usam a função.
+  - **Achados da M3 E06 nas etapas:**
+    - E02: o `B-M5` e a isenção da multa ao vivo;
+    - E03: o `A-M7`;
+    - E04: a duplicação com o `DayPanelState`;
+    - E05: o `B-M4`/`C-M2`, o `B-M8` e o `C-M8`.
+  - **Notas de processo:** entra a seção "Notas de máquina e de processo", com as notas do handoff da M3 E06:
+    - rolar até a linha antes do clique;
+    - `detektMain` e `detektTest` por tarefa;
+    - a conferência do `C-M6`;
+    - o Ubuntu novo.
+  - As restrições ganharam o resultado desconhecido e as permissões, e "Hipóteses e decisões em aberto" ganhou D1 e D2.
