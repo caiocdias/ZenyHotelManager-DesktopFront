@@ -349,7 +349,11 @@ class ReservationsAvailabilityTabAtaqueTest {
             conn.state.value = SessionState.Active("u-1", "s-2", false)
             waitForIdle()
 
-            assertEquals(1, source.availabilityCalls.size, "carregou o calendário na sessão nova sem ler a permissão")
+            assertEquals(
+                1,
+                source.availabilityCalls.size,
+                "carregou o calendário na sessão nova antes de a casca entregar as permissões dela",
+            )
             shell = "s-2" to emptySet()
             waitForIdle()
             assertSearchOnly()

@@ -6,7 +6,9 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -112,8 +114,9 @@ class NewReservationDialogEtapaAtaqueTest {
             onNodeWithTag("new-reservation-done").assertTextContains(ET_OFFER_TOTAL_TEXT, substring = true)
         }
 
+    // M4 (M4 E01): o nome dizia "antes de criar" e o teste também criava, sem afirmar que a repetição é a mesma intenção.
     @Test
-    fun afterAnUnknownResultAndBeforeCreatingTheOffersTotalStays() =
+    fun afterAnUnknownResultTheOffersTotalStaysAndTheRetryCreatesOnceWithTheSameKey() =
         runComposeUiTest {
             val server = source().apply { outcomes += ApiError.Network(IOException("offline")) }
             val state = dialog(server)
@@ -121,11 +124,22 @@ class NewReservationDialogEtapaAtaqueTest {
             submit()
 
             assertTrue(state.unconfirmed)
+            assertNull(state.done)
             onAllNodesWithText("Total", substring = true).assertCountEquals(1)
             onNodeWithTag("new-reservation-summary").assertTextContains(ET_OFFER_TOTAL_TEXT, substring = true)
+            onAllNodesWithText(ET_SERVER_TOTAL_TEXT, substring = true).assertCountEquals(0)
+            onNodeWithTag("new-reservation-done").assertDoesNotExist()
+            onNodeWithTag("new-reservation-submit").assertTextEquals("Tentar de novo")
+
             submit()
+
+            assertNotNull(state.done)
             onAllNodesWithText("Total", substring = true).assertCountEquals(1)
             onNodeWithTag("new-reservation-done").assertTextContains(ET_SERVER_TOTAL_TEXT, substring = true)
+            assertEquals(2, server.runs.size)
+            assertEquals(1, server.runs.map { it.key }.toSet().size, "a repetição leva a mesma Idempotency-Key")
+            assertTrue(server.runs.all { it.token == null })
+            onNodeWithTag("new-reservation-submit").assertDoesNotExist()
         }
 
     // --- Resultado desconhecido: a única saída é o botão ----------------------------------------------------------
@@ -133,14 +147,32 @@ class NewReservationDialogEtapaAtaqueTest {
     // O Esc em si (`onDismissRequest`, com `dismissOnClickOutside = false`) não chega ao `runComposeUiTest` nem a uma
     // `ImageComposeScene` (tentado: o evento não vira "dispensar"); a condição `unconfirmed` do Esc fica sem trava sem
     // um ponto de injeção na produção. O que este teste fixa é o que é observável: o botão Cancelar fecha.
+    // M4 (M4 E01): o nome prometia "nada mais age" e o teste só clicava no Cancelar. Agora as entradas estão travadas,
+    // o único outro botão é "Tentar de novo", e fechar não manda nada.
     @Test
-    fun afterAnUnknownResultTheCancelButtonStillClosesAndNothingElseDoes() =
+    fun afterAnUnknownResultTheInputsAreLockedOnlyRetryRemainsAndCancelClosesWithoutSending() =
         runComposeUiTest {
             val server = source().apply { outcomes += ApiError.Network(IOException("offline")) }
             val state = dialog(server)
             submit()
             assertTrue(state.unconfirmed)
             assertFalse(state.busy)
+            assertFalse(state.closeOnly)
+
+            listOf(
+                "new-reservation-requests",
+                "new-reservation-swap-holder",
+                "new-reservation-origin-PHONE",
+                "new-reservation-segment-EVENT",
+            ).forEach { onNodeWithTag(it).assertIsNotEnabled() }
+            state.specialRequests = "mudou"
+            state.nightlyRateText = "1,00"
+            assertEquals("", state.specialRequests)
+            assertEquals("", state.nightlyRateText)
+            onNodeWithTag("new-reservation-submit").assertTextEquals("Tentar de novo")
+            onNodeWithTag("new-reservation-submit").assertIsEnabled()
+            onNodeWithText("Criar reserva").assertDoesNotExist()
+            onNodeWithTag("new-reservation-close").assertTextEquals("Cancelar")
 
             assertEquals(0, closes)
             onNodeWithTag("new-reservation-close").assertIsEnabled()
@@ -148,6 +180,21 @@ class NewReservationDialogEtapaAtaqueTest {
             waitForIdle()
             assertEquals(1, closes)
             assertEquals(1, server.runs.size)
+            assertEquals(1, server.calls.size)
+        }
+
+    // O critério do B-M2a pede as entradas desabilitadas com o resultado desconhecido ou só fechar. O `MoneyField` da
+    // diária não recebe `enabled` (`NewReservationDialog.kt`, `Form`): o campo aparece habilitado, e só o estado ignora.
+    @Test
+    fun afterAStoredFailureTheNegotiatedRateFieldIsDisabledLikeTheOtherInputs() =
+        runComposeUiTest {
+            val server = source().apply { outcomes += ApiError.Problem(500, "INTERNAL_ERROR", null, emptyList()) }
+            val state = dialog(server)
+            submit()
+            assertTrue(state.closeOnly)
+
+            onNodeWithTag("new-reservation-requests").assertIsNotEnabled()
+            onNodeWithTag("new-reservation-rate").assertIsNotEnabled()
         }
 
     // --- Resposta da criação sem reserva ---------------------------------------------------------------------------

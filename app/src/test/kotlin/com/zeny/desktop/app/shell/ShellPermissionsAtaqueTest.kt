@@ -4,6 +4,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -31,10 +33,12 @@ import com.zeny.desktop.app.traces.TracesSource
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovalInput
+import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.HotelInfo
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.ProbeResult
+import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.theme.ZenyTheme
@@ -340,6 +344,64 @@ class ShellPermissionsAtaqueTest {
             assertFalse(hasTag("trace-resolve-0"), "resolver sem frontdesk.traces.resolve no me")
             assertFalse(hasTag("trace-new"), "novo recado sem frontdesk.traces.manage no me")
         }
+
+    // Pendência da E06: a seção de recados da reserva (`forReservation` em `receptionTraces`, AppRoot) não tinha
+    // asserção pela casca. A reserva aberta pela linha do dia mostra os recados dela com o conjunto do `me`.
+    @Test
+    fun reservationTracesSectionFromTheShellShowsTheReservationTraces() =
+        runComposeUiTest {
+            val conn = Conn(answers = mutableListOf({ me(CHECKIN, READ, TRACES_READ) }))
+            val id = conn.withArrivalAndItsTrace()
+            shell(conn)
+            click("Recepção")
+            onNodeWithTag("row-$id").performClick()
+            waitForIdle()
+
+            onNodeWithTag("reservation-detail").assertExists()
+            inDetail("Recados").assertExists()
+            inDetail("recado da reserva aberta").assertExists()
+            assertEquals(1, conn.meCalls, "a seção leu o me por conta própria")
+        }
+
+    @Test
+    fun reservationTracesSectionIsAbsentWhenTheShellSetLacksTracesReadEvenIfTheSourceWouldAnswer() =
+        runComposeUiTest {
+            val conn = Conn(answers = mutableListOf({ me(CHECKIN, READ) }))
+            conn.traces.permissions = setOf(TRACES_READ, TRACES_MANAGE, TRACES_RESOLVE)
+            val id = conn.withArrivalAndItsTrace()
+            shell(conn)
+            click("Recepção")
+            onNodeWithTag("row-$id").performClick()
+            waitForIdle()
+
+            onNodeWithTag("reservation-detail").assertExists()
+            inDetail("Recados").assertDoesNotExist()
+            onNodeWithText("recado da reserva aberta").assertDoesNotExist()
+        }
+
+    private fun Conn.withArrivalAndItsTrace(): String {
+        val item = searchItemOf(code = "R-7", holderGuestId = HOLDER)
+        val detail = confirmDetail(item.id, status = "CONFIRMED")
+        reception.pages[DayList.ARRIVALS to null] = Page(listOf(item), null)
+        reception.reservations[item.id.toString()] = detail
+        reception.holders[detail.holderGuestId.toString()] = HolderSummary("Ana Fictícia", null)
+        reception.holders[HOLDER] = HolderSummary("Ana Fictícia", null)
+        reception.ratePlans[item.ratePlanId.toString()] = "Tarifa Balcão"
+        reception.ratePlans[detail.reservation.ratePlanId.toString()] = "Tarifa Balcão"
+        reception.histories[item.id.toString()] = emptyList()
+        traces.reservationCodes[item.id.toString()] = "R-7"
+        traces.seed(
+            openTrace().copy(
+                id = Uuid.parse("50000000-0000-0000-0000-000000000077"),
+                reservationId = Option.Some(item.id),
+                text = "recado da reserva aberta",
+            ),
+        )
+        return item.id.toString()
+    }
+
+    private fun ComposeUiTest.inDetail(text: String) =
+        onNode(androidx.compose.ui.test.hasText(text) and hasAnyAncestor(hasTestTag("reservation-detail")))
 
     private companion object {
         fun openTrace() =

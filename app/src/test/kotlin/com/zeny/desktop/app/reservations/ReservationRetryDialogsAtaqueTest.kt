@@ -324,6 +324,12 @@ class ReservationReactivateLabelAtaqueTest {
                     .toSet()
                     .size,
             )
+            // Fechar está habilitado e fecha de fato, sem outra chamada.
+            onNodeWithTag("reactivate-close").assertIsEnabled()
+            assertEquals(0, closes)
+            click("reactivate-close")
+            assertEquals(1, closes)
+            assertEquals(2, source.runs.size)
         }
 
     @Test
