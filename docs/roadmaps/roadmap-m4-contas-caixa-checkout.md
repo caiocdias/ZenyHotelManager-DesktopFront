@@ -211,7 +211,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E06 | Fonte única de permissões | #concluida | — | As áreas usam as permissões lidas pela casca na sessão (ADR 0013); saem as leituras por área e a falha silenciosa |
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
-| E02 | Conta da hospedagem | #em-andamento | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
+| E02 | Conta da hospedagem | #concluida | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
 | E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
@@ -533,7 +533,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E02 — Conta da hospedagem — #em-andamento
+## E02 — Conta da hospedagem — #concluida
 
 **Objetivo:** a partir do detalhe da reserva ou da área Contas e caixa, o usuário abre a conta. Ele vê os lançamentos, o saldo e a taxa de serviço separada. Lança consumos por código de lançamento e estorna, e vê o extrato `GUEST` e `INTERNAL`, na tela e em PDF. Ajustar, dividir, transferir, remover a taxa a pedido, trocar o pagador e o limite de crédito, o `B-M5` e a isenção ao vivo passaram à E08 (divisão de 2026-11-18, no histórico).
 
@@ -561,13 +561,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Lançar um consumo numa conta do seed atualiza o saldo e a taxa de serviço separada, com os valores iguais aos da API.
-- [ ] Estornar como Recepcionista sem permissão abre o diálogo de aprovação. Aprovado pelo Gerente, o estorno aparece como lançamento novo, sem apagar o original.
-- [ ] Duplo clique em "lançar" gera um só lançamento (teste com a mesma `Idempotency-Key`).
-- [ ] O extrato `GUEST` não mostra os lançamentos internos que o servidor omite.
-- [ ] O extrato em PDF abre no visualizador com o mesmo saldo do extrato na tela, para `GUEST` e para `INTERNAL`, e nenhum arquivo é criado sem "Salvar como…".
-- [ ] Um tipo de lançamento desconhecido aparece como "Outro (VALOR)".
-- [ ] As ações da conta usam o conjunto de permissões da casca (ADR 0013), e as escritas usam a função única do resultado desconhecido (D1): o grep do critério da E01 continua sem linha.
+- [x] Lançar um consumo numa conta do seed atualiza o saldo e a taxa de serviço separada, com os valores iguais aos da API.
+- [x] Estornar como Recepcionista sem permissão abre o diálogo de aprovação. Aprovado pelo Gerente, o estorno aparece como lançamento novo, sem apagar o original.
+- [x] Duplo clique em "lançar" gera um só lançamento (teste com a mesma `Idempotency-Key`).
+- [x] O extrato `GUEST` não mostra os lançamentos internos que o servidor omite.
+- [x] O extrato em PDF abre no visualizador com o mesmo saldo do extrato na tela, para `GUEST` e para `INTERNAL`, e nenhum arquivo é criado sem "Salvar como…".
+- [x] Um tipo de lançamento desconhecido aparece como "Outro (VALOR)".
+- [x] As ações da conta usam o conjunto de permissões da casca (ADR 0013), e as escritas usam a função única do resultado desconhecido (D1): o grep do critério da E01 continua sem linha.
 
 **Validação obrigatória:**
 
@@ -591,7 +591,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo**. O código, o testador de etapa e a revisão final estão limpos no `12ab199`. Faltam os critérios que pedem o `zeny-front` com as credenciais do usuário (abaixo); o orquestrador não procurou segredos na máquina.
+- **Estado:** `#concluida` em 2026-11-18, depois da verificação ao vivo rodada pelo usuário contra o `zeny-front` (seed com a taxa de serviço e `LiveFolioCheck`: 1 teste, 0 pulados, 0 falhas). O código, o testador de etapa e a revisão final estão limpos no `12ab199`, e a rodada do seed em `6c4b66d`.
 - Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e02.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e02.md). Revisão de arquitetura (`revisor-arquitetura`, opus): bloqueado na rodada 0 (2 Importantes: o PDF `INTERNAL` por padrão e a fiação da aprovação aberta entre as fatias), aprovado com notas na rodada 1 (`4e80af8`).
 - Commits (`MERGE_BASE` `5e0fb8f`, HEAD de código `12ab199`):
   - Task 1, a fachada `FoliosFacade` (`ZenyCore.folios`), o extrato em PDF na `DocumentsFacade` e a porta `FolioSource`: `126e491`. Revisão de fatia aprovada.
@@ -608,11 +608,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - Scanner: `osv-scanner --recursive --no-ignore ./` no `a539be9` → 6 lockfiles do Gradle (1429 pacotes), "No issues found"; a etapa não muda dependência.
 - Integridade: `check_test_integrity.py --base 5e0fb8f` no `12ab199` → exit 0, nenhum apontamento; 3 avisos `SEM_SOUL` em commits de documento do orquestrador (`646052b`, `01beb04`, `4e80af8`: o `Soul:` ficou num parágrafo separado do `Co-Authored-By`), julgados justificados pela revisão final.
 - Critérios (testes com porta falsa; os três marcados "ao vivo" esperam a `LiveFolioCheck`):
-  1. **Lançar atualiza saldo e taxa** — testes: `PostingFormStateTest.successReloadsTheFolio`, `FolioStateTest.serviceChargeSitsUnderItsItem`, `FolioListStateTest.postingInThePanelRefreshesTheListRow`. **Ao vivo: pendente.**
-  2. **Estornar como Recepcionista com aprovação do Gerente** — testes: `ReversalStateTest.approvalRequiredGoesThroughApprove`, `successReloadsAndKeepsTheOriginal`, `cancelledApprovalLeavesTextAndUnlocks`; o diálogo de aprovação da casca abre pela aba "Contas" e pela Recepção (`FolioScreenTest`). **Ao vivo: pendente.**
+  1. **Lançar atualiza saldo e taxa** — testes: `PostingFormStateTest.successReloadsTheFolio`, `FolioStateTest.serviceChargeSitsUnderItsItem`, `FolioListStateTest.postingInThePanelRefreshesTheListRow`. **Ao vivo:** "conta C-2026-000016: item R$ 10,00 e taxa R$ 1,00; saldo R$ 31,00", com o duplo "Lançar" dando um item e uma taxa.
+  2. **Estornar como Recepcionista com aprovação do Gerente** — testes: `ReversalStateTest.approvalRequiredGoesThroughApprove`, `successReloadsAndKeepsTheOriginal`, `cancelledApprovalLeavesTextAndUnlocks`; o diálogo de aprovação da casca abre pela aba "Contas" e pela Recepção (`FolioScreenTest`). **Ao vivo:** "estorno aprovado pelo Gerente: -R$ 10,00, original intacto".
   3. **Duplo clique, um lançamento** — `PostingFormStateTest.doubleConfirmPostsOnce`, `retryAfterNetworkKeepsTheKey`; `FoliosFacadeTest.sameIntentKeepsTheKey`.
   4. **`GUEST` sem o que o servidor omite** — `FolioStateTest.guestStatementShowsOnlyWhatServerSends`, `switchingAudienceDropsTheShownStatement`.
-  5. **PDF com o mesmo saldo, sem arquivo** — `FolioWiringTest` (audiência e título por botão), `FolioScreenTest.guestPdfOpensTheViewerWithoutAFile`, `FolioSessionAtaqueTest` (nome `extrato-interno-<número>.pdf` e nenhum `.pdf` gravado pelo wiring real). **Mesmo saldo ao vivo: pendente.**
+  5. **PDF com o mesmo saldo, sem arquivo** — `FolioWiringTest` (audiência e título por botão), `FolioScreenTest.guestPdfOpensTheViewerWithoutAFile`, `FolioSessionAtaqueTest` (nome `extrato-interno-<número>.pdf` e nenhum `.pdf` gravado pelo wiring real). **Ao vivo:** "extratos GUEST e INTERNAL com o saldo da conta R$ 20,00" e "PDFs GUEST e INTERNAL com os dígitos do saldo R$ 20,00".
   6. **"Outro (VALOR)"** — `FolioStateTest.unknownTypeShowsAsOther` e `unknownStatementKindShowsAsOther`.
   7. **Conjunto da casca e D1** — no `12ab199`, `grep -rnE 'fun resultUnknown|IDEMPOTENCY_KEY_IN_USE' app/src/main` e `grep -rnE 'SERVER_ERROR|status >= 5' app/src/main` não devolvem linha; `fun permissions` em `app/src/main` não devolve linha; a aba, o botão e as ações leem o conjunto pelo `FolioWiring`, lembrado com `remember(source, sessionId, permissions)`.
 - **Antes da verificação ao vivo, rode o seed** (a partir de `6c4b66d`), para o hotel ganhar a taxa de serviço de 10%. A saída mostra `taxa de serviço: 10% (definida)`.
@@ -903,3 +903,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E07 fecha `#concluida` (`claude --agent orquestrador`): o usuário rodou o seed (que agora cria o ponto de caixa "Recepção") e as duas verificações ao vivo, que passaram. A E02 fica elegível.
 - 2026-11-18 — a E02 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E02 fica com a leitura da conta (lançamentos, saldo e taxa separada), lançar, estornar e o extrato na tela e em PDF, com os critérios dela sem mudança. Entra a **E08, "Correções da conta e multa de cancelamento"**, com ajustar, dividir, transferir, remover a taxa a pedido, o pagador e o limite de crédito, e os critérios do `B-M5` e da isenção ao vivo, que saíram da E02. A E08 depende da E02 e vem depois da E04 no índice; a E05 passa a depender também dela. A E02 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E02.
 - 2026-11-18 — a E02 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`). O código, o testador de etapa e a revisão final estão limpos no `12ab199`. Faltam os critérios que a `LiveFolioCheck` confere contra o `zeny-front`, que pedem as credenciais do usuário. A E03 e a E08 esperam por ela.
+- 2026-11-18 — a E02 fecha `#concluida` (`claude --agent orquestrador`). A primeira execução da `LiveFolioCheck` mostrou que a demo não tinha taxa de serviço (o padrão do hotel nasce em 0%). O seed passou a defini-la em 10% (`6c4b66d`). Depois de rodar o seed, o usuário rodou a verificação, que passou. A E03 e a E08 ficam elegíveis.
