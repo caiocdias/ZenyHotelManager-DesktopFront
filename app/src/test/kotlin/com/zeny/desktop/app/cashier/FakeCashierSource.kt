@@ -4,6 +4,7 @@ import com.zeny.desktop.core.facade.CashCount
 import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.types.Money
+import com.zeny.desktop.sdk.model.CashCountResponse
 import com.zeny.desktop.sdk.model.CashMovementResponse
 import com.zeny.desktop.sdk.model.CashPointResponse
 import com.zeny.desktop.sdk.model.CashierShiftReportResponse
@@ -87,10 +88,59 @@ fun shiftOf(
         status = CashierShiftResponse.Status.OPEN,
     )
 
+fun countOf(
+    method: String = "CASH",
+    expected: String = "150.00",
+    declared: String = "140.00",
+    difference: String = "-10.00",
+): CashCountResponse =
+    CashCountResponse(declared = declared, difference = difference, expected = expected, method = method)
+
+/** O relatório como o servidor o devolve: o turno fechado com a contagem e os totais. */
+@Suppress("LongParameterList") // os campos do relatório que os testes variam
+fun reportOf(
+    counts: List<CashCountResponse> = listOf(countOf()),
+    expectedTotal: String = "150.00",
+    declaredTotal: String = "140.00",
+    differenceTotal: String = "-10.00",
+    hasDifference: Boolean = true,
+    number: String = "CX-0001",
+): CashierShiftReportResponse =
+    CashierShiftReportResponse(
+        generatedAt = "2026-11-18T20:00:00Z",
+        shift =
+            shiftOf(number = number).copy(
+                status = CashierShiftResponse.Status.CLOSED,
+                closedAt = Option.Some("2026-11-18T20:00:00Z"),
+                closedOn = Option.Some("2026-11-18"),
+                counts = Option.Some(counts),
+                expectedTotal = Option.Some(expectedTotal),
+                declaredTotal = Option.Some(declaredTotal),
+                differenceTotal = Option.Some(differenceTotal),
+                hasDifference = Option.Some(hasDifference),
+            ),
+    )
+
 /** O que a abertura recebeu: o ponto, o fundo e a chave da intenção. */
 data class OpenCall(
     val cashPointId: String,
     val openingFloat: Money,
+    val key: String,
+)
+
+/** O que o movimento recebeu. */
+data class MovementCall(
+    val shiftId: String,
+    val type: CashMovementType,
+    val amount: Money,
+    val reason: String,
+    val key: String,
+)
+
+/** O que o fechamento recebeu. */
+data class CloseCall(
+    val shiftId: String,
+    val counts: List<CashCount>,
     val key: String,
 )
 
@@ -103,9 +153,17 @@ class FakeCashierSource : CashierSource {
     var opener: suspend (String, Money) -> CashierShiftResponse = { id, _ ->
         shiftOf(cashPointId = id, cashPointName = if (id == BAR_POINT) "Bar" else "Recepção")
     }
+    var recorder: suspend (CashMovementType, Money, String) -> CashMovementResponse = { type, amount, reason ->
+        movementOf(CashMovementResponse.Type.valueOf(type.name), amount.toApi(), reason)
+    }
+    var closer: suspend (List<CashCount>) -> CashierShiftReportResponse = { reportOf() }
+    var reporter: suspend (String) -> CashierShiftReportResponse = { reportOf() }
     var cashPointsCalls = 0
     var currentCalls = 0
     val openCalls = mutableListOf<OpenCall>()
+    val movementCalls = mutableListOf<MovementCall>()
+    val closeCalls = mutableListOf<CloseCall>()
+    val reportCalls = mutableListOf<String>()
 
     override suspend fun cashPoints(): List<CashPointResponse> {
         cashPointsCalls++
@@ -132,13 +190,23 @@ class FakeCashierSource : CashierSource {
         amount: Money,
         reason: String,
         intent: Intent,
-    ): CashMovementResponse = error("não usado")
+    ): CashMovementResponse {
+        movementCalls += MovementCall(shiftId, type, amount, reason, intent.key)
+        return recorder(type, amount, reason)
+    }
 
     override suspend fun closeShift(
         shiftId: String,
         counts: List<CashCount>,
         intent: Intent,
-    ): CashierShiftReportResponse = error("não usado")
+    ): CashierShiftReportResponse {
+        closeCalls += CloseCall(shiftId, counts, intent.key)
+        // Como no servidor: o turno fechado deixa de ser o corrente.
+        return closer(counts).also { current = { null } }
+    }
 
-    override suspend fun report(shiftId: String): CashierShiftReportResponse = error("não usado")
+    override suspend fun report(shiftId: String): CashierShiftReportResponse {
+        reportCalls += shiftId
+        return reporter(shiftId)
+    }
 }

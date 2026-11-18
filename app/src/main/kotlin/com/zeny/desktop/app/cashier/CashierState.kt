@@ -6,12 +6,13 @@ import androidx.compose.runtime.setValue
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.error.WriteFailure
 import com.zeny.desktop.core.error.classifyWriteFailure
+import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.input.InputResult
 import com.zeny.desktop.design.input.MoneyInput
+import com.zeny.desktop.sdk.model.CashierShiftReportResponse
 import com.zeny.desktop.sdk.model.CashierShiftResponse
-import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -20,42 +21,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 
 private const val OPERATE = "billing.cashier.operate"
+private const val REPORT = "billing.shifts.read"
 private const val FORBIDDEN = 403
 private const val ALREADY_OPEN = "CASHIER_SHIFT_ALREADY_OPEN"
-
-/** Um ponto de caixa ativo que a abertura pode usar. */
-data class CashPointOption(
-    val id: String,
-    val name: String,
-)
-
-/** Uma sangria ou um suprimento do turno, com o valor do servidor em BRL. */
-data class MovementLine(
-    val type: String,
-    val amount: String,
-    val reason: String,
-)
-
-/** O esperado de uma forma de pagamento, como o servidor o mandou. */
-data class ExpectedLine(
-    val method: String,
-    val amount: String,
-)
-
-/**
- * O turno corrente na tela: número, ponto, data de abertura, fundo e movimentos. O esperado ([expected],
- * [expectedTotal]) só vem quando o servidor o mostra (`expectedVisible`); no turno cego, vazio e nulo.
- */
-data class ShiftView(
-    val id: String,
-    val number: String,
-    val cashPointName: String,
-    val openedOn: String,
-    val openingFloat: String,
-    val movements: List<MovementLine>,
-    val expected: List<ExpectedLine>,
-    val expectedTotal: String?,
-)
 
 /**
  * Estado da área de caixa: o turno corrente do usuário e, sem turno, o formulário de abertura (ponto de caixa e fundo
@@ -66,10 +34,15 @@ data class ShiftView(
  * sob a chave deixa o estado [closeOnly]: só resta "Fechar" ([dismiss]), que relê o turno corrente para conferir.
  * O `CASHIER_SHIFT_ALREADY_OPEN` mostra a mensagem e relê o turno corrente.
  *
- * [onShiftChanged] roda depois de abrir e em toda releitura que troca o turno (não na primeira leitura). As mutações
- * correm no escopo da UI; [close] cancela o que é daqui, e a resposta que chega depois dele é descartada.
+ * Com turno, a sangria e o suprimento ([startMovement]) e o fechamento cego ([startClose]) abrem diálogos com a
+ * própria intenção ([CashierWriteForm]); o `CASHIER_SHIFT_CLOSED` fecha o diálogo, mostra [message] e relê. Fechado, o
+ * [report] do servidor fica na tela; o "Ver relatório" ([showReport], com `billing.shifts.read`) o relê.
+ *
+ * [onShiftChanged] roda depois de abrir e de fechar, na primeira leitura que dá certo e em toda releitura que troca o
+ * turno. As mutações correm no escopo da UI; [close] cancela o que é daqui, e a resposta que chega depois dele é
+ * descartada.
  */
-@Suppress("TooManyFunctions") // leitura, pontos de caixa, abertura, falha e o "Fechar"
+@Suppress("TooManyFunctions") // leitura, pontos de caixa, abertura, diálogos, relatório e o "Fechar"
 class CashierState(
     private val source: CashierSource,
     scope: CoroutineScope,
@@ -109,7 +82,7 @@ class CashierState(
     var closeOnly by mutableStateOf(false)
         private set
 
-    /** O resultado da última abertura que não deu certo. */
+    /** A falha da última abertura, o turno que fechou noutro lugar ou a falha da releitura do relatório. */
     var message by mutableStateOf<String?>(null)
         private set
 
@@ -120,6 +93,30 @@ class CashierState(
     private var closed = false
     private var generation = 0
     private var intent: Intent? = null
+
+    /** O diálogo de sangria ou suprimento aberto. */
+    var movement by mutableStateOf<MovementForm?>(null)
+        private set
+
+    /** O formulário de fechamento aberto. */
+    var closing by mutableStateOf<CloseShiftForm?>(null)
+        private set
+
+    /** O relatório na tela: o do fechamento que acabou de dar certo ou o relido por [showReport]. */
+    var report by mutableStateOf<ReportView?>(null)
+        private set
+
+    var reportLoading by mutableStateOf(false)
+        private set
+
+    /** O turno que fechou (ou sumiu na releitura) nesta área: o "Ver relatório" relê o dele. */
+    private var lastShiftId by mutableStateOf<String?>(null)
+
+    private val canReadReport: Boolean = REPORT in permissions
+
+    /** "Ver relatório": com `billing.shifts.read`, um turno fechado aqui e nenhum relatório na tela. */
+    val canViewReport: Boolean
+        get() = !closed && canReadReport && lastShiftId != null && report == null && !reportLoading
 
     /** O ponto de caixa escolhido; só um da lista, e não muda enquanto a abertura não tem resultado. */
     var cashPointId: String?
@@ -135,6 +132,14 @@ class CashierState(
         set(value) {
             if (!locked) floatText = value
         }
+
+    /** O fundo negativo é recusado aqui; o zero vale (o contrato aceita 0,00). */
+    val floatError: String?
+        get() = if ((typedFloat()?.amount?.signum() ?: 0) < 0) CashierText.NEGATIVE_FLOAT else null
+
+    /** A lista de pontos falhou por um motivo que repetir pode resolver (o `403` não). */
+    val cashPointsRetryable: Boolean
+        get() = cashPointsError != null && cashPointsError != CashierText.CASH_POINTS_FORBIDDEN
 
     val showsOpenForm: Boolean
         get() = canOperate && loaded && !loading && loadError == null && shift == null
@@ -159,7 +164,7 @@ class CashierState(
                 currentCoroutineContext().ensureActive()
                 if (mine != generation) return@launch
                 if (current == null) readCashPoints(mine)
-                if (mine == generation) applyRead(current?.let(::viewOf))
+                if (mine == generation) applyRead(current?.let(::shiftViewOf))
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
@@ -204,6 +209,59 @@ class CashierState(
         reload()
     }
 
+    /** Abre o diálogo de sangria ([CashMovementType.WITHDRAWAL]) ou de suprimento do turno corrente. */
+    fun startMovement(type: CashMovementType) {
+        val id = shift?.id
+        if (!canStartDialog() || id == null) return
+        message = null
+        movement =
+            MovementForm(
+                type,
+                id,
+                source,
+                ownScope,
+                hooks(onDone = { _ ->
+                    movement = null
+                    reload()
+                }),
+            )
+    }
+
+    /** Abre o fechamento cego do turno corrente. */
+    fun startClose() {
+        val id = shift?.id
+        if (!canStartDialog() || id == null) return
+        message = null
+        closing = CloseShiftForm(id, source, ownScope, hooks(onDone = { response -> afterClose(id, response) }))
+    }
+
+    /** "Ver relatório": relê o relatório do turno fechado aqui. */
+    fun showReport() {
+        val id = lastShiftId
+        if (!canViewReport || id == null) return
+        reportLoading = true
+        message = null
+        ownScope.launch {
+            try {
+                val response = source.report(id)
+                currentCoroutineContext().ensureActive()
+                report = reportViewOf(response)
+            } catch (
+                @Suppress("TooGenericExceptionCaught") e: Exception,
+            ) {
+                currentCoroutineContext().ensureActive()
+                message = apiErrorOf(e).userMessage
+            } finally {
+                reportLoading = false
+            }
+        }
+    }
+
+    /** Sai do relatório; o "Ver relatório" o relê. */
+    fun dismissReport() {
+        report = null
+    }
+
     fun close() {
         closed = true
         generation++
@@ -236,7 +294,9 @@ class CashierState(
     }
 
     private fun applyRead(view: ShiftView?) {
-        val changed = loaded && view?.id != shift?.id
+        // A primeira leitura também avisa: o topo pode estar em "não verificado" ou velho.
+        val changed = !loaded || view?.id != shift?.id
+        shift?.id?.takeIf { it != view?.id }?.let { lastShiftId = it }
         shift = view
         loaded = true
         if (changed) onShiftChanged()
@@ -246,7 +306,7 @@ class CashierState(
         intent = null
         unconfirmed = false
         message = null
-        shift = viewOf(response)
+        shift = shiftViewOf(response)
         loaded = true
         onShiftChanged()
     }
@@ -266,31 +326,42 @@ class CashierState(
         if ((failure as? ApiError.Problem)?.code == ALREADY_OPEN) reload()
     }
 
-    private fun parsedFloat(): Money? = (MoneyInput.parse(floatText) as? InputResult.Valid)?.value
+    private fun canStartDialog(): Boolean =
+        !closed && canOperate && movement == null && closing == null && report == null
 
-    private fun viewOf(response: CashierShiftResponse): ShiftView {
-        val visible = response.expectedVisible
-        val expected = (response.expected as? Option.Some)?.value.orEmpty()
-        return ShiftView(
-            id = response.id.toString(),
-            number = response.number,
-            cashPointName = response.cashPointName,
-            openedOn = CashierText.date(response.openedOn),
-            openingFloat = CashierText.money(response.openingFloat),
-            movements =
-                response.movements.map {
-                    MovementLine(CashierText.movementType(it.type), CashierText.money(it.amount), it.reason)
-                },
-            expected =
-                if (visible) {
-                    expected.map { ExpectedLine(CashierText.method(it.method), CashierText.money(it.expected)) }
-                } else {
-                    emptyList()
-                },
-            expectedTotal =
-                if (visible) (response.expectedTotal as? Option.Some)?.value?.let(CashierText::money) else null,
+    private fun <T> hooks(onDone: (T) -> Unit) =
+        FormHooks(
+            isClosed = { closed },
+            onDone = onDone,
+            onLeave = { reread ->
+                movement = null
+                closing = null
+                if (reread) reload()
+            },
+            onShiftClosed = { text ->
+                movement = null
+                closing = null
+                message = text
+                reload()
+            },
         )
+
+    /** O fechamento deu certo: o relatório do servidor na tela, o topo avisado e, sem turno, a abertura relida. */
+    private fun afterClose(
+        shiftId: String,
+        response: CashierShiftReportResponse,
+    ) {
+        closing = null
+        shift = null
+        lastShiftId = shiftId
+        report = reportViewOf(response)
+        onShiftChanged()
+        reload()
     }
+
+    private fun typedFloat(): Money? = (MoneyInput.parse(floatText) as? InputResult.Valid)?.value
+
+    private fun parsedFloat(): Money? = typedFloat()?.takeIf { it.amount.signum() >= 0 }
 }
 
 private fun apiErrorOf(e: Throwable): ApiError = e as? ApiError ?: ApiError.Network(e)

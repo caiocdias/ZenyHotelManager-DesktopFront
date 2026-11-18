@@ -7,9 +7,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.AppController
@@ -26,6 +31,7 @@ import com.zeny.desktop.core.facade.ProbeResult
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.theme.ZenyTheme
+import com.zeny.desktop.sdk.model.CashMovementResponse
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 import kotlin.test.Test
@@ -33,6 +39,7 @@ import kotlin.test.assertEquals
 
 private const val OPERATE = "billing.cashier.operate"
 private const val FOLIOS_READ = "billing.folios.read"
+private const val SHIFTS_READ = "billing.shifts.read"
 
 /** A área "Contas e caixa" ligada à casca como o `AppRoot` a monta. */
 @OptIn(ExperimentalTestApi::class)
@@ -152,6 +159,132 @@ class CashierScreenTest {
             onNodeWithText("Caixa indisponível nesta conexão.").assertExists()
         }
     }
+
+    @Test
+    fun cashPointsFailureOffersRetry() =
+        runComposeUiTest {
+            val source = FakeCashierSource()
+            source.points = { throw ApiError.Network(RuntimeException("sem rede")) }
+            val fake = Fake(source, initial = SessionState.Active("u-1", "A", false))
+            setContent { ZenyTheme { AreaContent(Area.ACCOUNTS, fake, "A", setOf(OPERATE)) } }
+            waitForIdle()
+
+            onNodeWithTag("cashier-points-error").assertExists()
+            onNodeWithTag("cashier-point-$BAR_POINT").assertDoesNotExist()
+
+            source.points = { listOf(cashPointOf(), cashPointOf(BAR_POINT, "Bar")) }
+            onNodeWithTag("cashier-points-retry").performClick()
+            waitForIdle()
+
+            onNodeWithTag("cashier-points-error").assertDoesNotExist()
+            onNodeWithTag("cashier-point-$BAR_POINT").assertExists()
+            assertEquals(2, source.cashPointsCalls)
+        }
+
+    private fun ComposeUiTest.area(
+        source: FakeCashierSource,
+        permissions: Set<String> = setOf(OPERATE, SHIFTS_READ),
+    ) {
+        val fake = Fake(source, initial = SessionState.Active("u-1", "A", false))
+        setContent { ZenyTheme { AreaContent(Area.ACCOUNTS, fake, "A", permissions) } }
+        waitForIdle()
+    }
+
+    /** Um botão da tela, que rola: rola até ele antes do clique. */
+    private fun ComposeUiTest.click(tag: String) {
+        onNodeWithTag(tag).performScrollTo().performClick()
+        waitForIdle()
+    }
+
+    /** Um botão do rodapé de um diálogo, que não rola. */
+    private fun ComposeUiTest.clickInDialog(tag: String) {
+        onNodeWithTag(tag).performClick()
+        waitForIdle()
+    }
+
+    @Test
+    fun withdrawalDialogRecordsAndTheMovementAppears() =
+        runComposeUiTest {
+            val source = FakeCashierSource()
+            source.current = { shiftOf() }
+            source.recorder = { _, amount, reason ->
+                val recorded = movementOf(CashMovementResponse.Type.WITHDRAWAL, amount.toApi(), reason)
+                source.current = { shiftOf(movements = listOf(recorded)) }
+                recorded
+            }
+            area(source)
+            onNodeWithText("Nenhum movimento no turno.").assertExists()
+
+            click("cashier-withdrawal")
+            onNodeWithTag("movement-dialog").assertExists()
+            onNodeWithTag("movement-amount").performTextInput("50,00")
+            onNodeWithTag("movement-reason").performTextInput("Depósito no cofre")
+            clickInDialog("movement-submit")
+
+            onNodeWithTag("movement-dialog").assertDoesNotExist()
+            onNodeWithText("Sangria · R$ 50,00 · Depósito no cofre").assertExists()
+            assertEquals(1, source.movementCalls.size)
+        }
+
+    @Test
+    fun closeFormShowsNoExpectedValue() =
+        runComposeUiTest {
+            val source = FakeCashierSource()
+            source.current = {
+                shiftOf(
+                    expectedVisible = true,
+                    expected = listOf(expectedOf("CASH", "987.65")),
+                    expectedTotal = "987.65",
+                )
+            }
+            area(source)
+            onNodeWithText("Total esperado: R$ 987,65").assertExists()
+
+            click("cashier-close-shift")
+
+            onNodeWithTag("close-dialog").assertExists()
+            onNodeWithTag("close-count-CASH").assertExists()
+            onNodeWithTag("close-count-BANK_TRANSFER").assertExists()
+            onAllNodes(hasAnyAncestor(hasTestTag("close-dialog")) and hasText("987", substring = true))
+                .assertCountEquals(0)
+            onAllNodes(hasAnyAncestor(hasTestTag("close-dialog")) and hasText("sperado", substring = true))
+                .assertCountEquals(0)
+        }
+
+    @Test
+    fun reportShowsTheDifferenceInBrlPerMethod() =
+        runComposeUiTest {
+            val source = FakeCashierSource()
+            source.current = { shiftOf() }
+            source.closer = {
+                reportOf(
+                    counts =
+                        listOf(
+                            countOf("CASH", expected = "150.00", declared = "140.00", difference = "-10.00"),
+                            countOf("PIX", expected = "50.00", declared = "50.00", difference = "0.00"),
+                        ),
+                    differenceTotal = "-10.00",
+                )
+            }
+            area(source)
+
+            click("cashier-close-shift")
+            onNodeWithTag("close-count-CASH").performTextInput("140,00")
+            onNodeWithTag("close-count-PIX").performTextInput("50,00")
+            clickInDialog("close-submit")
+
+            onNodeWithTag("close-dialog").assertDoesNotExist()
+            onNodeWithTag("cashier-report").assertExists()
+            onNodeWithText("Diferença: -R$ 10,00").assertExists()
+            onNodeWithText("Diferença: R$ 0,00").assertExists()
+            onNodeWithText("Diferença total: -R$ 10,00").assertExists()
+
+            click("cashier-report-dismiss")
+            onNodeWithTag("cashier-report").assertDoesNotExist()
+            click("cashier-view-report")
+            onNodeWithTag("cashier-report").assertExists()
+            assertEquals(1, source.reportCalls.size)
+        }
 
     @Test
     fun areaWithForeignSessionDrawsNothing() =
