@@ -15,7 +15,7 @@
 
 Não há `ARCHITECTURE.md` no repositório.
 
-**Riscos:** cálculo de valor monetário (saldo, taxa de serviço, valor unitário e totais do extrato, só exibidos); concorrência (lançamento e estorno idempotentes repetidos depois de falha, duplo clique); autenticação ou autorização (ações pelo conjunto da casca, estorno como ação sensível com aprovação de superior); dado pessoal ou segredo (o extrato `INTERNAL` traz usuários e motivos que o `GUEST` omite; a verificação ao vivo lê senhas do ambiente e nunca as imprime).
+**Riscos:** cálculo de valor monetário (saldo, taxa de serviço, valor unitário e totais do extrato, só exibidos); concorrência (lançamento e estorno idempotentes repetidos depois de falha, duplo clique); autenticação ou autorização (ações pelo conjunto da casca, estorno como ação sensível com aprovação de superior); dado pessoal ou segredo (o extrato `INTERNAL` traz usuários e motivos que o `GUEST` omite; a verificação ao vivo lê senhas do ambiente e nunca as imprime); parsing de entrada externa não confiável (o PDF do servidor no visualizador, decimais e datas do servidor fora do formato, enums extensíveis e a quantidade e o valor digitados; acrescentado pela revisão final).
 
 ## Global Constraints
 
