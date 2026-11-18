@@ -15,6 +15,9 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.utils.io.ByteChannel
+import io.ktor.utils.io.close
+import io.ktor.utils.io.writeFully
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
@@ -121,6 +124,24 @@ class DocumentsFacadeTest {
     fun networkFailureIsTyped() =
         runTest {
             core { throw IOException("queda") }.use { core ->
+                assertFailsWith<ApiError.Network> { core.documents.registrationCard(RES) }
+            }
+        }
+
+    /**
+     * A conexão cai no meio do corpo antes de o `core` começar a ler: no Ktor, o canal fechado com causa devolve zero
+     * bytes sem lançar. O fechamento acontece antes da resposta, então a ordem é sempre essa (sem corrida).
+     */
+    @Test
+    fun bodyClosedWithCauseBeforeTheReadIsNetwork() =
+        runTest {
+            val channel = ByteChannel()
+            channel.writeFully(PDF)
+            channel.flush()
+            channel.close(IOException("conexao caiu"))
+            core {
+                respond(channel, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/pdf"))
+            }.use { core ->
                 assertFailsWith<ApiError.Network> { core.documents.registrationCard(RES) }
             }
         }

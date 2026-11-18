@@ -60,7 +60,8 @@ class ApiExecutor {
 
     /**
      * Executa uma chamada que devolve um corpo binário (sem `Intent`), com os mesmos erros tipados do `execute`.
-     * Um corpo acima de `maxBytes` vira `IncompatibleResponse` sem ler o resto.
+     * Um corpo acima de `maxBytes` vira `IncompatibleResponse` sem ler o resto. A conexão que cai no meio do corpo é
+     * `ApiError.Network`, nunca bytes parciais.
      */
     suspend fun executeBytes(
         maxBytes: Long,
@@ -72,7 +73,10 @@ class ApiExecutor {
                 if (raw.status.value !in HTTP_SUCCESS) throw errorOf(options, raw)
                 val declared = raw.headers[HttpHeaders.ContentLength]?.toLongOrNull()
                 if (declared != null && declared > maxBytes) throw tooLarge()
-                val bytes = raw.bodyAsChannel().readBuffer(maxBytes + 1).readByteArray()
+                val body = raw.bodyAsChannel()
+                val bytes = body.readBuffer(maxBytes + 1).readByteArray()
+                // Canal fechado com causa antes da leitura devolve o que sobrou (às vezes nada) sem lançar: é a rede.
+                body.closedCause?.let { throw it }
                 if (bytes.size > maxBytes) throw tooLarge()
                 BinaryResponse(bytes, raw.headers[HttpHeaders.ContentType], raw.headers[HttpHeaders.ContentDisposition])
             }
