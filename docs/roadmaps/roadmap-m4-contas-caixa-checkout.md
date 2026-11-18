@@ -1,6 +1,6 @@
 # Roadmap — M4 Contas, caixa e check-out
 
-> Arquivo: `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` · branch de execução: `roadmap/m4-contas-caixa-checkout` · criado em 2026-11-10 · última revisão 2026-11-17
+> Arquivo: `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` · branch de execução: `roadmap/m4-contas-caixa-checkout` · criado em 2026-11-10 · última revisão 2026-11-18
 
 > **Pré-requisito:** a etapa E05 ("Gate do marco M3") de `docs/roadmaps/roadmap-m3-reservas.md` está `#concluida`, e a etapa E06 ("Revisão adiada do processo acelerado") do mesmo roadmap também ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md) e regra 8 de `docs/roadmaps/README.md`). Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -84,7 +84,7 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 - **Idempotência:** toda operação financeira leva `Idempotency-Key` por intenção. Repetir depois de erro de rede ou de aprovação reaproveita a chave. Nenhum duplo clique gera dois lançamentos.
 - **Cartão:** nenhum campo de número de cartão no app. Na caução, só os dados que o contrato pede (token ou referência, bandeira e últimos dígitos).
 - **Aprovação de superior:** ação recusada com `APPROVAL_REQUIRED` passa pelo diálogo do M1.
-- **Resultado desconhecido (D1):** toda escrita idempotente do marco classifica a falha pela função única do `core` criada na primeira tarefa da E01. Nenhum estado novo copia a regra.
+- **Resultado desconhecido (D1):** toda escrita idempotente do marco classifica a falha pela função única do `core` criada na E01. Nenhum estado novo copia a regra.
 - **Permissões (D2, [ADR 0013](../adr/0013-fonte-unica-de-permissoes-por-sessao.md)):** as áreas e o topo da casca usam o conjunto de permissões que o `ShellState` leu na sessão vigente, recebido por parâmetro. Nenhuma área lê o `me` por conta própria, e a falha dessa leitura é a falha da casca.
 - **Servidor:** só leitura, e o commit fixado não muda no marco.
 - **Idioma:** UI em pt-BR, código em inglês.
