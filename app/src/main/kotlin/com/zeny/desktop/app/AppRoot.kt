@@ -219,8 +219,9 @@ internal fun AreaContent(
 
 /**
  * O painel do dia e o detalhe da reserva vivem enquanto a Recepção está aberta na mesma sessão, como o mapa de UHs:
- * nascem com a chave do [sessionId] da casca e das [permissions] dela (o cache de titulares é da sessão) e fecham ao
- * sair da área, da casca ou da sessão, o que cancela a assinatura de tempo real. Enquanto a sessão ativa da conexão
+ * o painel nasce com a chave do [sessionId] da casca e das [permissions] dela (o cache de titulares é da sessão), o
+ * detalhe só com a do [sessionId], e cada um fecha ao sair da área, da casca ou da sessão (o painel também com outro
+ * conjunto), o que cancela a assinatura de tempo real. Enquanto a sessão ativa da conexão
  * não é a [sessionId] da casca, o quadro fica vazio de propósito: as [permissions] de uma sessão nunca valem na outra,
  * e uma assinatura aberta sem sessão esperaria pela próxima. O painel, o check-in, o walk-in e os recados usam o
  * conjunto da casca (ADR 0013). O ganho de foco da janela atualiza o painel e relê a reserva aberta; a perda só o
@@ -244,12 +245,9 @@ private fun ReceptionArea(
         sessionId != null && sessionId == activeSessionId -> {
             val panel = remember(source, sessionId, permissions) { DayPanelState(source, scope, permissions) }
             val detail = remember(source, sessionId) { ReservationDetailState(source, scope) }
-            DisposableEffect(panel, detail) {
-                onDispose {
-                    panel.close()
-                    detail.close()
-                }
-            }
+            // Um efeito por holder, com a chave dele: o conjunto novo fecha só o painel, e o detalhe da sessão segue.
+            DisposableEffect(panel) { onDispose { panel.close() } }
+            DisposableEffect(detail) { onDispose { detail.close() } }
             val traces = receptionTraces(connection.tracesSource(), sessionId, permissions, scope)
             val window = LocalWindowInfo.current
             LaunchedEffect(panel, detail, window) {
@@ -302,13 +300,12 @@ private fun ReservationsArea(
             val search = remember(source, sessionId) { ReservationSearchState(source, scope) }
             val detail =
                 remember(receptionSource, sessionId) { receptionSource?.let { ReservationDetailState(it, scope) } }
-            DisposableEffect(search, detail) {
+            // Um efeito por holder, com a chave dele, como na Recepção.
+            DisposableEffect(search) {
                 search.start()
-                onDispose {
-                    search.close()
-                    detail?.close()
-                }
+                onDispose { search.close() }
             }
+            DisposableEffect(detail) { onDispose { detail?.close() } }
             val window = LocalWindowInfo.current
             LaunchedEffect(detail, window) {
                 snapshotFlow { window.isWindowFocused }.collect { focused ->

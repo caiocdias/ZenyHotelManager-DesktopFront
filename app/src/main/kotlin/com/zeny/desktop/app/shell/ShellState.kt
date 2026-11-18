@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import java.util.Set as JavaSet
 
 private const val UNCONFIGURED_HOTEL = "Hotel ainda não configurado"
 private const val UNKNOWN_HOTEL = "Hotel"
@@ -81,7 +82,7 @@ class ShellState(
                     val date = connection.businessDate()
                     userName = me.name
                     areas = visibleAreas(me.permissions, IMPLEMENTED_AREAS, devMode)
-                    val read = java.util.Set.copyOf(me.permissions)
+                    val read = JavaSet.copyOf(me.permissions)
                     businessDate = DateInput.format(date)
                     restoreArea?.let { selected = it }
                     restoreArea = null

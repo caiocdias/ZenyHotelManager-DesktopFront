@@ -396,4 +396,26 @@ class ReceptionShellTest {
             }
         }
     }
+
+    @Test
+    fun setChangeInTheSameSessionKeepsTheOpenDetail() =
+        runComposeUiTest {
+            val reception = receptionWithArrival().apply { permissions = emptySet() }
+            val fake = Fake(reception = reception, initial = SessionState.Active("u-1", "s-1", false))
+            var permissions by mutableStateOf(setOf(CHECKIN))
+            setContent { ZenyTheme { AreaContent(Area.RECEPTION, fake, "s-1", permissions) } }
+            waitForIdle()
+            onNodeWithTag("row-$reservationUuid").performClick()
+            waitForIdle()
+            onNodeWithTag("reservation-detail").assertExists()
+            assertEquals(0, reception.subscriptions)
+
+            // Só o conjunto muda: o painel renasce com ele, e o detalhe lembrado da sessão segue aberto.
+            permissions = setOf(CHECKIN, "rooms.status.read")
+            waitForIdle()
+
+            onNodeWithTag("reservation-detail").assertExists()
+            assertEquals(listOf(setOf("rooms")), reception.subscribedTopics, "o painel não renasceu com o conjunto")
+            assertEquals(1, reception.activeSubscriptions)
+        }
 }
