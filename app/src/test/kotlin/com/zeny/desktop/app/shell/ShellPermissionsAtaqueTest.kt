@@ -53,6 +53,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.uuid.Uuid
+import androidx.compose.ui.test.hasText as textMatcher
 
 private const val READ = "reservations.reservations.read"
 private const val MANAGE = "reservations.reservations.manage"
@@ -401,7 +402,7 @@ class ShellPermissionsAtaqueTest {
     }
 
     private fun ComposeUiTest.inDetail(text: String) =
-        onNode(androidx.compose.ui.test.hasText(text) and hasAnyAncestor(hasTestTag("reservation-detail")))
+        onNode(textMatcher(text) and hasAnyAncestor(hasTestTag("reservation-detail")))
 
     private companion object {
         fun openTrace() =

@@ -114,7 +114,8 @@ class NewReservationDialogEtapaAtaqueTest {
             onNodeWithTag("new-reservation-done").assertTextContains(ET_OFFER_TOTAL_TEXT, substring = true)
         }
 
-    // M4 (M4 E01): o nome dizia "antes de criar" e o teste também criava, sem afirmar que a repetição é a mesma intenção.
+    // M4 (M4 E01): o nome dizia "antes de criar" e o teste também criava, sem afirmar que a repetição é a mesma
+    // intenção.
     @Test
     fun afterAnUnknownResultTheOffersTotalStaysAndTheRetryCreatesOnceWithTheSameKey() =
         runComposeUiTest {
@@ -137,7 +138,8 @@ class NewReservationDialogEtapaAtaqueTest {
             onAllNodesWithText("Total", substring = true).assertCountEquals(1)
             onNodeWithTag("new-reservation-done").assertTextContains(ET_SERVER_TOTAL_TEXT, substring = true)
             assertEquals(2, server.runs.size)
-            assertEquals(1, server.runs.map { it.key }.toSet().size, "a repetição leva a mesma Idempotency-Key")
+            val keys = server.runs.map { it.key }.toSet()
+            assertEquals(1, keys.size, "a repetição leva a mesma Idempotency-Key")
             assertTrue(server.runs.all { it.token == null })
             onNodeWithTag("new-reservation-submit").assertDoesNotExist()
         }
@@ -184,7 +186,8 @@ class NewReservationDialogEtapaAtaqueTest {
         }
 
     // O critério do B-M2a pede as entradas desabilitadas com o resultado desconhecido ou só fechar. O `MoneyField` da
-    // diária não recebe `enabled` (`NewReservationDialog.kt`, `Form`): o campo aparece habilitado, e só o estado ignora.
+    // diária não recebe `enabled` (`NewReservationDialog.kt`, `Form`): o campo aparece habilitado, e só o estado
+    // ignora o que se digita.
     @Test
     fun afterAStoredFailureTheNegotiatedRateFieldIsDisabledLikeTheOtherInputs() =
         runComposeUiTest {

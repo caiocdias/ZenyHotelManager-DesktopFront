@@ -435,7 +435,8 @@ class FakeReceptionActionsAtaqueTest {
     fun panelPermissionsComeOnlyFromTheConstructorAndASourceChangeNeverReachesThePanelOrItsTopics() =
         runTest {
             // Pendência da E06: o nome antigo falava de uma leitura que não existe mais (ADR 0013). O que se prova:
-            // o painel usa só o conjunto da casca; o falso ganhar permissões depois não muda o painel nem as assinaturas.
+            // o painel usa só o conjunto da casca; o falso ganhar permissões depois não muda o painel nem as
+            // assinaturas.
             val source = FakeReceptionSource().apply { permissions = setOf("guests.profiles.read") }
             val panel = DayPanelState(source, backgroundScope, setOf("guests.profiles.read"))
             runCurrent()
