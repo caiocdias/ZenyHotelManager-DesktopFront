@@ -20,6 +20,7 @@ class FolioConnection(
     private val reception: ReceptionSource? = null,
     private val search: ReservationSearchSource? = null,
     sessionId: String = "A",
+    private val payments: PaymentSource? = null,
 ) : ServerConnection {
     override val state = MutableStateFlow<SessionState>(SessionState.Active("u-1", sessionId, false))
 
@@ -49,6 +50,8 @@ class FolioConnection(
     ): String = error("não usado")
 
     override fun folioSource(): FolioSource? = folios
+
+    override fun paymentSource(): PaymentSource? = payments
 
     override fun cashierSource(): CashierSource? = cashier
 

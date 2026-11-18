@@ -23,8 +23,8 @@ import com.zeny.desktop.design.input.MoneyField
 
 private val DIALOG_WIDTH = 560.dp
 
-/** O que muda entre os dois diálogos de escrita da conta: o prefixo das tags, o título e o botão de envio. */
-private class WriteDialogTexts(
+/** O que muda entre os diálogos de escrita da conta: o prefixo das tags, o título e o botão de envio. */
+internal class WriteDialogTexts(
     val tag: String,
     val title: String,
     val submitLabel: String,
@@ -119,11 +119,13 @@ internal fun ReversalDialog(
     }
 }
 
+/** O diálogo de escrita da conta; [afterMessage] vem logo abaixo da mensagem (o atalho do turno, nos pagamentos). */
 @Composable
-private fun WriteDialog(
+internal fun WriteDialog(
     form: FolioWriteForm,
     spec: WriteDialogTexts,
     onLeave: () -> Unit,
+    afterMessage: @Composable () -> Unit = {},
     fields: @Composable () -> Unit,
 ) {
     AlertDialog(
@@ -141,6 +143,7 @@ private fun WriteDialog(
                         modifier = Modifier.testTag("${spec.tag}-message"),
                     )
                 }
+                afterMessage()
             }
         },
         confirmButton = {

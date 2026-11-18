@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // detekt: a lista, o painel e uma composição por seção da conta
+
 package com.zeny.desktop.app.folio
 
 import androidx.compose.foundation.border
@@ -188,8 +190,9 @@ private fun ReservationFolios(
 
 /**
  * O painel da conta: cabeçalho, "Lançar", lançamentos (a taxa de serviço recuada sob o item dela, cada um com o menu
- * dele), o extrato da audiência escolhida e os dois botões do extrato em PDF, independentes dela. Tudo como o servidor
- * devolve. O PDF aberto fecha quando o painel sai de cena (trocar de aba).
+ * dele), os pagamentos (com "Receber", quando há a porta deles), o extrato da audiência escolhida e os dois botões do
+ * extrato em PDF, independentes dela. Tudo como o servidor devolve. O PDF aberto fecha quando o painel sai de cena
+ * (trocar de aba).
  */
 @Composable
 fun FolioPanel(
@@ -223,12 +226,14 @@ fun FolioPanel(
                 Header(view)
                 Actions(state)
                 Postings(state)
+                Payments(state)
                 Statement(state)
             }
         }
     }
     state.pdf?.let { RegistrationCardDialog(it, onClose = state::closePdf) }
     state.posting?.let { PostingDialog(it, onLeave = state::dismissPosting) }
+    state.payment?.let { PaymentDialog(it, onLeave = state::finishPayment) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
@@ -301,6 +306,40 @@ private fun PostingLine(
                 }
             }
         }
+    }
+}
+
+/** A seção "Pagamentos", na ordem do servidor; só com a porta dos pagamentos. */
+@Composable
+private fun Payments(state: FolioState) {
+    if (!state.hasPayments) return
+    Text("Pagamentos", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+    if (state.canReceive) {
+        Button(onClick = state::startPayment, modifier = Modifier.testTag("receive-payment")) { Text("Receber") }
+    }
+    state.paymentsError?.let {
+        Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("payments-error"))
+    }
+    if (state.paymentsError == null && state.payments.isEmpty()) Text(FolioText.NO_PAYMENTS)
+    state.payments.forEachIndexed { index, row ->
+        key(row.id) { PaymentLine(index, row) }
+    }
+}
+
+@Composable
+private fun PaymentLine(
+    index: Int,
+    row: PaymentRow,
+) {
+    Row(
+        Modifier.fillMaxWidth().testTag("payment-$index"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(listOfNotNull(row.date, row.type, row.method, row.card).joinToString(" · "), Modifier.weight(1f))
+        Text(row.amount)
+        if (row.deposit) Text(FolioText.DEPOSIT, color = MaterialTheme.colorScheme.secondary)
+        row.refunded?.let { Text("Reembolsado $it", color = MaterialTheme.colorScheme.secondary) }
     }
 }
 

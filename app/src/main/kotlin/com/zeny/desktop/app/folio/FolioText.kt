@@ -1,5 +1,7 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.core.facade.PaymentMethod
+import com.zeny.desktop.core.facade.PaymentProblem
 import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.ExtensibleEnumLabels
@@ -11,6 +13,7 @@ import com.zeny.desktop.sdk.model.FolioResponse
 import java.math.BigDecimal
 
 /** Os textos da conta. Os valores vêm do servidor e só são formatados em BRL, nunca calculados; nenhum id. */
+@Suppress("TooManyFunctions") // um rótulo por enum e um texto por regra, num lugar só
 object FolioText {
     const val NO_FOLIO = "Esta reserva ainda não tem conta."
     const val CLOSED = "Conta encerrada"
@@ -36,6 +39,16 @@ object FolioText {
     const val REVERSAL_SERVER_UNCONFIRMED =
         "O servidor não confirmou o estorno. Feche e confira a conta antes de refazer."
     const val APPROVAL_CANCELLED = "Aprovação cancelada. O estorno não foi feito."
+    const val NO_PAYMENTS = "Nenhum pagamento nesta conta."
+    const val PAYMENTS_FAILED = "Não foi possível ler os pagamentos."
+    const val DEPOSIT = "Depósito"
+    const val AMOUNT_REQUIRED = "Informe o valor."
+    const val PAYMENT_UNCONFIRMED =
+        "Não foi possível confirmar o recebimento. Receba de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de receber de novo."
+    const val PAYMENT_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o recebimento. Feche e confira a conta antes de receber de novo."
+    const val PAYMENT_RECORDED = "Pagamento registrado."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -51,6 +64,10 @@ object FolioText {
         )
 
     private val statementKinds = ExtensibleEnumLabels(mapOf("POSTING" to "Lançamento", "PAYMENT" to "Pagamento"))
+
+    private val paymentTypes = ExtensibleEnumLabels(mapOf("PAYMENT" to "Recebimento", "REFUND" to "Reembolso"))
+
+    private val paymentMethods = ExtensibleEnumLabels(PaymentMethod.entries.associate { it.name to method(it) })
 
     /** O decimal do servidor em BRL (`R$ 1.234,56`); um valor fora do formato do contrato vira "—". */
     fun money(decimal: String): String =
@@ -90,6 +107,39 @@ object FolioText {
 
     /** O tipo da linha do extrato (`x-extensible-enum`): o desconhecido aparece como "Outro (VALOR)". */
     fun statementKind(value: String): String = statementKinds.label(value)
+
+    /** O tipo do pagamento (`x-extensible-enum`): o desconhecido aparece como "Outro (VALOR)". */
+    fun paymentType(value: String): String = paymentTypes.label(value)
+
+    /** A forma do pagamento lida do servidor (`x-extensible-enum`): a desconhecida aparece como "Outro (VALOR)". */
+    fun paymentMethod(value: String): String = paymentMethods.label(value)
+
+    /** A forma oferecida no recebimento. */
+    fun method(method: PaymentMethod): String =
+        when (method) {
+            PaymentMethod.CASH -> "Dinheiro"
+            PaymentMethod.DEBIT_CARD -> "Cartão de débito"
+            PaymentMethod.CREDIT_CARD -> "Cartão de crédito"
+            PaymentMethod.PIX -> "Pix"
+            PaymentMethod.BANK_TRANSFER -> "Transferência"
+            PaymentMethod.OTHER -> "Outra"
+        }
+
+    /** O texto ao lado do campo com o problema de formato; nunca repete o que foi digitado. */
+    fun problem(problem: PaymentProblem): String =
+        when (problem) {
+            PaymentProblem.AMOUNT -> "O valor deve ser maior que zero."
+            PaymentProblem.TENDERED -> "O valor entregue não pode ser menor que o valor."
+            PaymentProblem.CARD_BRAND -> "A bandeira tem só letras e espaços, até 20."
+            PaymentProblem.CARD_LAST4 -> "Informe os 4 últimos dígitos do cartão."
+            PaymentProblem.NSU -> "O NSU tem até 20 letras e números, no máximo 12 dígitos."
+            PaymentProblem.AUTHORIZATION_CODE -> "A autorização tem até 20 letras e números, no máximo 12 dígitos."
+            PaymentProblem.REASON -> "Informe o motivo, com até 200 caracteres."
+        }
+
+    /** O aviso do recebimento feito, com o troco que o servidor devolveu quando é maior que zero. */
+    fun received(change: String?): String =
+        if (change == null) PAYMENT_RECORDED else "$PAYMENT_RECORDED Troco: $change."
 
     /** O dono da conta pelo rótulo do tipo, nunca pelo id. */
     fun owner(type: FolioOwnerDto.Type?): String =

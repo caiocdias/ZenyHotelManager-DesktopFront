@@ -7,19 +7,27 @@ import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.PdfDocument
 import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.http.ApiResponse
+import com.zeny.desktop.sdk.model.PaymentResponse
 import com.zeny.desktop.sdk.model.PostingResponse
 
 /**
  * O que as três entradas da conta (a aba "Contas", "Conta" na Recepção e "Conta" nas Reservas e pendências) recebem
  * do `AppRoot`: a porta, o conjunto de permissões da casca, a aprovação da sessão e as fábricas do extrato em PDF de
- * cada audiência (nulas sem visualizador). Nenhuma entrada fica sem coordenador de aprovação.
+ * cada audiência (nulas sem visualizador); a porta dos pagamentos (nula, sem a seção "Pagamentos"), a aprovação do
+ * reembolso e o atalho "Abrir turno" (nulo sem `billing.cashier.operate`). O `AppRoot` monta as três entradas com o
+ * coordenador de aprovação da sessão. O padrão de [approveRefund] nunca roda a ação (equivale à aprovação cancelada):
+ * existe só para quem monta o portador sem coordenador compilar, e uma entrada assim não reembolsa por engano.
  */
+@Suppress("LongParameterList") // o que as três entradas recebem; os campos novos entram por último, com padrão
 class FolioWiring(
     val source: FolioSource,
     val permissions: Set<String>,
     val approve: suspend (ApprovableAction<PostingResponse>) -> ApiResponse<PostingResponse>?,
     val guestPdf: ((folioId: String, number: String) -> RegistrationCardState)?,
     val internalPdf: ((folioId: String, number: String) -> RegistrationCardState)?,
+    val payments: PaymentSource? = null,
+    val approveRefund: suspend (ApprovableAction<PaymentResponse>) -> ApiResponse<PaymentResponse>? = { null },
+    val openShift: (() -> Unit)? = null,
 )
 
 /**
