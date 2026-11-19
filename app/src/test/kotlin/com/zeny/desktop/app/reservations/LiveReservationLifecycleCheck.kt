@@ -42,10 +42,12 @@ import com.zeny.desktop.design.table.TableState
 import com.zeny.desktop.design.theme.ZenyTheme
 import com.zeny.desktop.sdk.model.BookingResponse
 import com.zeny.desktop.sdk.model.CancellationResponse
+import com.zeny.desktop.sdk.model.PostingResponse
 import com.zeny.desktop.sdk.model.QuoteOfferResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.ReservationResponse
+import com.zeny.desktop.sdk.model.TransactionCodeResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.emptyFlow
@@ -93,9 +95,13 @@ private const val REALLOCATED_DETAIL = "UH 208 fora de ordem na estadia"
 private const val PRE_BOOKING_KIND = "Pré-reserva"
 private const val ONE_NIGHT_PENALTY = "multa de 1 diária(s)"
 private const val PENALTY_POSTED = "Multa lançada na conta: "
-private const val NO_PENALTY = "Sem multa."
+private const val PENALTY_WAIVED = "Multa isenta: "
+private const val NO_NEW_PENALTY = "Sem multa nova. A conta já tem "
+private const val PREVIOUS_PENALTY = " de multa de cancelamento anterior."
 private const val REACTIVATE_PERMISSION = "reservations.reservations.reactivate"
 private const val APPROVAL_REASON = "Verificação ao vivo da reativação da E04"
+private const val WAIVE_PERMISSION = "reservations.penalties.waive"
+private const val WAIVER_REASON = "Verificação ao vivo da isenção da multa da E12"
 private const val G1_CPF_BASE = "202600101"
 private const val CPF_FIRST_WEIGHT = 10
 private const val CPF_MODULUS = 11
@@ -106,13 +112,15 @@ private const val NO_REALLOCATION =
     "NEED_SEED: rode o demo-seed desta etapa (a DEMO-PEND-R1, alocada na UH 208, que entra em fora de ordem)"
 
 /**
- * Verificação do cancelamento, da reativação e das pendências da M3 E04 contra um servidor real (o ambiente
- * `zeny-front`), com a Recepcionista e a aprovação do Gerente, pelo `CoreConnection` real, pelos estados reais
- * (`NewReservationState`, `ReservationCancelState`, `ReservationReactivateState`, `PendingListsState`,
- * `ReservationDetailState`), pelos diálogos e pelo painel reais e pelo `ApprovalCoordinator` real.
- * **Escreve na demo** (ruling 6): cada execução deixa uma reserva cancelada do G1 com a chegada hoje, com os pedidos
- * especiais "ENSAIO E04", e cancela as reservas confirmadas do G1 cujos pedidos especiais começam com "ENSAIO E0"
- * (nunca uma do seed, de `externalId` "DEMO-…").
+ * Verificação do cancelamento, da reativação e das pendências da M3 E04, e da multa de cancelamento da M4 E12 (o
+ * texto do recancelamento e a isenção), contra um servidor real (o ambiente `zeny-front`), com a Recepcionista e a
+ * aprovação do Gerente, pelo `CoreConnection` real, pelos estados reais (`NewReservationState`,
+ * `ReservationCancelState`, `ReservationReactivateState`, `PendingListsState`, `ReservationDetailState`), pelos
+ * diálogos e pelo painel reais e pelo `ApprovalCoordinator` real; a conta da reserva é lida pela `FolioSource` real.
+ * **Escreve na demo e não desfaz** (ruling 6): cada execução deixa duas reservas canceladas do G1 com a chegada hoje,
+ * com os pedidos especiais "ENSAIO E04" (uma com a multa lançada na conta, outra com a multa isenta pelo Gerente), e
+ * cancela as reservas confirmadas do G1 cujos pedidos especiais começam com "ENSAIO E0" (nunca uma do seed, de
+ * `externalId` "DEMO-…").
  *
  * Pulada sem o opt-in `ZENY_LIVE_LIFECYCLE=1`; com ele, exige `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`,
  * `ZENY_LIVE_VIEWER_PASSWORD`, `ZENY_LIVE_APPROVER_LOGIN` e `ZENY_LIVE_APPROVER_PIN` (só do ambiente, nunca
@@ -142,28 +150,32 @@ class LiveReservationLifecycleCheck {
     }
 
     /**
-     * Critérios 1 e 2, sobre a mesma reserva de chegada hoje: cancela com a multa lançada, reativa com o Gerente,
-     * acha a reativada nos no-shows previstos e cancela de novo, sem outra multa. Se ela ficar confirmada no fim (o
-     * teste falhou no meio), a limpeza a cancela; a falha da limpeza entra como suprimida na do corpo.
+     * Critérios 1 e 2 da E04, sobre a mesma reserva de chegada hoje: cancela com a multa lançada, reativa com o
+     * Gerente, acha a reativada nos no-shows previstos e cancela de novo, sem outra multa (e, desde a E12, com o texto
+     * "Sem multa nova" e a multa do 1º cancelamento intacta na conta). Se ela ficar confirmada no fim (o teste falhou
+     * no meio), a limpeza a cancela ([withRehearsal]).
      */
     @Test
     fun cancelAndReactivate() =
         withScreen { screen, ports, approver ->
-            val today = runBlocking { ports.availability.businessDay().date }
-            val created = createToday(screen, ports, today)
-            val body =
-                runCatching {
-                    val penalty = cancelWithPenalty(screen, ports, created)
-                    reactivateWithApproval(screen, ports, approver, created)
-                    listedAsExpectedNoShow(screen, ports, created)
-                    cancelAgainWithoutPenalty(screen, ports, created, penalty)
-                }
-            val cleanup = runCatching { cancelIfStillConfirmed(screen, ports, created) }
-            body.exceptionOrNull()?.let { failure ->
-                cleanup.exceptionOrNull()?.let(failure::addSuppressed)
-                throw failure
+            withRehearsal(screen, ports) { created ->
+                val penalty = cancelWithPenalty(screen, ports, created)
+                reactivateWithApproval(screen, ports, approver, created)
+                listedAsExpectedNoShow(screen, ports, created)
+                cancelAgainWithoutPenalty(screen, ports, created, penalty)
             }
-            cleanup.getOrThrow()
+        }
+
+    /**
+     * Critério 3 da E12: uma reserva de ensaio de chegada hoje (o prazo da política vencido, a multa devida) cancelada
+     * com "Isentar a multa", aprovada pelo Gerente se o servidor pedir: o resumo diz "Multa isenta" e a conta da
+     * reserva fica sem lançamento de multa (ou só com o que a API devolver para a isenção). A limpeza é a do
+     * [withRehearsal].
+     */
+    @Test
+    fun cancelWithWaiver() =
+        withScreen { screen, ports, approver ->
+            withRehearsal(screen, ports) { created -> cancelWaived(screen, ports, approver, created) }
         }
 
     /**
@@ -286,6 +298,26 @@ class LiveReservationLifecycleCheck {
 
     // --- Step 1 -------------------------------------------------------------------------------------------------
 
+    /**
+     * Cria o ensaio de hoje ([createToday]) e roda [steps] sobre ele; se o ensaio ficar confirmado no fim (o teste
+     * falhou no meio), a limpeza o cancela, e a falha da limpeza entra como suprimida na do corpo.
+     */
+    private fun DesktopComposeUiTest.withRehearsal(
+        screen: LifecycleScreen,
+        ports: LifecyclePorts,
+        steps: DesktopComposeUiTest.(LifecycleReservation) -> Unit,
+    ) {
+        val today = runBlocking { ports.availability.businessDay().date }
+        val created = createToday(screen, ports, today)
+        val body = runCatching { steps(created) }
+        val cleanup = runCatching { cancelIfStillConfirmed(screen, ports, created) }
+        body.exceptionOrNull()?.let { failure ->
+            cleanup.exceptionOrNull()?.let(failure::addSuppressed)
+            throw failure
+        }
+        cleanup.getOrThrow()
+    }
+
     /** Cria pela `NewReservationState` a reserva STD/BALCAO do G1 de hoje a amanhã, com os pedidos do ensaio. */
     private fun DesktopComposeUiTest.createToday(
         screen: LifecycleScreen,
@@ -323,13 +355,16 @@ class LiveReservationLifecycleCheck {
         }
     }
 
-    /** Critério 1: os termos antes de confirmar, e depois a multa do servidor lançada na conta. Devolve a multa. */
+    /**
+     * Critério 1: os termos antes de confirmar, e depois a multa do servidor lançada na conta. Devolve a multa e o
+     * lançamento dela.
+     */
     @Suppress("LongMethod") // um roteiro só: termos, captura, confirmação, releitura e o texto da multa
     private fun DesktopComposeUiTest.cancelWithPenalty(
         screen: LifecycleScreen,
         ports: LifecyclePorts,
         created: LifecycleReservation,
-    ): BigDecimal {
+    ): ChargedPenalty {
         val state = openCancel(screen, ports, created)
         try {
             val terms = assertNotNull(state.terms, "o diálogo de ${created.code} não leu os termos")
@@ -366,6 +401,7 @@ class LiveReservationLifecycleCheck {
                 (penalty.postingId as? Option.Some)?.value != null,
                 "a multa de ${created.code} não tem lançamento na conta (postingId vazio)",
             )
+            val postingId = (penalty.postingId as? Option.Some)?.value?.toString().orEmpty()
             assertEquals(
                 0,
                 amountOf(reservation.penaltiesCharged, "as multas cobradas de ${created.code}").compareTo(amount),
@@ -377,7 +413,7 @@ class LiveReservationLifecycleCheck {
                 "LiveReservationLifecycleCheck: reserva ${created.code} cancelada (GUEST_REQUEST) com multa " +
                     "${ReceptionText.money(penalty.amount)} lançada; resumo: $done",
             )
-            return amount
+            return ChargedPenalty(amount, postingId)
         } finally {
             closeCancel(screen, state)
         }
@@ -413,21 +449,9 @@ class LiveReservationLifecycleCheck {
                             "erro: ${state.error}); a Recepcionista não devia ter $REACTIVATE_PERMISSION",
                     )
             assertEquals(REACTIVATE_PERMISSION, required.permission, "a permissão pedida no APPROVAL_REQUIRED")
-            runOnUiThread {
-                screen.approvals.login = approver.login
-                screen.approvals.pin = approver.pin
-                screen.approvals.reason = APPROVAL_REASON
+            approveAsManager(screen, approver, APPROVAL_REASON, "a reativação aprovada pelo Gerente") {
+                !state.busy && (state.done != null || state.error != null)
             }
-            assertTrue(
-                screen.approvals.dialog?.canConfirm == true,
-                "o diálogo de aprovação não aceita o login, o PIN (4 a 8 dígitos) ou o motivo do Gerente",
-            )
-            runOnUiThread { screen.approvals.confirm() }
-            waitUntil("a reativação aprovada pelo Gerente", LOAD_TIMEOUT_MILLIS) {
-                screen.approvals.dialog?.message != null ||
-                    (!state.busy && (state.done != null || state.error != null))
-            }
-            assertNull(screen.approvals.dialog?.message, "o Gerente foi recusado: ${screen.approvals.dialog?.message}")
             assertNull(state.error, "a reativação aprovada de ${created.code} falhou: ${state.error}")
             assertEquals("Reserva ${created.code} reativada.", state.done, "o resumo da reativação")
             val reservation = runBlocking { ports.reception.reservation(created.id) }.reservation
@@ -446,6 +470,31 @@ class LiveReservationLifecycleCheck {
                 state.close()
             }
         }
+    }
+
+    /**
+     * Aprova como o Gerente o pedido pendente do `ApprovalCoordinator`: o único caminho do PIN, que só vai ao diálogo
+     * de aprovação. Espera a recusa do Gerente ou a ação [settled] e exige que ele não tenha sido recusado.
+     */
+    private fun ComposeUiTest.approveAsManager(
+        screen: LifecycleScreen,
+        approver: Approver,
+        reason: String,
+        what: String,
+        settled: () -> Boolean,
+    ) {
+        runOnUiThread {
+            screen.approvals.login = approver.login
+            screen.approvals.pin = approver.pin
+            screen.approvals.reason = reason
+        }
+        assertTrue(
+            screen.approvals.dialog?.canConfirm == true,
+            "o diálogo de aprovação não aceita o login, o PIN (4 a 8 dígitos) ou o motivo do Gerente",
+        )
+        runOnUiThread { screen.approvals.confirm() }
+        waitUntil(what, LOAD_TIMEOUT_MILLIS) { screen.approvals.dialog?.message != null || settled() }
+        assertNull(screen.approvals.dialog?.message, "o Gerente foi recusado: ${screen.approvals.dialog?.message}")
     }
 
     /** Confirmada, de chegada hoje e sem check-in: a reserva está em "No-shows previstos". */
@@ -478,12 +527,17 @@ class LiveReservationLifecycleCheck {
         }
     }
 
-    /** Cancela de novo a reativada: CANCELLED, e a multa já cobrada não é lançada outra vez. */
+    /**
+     * Cancela de novo a reativada: CANCELLED, e a multa já cobrada não é lançada outra vez. O resumo diz "Sem multa
+     * nova" com o `penaltiesCharged` relido, e o lançamento da multa do 1º cancelamento continua na conta da reserva,
+     * sem estorno, com o valor do `penaltiesCharged` e sem outro lançamento no mesmo código (critério 2 da E12).
+     */
+    @Suppress("LongMethod") // um roteiro só: releitura, multa, conta e o texto da multa anterior
     private fun DesktopComposeUiTest.cancelAgainWithoutPenalty(
         screen: LifecycleScreen,
         ports: LifecyclePorts,
         created: LifecycleReservation,
-        charged: BigDecimal,
+        charged: ChargedPenalty,
     ) {
         val state = openCancel(screen, ports, created)
         try {
@@ -503,17 +557,121 @@ class LiveReservationLifecycleCheck {
             )
             assertEquals(
                 0,
-                amountOf(reservation.penaltiesCharged, "as multas cobradas de ${created.code}").compareTo(charged),
+                amountOf(reservation.penaltiesCharged, "as multas cobradas de ${created.code}")
+                    .compareTo(charged.amount),
                 "as multas cobradas de ${created.code} mudaram no 2º cancelamento: ${reservation.penaltiesCharged}",
             )
-            assertTrue(done.contains(NO_PENALTY), "o resumo do 2º cancelamento é \"$done\"; esperava \"$NO_PENALTY\"")
+            val previousText = "$NO_NEW_PENALTY${ReceptionText.money(reservation.penaltiesCharged)}$PREVIOUS_PENALTY"
+            assertTrue(
+                done.contains(previousText),
+                "o resumo do 2º cancelamento é \"$done\"; esperava conter \"$previousText\"",
+            )
+            firstPenaltyStaysOnTheFolio(ports, created, reservation, charged)
             println("LiveReservationLifecycleCheck: reserva ${created.code} cancelada de novo, sem outra multa: $done")
         } finally {
             closeCancel(screen, state)
         }
     }
 
-    /** A limpeza do [cancelAndReactivate]: a reserva do ensaio não fica confirmada na demo. */
+    /**
+     * A multa do 1º cancelamento ([charged]) continua na conta da reserva relida: o mesmo lançamento, sem estorno, com
+     * o valor do `penaltiesCharged`, e nenhum outro lançamento no mesmo código de transação.
+     */
+    private fun firstPenaltyStaysOnTheFolio(
+        ports: LifecyclePorts,
+        created: LifecycleReservation,
+        reservation: ReservationResponse,
+        charged: ChargedPenalty,
+    ) {
+        val postings = postingsOf(ports, reservation)
+        val first =
+            postings.firstOrNull { it.id.toString() == charged.postingId }
+                ?: fail("o lançamento da multa do 1º cancelamento de ${created.code} não está na conta da reserva")
+        assertNull(
+            (first.reversedBy as? Option.Some)?.value,
+            "a multa do 1º cancelamento de ${created.code} foi estornada",
+        )
+        assertEquals(
+            0,
+            amountOf(first.amount, "o lançamento da multa de ${created.code}")
+                .compareTo(amountOf(reservation.penaltiesCharged, "as multas cobradas de ${created.code}")),
+            "o lançamento da multa de ${created.code} é ${first.amount}; as multas cobradas são " +
+                reservation.penaltiesCharged,
+        )
+        val others = postings.filter { it.transactionCodeId == first.transactionCodeId && it.id != first.id }
+        assertTrue(
+            others.isEmpty(),
+            "a conta de ${created.code} tem ${others.size} lançamento(s) a mais no código da multa",
+        )
+    }
+
+    /**
+     * Critério 3 da E12: cancela com "Isentar a multa", aprova como o Gerente se o servidor pedir e exige a multa
+     * devida isenta, o resumo "Multa isenta" com o valor do servidor e a conta sem lançamento de multa (ou só com o
+     * que a API devolver para a isenção).
+     */
+    @Suppress("LongMethod") // um roteiro só: isenção, aprovação, releitura, conta e o texto da multa isenta
+    private fun DesktopComposeUiTest.cancelWaived(
+        screen: LifecycleScreen,
+        ports: LifecyclePorts,
+        approver: Approver,
+        created: LifecycleReservation,
+    ) {
+        val state = openCancel(screen, ports, created)
+        try {
+            runOnUiThread {
+                state.reason = GUEST_REQUEST
+                state.waivePenalty = true
+            }
+            assertTrue(state.waivePenalty, "a isenção da multa de ${created.code} não foi marcada")
+            runOnUiThread { state.confirm() }
+            val settled = { !state.busy && (state.done != null || state.error != null) }
+            waitUntil("o cancelamento com isenção de ${created.code}", LOAD_TIMEOUT_MILLIS) {
+                screen.approvals.pending != null || settled()
+            }
+            screen.approvals.pending?.let { asked ->
+                assertEquals(WAIVE_PERMISSION, asked.permission, "a permissão pedida na isenção da multa")
+                approveAsManager(screen, approver, WAIVER_REASON, "a isenção aprovada pelo Gerente", settled)
+            }
+            assertNull(state.error, "o cancelamento com isenção de ${created.code} falhou: ${state.error}")
+            val done = assertNotNull(state.done, "o cancelamento com isenção de ${created.code} não concluiu")
+            val reservation = runBlocking { ports.reception.reservation(created.id) }.reservation
+            assertEquals(CANCELLED, reservation.status, "a situação relida de ${created.code} depois da isenção")
+            val penalty = cancellationOf(reservation).penalty
+            assertTrue(penalty.waived, "a multa de ${created.code} não veio isenta")
+            assertTrue(
+                amountOf(penalty.amount, "a multa isenta de ${created.code}").signum() > 0,
+                "a multa isenta de ${created.code} é ${penalty.amount}; esperava a multa devida, maior que zero (a " +
+                    "chegada é hoje: o prazo da política já passou)",
+            )
+            assertEquals(
+                0,
+                amountOf(reservation.penaltiesCharged, "as multas cobradas de ${created.code}").signum(),
+                "a isenção de ${created.code} cobrou ${reservation.penaltiesCharged}",
+            )
+            val returned = (penalty.postingId as? Option.Some)?.value?.toString()
+            val feeCode = cancellationFeeCode(ports)
+            val fees = postingsOf(ports, reservation).filter { it.transactionCodeId.toString() == feeCode }
+            assertEquals(
+                listOfNotNull(returned),
+                fees.map { it.id.toString() },
+                "a conta de ${created.code} tem lançamento de multa além do que a isenção devolveu",
+            )
+            val waivedText = "$PENALTY_WAIVED${ReceptionText.money(penalty.amount)}."
+            assertTrue(
+                done.contains(waivedText),
+                "o resumo da isenção é \"$done\"; esperava conter \"$waivedText\"",
+            )
+            println(
+                "LiveReservationLifecycleCheck: reserva ${created.code} cancelada com a multa " +
+                    "${ReceptionText.money(penalty.amount)} isenta, sem lançamento de multa na conta; resumo: $done",
+            )
+        } finally {
+            closeCancel(screen, state)
+        }
+    }
+
+    /** A limpeza do [withRehearsal]: a reserva do ensaio não fica confirmada na demo. */
     private fun DesktopComposeUiTest.cancelIfStillConfirmed(
         screen: LifecycleScreen,
         ports: LifecyclePorts,
@@ -601,6 +759,12 @@ private class LifecycleScreen {
 private class LifecycleReservation(
     val id: String,
     val code: String,
+)
+
+/** A multa do 1º cancelamento: o valor do servidor e o lançamento dela na conta da reserva. */
+private class ChargedPenalty(
+    val amount: BigDecimal,
+    val postingId: String,
 )
 
 // --- Step 3 -------------------------------------------------------------------------------------------------
@@ -863,6 +1027,7 @@ private class LifecyclePorts(
     val cancel = connection.reservationCancelSource()
     val reactivate = connection.reservationReactivateSource()
     val pending = connection.pendingSource()
+    val folios = connection.folioSource()
     val permissions: Set<String> = runBlocking { connection.me().permissions }
 }
 
@@ -887,6 +1052,20 @@ private fun stdOffer(
 private fun cancellationOf(reservation: ReservationResponse): CancellationResponse =
     (reservation.cancellation as? Option.Some)?.value
         ?: fail("a reserva ${reservation.code} (${reservation.status}) veio sem o cancelamento")
+
+/** Os lançamentos da conta da reserva relida. */
+private fun postingsOf(
+    ports: LifecyclePorts,
+    reservation: ReservationResponse,
+): List<PostingResponse> = runBlocking { ports.folios.postings(reservation.folioId.toString()) }
+
+/** O id do código de lançamento da multa de cancelamento (`CANCELLATION_FEE`); sem ele, `NEED_SEED`. */
+private fun cancellationFeeCode(ports: LifecyclePorts): String =
+    runBlocking { ports.folios.transactionCodes() }
+        .firstOrNull { (it.key as? Option.Some)?.value == TransactionCodeResponse.Key.CANCELLATION_FEE }
+        ?.id
+        ?.toString()
+        ?: fail("NEED_SEED: sem o código de lançamento CANCELLATION_FEE")
 
 /** Um decimal do servidor; ilegível, falha citando [what]. */
 private fun amountOf(
