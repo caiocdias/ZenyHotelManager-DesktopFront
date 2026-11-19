@@ -18,6 +18,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -32,6 +33,8 @@ private const val PAY = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f11"
 private const val PAY_2 = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f12"
 private const val SHIFT = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f13"
 private const val USER = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f14"
+private const val PRE = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f21"
+private const val PRE_2 = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f22"
 private const val SECRET_ID = "id-secreto-que-nao-e-uuid"
 private const val NSU_13 = "1234567890123"
 private const val AUTH_19 = "1234567890123456789"
@@ -70,6 +73,26 @@ class PaymentsFacadeTest {
         val cursor = if (next == null) "" else ""","nextCursor":"$next""""
         return """{"items":[$items]$cursor}"""
     }
+
+    private fun preAuthorization(id: String = PRE) =
+        """{"amount":"300.00","authorizationCode":"AUT123","businessDate":"2026-11-18","capturableAmount":"300.00",
+        "capturePaymentIds":[],"capturedAmount":"0.00","expiresAt":"2026-11-20T02:59:59Z","folioId":"$FOLIO",
+        "id":"$id","registeredAt":"2026-11-18T10:00:00Z","registeredBy":"$USER","status":"ACTIVE"}"""
+
+    private fun register(
+        authorizationCode: String = "AUT123",
+        nsu: String? = null,
+        cardBrand: String? = null,
+        cardLast4: String? = null,
+        amount: String = "300.00",
+    ) = PreAuthorizationInput(
+        Money.parse(amount),
+        Instant.parse("2026-11-20T02:59:59Z"),
+        authorizationCode,
+        nsu,
+        cardBrand,
+        cardLast4,
+    )
 
     private val approvalProblem =
         """{"code":"APPROVAL_REQUIRED","detail":"d","action":"billing.payments.refund","permission":"p",
@@ -347,6 +370,242 @@ class PaymentsFacadeTest {
                         },
                         assertFailsWith<IllegalArgumentException> {
                             core.payments.refund(FOLIO, SECRET_ID, refund(), Intent())
+                        },
+                    )
+                failures.forEach { assertTrue(SECRET_ID !in it.message.orEmpty()) }
+                assertTrue(requests.isEmpty())
+            }
+        }
+
+    @Test
+    fun preAuthorizationsReadAllPages() =
+        runTest {
+            core { request ->
+                if (request.url.parameters["cursor"] == null) {
+                    json(page(preAuthorization(PRE), "next-2"))
+                } else {
+                    json(page(preAuthorization(PRE_2)))
+                }
+            }.use { core ->
+                val all = core.payments.preAuthorizations(FOLIO)
+                assertEquals(listOf(PRE, PRE_2), all.map { it.id.toString() })
+                assertEquals(2, requests.size)
+                assertTrue(requests.all { it.url.encodedPath.endsWith("/folios/$FOLIO/card-pre-authorizations") })
+                assertEquals("200", requests[0].url.parameters["limit"])
+                assertEquals("next-2", requests[1].url.parameters["cursor"])
+            }
+        }
+
+    @Test
+    fun registerSendsExactDecimalsExpiryAndKey() =
+        runTest {
+            core { json(preAuthorization(), HttpStatusCode.Created) }.use { core ->
+                val done =
+                    core.payments.registerPreAuthorization(
+                        FOLIO,
+                        register(nsu = "NSU1", cardBrand = "Visa", cardLast4 = "1234"),
+                        Intent(),
+                    )
+                assertEquals(PRE, done.id.toString())
+                val request = requests.single()
+                assertEquals("POST", request.method.value)
+                assertTrue(request.url.encodedPath.endsWith("/folios/$FOLIO/card-pre-authorizations"))
+                val body = bodyOf(request)
+                assertEquals("300.00", body.getValue("amount").jsonPrimitive.content)
+                assertTrue(body.getValue("amount").jsonPrimitive.isString)
+                assertEquals("2026-11-20T02:59:59Z", body.getValue("expiresAt").jsonPrimitive.content)
+                assertEquals("AUT123", body.getValue("authorizationCode").jsonPrimitive.content)
+                assertEquals("NSU1", body.getValue("nsu").jsonPrimitive.content)
+                assertEquals("Visa", body.getValue("cardBrand").jsonPrimitive.content)
+                assertEquals("1234", body.getValue("cardLast4").jsonPrimitive.content)
+                assertEquals(
+                    setOf("amount", "expiresAt", "authorizationCode", "nsu", "cardBrand", "cardLast4"),
+                    body.keys,
+                )
+                assertTrue(request.headers["Idempotency-Key"]?.isNotBlank() == true)
+            }
+        }
+
+    @Test
+    fun registerWithoutAuthorizationFailsBeforeTheNetwork() =
+        runTest {
+            core { json(preAuthorization(), HttpStatusCode.Created) }.use { core ->
+                listOf("", "   ").forEach { blank ->
+                    assertEquals(
+                        setOf(PaymentProblem.AUTHORIZATION_CODE),
+                        register(authorizationCode = blank).problems(),
+                    )
+                    assertFailsWith<IllegalArgumentException> {
+                        core.payments.registerPreAuthorization(FOLIO, register(authorizationCode = blank), Intent())
+                    }
+                }
+                assertTrue(requests.isEmpty())
+            }
+        }
+
+    @Test
+    fun captureSendsAmountAndKey() =
+        runTest {
+            core { json("""{"payment":${payment()},"preAuthorization":${preAuthorization()}}""") }.use { core ->
+                val intent = Intent()
+                val done =
+                    core.payments.capturePreAuthorization(
+                        FOLIO,
+                        PRE,
+                        CaptureInput(Money.parse("120.00")),
+                        intent,
+                    )
+                assertEquals(PRE, done.preAuthorization.id.toString())
+                assertEquals(PAY, done.payment.id.toString())
+                val request = requests.single()
+                assertEquals("POST", request.method.value)
+                assertTrue(request.url.encodedPath.endsWith("/folios/$FOLIO/card-pre-authorizations/$PRE/capture"))
+                val body = bodyOf(request)
+                assertEquals(setOf("amount"), body.keys)
+                assertEquals("120.00", body.getValue("amount").jsonPrimitive.content)
+                assertTrue(body.getValue("amount").jsonPrimitive.isString)
+                assertEquals(intent.key, request.headers["Idempotency-Key"])
+            }
+        }
+
+    @Test
+    fun captureSendsCodesOnlyWhenPresent() =
+        runTest {
+            core { json("""{"payment":${payment()},"preAuthorization":${preAuthorization()}}""") }.use { core ->
+                val input = CaptureInput(Money.parse("1.00"), nsu = "NSU9", authorizationCode = " AUT9 ")
+                core.payments.capturePreAuthorization(FOLIO, PRE, input, Intent())
+                val body = bodyOf(requests.single())
+                assertEquals(setOf("amount", "nsu", "authorizationCode"), body.keys)
+                assertEquals("NSU9", body.getValue("nsu").jsonPrimitive.content)
+                assertEquals("AUT9", body.getValue("authorizationCode").jsonPrimitive.content)
+            }
+        }
+
+    @Test
+    fun releaseSendsOnlyTheKey() =
+        runTest {
+            core { json(preAuthorization()) }.use { core ->
+                val intent = Intent()
+                val done = core.payments.releasePreAuthorization(FOLIO, PRE, intent)
+                assertEquals(PRE, done.id.toString())
+                val request = requests.single()
+                assertEquals("POST", request.method.value)
+                assertTrue(request.url.encodedPath.endsWith("/folios/$FOLIO/card-pre-authorizations/$PRE/release"))
+                assertTrue(request.body.toByteArray().isEmpty())
+                assertEquals(intent.key, request.headers["Idempotency-Key"])
+            }
+        }
+
+    @Test
+    fun cardLikePreAuthorizationCodesNeverReachTheNetwork() =
+        runTest {
+            core { json(preAuthorization()) }.use { core ->
+                val failures = mutableListOf<IllegalArgumentException>()
+                listOf(NSU_13, AUTH_19).forEach { code ->
+                    failures +=
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.registerPreAuthorization(FOLIO, register(authorizationCode = code), Intent())
+                        }
+                    failures +=
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.registerPreAuthorization(FOLIO, register(nsu = code), Intent())
+                        }
+                    failures +=
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.registerPreAuthorization(FOLIO, register(cardLast4 = code), Intent())
+                        }
+                    failures +=
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.capturePreAuthorization(
+                                FOLIO,
+                                PRE,
+                                CaptureInput(Money.parse("1.00"), nsu = code),
+                                Intent(),
+                            )
+                        }
+                    failures +=
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.capturePreAuthorization(
+                                FOLIO,
+                                PRE,
+                                CaptureInput(Money.parse("1.00"), authorizationCode = code),
+                                Intent(),
+                            )
+                        }
+                }
+                failures.forEach {
+                    assertFalse(NSU_13 in it.message.orEmpty())
+                    assertFalse(AUTH_19 in it.message.orEmpty())
+                }
+                assertTrue(requests.isEmpty())
+            }
+        }
+
+    @Test
+    fun preAuthorizationProblemsFollowTheContract() {
+        val table: List<Pair<Set<PaymentProblem>, Set<PaymentProblem>>> =
+            listOf(
+                register().problems() to emptySet(),
+                register(amount = "0.00").problems() to setOf(PaymentProblem.AMOUNT),
+                register(amount = "-1.00").problems() to setOf(PaymentProblem.AMOUNT),
+                register(authorizationCode = "ABC-12").problems() to setOf(PaymentProblem.AUTHORIZATION_CODE),
+                register(authorizationCode = "A".repeat(21)).problems() to setOf(PaymentProblem.AUTHORIZATION_CODE),
+                register(authorizationCode = "123456789012").problems() to emptySet(),
+                register(nsu = NSU_13).problems() to setOf(PaymentProblem.NSU),
+                register(nsu = " ").problems() to emptySet(),
+                register(cardBrand = "Visa 3").problems() to setOf(PaymentProblem.CARD_BRAND),
+                register(cardBrand = "A".repeat(21)).problems() to setOf(PaymentProblem.CARD_BRAND),
+                register(cardBrand = "Mastercard Elo").problems() to emptySet(),
+                register(cardLast4 = "123").problems() to setOf(PaymentProblem.CARD_LAST4),
+                register(cardLast4 = "1234").problems() to emptySet(),
+                register(cardBrand = " ", cardLast4 = " ").problems() to emptySet(),
+                CaptureInput(Money.parse("1.00")).problems() to emptySet(),
+                CaptureInput(Money.parse("0.00")).problems() to setOf(PaymentProblem.AMOUNT),
+                CaptureInput(Money.parse("1.00"), nsu = NSU_13).problems() to setOf(PaymentProblem.NSU),
+                CaptureInput(Money.parse("1.00"), authorizationCode = AUTH_19).problems() to
+                    setOf(PaymentProblem.AUTHORIZATION_CODE),
+                CaptureInput(Money.parse("1.00"), nsu = " ", authorizationCode = " ").problems() to emptySet(),
+            )
+        table.forEachIndexed { index, (actual, expected) -> assertEquals(expected, actual, "linha $index") }
+    }
+
+    @Test
+    fun preAuthorizationInputsHideCardDataInToString() {
+        val register =
+            register(
+                authorizationCode = "AUTSECRETA",
+                nsu = "NSUSECRETO",
+                cardBrand = "MarcaSecreta",
+                cardLast4 = "9876",
+            )
+        val capture = CaptureInput(Money.parse("1.00"), nsu = "NSUSECRETO", authorizationCode = "AUTSECRETA")
+        listOf(register.toString(), capture.toString()).forEach { text ->
+            listOf("MarcaSecreta", "9876", "NSUSECRETO", "AUTSECRETA").forEach { assertFalse(it in text, text) }
+        }
+    }
+
+    @Test
+    fun preAuthorizationNonUuidIdsFailBeforeTheNetwork() =
+        runTest {
+            core { json(preAuthorization()) }.use { core ->
+                val capture = CaptureInput(Money.parse("1.00"))
+                val failures =
+                    listOf(
+                        assertFailsWith<IllegalArgumentException> { core.payments.preAuthorizations(SECRET_ID) },
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.registerPreAuthorization(SECRET_ID, register(), Intent())
+                        },
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.capturePreAuthorization(SECRET_ID, PRE, capture, Intent())
+                        },
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.capturePreAuthorization(FOLIO, SECRET_ID, capture, Intent())
+                        },
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.releasePreAuthorization(SECRET_ID, PRE, Intent())
+                        },
+                        assertFailsWith<IllegalArgumentException> {
+                            core.payments.releasePreAuthorization(FOLIO, SECRET_ID, Intent())
                         },
                     )
                 failures.forEach { assertTrue(SECRET_ID !in it.message.orEmpty()) }

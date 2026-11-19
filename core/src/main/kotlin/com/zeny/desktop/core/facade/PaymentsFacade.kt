@@ -5,11 +5,17 @@ import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.Money
+import com.zeny.desktop.core.types.toApi
 import com.zeny.desktop.sdk.client.BillingApi
+import com.zeny.desktop.sdk.model.CapturePreAuthorizationRequest
+import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
 import com.zeny.desktop.sdk.model.PaymentResponse
+import com.zeny.desktop.sdk.model.PreAuthorizationCaptureResponse
 import com.zeny.desktop.sdk.model.ReceivePaymentRequest
 import com.zeny.desktop.sdk.model.RefundPaymentRequest
+import com.zeny.desktop.sdk.model.RegisterPreAuthorizationRequest
 import de.quati.kotlin.util.Option
+import java.time.Instant
 import kotlin.uuid.Uuid
 
 /** Maior página que o contrato aceita: a lista completa vem com o mínimo de idas ao servidor. */
@@ -24,7 +30,7 @@ private val BRAND_FORMAT = Regex("^[\\p{L} ]{1,$MAX_BRAND}$")
 private val LAST4_FORMAT = Regex("^[0-9]{4}$")
 private val CODE_FORMAT = Regex("^[A-Za-z0-9]{1,$MAX_CODE}$")
 
-/** O que a entrada de pagamento ou de reembolso tem de errado; a tela escolhe o texto. */
+/** O que a entrada de pagamento, de reembolso ou de caução tem de errado; a tela escolhe o texto. */
 enum class PaymentProblem { AMOUNT, TENDERED, CARD_BRAND, CARD_LAST4, NSU, AUTHORIZATION_CODE, REASON }
 
 /**
@@ -53,6 +59,32 @@ data class RefundInput(
     val authorizationCode: String? = null,
 ) {
     override fun toString(): String = "RefundInput(amount=$amount)"
+}
+
+/**
+ * Uma caução (pré-autorização de cartão de crédito feita na maquininha): o valor autorizado, a validade [expiresAt]
+ * (o estado confere o intervalo, que depende do fuso do hotel), a autorização (obrigatória) e, opcionais, o NSU, a
+ * bandeira e os 4 últimos dígitos. Não há número de cartão nem CVV. O `toString()` não mostra cartão, NSU nem
+ * autorização.
+ */
+data class PreAuthorizationInput(
+    val amount: Money,
+    val expiresAt: Instant,
+    val authorizationCode: String,
+    val nsu: String? = null,
+    val cardBrand: String? = null,
+    val cardLast4: String? = null,
+) {
+    override fun toString(): String = "PreAuthorizationInput(amount=$amount, expiresAt=$expiresAt)"
+}
+
+/** Uma captura de caução, total ou parcial. O `toString()` não mostra o NSU nem a autorização. */
+data class CaptureInput(
+    val amount: Money,
+    val nsu: String? = null,
+    val authorizationCode: String? = null,
+) {
+    override fun toString(): String = "CaptureInput(amount=$amount)"
 }
 
 private fun String?.present(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
@@ -92,9 +124,28 @@ fun RefundInput.problems(): Set<PaymentProblem> =
         addAll(codeProblems(nsu, authorizationCode, allowed = true))
     }
 
+/** Valor maior que zero, autorização presente e no formato e, se vierem, NSU, bandeira e últimos no formato. */
+fun PreAuthorizationInput.problems(): Set<PaymentProblem> =
+    buildSet {
+        if (!amount.positive()) add(PaymentProblem.AMOUNT)
+        if (authorizationCode.present() == null) add(PaymentProblem.AUTHORIZATION_CODE)
+        cardBrand.present()?.let { if (!BRAND_FORMAT.matches(it)) add(PaymentProblem.CARD_BRAND) }
+        cardLast4.present()?.let { if (!LAST4_FORMAT.matches(it)) add(PaymentProblem.CARD_LAST4) }
+        addAll(codeProblems(nsu, authorizationCode, allowed = true))
+    }
+
+/** Valor maior que zero e, se vierem, NSU e autorização no formato. */
+fun CaptureInput.problems(): Set<PaymentProblem> =
+    buildSet {
+        if (!amount.positive()) add(PaymentProblem.AMOUNT)
+        addAll(codeProblems(nsu, authorizationCode, allowed = true))
+    }
+
 /**
- * Os pagamentos da conta: lista, recebimento e reembolso. Receber e reembolsar levam `Idempotency-Key` pela `Intent`;
- * o reembolso pode pedir aprovação (`ApprovableAction`). O front não calcula troco, reembolsado nem reembolsável.
+ * Os pagamentos da conta: lista, recebimento e reembolso, e as cauções (lista, registro, captura e liberação). As
+ * escritas levam `Idempotency-Key` pela `Intent`; o reembolso pode pedir aprovação (`ApprovableAction`). O front não
+ * calcula troco, reembolsado, reembolsável, capturado, capturável nem liberado. As respostas de caução do `sdk`
+ * imprimem o cartão no `toString`: nunca as logue nem as interpole.
  * Entrada com problema ou `id` que não é UUID lança `IllegalArgumentException` antes de ir à rede, sem o valor
  * na mensagem.
  */
@@ -166,6 +217,84 @@ class PaymentsFacade internal constructor(
                 block = it.headers,
             )
         }
+    }
+
+    /** Todas as cauções da conta, todas as páginas, na ordem do servidor. */
+    suspend fun preAuthorizations(folioId: String): List<CardPreAuthorizationResponse> {
+        val id = idOf(folioId, "conta")
+        val pager =
+            CursorPager(ALL_PAGES_SIZE) { cursor, limit ->
+                val page = executor.execute { billing.listCardPreAuthorizations(id, cursor, limit, it.headers) }.value
+                Page(page.items, (page.nextCursor as? Option.Some)?.value?.takeIf { it.isNotBlank() })
+            }
+        val all = mutableListOf<CardPreAuthorizationResponse>()
+        while (pager.hasMore) all += pager.next()
+        return all
+    }
+
+    suspend fun registerPreAuthorization(
+        folioId: String,
+        input: PreAuthorizationInput,
+        intent: Intent,
+    ): CardPreAuthorizationResponse {
+        val id = idOf(folioId, "conta")
+        val problems = input.problems()
+        require(problems.isEmpty()) { "caução inválida: $problems" }
+        val request =
+            RegisterPreAuthorizationRequest(
+                amount = input.amount.toApi(),
+                authorizationCode = optional(input.authorizationCode),
+                cardBrand = optional(input.cardBrand),
+                cardLast4 = optional(input.cardLast4),
+                expiresAt = input.expiresAt.toApi(),
+                nsu = optional(input.nsu),
+            )
+        return executor
+            .execute(intent) {
+                billing.registerCardPreAuthorization(id, it.requireIdempotencyKey(), request, it.headers)
+            }.value
+    }
+
+    suspend fun capturePreAuthorization(
+        folioId: String,
+        preAuthorizationId: String,
+        input: CaptureInput,
+        intent: Intent,
+    ): PreAuthorizationCaptureResponse {
+        val folio = idOf(folioId, "conta")
+        val preAuthorization = idOf(preAuthorizationId, "caução")
+        val problems = input.problems()
+        require(problems.isEmpty()) { "captura inválida: $problems" }
+        val request =
+            CapturePreAuthorizationRequest(
+                amount = input.amount.toApi(),
+                authorizationCode = optional(input.authorizationCode),
+                nsu = optional(input.nsu),
+            )
+        return executor
+            .execute(intent) {
+                billing.captureCardPreAuthorization(
+                    folioId = folio,
+                    preAuthorizationId = preAuthorization,
+                    idempotencyKey = it.requireIdempotencyKey(),
+                    capturePreAuthorizationRequest = request,
+                    block = it.headers,
+                )
+            }.value
+    }
+
+    /** Libera a sobra; vale também com a conta encerrada e com a caução vencida (o servidor decide). */
+    suspend fun releasePreAuthorization(
+        folioId: String,
+        preAuthorizationId: String,
+        intent: Intent,
+    ): CardPreAuthorizationResponse {
+        val folio = idOf(folioId, "conta")
+        val preAuthorization = idOf(preAuthorizationId, "caução")
+        return executor
+            .execute(intent) {
+                billing.releaseCardPreAuthorization(folio, preAuthorization, it.requireIdempotencyKey(), it.headers)
+            }.value
     }
 
     private fun optional(text: String?): Option<String?> = text.present()?.let { Option.Some(it) } ?: Option.Undefined
