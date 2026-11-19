@@ -27,6 +27,8 @@ private const val CREATE = "billing.postings.create"
 private const val REVERSE = "billing.postings.reverse"
 private const val RECEIVE = "billing.payments.receive"
 private const val REFUND = "billing.payments.refund"
+private const val MANAGE = "billing.folios.manage"
+private const val COMPANIES_READ = "guests.companies.read"
 private const val REGULAR = "REGULAR"
 private const val TRANSFER_IN = "TRANSFER_IN"
 private const val PAYMENT = "PAYMENT"
@@ -145,6 +147,11 @@ data class StatementView(
  * Com a porta das correções no [wiring], "Ajustar", "Remover a taxa", "Transferir" e "Dividir" ficam no
  * [corrections] (o `FolioCorrectionsState`), fechado com a conta; os diálogos dele também contam como diálogos do
  * painel.
+ *
+ * Com a porta do pagador e do limite no [wiring], "Pagador e limite" ([startAccount], com `billing.folios.manage` e a
+ * conta aberta) abre o [account] (o `FolioAccountFormState`), que só escolhe a empresa com `guests.companies.read`.
+ * Depois do sucesso, o diálogo sai, a conta e a lista são relidas e o aviso diz "Pagador e limite atualizados."; o
+ * `412` e o resultado desconhecido também releem a conta, com o diálogo aberto.
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
@@ -237,6 +244,10 @@ class FolioState(
     var reversing by mutableStateOf<PostingRow?>(null)
         private set
 
+    /** O diálogo "Pagador e limite" aberto. */
+    var account by mutableStateOf<FolioAccountFormState?>(null)
+        private set
+
     private val canCreate = CREATE in wiring.permissions
     private val canReverseAny = canCreate || REVERSE in wiring.permissions
 
@@ -258,7 +269,7 @@ class FolioState(
                 folioId,
                 folioOpen = { view?.closed == false },
                 otherDialogOpen = {
-                    posting != null || reversal != null || payment != null || refund != null ||
+                    posting != null || reversal != null || payment != null || refund != null || account != null ||
                         corrections?.dialogOpen == true
                 },
                 notify = { notice = it },
@@ -277,7 +288,7 @@ class FolioState(
                 folioId,
                 folioOpen = { view?.closed == false },
                 otherDialogOpen = {
-                    posting != null || reversal != null || payment != null || refund != null ||
+                    posting != null || reversal != null || payment != null || refund != null || account != null ||
                         preAuthorizations?.dialogOpen == true
                 },
                 notify = { notice = it },
@@ -289,7 +300,7 @@ class FolioState(
 
     private val dialogOpen: Boolean
         get() =
-            posting != null || reversal != null || payment != null || refund != null ||
+            posting != null || reversal != null || payment != null || refund != null || account != null ||
                 preAuthorizations?.dialogOpen == true || corrections?.dialogOpen == true
 
     /** "Lançar": com `billing.postings.create` e a conta aberta. */
@@ -306,6 +317,10 @@ class FolioState(
 
     /** "Reembolsar" na linha: um recebimento com reembolsável, com uma das duas permissões e a conta aberta. */
     fun canRefund(row: PaymentRow): Boolean = !closed && canRefundAny && view?.closed == false && row.refundable != null
+
+    /** "Pagador e limite": com a porta dele, `billing.folios.manage` e a conta aberta. */
+    val canEditAccount: Boolean
+        get() = !closed && MANAGE in wiring.permissions && wiring.account != null && view?.closed == false
 
     /** O extrato em PDF aberto (o visualizador da ficha). */
     var pdf by mutableStateOf<RegistrationCardState?>(null)
@@ -486,9 +501,30 @@ class FolioState(
         if (form.unconfirmed || form.closeOnly) rereadAfterWrite()
     }
 
+    /** Abre "Pagador e limite"; com outro diálogo aberto, nada. */
+    fun startAccount() {
+        val source = wiring.account
+        if (!canEditAccount || dialogOpen || source == null) return
+        notice = null
+        val canChoosePayer = COMPANIES_READ in wiring.permissions
+        account =
+            FolioAccountFormState(source, ownScope, folioId, canChoosePayer, ::accountSaved, ::rereadAfterWrite).also {
+                it.start()
+            }
+    }
+
+    /** "Voltar" de "Pagador e limite"; com o envio em curso, nada. */
+    fun dismissAccount() {
+        val form = account ?: return
+        if (form.busy) return
+        form.close()
+        account = null
+    }
+
     fun close() {
         closed = true
         jobs.cancel()
+        account?.close()
         posting?.close()
         reversal?.close()
         payment?.close()
@@ -505,6 +541,14 @@ class FolioState(
     ) {
         finish()
         open()
+    }
+
+    /** Pagador e limite trocados: o diálogo sai, a conta e a lista são relidas, e o aviso diz que foi feito. */
+    private fun accountSaved() {
+        account?.close()
+        account = null
+        rereadAfterWrite()
+        notice = FolioText.ACCOUNT_SAVED
     }
 
     /** O reembolso deu certo: o diálogo sai, a conta e os pagamentos são relidos, e o aviso diz que foi feito. */

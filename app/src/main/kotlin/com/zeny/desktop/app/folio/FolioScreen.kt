@@ -223,7 +223,7 @@ fun FolioPanel(
                         modifier = Modifier.testTag("folio-error"),
                     )
                 }
-                Header(view)
+                Header(view, state)
                 Actions(state)
                 Postings(state)
                 Payments(state)
@@ -244,6 +244,7 @@ private fun OpenDialogs(state: FolioState) {
     state.refund?.let { RefundDialog(it, onLeave = state::finishRefund) }
     state.preAuthorizations?.let { PreAuthorizationDialogs(it) }
     state.corrections?.let { CorrectionDialogs(it) }
+    state.account?.let { FolioAccountDialog(it, onLeave = state::dismissAccount) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
@@ -256,13 +257,24 @@ private fun Actions(state: FolioState) {
     state.notice?.let { Text(it, modifier = Modifier.testTag("folio-notice")) }
 }
 
+/** O cabeçalho da conta; "Pagador e limite" fica ao lado do limite quando o estado o oferece. */
 @Composable
-private fun Header(view: FolioView) {
+private fun Header(
+    view: FolioView,
+    state: FolioState,
+) {
     Text("Conta ${view.number}", style = MaterialTheme.typography.titleLarge)
     Text("Dono: ${view.owner}")
     Text("Situação: ${view.status}", modifier = Modifier.testTag("folio-status"))
     Text("Saldo: ${view.balance}", modifier = Modifier.testTag("folio-balance"))
-    Text("Limite: ${view.creditLimit}")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Limite: ${view.creditLimit}", modifier = Modifier.testTag("folio-limit"))
+        if (state.canEditAccount) {
+            OutlinedButton(onClick = state::startAccount, modifier = Modifier.testTag("folio-account")) {
+                Text("Pagador e limite")
+            }
+        }
+    }
     if (view.limitExceeded) Text(FolioText.LIMIT_EXCEEDED, color = MaterialTheme.colorScheme.error)
 }
 
