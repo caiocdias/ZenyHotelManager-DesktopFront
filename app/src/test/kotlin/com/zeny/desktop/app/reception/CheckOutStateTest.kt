@@ -175,6 +175,35 @@ class CheckOutStateTest {
         }
 
     @Test
+    fun malformedCapturableBlocksConclude() =
+        runTest {
+            val source = FakeCheckOutSource()
+            val payments =
+                FakePaymentSource().apply {
+                    preAuthorizations = { listOf(preAuthorizationOf(status = "ACTIVE", capturable = "trezentos")) }
+                }
+
+            val state = started(source, payments = payments)
+            state.conclude()
+            runCurrent()
+
+            assertEquals(CHECK_FAILED, state.error, "capturável ilegível numa caução ativa não some da conferência")
+            assertFalse(state.canConclude)
+            assertTrue(source.calls.isEmpty())
+
+            payments.preAuthorizations = { listOf(preAuthorizationOf(status = "PARTIALLY_CAPTURED", capturable = "")) }
+            state.reload()
+            runCurrent()
+            assertEquals(CHECK_FAILED, state.error)
+
+            payments.preAuthorizations = { listOf(preAuthorizationOf(status = "RELEASED", capturable = "x")) }
+            state.reload()
+            runCurrent()
+            assertNull(state.error, "fora das situações capturáveis, o capturável não importa")
+            assertTrue(state.canConclude)
+        }
+
+    @Test
     fun expiredIsNotPending() =
         runTest {
             val payments =
@@ -456,6 +485,32 @@ class CheckOutStateTest {
         }
 
     @Test
+    fun closingWhileUnknownReloadsThePanel() =
+        runTest {
+            val source = FakeCheckOutSource().apply { checkOut = { throw ApiError.Network(IOException("x")) } }
+            val state = started(source)
+            state.conclude()
+            runCurrent()
+            assertTrue(state.unconfirmed)
+
+            state.close()
+
+            val expected = listOf<Pair<String?, Boolean>>(null to true)
+            assertEquals(expected, closings, "o servidor pode ter feito o check-out")
+
+            val stored = FakeCheckOutSource().apply { checkOut = { throw problem(500, "INTERNAL_ERROR") } }
+            val closeOnly = started(stored)
+            closeOnly.conclude()
+            runCurrent()
+            assertTrue(closeOnly.closeOnly)
+            closeOnly.close()
+            assertEquals(null to true, closings.last())
+
+            started().close()
+            assertEquals(null to false, closings.last(), "sem envio, fechar não relê o painel")
+        }
+
+    @Test
     fun lateIsSentOnlyWhenChecked() =
         runTest {
             val source = FakeCheckOutSource().apply { quote = { LATE } }
@@ -639,7 +694,7 @@ class CheckOutStateTest {
             state.conclude()
             runCurrent()
 
-            assertEquals(failure.userMessage, state.message)
+            assertEquals("A reserva mudou enquanto você concluía. Confira e tente de novo.", state.message)
             assertEquals(2, folios.reservationCalls.size)
             assertEquals(2, payments.preAuthorizationCalls.size)
             assertEquals(2, source.quoteCalls)

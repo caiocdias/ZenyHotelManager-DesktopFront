@@ -12,12 +12,14 @@ import com.zeny.desktop.app.folio.PaymentFormState
 import com.zeny.desktop.app.folio.PaymentSource
 import com.zeny.desktop.app.folio.WriteOutcome
 import com.zeny.desktop.app.folio.isCapturable
+import com.zeny.desktop.app.folio.isCapturableStatus
 import com.zeny.desktop.app.folio.moneyOrNull
 import com.zeny.desktop.core.facade.CheckOutResult
 import com.zeny.desktop.core.facade.FolioDue
 import com.zeny.desktop.core.facade.LateCheckOutQuote
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.input.MoneyInput
+import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
 import com.zeny.desktop.sdk.model.PaymentResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CoroutineScope
@@ -262,8 +264,15 @@ class CheckOutState(
         if (form.unconfirmed || form.closeOnly) reload()
     }
 
-    /** Fecha o assistente; com um devido recebido e o check-out não concluído, o painel avisa. */
-    fun close() = finish(CheckOutText.PAID_NOT_CHECKED_OUT.takeIf { dueReceived.isNotEmpty() }, false)
+    /**
+     * Fecha o assistente; com um devido recebido e o check-out não concluído, o painel avisa. Com o resultado
+     * desconhecido, o servidor pode ter feito o check-out: o painel e o detalhe são relidos.
+     */
+    fun close() =
+        finish(
+            CheckOutText.PAID_NOT_CHECKED_OUT.takeIf { dueReceived.isNotEmpty() },
+            write.unconfirmed || write.closeOnly,
+        )
 
     /** Um diálogo por vez, nunca com o check-out em voo ou com o resultado desconhecido. */
     private fun canOpenPayment(): Boolean = !closed && payment == null && !write.locked
@@ -345,10 +354,22 @@ class CheckOutState(
                 val id = folio.id.toString()
                 port
                     .preAuthorizations(id)
-                    .filter { isCapturable(it.status, moneyOrNull(it.capturableAmount)) }
+                    .filter { pendingCapture(it) }
                     .map { CheckOutPending.PreAuthorization(folio.number, text, id) }
             }
         return PendingRead(balances, preAuthorizations)
+    }
+
+    /**
+     * A caução ainda capturável, pelo predicado da seção "Cauções". Numa situação capturável, o capturável fora do
+     * formato do contrato é falha da leitura (bloqueia "Concluir"), nunca uma caução que some da conferência.
+     */
+    private fun pendingCapture(preAuthorization: CardPreAuthorizationResponse): Boolean {
+        val capturable = moneyOrNull(preAuthorization.capturableAmount)
+        check(capturable != null || !isCapturableStatus(preAuthorization.status)) {
+            "capturável fora do formato numa caução capturável"
+        }
+        return isCapturable(preAuthorization.status, capturable)
     }
 
     private fun concluded(result: CheckOutResult) {

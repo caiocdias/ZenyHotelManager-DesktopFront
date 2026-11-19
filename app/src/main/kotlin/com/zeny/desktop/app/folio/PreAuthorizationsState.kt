@@ -36,7 +36,10 @@ private val CAPTURABLE = setOf("ACTIVE", "PARTIALLY_CAPTURED")
 internal fun isCapturable(
     statusCode: String,
     capturable: Money?,
-): Boolean = statusCode in CAPTURABLE && capturable != null && capturable.amount.signum() > 0
+): Boolean = isCapturableStatus(statusCode) && capturable != null && capturable.amount.signum() > 0
+
+/** A situação [statusCode] ainda é capturável (ativa ou capturada em parte), sem olhar o capturável. */
+internal fun isCapturableStatus(statusCode: String): Boolean = statusCode in CAPTURABLE
 
 /** As situações em que a caução ainda tem o que liberar. */
 private val RELEASABLE = setOf("ACTIVE", "PARTIALLY_CAPTURED", "EXPIRED")
