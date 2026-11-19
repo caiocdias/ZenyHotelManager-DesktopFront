@@ -63,8 +63,15 @@ class ExpiringPreAuthorizationsState(
     /** Uma nova leitura pediu a troca das linhas: só uma página que chega a desliga (a falha a mantém para o retry). */
     private var replacePending = false
 
-    /** O "Até" como a operadora o vê (`dd/MM/aaaa`). */
-    var untilText by mutableStateOf("")
+    private var typedUntil by mutableStateOf("")
+
+    /** O "Até" como a operadora o vê (`dd/MM/aaaa`); digitar limpa o aviso da data. */
+    var untilText: String
+        get() = typedUntil
+        set(value) {
+            typedUntil = value
+            untilError = null
+        }
 
     var untilError by mutableStateOf<String?>(null)
         private set
@@ -81,10 +88,15 @@ class ExpiringPreAuthorizationsState(
     var hasMore by mutableStateOf(false)
         private set
 
+    /** Uma leitura terminou com êxito desde a última entrada ou busca: só então "nenhuma caução" é verdade. */
+    var loaded by mutableStateOf(false)
+        private set
+
     /** Entra na aba: lê a data operacional e relê a primeira página com o "Até" vigente (ou a data mais 7 dias). */
     fun enter() {
         if (closed) return
         enterJob?.cancel()
+        loaded = false
         enterJob =
             ownScope.launch {
                 val day = readDay()
@@ -104,9 +116,9 @@ class ExpiringPreAuthorizationsState(
     /** Relê da primeira página com o "Até" digitado; data em branco ou inválida mostra o texto e não lê. */
     fun search() {
         if (closed) return
-        val to = parseUntil() ?: return
-        enterJob?.cancel()
-        startReading(to)
+        val to = parseUntil()
+        // A entrada em curso ainda lê a data operacional (o fuso das validades): ela mesma lê com o "Até" digitado.
+        if (to != null && enterJob?.isActive != true) startReading(to)
     }
 
     /** A página seguinte; depois de uma leitura que falhou, a mesma página de novo. */
@@ -155,6 +167,7 @@ class ExpiringPreAuthorizationsState(
         loadJob?.cancel()
         pager = CursorPager(PAGE_SIZE) { cursor, limit -> source.page(to, cursor, limit) }
         replacePending = true
+        loaded = false
         load()
     }
 
@@ -172,6 +185,7 @@ class ExpiringPreAuthorizationsState(
                     if (mine != generation) return@launch
                     rows = if (replacePending) page else rows + page
                     replacePending = false
+                    loaded = true
                     hasMore = current.hasMore
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,

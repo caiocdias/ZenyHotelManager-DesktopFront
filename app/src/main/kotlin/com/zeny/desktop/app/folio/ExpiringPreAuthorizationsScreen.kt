@@ -55,8 +55,7 @@ fun ExpiringPreAuthorizationsScreen(
             OutlinedButton(onClick = state::search, modifier = Modifier.testTag("expiring-search")) { Text("Buscar") }
         }
         state.rows.forEachIndexed { index, row -> ExpiringRowItem(row, index, onOpenFolio) }
-        val idle = !state.loading && state.error == null
-        if (idle && state.untilError == null && state.rows.isEmpty()) Text(NO_EXPIRING)
+        if (state.loaded && !state.loading && state.rows.isEmpty()) Text(NO_EXPIRING)
         state.error?.let {
             Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("expiring-error"))
         }
