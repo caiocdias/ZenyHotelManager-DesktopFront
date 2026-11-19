@@ -228,15 +228,16 @@ class ReservationCancelState(
         val reservation = response.reservation
         val penalty = (reservation.cancellation as? Option.Some)?.value?.penalty
         val text = "Reserva ${reservation.code} cancelada."
+
+        // A multa deste cancelamento com o total de multas da reserva relida ao lado.
+        fun penaltyText(
+            amount: String,
+            waived: Boolean,
+        ) = penaltySummary(amount, waived, reservation.penaltiesCharged)
         dropIntent()
         unconfirmed = false
         error = null
-        done =
-            if (penalty == null) {
-                text
-            } else {
-                "$text ${penaltyText(penalty.amount, penalty.waived, reservation.penaltiesCharged)}".trimEnd()
-            }
+        done = if (penalty == null) text else "$text ${penaltyText(penalty.amount, penalty.waived)}".trimEnd()
         onChanged()
     }
 
@@ -266,7 +267,7 @@ class ReservationCancelState(
  * `penaltiesCharged` relido), sem somar nada: isenta, lançada, sem multa nova com a anterior na conta ou sem multa. Um
  * valor ilegível, em qualquer dos dois, não afirma nada.
  */
-private fun penaltyText(
+private fun penaltySummary(
     amount: String,
     waived: Boolean,
     charged: String,
@@ -277,8 +278,8 @@ private fun penaltyText(
     val totalShown = if (waived) hasCharges else owed && exceeds(charged, amount)
     val total = if (totalShown) " Total de multas de cancelamento desta reserva: ${money(charged)}." else ""
     return when {
-        waived -> "Multa isenta: ${money(amount)}.$total"
-        owed -> "Multa lançada na conta: ${money(amount)}.$total"
+        waived -> "Multa isenta: ${money(amount)}." + total
+        owed -> "Multa lançada na conta: ${money(amount)}." + total
         hasCharges -> "Sem multa nova. A conta já tem ${money(charged)} de multa de cancelamento anterior."
         else -> "Sem multa."
     }
