@@ -627,6 +627,12 @@ class LiveReservationLifecycleCheck {
             waitUntil("o cancelamento com isenção de ${created.code}", LOAD_TIMEOUT_MILLIS) {
                 screen.approvals.pending != null || settled()
             }
+            if (WAIVE_PERMISSION !in ports.permissions && screen.approvals.pending == null) {
+                fail(
+                    "o cancelamento com isenção de ${created.code} não pediu aprovação de superior (resumo: " +
+                        "${state.done}, erro: ${state.error}); a Recepcionista não tem $WAIVE_PERMISSION",
+                )
+            }
             screen.approvals.pending?.let { asked ->
                 assertEquals(WAIVE_PERMISSION, asked.permission, "a permissão pedida na isenção da multa")
                 approveAsManager(screen, approver, WAIVER_REASON, "a isenção aprovada pelo Gerente", settled)
