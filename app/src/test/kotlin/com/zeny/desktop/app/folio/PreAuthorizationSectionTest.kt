@@ -2,19 +2,23 @@ package com.zeny.desktop.app.folio
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.AreaContent
 import com.zeny.desktop.app.cashier.FakeCashierSource
 import com.zeny.desktop.app.shell.Area
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.design.theme.ZenyTheme
+import com.zeny.desktop.sdk.model.FolioResponse
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.Test
@@ -24,14 +28,15 @@ private const val READ = "billing.folios.read"
 private const val OPERATE = "billing.cashier.operate"
 private const val RECEIVE = "billing.payments.receive"
 
-/** A seção "Cauções" do painel da conta: registrar e liberar na aba "Contas". */
+/** A seção "Cauções" do painel da conta: registrar, capturar e liberar na aba "Contas". */
 @OptIn(ExperimentalTestApi::class)
 class PreAuthorizationSectionTest {
     private fun ComposeUiTest.accounts(
         payments: PaymentSource?,
         permissions: Set<String> = setOf(READ, OPERATE, RECEIVE),
+        folios: FakeFolioSource = FakeFolioSource(),
     ) {
-        val connection = FolioConnection(FakeFolioSource(), cashier = FakeCashierSource(), payments = payments)
+        val connection = FolioConnection(folios, cashier = FakeCashierSource(), payments = payments)
         setContent { ZenyTheme { AreaContent(Area.ACCOUNTS, connection, "A", permissions) } }
         waitForIdle()
         onNodeWithText("Contas").performClick()
@@ -125,5 +130,90 @@ class PreAuthorizationSectionTest {
             onNodeWithText("Cauções").assertExists()
             onNodeWithTag("register-pre-authorization").assertDoesNotExist()
             onNodeWithTag("release-0").assertDoesNotExist()
+        }
+
+    @Test
+    fun captureOnlyOnACapturableRowWithReceiveAndAnOpenFolio() {
+        val rows = {
+            FakePaymentSource().apply {
+                preAuthorizations = {
+                    listOf(
+                        preAuthorizationOf(),
+                        preAuthorizationOf(captured = "300.00", capturable = "0.00", status = "CAPTURED"),
+                        preAuthorizationOf(status = "EXPIRED"),
+                    )
+                }
+            }
+        }
+        runComposeUiTest {
+            accounts(rows())
+            onNodeWithTag("folio-panel").performScrollToNode(hasTestTag("pre-authorization-row-2"))
+            onNodeWithTag("capture-0").assertExists()
+            onNodeWithTag("capture-1").assertDoesNotExist()
+            onNodeWithTag("capture-2").assertDoesNotExist()
+        }
+        runComposeUiTest {
+            accounts(rows(), setOf(READ, OPERATE))
+            onNodeWithTag("folio-panel").performScrollToNode(hasTestTag("pre-authorization-row-0"))
+            onNodeWithTag("capture-0").assertDoesNotExist()
+        }
+        runComposeUiTest {
+            val closed = FakeFolioSource().apply { folio = { folioOf(status = FolioResponse.Status.CLOSED) } }
+            accounts(rows(), folios = closed)
+            onNodeWithTag("folio-panel").performScrollToNode(hasTestTag("pre-authorization-row-0"))
+            onNodeWithTag("release-0").assertExists()
+            onNodeWithTag("capture-0").assertDoesNotExist()
+        }
+    }
+
+    @Test
+    fun captureChangesTheRowAndThePaymentAppears() =
+        runComposeUiTest {
+            val payments = FakePaymentSource().apply { preAuthorizations = { listOf(preAuthorizationOf()) } }
+            accounts(payments)
+
+            scrollAndClick("capture-0")
+            onNodeWithTag("capture-capturable").assertTextEquals("Capturável: R$ 300,00")
+            onNodeWithTag("capture-amount").performTextClearance()
+            onNodeWithTag("capture-amount").performTextInput("100,00")
+            payments.preAuthorizations = {
+                listOf(preAuthorizationOf(captured = "100.00", capturable = "200.00", status = "PARTIALLY_CAPTURED"))
+            }
+            payments.payments = { listOf(paymentOf(amount = "100.00", method = "CREDIT_CARD")) }
+            click("capture-submit")
+
+            onNodeWithTag("capture-dialog").assertDoesNotExist()
+            assertEquals(
+                "100.00",
+                payments.captureCalls
+                    .single()
+                    .input.amount
+                    .toApi(),
+            )
+            onNodeWithText("Caução capturada.").assertExists()
+            onNodeWithTag("folio-panel").performScrollToNode(hasTestTag("payment-0"))
+            onNodeWithText("Cartão de crédito", substring = true).assertExists()
+            onNodeWithTag("folio-panel").performScrollToNode(hasTestTag("pre-authorization-row-0"))
+            onNodeWithText("Capturada em parte", substring = true).assertExists()
+            onNodeWithText("Capturável: R$ 200,00").assertExists()
+        }
+
+    @Test
+    fun shiftRequiredOpenShiftClosesTheDialogAndCallsTheShortcut() =
+        runComposeUiTest {
+            val payments =
+                FakePaymentSource().apply {
+                    preAuthorizations = { listOf(preAuthorizationOf()) }
+                    capture = { throw ApiError.Problem(422, "CASHIER_SHIFT_REQUIRED", null, emptyList()) }
+                }
+            accounts(payments)
+
+            scrollAndClick("capture-0")
+            click("capture-submit")
+            onNodeWithText("É preciso um turno de caixa aberto.").assertExists()
+            click("open-shift")
+
+            onNodeWithText("Turno de caixa").assertExists()
+            onNodeWithTag("capture-dialog").assertDoesNotExist()
         }
 }

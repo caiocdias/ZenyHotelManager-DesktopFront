@@ -99,7 +99,7 @@ internal fun RefundDialog(
 
 /** "Abrir turno", logo abaixo da mensagem do turno fechado, só quando o diálogo oferece o atalho. */
 @Composable
-private fun OpenShiftButton(
+internal fun OpenShiftButton(
     offered: Boolean,
     onClick: () -> Unit,
 ) {

@@ -79,6 +79,12 @@ object FolioText {
     const val RELEASE_SERVER_UNCONFIRMED =
         "O servidor não confirmou a liberação. Feche e confira a conta antes de liberar de novo."
     const val RELEASE_DONE = "Sobra liberada."
+    const val CAPTURE_UNCONFIRMED =
+        "Não foi possível confirmar a captura. Capture de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de capturar de novo."
+    const val CAPTURE_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a captura. Feche e confira a conta antes de capturar de novo."
+    const val CAPTURE_DONE = "Caução capturada."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -217,6 +223,9 @@ object FolioText {
 
     /** O reembolsável que o servidor devolveu, já formatado. */
     fun refundable(value: String): String = "Reembolsável: $value"
+
+    /** O capturável que o servidor devolveu, já formatado. */
+    fun capturable(value: String): String = "Capturável: $value"
 
     /** O dono da conta pelo rótulo do tipo, nunca pelo id. */
     fun owner(type: FolioOwnerDto.Type?): String =

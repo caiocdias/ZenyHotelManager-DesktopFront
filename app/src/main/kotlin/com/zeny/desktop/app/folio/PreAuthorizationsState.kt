@@ -18,6 +18,14 @@ import java.time.ZoneId
 private const val RECEIVE = "billing.payments.receive"
 private const val FOLIO_CLOSED = "FOLIO_CLOSED"
 private const val SETTLED = "PRE_AUTHORIZATION_SETTLED"
+private const val EXPIRED = "PRE_AUTHORIZATION_EXPIRED"
+private const val EXCEEDS = "CAPTURE_EXCEEDS_AUTHORIZED"
+
+/** As recusas da caução que mudam o que a tabela mostra: as cauções são relidas. */
+private val RELOADS = setOf(SETTLED, EXPIRED, EXCEEDS)
+
+/** As situações em que a caução ainda tem o que capturar (com o capturável maior que zero). */
+private val CAPTURABLE = setOf("ACTIVE", "PARTIALLY_CAPTURED")
 
 /** As situações em que a caução ainda tem o que liberar. */
 private val RELEASABLE = setOf("ACTIVE", "PARTIALLY_CAPTURED", "EXPIRED")
@@ -49,12 +57,15 @@ data class PreAuthorizationRow(
  * ([error]) e não esconde a conta, e a falha do fuso é tolerada (a validade cai para a data UTC e o registro diz que
  * não leu o fuso). O front não calcula nada: autorizado, capturado, capturável e liberado são os do servidor.
  *
- * "Registrar caução" ([startRegister], com `billing.payments.receive` e a conta aberta, [folioOpen]) e "Liberar"
- * ([startRelease], com `billing.payments.receive` numa caução ativa, capturada em parte ou vencida, inclusive com a
- * conta encerrada) abrem um diálogo por vez, nunca com outro diálogo do painel aberto ([otherDialogOpen]). O sucesso
- * fecha o diálogo, relê as cauções, chama [onChanged] (a conta e os pagamentos) e avisa o painel por [notify]. A recusa
- * `PRE_AUTHORIZATION_SETTLED` relê as cauções; a `FOLIO_CLOSED`, a conta. Fechar um diálogo sem resultado conhecido
- * relê os dois, para conferir. [close] cancela o que é daqui.
+ * "Registrar caução" ([startRegister], com `billing.payments.receive` e a conta aberta, [folioOpen]), "Capturar"
+ * ([startCapture], com `billing.payments.receive` e a conta aberta, numa caução ativa ou capturada em parte com
+ * capturável) e "Liberar" ([startRelease], com `billing.payments.receive` numa caução ativa, capturada em parte ou
+ * vencida, inclusive com a conta encerrada) abrem um diálogo por vez, nunca com outro diálogo do painel aberto
+ * ([otherDialogOpen]). O sucesso fecha o diálogo, relê as cauções, chama [onChanged] (a conta e os pagamentos: a
+ * captura entra no saldo e nos pagamentos) e avisa o painel por [notify]. As recusas `PRE_AUTHORIZATION_SETTLED`,
+ * `PRE_AUTHORIZATION_EXPIRED` e `CAPTURE_EXCEEDS_AUTHORIZED` relêem as cauções; a `FOLIO_CLOSED`, a conta. Fechar um
+ * diálogo sem resultado conhecido relê os dois, para conferir. O "Abrir turno" da captura fecha o diálogo e só então
+ * chama o `openShift` do [wiring]. [close] cancela o que é daqui.
  */
 @Suppress("LongParameterList", "TooManyFunctions") // o que o painel passa; ler, abrir, fechar e o resultado
 class PreAuthorizationsState(
@@ -88,16 +99,24 @@ class PreAuthorizationsState(
     var register by mutableStateOf<PreAuthorizationFormState?>(null)
         private set
 
+    /** O diálogo "Capturar" aberto. */
+    var capture by mutableStateOf<CaptureState?>(null)
+        private set
+
     /** A confirmação "Liberar" aberta. */
     var release by mutableStateOf<ReleaseState?>(null)
         private set
 
     private val canWrite = RECEIVE in wiring.permissions && wiring.payments != null
 
-    val dialogOpen: Boolean get() = register != null || release != null
+    val dialogOpen: Boolean get() = register != null || capture != null || release != null
 
     /** "Registrar caução": com `billing.payments.receive` e a conta aberta. */
     val canRegister: Boolean get() = !closed && canWrite && folioOpen()
+
+    /** "Capturar" na linha: com `billing.payments.receive` e a conta aberta, numa caução com capturável. */
+    fun canCapture(row: PreAuthorizationRow): Boolean =
+        !closed && canWrite && folioOpen() && row.statusCode in CAPTURABLE && row.capturable != null
 
     /** "Liberar" na linha: com `billing.payments.receive`, numa caução com o que liberar (conta aberta ou não). */
     fun canRelease(row: PreAuthorizationRow): Boolean = !closed && canWrite && row.statusCode in RELEASABLE
@@ -146,6 +165,23 @@ class PreAuthorizationsState(
         if (form.unconfirmed || form.closeOnly) changed()
     }
 
+    /** Abre "Capturar" para a caução [row], com o capturável sugerido; fora das regras ou com outro diálogo, nada. */
+    fun startCapture(row: PreAuthorizationRow) {
+        val source = wiring.payments
+        if (!canCapture(row) || !noDialogOpen() || source == null) return
+        val shortcut = wiring.openShift?.let { open -> { closeThenOpenShift(::finishCapture, open) } }
+        capture = CaptureState(source, ownScope, folioId, row, shortcut, ::captured, ::refused)
+    }
+
+    /** "Voltar" ou "Fechar" da captura (e o atalho do turno); sem resultado conhecido, relê as cauções e a conta. */
+    fun finishCapture() {
+        val form = capture ?: return
+        if (form.busy) return
+        form.close()
+        capture = null
+        if (form.unconfirmed || form.closeOnly) changed()
+    }
+
     /** Abre "Liberar" para a caução [row]; fora das regras ou com outro diálogo aberto, nada. */
     fun startRelease(row: PreAuthorizationRow) {
         val source = wiring.payments
@@ -166,6 +202,7 @@ class PreAuthorizationsState(
         closed = true
         jobs.cancel()
         register?.close()
+        capture?.close()
         release?.close()
     }
 
@@ -190,6 +227,22 @@ class PreAuthorizationsState(
         notify(FolioText.PRE_AUTHORIZATION_RECORDED)
     }
 
+    /** O diálogo sai antes do atalho: voltando à conta, não há diálogo morto. */
+    private fun closeThenOpenShift(
+        finish: () -> Unit,
+        open: () -> Unit,
+    ) {
+        finish()
+        open()
+    }
+
+    private fun captured() {
+        capture?.close()
+        capture = null
+        changed()
+        notify(FolioText.CAPTURE_DONE)
+    }
+
     private fun released() {
         release?.close()
         release = null
@@ -197,10 +250,13 @@ class PreAuthorizationsState(
         notify(FolioText.RELEASE_DONE)
     }
 
-    /** A recusa definitiva (o texto já está no diálogo): a caução liquidada relê as cauções; conta fechada, a conta. */
+    /**
+     * A recusa definitiva (o texto já está no diálogo): a caução liquidada, vencida ou capturada a mais relê as
+     * cauções; conta fechada, a conta.
+     */
     private fun refused(code: String) {
         when (code) {
-            SETTLED -> reload()
+            in RELOADS -> reload()
             FOLIO_CLOSED -> onChanged()
         }
     }
