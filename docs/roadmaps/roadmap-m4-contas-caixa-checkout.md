@@ -682,12 +682,51 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-18). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `c4016ce`. Falta a `LivePaymentCheck` contra o `zeny-front`, que pede as credenciais do usuário. Por decisão do usuário neste lote ("pode substituir a revisão humana pela opção recomendada [...] O importante é avançar na entrega do marco"), a espera não trava o lote: para a escolha da próxima etapa, a E03 conta como concluída, como a regra 7 do README faz com o Windows, e as etapas que dependem dela registram que a base ainda não foi verificada ao vivo.
+- Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e03.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e03.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0 (3 Importantes: a assinatura de `folioWiring` sem padrão quebraria um arquivo do testador; o "servidor não duplica" sem prova ao vivo; o limite no ramo com máscara sem consumidor), aprovado com notas na rodada 1 (`d013789`).
+- Commits (`MERGE_BASE` `a1cde4b`, HEAD de código `c4016ce`):
+  - Antes das fatias: `b736771` (divisão E03/E09) e `0a725fe` (testador: a fixture intermitente do `AuthPluginAttackTest`; ver abaixo).
+  - Task 1, os campos do `design` (`A-M7`), a `PaymentsFacade` (`ZenyCore.payments`) e a porta `PaymentSource`: `fd2c6b3`. Revisão de fatia aprovada.
+  - Task 2, a seção "Pagamentos", "Receber" e o atalho "Abrir turno" nas três entradas: `4caaf7d`. Revisão de fatia aprovada.
+  - Task 3, "Reembolsar" com a aprovação da casca e a `LivePaymentCheck`: `a3d86c8`, `7cdc195` e `2077e42`. Revisão de fatia aprovada.
+  - Testador de etapa: `7ec20de`, `80107b4`, `6ffd7f2` e `5a29da7` (trava `tests/test_live_payment_ataque.sh` contra credencial e cartão impressos, com os templates da verificação numa lista fechada; cartão com espaços e traços; bordas do valor e do valor entregue; duplo clique e aprovação perdida no reembolso, com a chave girada e o token no fio; campos desabilitados com `locked` nos dois diálogos; o reembolso pelo `ApprovalCoordinator` real; o atalho pelo `AppRoot` inteiro). Nenhum defeito de produção.
+  - Correção do fim da etapa: `c4016ce` ("Nenhum pagamento nesta conta." só depois da primeira leitura; o motivo do reembolso medido aparado).
+- Revisão final (`revisor-seguranca`, fable, `code-reviewer.md`, `a1cde4b..2077e42`): 0 Críticos, 0 Importantes, 8 Menores, "Ready to merge: Yes". Re-revisão escopada de `2077e42..c4016ce` (os testes do testador e a correção): os dois Menores corrigidos, 3 Menores novos (abaixo), "Ready to merge: Yes".
+- Gate no `c4016ce`: `./gradlew build` → BUILD SUCCESSFUL (app 2851 testes, 48 pulados, 0 falhas; core 1252, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 63 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- Scanner: `osv-scanner --recursive --no-ignore ./` no `2077e42` → 6 lockfiles do Gradle (1429 pacotes), "No issues found"; a etapa não muda dependência (só o opt-in `ZENY_LIVE_PAYMENT` no `app/build.gradle.kts`).
+- Integridade: `check_test_integrity.py --base a1cde4b` no `c4016ce` → exit 0, nenhum apontamento. Na Task 3 (`--base 4caaf7d`), 4 `ASSERCAO_REMOVIDA` da troca de `shiftRequired` por `offersOpenShift`, julgadas trocas 1:1 pela revisão.
+- **Antes da E03 (nota da E02), resolvido:** o testador reproduziu a falha do `AuthPluginAttackTest.refresherUsingTheSameClientNeitherRecursesNorReusesARotatedRefreshToken` em 157 de 2000 repetições. A causa é a fixture, não o `AuthPlugin`: o par inicial tinha `sessionId "s1"`, e o refresh falso devolvia outro, o que o `Authenticator` lê como troca de sessão (o servidor conserva a sessão no refresh). Com a fixture coerente, 0 de 2000, também com a CPU ocupada; um teste novo determinístico fica vermelho com a fixture antiga (`0a725fe`).
+- Critérios (testes com porta falsa; os marcados "ao vivo" esperam a `LivePaymentCheck`):
+  1. **Sem turno: mensagem e atalho** — `PaymentFormStateTest.shiftRequiredShowsMessageAndShortcut`; `FolioPaymentsScreenTest` (a aba "Contas" leva à aba "Caixa", sem diálogo morto; "Conta" na Recepção e nas Reservas leva à área "Contas e caixa"); `PaymentShellAtaqueTest` (pelo `AppRoot` inteiro). **Ao vivo:** o passo 1 da `LivePaymentCheck`, quando a Recepcionista está sem turno.
+  2. **Receber o saldo zera o saldo e entra no turno** — `successReloadsAndShowsChange`, `suggestedAmountIsTheServerBalance`. **Ao vivo:** o saldo relido `0.00`, a tela em "R$ 0,00" e o `cashierShiftId` igual ao turno corrente.
+  3. **Repetir depois de falha de rede usa a mesma chave, sem duplicar** — `PaymentFormStateTest.retryAfterNetworkKeepsTheKey`, `doubleConfirmReceivesOnce`; `PaymentsFacadeTest.sameIntentKeepsTheKey`. **Ao vivo:** a resposta perdida, o `confirm` de novo com a mesma `Intent` e um pagamento só a mais (padrão `recordTwice`).
+  4. **`A-M7`, `enabled`** — `FieldLimitsTest.disabledMoneyFieldRefusesTypingAndPaste` e `disabledDateFieldRefusesTypingAndPaste`; `PaymentFormStateTest.fieldsLockWhileBusyAndUnknown`; `PaymentDialogsAtaqueTest` (campos desabilitados na tela com `locked`).
+  5. **`A-M7`, colagem** — `FieldLimitsTest.pasteOverLimitShowsSignalAndKeepsText` e `pasteAtLimitIsAccepted`; `FieldLimitsAtaqueTest`. O sinal é o erro do campo, na hora: "Texto colado com mais de 1000 caracteres. Ele não foi aceito.".
+- **Como fazer a verificação ao vivo** (escreve na demo e não desfaz: um pagamento em dinheiro que zera uma conta aberta de reserva do seed, um consumo de R$ 10,00 quando a conta não tem saldo e, se a Recepcionista estava sem turno, um turno aberto no ponto "Recepção"): no worktree, com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` (a Recepcionista) e `ZENY_LIVE_VIEWER_PASSWORD` no ambiente de um subshell, `(set -a; . <arquivo>; set +a; ZENY_LIVE_PAYMENT=1 ./gradlew :app:test --tests '*LivePaymentCheck*' --rerun)`. Confira no relatório de testes que ela não foi pulada. `NEED_SEED` quer dizer que falta conta aberta de reserva com saldo: rode o seed. Passando, a etapa fecha `#concluida`.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **Divisão da E03** (ruling de 2026-11-18). O escopo original não cabia em três fatias de até 60 min e 12 arquivos de produção. A E03 ficou com receber, reembolsar, o atalho e o `A-M7`, com os critérios dela sem mudança. Entrou a **E09, "Cauções"**, com os dois critérios da caução. A E04 passou a depender também da E09. Custo se errado: reorganizar o índice numa sessão do arquiteto.
+  2. **A verificação ao vivo não trava o lote** (instrução do usuário neste lote). Custo se errado: um defeito que só aparece ao vivo pede correção também nas etapas que vieram depois.
+  3. **"Reembolsar" é mais restrito que o servidor** (M6 da revisão de arquitetura): aparece com `billing.payments.receive` ou `billing.payments.refund`, como o estorno da E02. O servidor só exige `billing.folios.read` antes da aprovação.
+  4. **O motivo do reembolso é texto livre e pode levar um número de cartão** (Menor 2 da revisão final). A recusa de sequência com cara de cartão vale só para o NSU e a autorização, como o plano decidiu. A alternativa é recusar uma sequência de 13 a 19 dígitos também no motivo, em `RefundInput.problems()`.
+  5. **O limite de 1000 caracteres** é por edição, nos dois campos, e o sinal fica até a próxima edição aceita. O `A-M7` falava em colagem recusada em silêncio, mas no `a1cde4b` os campos não tinham limite nenhum (conferência registrada nas notas do plano).
+  6. **O `PaymentMethod` foi reaproveitado** do `CashierFacade.kt` (as mesmas seis formas, sem `CITY_LEDGER`). Um `CITY_LEDGER` lido do servidor aparece como "Outro (CITY_LEDGER)".
+- Notas para a próxima etapa:
+  - **Dívidas (antes da E09, que traz o terceiro formulário de escrita):**
+    - o `RefundState` repete quase todo o `PaymentFormState` (`send`, `edit`, `fail`), e o `FolioState.kt` passou de 600 linhas;
+    - o padrão `approveRefund = { null }` do `FolioWiring` existe só para os arquivos do testador compilarem, como o `T3 M1` da E02;
+    - constantes repetidas: o limite do motivo (`REASON_MAX`/`MAX_REASON`, três vezes), o `present()` (três vezes) e o `MAX_LENGTH = 1000` (duas vezes, com "1000" fixo no texto do sinal).
+  - **Diferidos (Menores):**
+    - o `400 PAYMENT_INVALID` mostra o texto genérico, sem o campo;
+    - o motivo acima de 200 caracteres é recusado em silêncio, como no estorno;
+    - NSU, autorização, bandeira e últimos dígitos não têm limite de colagem (o valor longo é recusado na confirmação e nunca enviado);
+    - um `IllegalArgumentException` local vira "resultado desconhecido" (herdado da E02);
+    - dois testes do testador marcados "Hoje:" (`PaymentDialogsAtaqueTest.longPasteInRefundReasonAndCodesIsNeverSent` e `longPasteInPaymentCodesIsRefusedOnConfirmAndNeverSent`) fixam esse comportamento e ficam vermelhos quando o usuário decidir o M8. É decisão, não regressão.
+  - **Para o testador:**
+    - a trava `test_live_payment_ataque.sh` não pega concatenação (`println("x" + payment)`), `error(payment.toString())`, `throw` nem um `assertEquals` com o objeto inteiro;
+    - duas asserções de borda em `PaymentAtaqueTest` aceitam qualquer texto;
+    - continuam abertos os itens da E02: o mutante `replacePending`, a varredura de `.pdf` em `/tmp`, o título de `guestStatementWithoutInternalBlockShowsNoReason` e a troca de sessão com o diálogo "Conta" aberto nas Reservas e nas pendências;
+    - a colagem sem foco não é testável pela API de teste, e o wiring do `CoreConnection` não tem ponto de injeção do engine HTTP.
+  - **E09:** a captura gera um pagamento, que a seção "Pagamentos" já mostra (`PaymentRow`, tipo `PAYMENT` com `cardPreAuthorizationId`), e exige turno: use o `offersOpenShift` e o `closeThenOpenShift` do `FolioState`. A porta `PaymentSource` é a que a E09 amplia.
 
 ---
 
@@ -956,3 +995,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E02 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`). O código, o testador de etapa e a revisão final estão limpos no `12ab199`. Faltam os critérios que a `LiveFolioCheck` confere contra o `zeny-front`, que pedem as credenciais do usuário. A E03 e a E08 esperam por ela.
 - 2026-11-18 — a E02 fecha `#concluida` (`claude --agent orquestrador`). A primeira execução da `LiveFolioCheck` mostrou que a demo não tinha taxa de serviço (o padrão do hotel nasce em 0%). O seed passou a defini-la em 10% (`6c4b66d`). Depois de rodar o seed, o usuário rodou a verificação, que passou. A E03 e a E08 ficam elegíveis.
 - 2026-11-18 — a E03 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01 e a E02: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E03, "Pagamentos", fica com receber e reembolsar, o atalho "abrir turno" e o `A-M7`, com os critérios dela sem mudança. Entra a **E09, "Cauções"**, com registrar, capturar e liberar caução e as cauções a vencer, e os dois critérios da caução, que saíram da E03. A E09 depende da E07, da E02 e da E03 e vem logo depois da E03 no índice; a E04 passa a depender também dela. A E03 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E03.
+- 2026-11-18 — a E03 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `c4016ce`; falta a `LivePaymentCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E03 conta como concluída para a escolha da próxima etapa, e a E09 fica elegível.
