@@ -1031,6 +1031,16 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - **Fonte do `B-M5`:** a descrição está só na tabela de destinos do plano da M3 E06 (`docs/superpowers/plans/2026-11-17-m3-reservas-e06.md`). O planejador lê o texto da multa no `ReservationCancelState` e no diálogo e o compara com o que a conta mostra. No segundo cancelamento, a M3 E04 viu `penalty.amount` zero, sem `postingId`, e o resumo atual diz "Sem multa.", embora a multa do primeiro cancelamento continue na conta (`penaltiesCharged`). A verificação ao vivo da multa e da reativação é a `LiveReservationLifecycleCheck` (M3 E04), e a isenção pode entrar nela ou numa verificação ao lado. Ela escreve na demo, como a da M3 E04 (decisão 5 do handoff dela).
 - Partes independentes, para as ondas do plano: a troca do pagador e do limite (`PUT`) não depende das correções; a multa não depende de nenhuma das duas.
 - **Risco:** cálculo de valor monetário e concorrência estão na lista fechada.
+- **Recomendação do orquestrador (2026-11-19, conferência do contrato):** o escopo não cabe em três fatias de até 60 min. A divisão recomendada é esta, com os critérios indo junto:
+  - a E08 fica com as correções da conta: ajustar, dividir, transferir, remover a taxa e reabrir;
+  - uma E12 fica com o pagador e o limite de crédito (`PUT`), o `B-M5` e a isenção ao vivo.
+
+  Fatos do contrato para o plano:
+  - **Ajustar:** `adjust` é ação sensível com `X-Approval-Token`, tem limite e devolve `PostingResponse`; o `approve` do `FolioWiring` serve.
+  - **Dividir e transferir:** `split` e `transfer` devolvem `TransferResponse`, exigem `billing.postings.transfer` e levam a taxa junto. O `split` usa `PERCENT` ou `AMOUNT`, com 2 a 10 partes.
+  - **Remover a taxa:** `remove-service-charge` vai sem corpo e não é sensível; exige `billing.servicecharge.remove`.
+  - **Reabrir:** `reopen` é sensível e **não tem `Idempotency-Key`**; o resultado desconhecido quer dizer "confira", como no recado. Devolve `FolioResponse`, então o `FolioWiring` precisa de uma aprovação própria para ele.
+  - **Porta:** as correções cabem melhor numa porta nova (`FolioCorrectionSource`). Arquivos do testador implementam `FolioSource`.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
