@@ -77,6 +77,13 @@ violacoes() {
   if grep -oE '"([^"\\]|\\.)*"' <<<"$app" | grep -vE '^"ZENY_[A-Z_]*"$' | grep -qiE "$SEGREDO"; then
     echo "proibido: literal com credencial ou dado de cartão"
   fi
+  # "Nunca imprimir o PaymentResponse" fora do KDoc: todo template de todo literal do arquivo está nesta lista (dados
+  # da demo e da tela, o nome da variável no env() e no print). Um objeto inteiro (pagamento, conta, lista) não entra.
+  local permitidos=' $CONSUMPTION $SCREEN_ZERO $name ${FolioText.money(payment.amount)} ${form.codesError} '
+  permitidos+='${form.message} ${reread.number} ${shift.number} ${UUID.randomUUID().toString().take(TAG_LENGTH)} '
+  while IFS= read -r p; do
+    [[ -z "$p" || "$permitidos" == *" $p "* ]] || echo "proibido: template fora da lista ($p)"
+  done < <(grep -oE '"([^"\\]|\\.)*"' <<<"$app" | grep -oE '\$\{[^}]*\}|\$[A-Za-z_][A-Za-z0-9_]*')
   # O furo da trava da E02: println/fail com argumento não literal (variável, chamada) escapa de mensagens(). Aqui,
   # todo println e todo fail começa por um literal ou por uma constante NEED_SEED/ZENY em maiúsculas.
   [[ "$(conta "$app" '(println|fail)\(')" == "$(conta "$app" '(println|fail)\(("|[A-Z][A-Z_]*\))')" ]] ||
@@ -127,6 +134,12 @@ muta "println com argumento não literal" 'return payment }' 'println(payment.to
 muta "fail com argumento não literal" 'fail("ZENY_LIVE_URL inválida")' 'fail(url.toString())' app
 muta "senha numa mensagem continuada" '"a sessão da Recepcionista caiu"' \
   '"a sessão da Recepcionista caiu; " + "senha: "' app
+muta "conta inteira numa falha" '"o pagamento não está no turno corrente"' \
+  '"o pagamento não está no turno corrente: ${reread}"' app
+muta "pagamento por outro nome" '"o valor recebido não é o saldo sugerido"' \
+  '"o valor recebido não é o saldo sugerido: ${added.single()}"' app
+muta "dado de cartão do pagamento" '"o pagamento não foi em dinheiro"' \
+  '"o pagamento não foi em dinheiro: ${payment.cardBrand}"' app
 muta "stack trace impresso" 'runCatching { runBlocking { connection.logout() } }' \
   'runCatching { runBlocking { connection.logout() } }.onFailure { it.printStackTrace() }' app
 muta "resposta gravada em disco" 'val file = File("build/live/$name.png")' \
