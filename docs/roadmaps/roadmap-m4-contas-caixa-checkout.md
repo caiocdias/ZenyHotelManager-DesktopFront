@@ -868,10 +868,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - cotação de late check-out (`GET /api/v1/reservations/{id}/early-late-quote`);
   - recebimento (E03);
   - liberação de cauções (E09);
-  - encerramento das contas (`POST /api/v1/folios/{id}/close`);
-  - `POST /api/v1/reservations/{id}/check-out`.
+  - `POST /api/v1/reservations/{id}/check-out`, que no servidor encerra as contas, libera as cauções não encerradas e lança o late na mesma transação (conferência de 2026-11-19: o front não chama `POST /api/v1/folios/{id}/close` à parte).
 - **Erros:** com pendências, mensagens em pt-BR por `code`.
-- **Reabrir conta encerrada:** `POST /api/v1/folios/{id}/reopen`, com aprovação.
 - **Duplicação com o `DayPanelState` (estacionado da M3 E01, destino da M3 E06):** o assistente parte de uma saída do painel do dia. Por isso, a duplicação entre o `DayPanelState` e o `ReservationSearchState` sai nesta etapa: as colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares. O destino previsto na M3 E01 era `reservationColumns()` e um leitor de página compartilhado em `ReservationRows.kt`.
 
 **Fora de escopo:**
@@ -928,6 +926,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - **Correções:** `/adjust`, `/split` e `/remove-service-charge` em `POST /api/v1/folios/{id}/postings/{postingId}/…` e `POST /api/v1/folios/{id}/postings/transfer`.
 - **Conta:** `PUT /api/v1/folios/{id}` (pagador e limite de crédito), com `If-Match`.
+- **Reabrir conta encerrada:** `POST /api/v1/folios/{id}/reopen`, com aprovação (veio da E04 em 2026-11-19: ação da conta com aprovação, sem critério na E04).
 - **Aprovação de superior:** diálogo onde o servidor exigir (o ajuste é ação sensível com limite).
 - **Multa de cancelamento (achados da M3 E06, antes destinados à E02):**
   - `B-M5`: os textos da multa numa reserva cancelada mais de uma vez;
@@ -935,7 +934,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Fora de escopo:**
 
-- encerrar e reabrir a conta (E04);
+- encerrar a conta, que o check-out do servidor faz (E04);
 - cadastro de empresas (M5); o pagador é escolhido entre as empresas que o servidor lista.
 
 **Critérios de aceite:**
@@ -1117,3 +1116,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E03 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `c4016ce`; falta a `LivePaymentCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E03 conta como concluída para a escolha da próxima etapa, e a E09 fica elegível.
 - 2026-11-18 — a E09 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano (I5): as três fatias passavam do teto de 60 min com a lista de cauções a vencer. Entra a **E10, "Cauções a vencer"**, dependente da E09, antes do gate; a E05 passa a depender também dela. Os critérios da E09 não mudam. A divisão está nas "Decisões para o usuário" do handoff da E09.
 - 2026-11-19 — a E09 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `e3227ee`; falta a `LivePreAuthorizationCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E04 fica elegível.
+- 2026-11-19 — conferência da E04 pelo orquestrador (`claude --agent orquestrador`): o check-out do servidor encerra as contas, libera as cauções e lança o late na mesma transação, então o assistente não chama o encerramento à parte. A reabertura de conta (`…/reopen`, com aprovação) passou à E08, onde ficam as ações da conta com aprovação. Os critérios não mudaram.
