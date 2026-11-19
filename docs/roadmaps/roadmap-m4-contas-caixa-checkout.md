@@ -904,12 +904,81 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `0bb5f1e`. Falta a `LiveCheckOutCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava a escolha da próxima etapa. **A base (E03 e E09) também não foi verificada ao vivo.**
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 9 Importantes:
+  - `extensions` público;
+  - o `until` contra o contrato;
+  - a falha da leitura das cauções;
+  - as regras do recebimento do devido;
+  - a conta que parece credora depois de receber;
+  - a caixa do late na intenção;
+  - o tamanho das fatias;
+  - o destino da duplicação;
+  - `Riscos:` incompleto.
+
+  Aprovado com notas na rodada 1 (`9b25b52`), com a divisão da E11.
+- **Commits** (`MERGE_BASE` `e3227ee`, HEAD de código `0bb5f1e`):
+  - **Task 1:** a `CheckOutFacade` (`ZenyCore.checkOut`): cotação do late e check-out com o resultado tipado `BalanceDue`. Também `ApiError.Problem.extensions` (`internal`) e a porta `CheckOutSource` (`8086cb0`). Sem late, o check-out vai sem corpo, porque o `sdk` mandava o JSON `null` (conferido contra o servidor, `@RequestBody(required = false)`). Revisão de fatia aprovada.
+  - **Task 2:** o `CheckOutState` e o `CheckOutDialog`: pendências por leitura, bloqueio por caução capturável, devido por conta com "Receber", late na intenção, `FolioWrite` (`04acc16`). Revisão de fatia aprovada.
+  - **Task 3:** "Check-out" no detalhe da reserva na Recepção, "Abrir conta" pelo `ReservationFolioDialog`, o aviso no painel e a `LiveCheckOutCheck`. Entraram também os itens da revisão da Task 2 (`f21ba00`, `7d22a2c`, `2ed0126`):
+    - `RESERVATION_CHANGED` no `ErrorCatalog`;
+    - a caução com capturável ilegível bloqueia;
+    - fechar com resultado desconhecido relê o painel.
+
+    Revisão de fatia aprovada.
+  - **Testador de etapa:** `0078ab0`, `ba8c5e0` e `882f487`. Nenhum defeito de produção. Cobriu:
+    - a trava `tests/test_live_checkout_ataque.sh`, com 30 mutantes;
+    - o devido no `core` e a porta sobre um servidor HTTP local;
+    - o assistente e o botão na Recepção, inclusive `CHECKED_OUT`, a aba "Saídas", sair da área e a troca de sessão com o check-out em voo.
+  - **Correção do fim da etapa:** `144666c` e `0bb5f1e`:
+    - o devido velho sai da tela depois de um pagamento com resultado desconhecido ou de um pagamento pelo "Abrir conta" ("Confira a conta e conclua de novo."); era o risco de pagamento em dobro, Importante da revisão final;
+    - "Receber" e "Abrir conta" ficam desabilitados com o check-out em voo ou desconhecido;
+    - o aviso "Check-out concluído." some ao trocar de reserva;
+    - fechar com o check-out em voo relê o painel;
+    - a conferência do late na verificação ao vivo compara por valor e exige um lançamento novo.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `e3227ee..2ed0126`): 0 Críticos, 1 Importante, 7 Menores, "Ready to merge: With fixes".
+  - Re-revisão de `2ed0126..0bb5f1e`: no ledger.
+- **Gate no `0bb5f1e`:**
+  - `./gradlew build` → BUILD SUCCESSFUL. Contagens (testes, pulados, falhas): app 3013, 50, 0; core 1286, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0.
+  - `bash tests/run.sh` → 65 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `2ed0126` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_CHECKOUT`.
+- **Integridade:** `check_test_integrity.py --base e3227ee` no `0bb5f1e` → exit 0. Na Task 3 (`--base 04acc16`), houve 1 `ASSERCAO_REMOVIDA`: uma asserção tautológica trocada pelo texto fixo do catálogo, julgada justificada.
+- **Critérios:**
+  1. **Saída do seed até o saldo zero, com a UH Vaga e Suja em até 2 s.** Testes: `CheckOutStateTest.balanceDueShowsEachFolioAndRetriesWithANewKey`, `receiveDueSuggestsTheServerAmount` e `successCallsOnDoneAndCloses`; `ReceptionCheckOutTest`. **Ao vivo:** os passos 3 a 5 da `LiveCheckOutCheck`, com o mapa assinado em paralelo e os 2 s contados da resposta do servidor.
+  2. **Caução capturável mostra a pendência e não conclui até a liberação.** Testes: `capturablePreAuthorizationBlocksConclude`, `releasingTheCautionUnblocks`, `malformedCapturableBlocksConclude` e `preAuthorizationReadFailureBlocksConclude`; `ReceptionCheckOutTest.openFolioReleasesTheCautionAndTheReloadedAssistantUnlocks`. **Ao vivo:** o passo 2.
+  3. **Recusa em pt-BR, nada pela metade.** Testes: `concurrentChangeShowsTextAndReloads` (texto fixo do catálogo), `alreadyCheckedOutClosesAndReloadsThePanel`, `feeChangedRereadsTheQuoteAndWaits` e `lateNotOfferedUnchecksAndRereads`.
+  4. **Late cotado aparece antes do saldo final.** Testes: `lateLineShowsAboveTheTotal` e `lateIsSentOnlyWhenChecked`. **Ao vivo:** o lançamento do late na conta relida depois do sucesso (passo 3). O servidor só lança o late dentro da transação do check-out; ver a decisão 2.
+- **Como fazer a verificação ao vivo.** Ela escreve na demo e não desfaz: faz o check-out de uma saída do dia do seed, com a caução registrada e liberada e o devido recebido, e abre o turno se a Recepcionista estava sem turno.
+  - No worktree, ponha `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD` no ambiente de um subshell e rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_CHECKOUT=1 ./gradlew :app:test --tests '*LiveCheckOutCheck' --rerun)`.
+  - Rode antes a `LivePaymentCheck` (E03) e a `LivePreAuthorizationCheck` (E09).
+  - `NEED_SEED` quer dizer que falta uma saída do dia com conta: recrie a demo e rode o seed no mesmo dia.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **O assistente não encerra as contas à parte.** O check-out do servidor faz isso na mesma transação. Encerrar à parte deixaria contas encerradas numa reserva hospedada se o check-out falhasse.
+  2. **Critério 4 (late):**
+     - a linha "Late check-out: <valor>" aparece acima do total devido do servidor, e o lançamento aparece na conta depois do sucesso;
+     - foi descartado lançar o late à mão antes do check-out, que deixaria o lançamento órfão numa falha e fugiria do `EARLY_LATE_FEE_CHANGED`;
+     - a linha do late ao lado do devido, que já o inclui, pode ser lida como soma; vale decidir uma redação como "(já incluído)".
+  3. **Caução capturável bloqueia "Concluir"** (regra do front). O servidor a liberaria sozinho, mas quem decide entre capturar e liberar é a operadora. `EXPIRED` não é pendência, ao contrário da nota da E09 para esta etapa.
+  4. **Perfil sem `billing.folios.read` conclui sem conferir pendências.** O servidor confere os saldos e libera as cauções capturáveis em silêncio, então para esse perfil o critério 2 não vale. Perfil com `frontdesk.stays.checkout` e sem `billing.payments.receive` vê a pendência e não conclui.
+  5. **`ApiError.Problem.extensions`** é API do `core`, `internal`. A alternativa, tipar no `ProblemMapper`, levaria domínio de conta ao mapeador.
+  6. **Status `IN_HOUSE`.** O plano dizia `CHECKED_IN`, que não existe no contrato.
+  7. **`RESERVATION_CHANGED` entrou no catálogo:** "A reserva mudou enquanto você concluía. Confira e tente de novo.".
+  8. **A reabertura de conta (`…/reopen`) passou à E08**, e **a duplicação entre o painel do dia e a busca passou à E11**.
+- **Notas para a próxima etapa:**
+  - **Dívidas:**
+    - o `withoutBody` da `CheckOutFacade` depende de o `sdk` aplicar o `block` depois do corpo (o teste `checkOutSendsKeyAndNoBodyWithoutLate` pega uma regressão);
+    - o `write.edited()` no `chargeLate` não tem efeito observável hoje;
+    - o `FolioWrite` é usado em `reception` e pode ir para um pacote comum quando o `PostingFormState` migrar.
+  - **Diferidos (Menores):**
+    - a recusa definitiva sem `code` não relê o assistente;
+    - a conta credora aparece sem sinal;
+    - a rolagem do assistente se perde ao voltar do recebimento;
+    - ao reabrir o assistente, o "recebido" se perde e a conta aparece como credora; o aviso "pagamento registrado" no painel é a mitigação;
+    - depois de um pagamento incerto ou feito pela conta, fechar o assistente não avisa;
+    - "Abrir conta" segue habilitado com `closeOnly`;
+    - a cotação que não responde bloqueia "Concluir" até o tempo limite do cliente.
+  - **Para o testador:** o duplo clique pela UI real (coberto no estado e pelo `enabled`).
 
 ---
 
