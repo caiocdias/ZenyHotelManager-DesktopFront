@@ -3,27 +3,17 @@ package com.zeny.desktop.app.folio
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.zeny.desktop.core.error.ApiError
-import com.zeny.desktop.core.error.WriteFailure
-import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.PaymentInput
 import com.zeny.desktop.core.facade.PaymentMethod
 import com.zeny.desktop.core.facade.PaymentProblem
 import com.zeny.desktop.core.facade.problems
-import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.input.InputResult
 import com.zeny.desktop.design.input.MoneyInput
 import com.zeny.desktop.sdk.model.PaymentResponse
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 
 private const val FOLIO_CLOSED = "FOLIO_CLOSED"
-private const val SHIFT_REQUIRED = "CASHIER_SHIFT_REQUIRED"
 
 /**
  * O diálogo "Receber" da conta [folioId]: a forma (padrão "Dinheiro"), o valor (sugerido com o saldo [suggested] da
@@ -33,10 +23,11 @@ private const val SHIFT_REQUIRED = "CASHIER_SHIFT_REQUIRED"
  * são as de `PaymentInput.problems()`, cada uma com o texto dela em [errors]; com problema, nada vai à rede.
  *
  * O recebimento leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
- * (`classifyWriteFailure`), com as entradas travadas; resposta definitiva gera outra. O `5xx` guardado sob a chave
+ * (pelo `FolioWrite`), com as entradas travadas; resposta definitiva gera outra. O `5xx` guardado sob a chave
  * deixa o estado [closeOnly]. O sucesso vai a [onChanged] com a resposta (o troco vem dela); o `FOLIO_CLOSED` mostra a
  * mensagem e chama [onFolioClosed]. O `CASHIER_SHIFT_REQUIRED` mostra a mensagem do catálogo e, com [openShift], o
  * atalho ([offersOpenShift], [openShiftAndClose]). [close] cancela o que é daqui. O `toString()` não mostra o digitado.
+ * O envio, a classificação da falha e o fechamento são do ajudante comum `FolioWrite`.
  */
 @Suppress("LongParameterList") // a porta, a conta, a sugestão do servidor e os três avisos para o painel
 class PaymentFormState(
@@ -46,10 +37,12 @@ class PaymentFormState(
     suggested: Money?,
     private val openShift: (() -> Unit)?,
     private val onChanged: (PaymentResponse) -> Unit,
-    private val onFolioClosed: () -> Unit,
+    onFolioClosed: () -> Unit,
 ) : FolioWriteForm {
-    private val jobs = SupervisorJob(scope.coroutineContext[Job])
-    private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
+    private val write =
+        FolioWrite(scope, FolioText.PAYMENT_UNCONFIRMED, FolioText.PAYMENT_SERVER_UNCONFIRMED, openShift) { code ->
+            if (code == FOLIO_CLOSED) onFolioClosed()
+        }
 
     private var methodValue by mutableStateOf(PaymentMethod.CASH)
     private var amountText by mutableStateOf(
@@ -62,37 +55,27 @@ class PaymentFormState(
     private var nsuText by mutableStateOf("")
     private var authorizationText by mutableStateOf("")
 
-    override var busy by mutableStateOf(false)
-        private set
+    override val busy: Boolean get() = write.busy
 
-    override var unconfirmed by mutableStateOf(false)
-        private set
+    override val unconfirmed: Boolean get() = write.unconfirmed
 
-    override var closeOnly by mutableStateOf(false)
-        private set
+    override val closeOnly: Boolean get() = write.closeOnly
 
-    override var message by mutableStateOf<String?>(null)
-        private set
+    override val message: String? get() = write.message
 
     /** Os problemas de formato do último envio recusado, cada um com o texto ao lado do campo. */
     var errors by mutableStateOf<Map<PaymentProblem, String>>(emptyMap())
         private set
 
-    private var shiftRefused by mutableStateOf(false)
-
-    // `closed` é estado observável: `canConfirm` o lê, e o Compose só recompõe o que leu estado.
-    private var closed by mutableStateOf(false)
-    private var intent: Intent? = null
-
     /** As entradas estão travadas (em voo, resultado desconhecido ou fechado). */
-    val locked: Boolean get() = closed || busy || unconfirmed || closeOnly
+    val locked: Boolean get() = write.locked
 
     /** O servidor pediu um turno aberto e há o atalho "Abrir turno"; sem [openShift], só o texto aparece. */
-    val offersOpenShift: Boolean get() = shiftRefused && openShift != null
+    val offersOpenShift: Boolean get() = write.offersOpenShift
 
-    override val canConfirm: Boolean get() = !closed && !busy && !closeOnly
+    override val canConfirm: Boolean get() = write.canSend
 
-    override val closesOnEscape: Boolean get() = !busy && (!unconfirmed || closeOnly)
+    override val closesOnEscape: Boolean get() = write.closesOnEscape
 
     val showsTendered: Boolean get() = methodValue == PaymentMethod.CASH
 
@@ -103,7 +86,9 @@ class PaymentFormState(
     var method: PaymentMethod
         get() = methodValue
         set(value) {
-            if (!locked) methodValue = value
+            if (locked) return
+            methodValue = value
+            write.edited()
         }
 
     /** O valor digitado (`MoneyField`, `1.234,56`). */
@@ -114,7 +99,9 @@ class PaymentFormState(
     var deposit: Boolean
         get() = depositValue
         set(value) {
-            if (!locked) depositValue = value
+            if (locked) return
+            depositValue = value
+            write.edited()
         }
 
     /** O valor entregue em dinheiro, opcional; o troco é do servidor. */
@@ -142,7 +129,9 @@ class PaymentFormState(
         if (!canConfirm) return
         val input = typedInput()
         errors = input?.problems().orEmpty().associateWith(FolioText::problem)
-        if (input != null && errors.isEmpty()) send(input)
+        if (input != null && errors.isEmpty()) {
+            write.send({ WriteOutcome.Done(source.receive(folioId, input, it)) }, onChanged)
+        }
     }
 
     /** "Abrir turno": quem criou o diálogo o fecha e leva ao caixa. Sem o atalho, nada. */
@@ -150,33 +139,7 @@ class PaymentFormState(
         if (offersOpenShift) openShift?.invoke()
     }
 
-    fun close() {
-        closed = true
-        jobs.cancel()
-    }
-
-    private fun send(input: PaymentInput) {
-        busy = true
-        message = null
-        shiftRefused = false
-        val current = intent ?: Intent().also { intent = it }
-        ownScope.launch {
-            try {
-                val response = source.receive(folioId, input, current)
-                currentCoroutineContext().ensureActive()
-                intent = null
-                unconfirmed = false
-                onChanged(response)
-            } catch (
-                @Suppress("TooGenericExceptionCaught") e: Exception,
-            ) {
-                currentCoroutineContext().ensureActive()
-                fail(e as? ApiError ?: ApiError.Network(e))
-            } finally {
-                busy = false
-            }
-        }
-    }
+    fun close() = write.close()
 
     private fun edit(
         problem: PaymentProblem,
@@ -184,6 +147,7 @@ class PaymentFormState(
     ) {
         if (locked) return
         change()
+        write.edited()
         errors = errors - problem
     }
 
@@ -194,7 +158,7 @@ class PaymentFormState(
     private fun typedInput(): PaymentInput? {
         val amount = MoneyInput.parse(amountText)
         val tendered = if (showsTendered) MoneyInput.parse(tenderedText) else InputResult.Empty
-        message =
+        write.message =
             when {
                 amount is InputResult.Invalid -> amount.message
                 amount is InputResult.Empty -> FolioText.AMOUNT_REQUIRED
@@ -212,24 +176,6 @@ class PaymentFormState(
             nsu = nsuText.takeIf { showsCodes }?.present(),
             authorizationCode = authorizationText.takeIf { showsCodes }?.present(),
         )
-    }
-
-    private fun fail(failure: ApiError) {
-        val outcome = classifyWriteFailure(failure)
-        if (outcome != WriteFailure.DEFINITIVE) {
-            // A repetição leva a mesma chave; com a resposta guardada, repetir não adianta: feche e confira.
-            unconfirmed = true
-            closeOnly = outcome == WriteFailure.UNKNOWN_STORED
-            message = if (closeOnly) FolioText.PAYMENT_SERVER_UNCONFIRMED else FolioText.PAYMENT_UNCONFIRMED
-            return
-        }
-        unconfirmed = false
-        intent = null
-        message = failure.userMessage
-        when ((failure as? ApiError.Problem)?.code) {
-            FOLIO_CLOSED -> onFolioClosed()
-            SHIFT_REQUIRED -> shiftRefused = true
-        }
     }
 
     override fun toString(): String = "PaymentFormState(busy=$busy, unconfirmed=$unconfirmed, closeOnly=$closeOnly)"

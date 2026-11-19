@@ -3,9 +3,6 @@ package com.zeny.desktop.app.folio
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.zeny.desktop.core.error.ApiError
-import com.zeny.desktop.core.error.WriteFailure
-import com.zeny.desktop.core.error.classifyWriteFailure
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.PaymentMethod
 import com.zeny.desktop.core.facade.PaymentProblem
@@ -17,14 +14,8 @@ import com.zeny.desktop.design.input.InputResult
 import com.zeny.desktop.design.input.MoneyInput
 import com.zeny.desktop.sdk.model.PaymentResponse
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 
 private const val FOLIO_CLOSED = "FOLIO_CLOSED"
-private const val SHIFT_REQUIRED = "CASHIER_SHIFT_REQUIRED"
 private const val REASON_MAX = 200
 
 /**
@@ -36,11 +27,12 @@ private const val REASON_MAX = 200
  *
  * O reembolso passa pelo [approve] (o coordenador da sessão): a aprovação cancelada deixa "Aprovação cancelada. O
  * reembolso não foi feito." e destrava, com a mesma intenção. A `Idempotency-Key` é por intenção: a mesma `Intent`
- * vale enquanto o resultado é desconhecido (`classifyWriteFailure`), com as entradas travadas; resposta definitiva
+ * vale enquanto o resultado é desconhecido (pelo `FolioWrite`), com as entradas travadas; resposta definitiva
  * gera outra. O `5xx` guardado sob a chave deixa o estado [closeOnly]. O sucesso ([done]) vai a [onChanged]; o
  * `FOLIO_CLOSED` mostra a mensagem e chama [onFolioClosed]; o `CASHIER_SHIFT_REQUIRED` mostra a mensagem do catálogo
  * e, com [openShift], o atalho ([offersOpenShift], [openShiftAndClose]). [close] cancela o que é daqui. O
- * `toString()` não mostra o digitado.
+ * `toString()` não mostra o digitado. O envio, a classificação da falha e o fechamento são do ajudante comum
+ * `FolioWrite`.
  */
 @Suppress("LongParameterList") // a porta, a conta, o pagamento, a aprovação e os três avisos para o painel
 class RefundState(
@@ -51,10 +43,12 @@ class RefundState(
     private val approve: suspend (ApprovableAction<PaymentResponse>) -> ApiResponse<PaymentResponse>?,
     private val openShift: (() -> Unit)?,
     private val onChanged: () -> Unit,
-    private val onFolioClosed: () -> Unit,
+    onFolioClosed: () -> Unit,
 ) : FolioWriteForm {
-    private val jobs = SupervisorJob(scope.coroutineContext[Job])
-    private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
+    private val write =
+        FolioWrite(scope, FolioText.REFUND_UNCONFIRMED, FolioText.REFUND_SERVER_UNCONFIRMED, openShift) { code ->
+            if (code == FOLIO_CLOSED) onFolioClosed()
+        }
 
     private val suggested = payment.refundable?.let(MoneyInput::format)
     private var amountText by mutableStateOf(suggested.orEmpty())
@@ -62,18 +56,14 @@ class RefundState(
     private var nsuText by mutableStateOf("")
     private var authorizationText by mutableStateOf("")
 
-    override var busy by mutableStateOf(false)
-        private set
+    override val busy: Boolean get() = write.busy
 
-    override var unconfirmed by mutableStateOf(false)
-        private set
+    override val unconfirmed: Boolean get() = write.unconfirmed
 
-    override var closeOnly by mutableStateOf(false)
-        private set
+    override val closeOnly: Boolean get() = write.closeOnly
 
     /** A validação recusada, a aprovação cancelada ou o resultado do último envio que não deu certo. */
-    override var message by mutableStateOf<String?>(null)
-        private set
+    override val message: String? get() = write.message
 
     /** Os problemas de formato do último envio recusado, cada um com o texto ao lado do campo. */
     var errors by mutableStateOf<Map<PaymentProblem, String>>(emptyMap())
@@ -83,21 +73,15 @@ class RefundState(
     var done by mutableStateOf(false)
         private set
 
-    private var shiftRefused by mutableStateOf(false)
-
-    // `closed` é estado observável: `canConfirm` o lê, e o Compose só recompõe o que leu estado.
-    private var closed by mutableStateOf(false)
-    private var intent: Intent? = null
-
     /** As entradas estão travadas (em voo, resultado desconhecido, fechado ou feito). */
-    val locked: Boolean get() = closed || busy || unconfirmed || closeOnly || done
+    val locked: Boolean get() = write.locked || done
 
     /** O servidor pediu um turno aberto e há o atalho "Abrir turno"; sem [openShift], só o texto aparece. */
-    val offersOpenShift: Boolean get() = shiftRefused && openShift != null
+    val offersOpenShift: Boolean get() = write.offersOpenShift
 
-    override val canConfirm: Boolean get() = !closed && !busy && !closeOnly && !done
+    override val canConfirm: Boolean get() = write.canSend && !done
 
-    override val closesOnEscape: Boolean get() = !busy && (!unconfirmed || closeOnly)
+    override val closesOnEscape: Boolean get() = write.closesOnEscape
 
     /** NSU e autorização só numa forma reconhecida que não é dinheiro. */
     val showsCodes: Boolean get() = payment.methodCode != null && payment.methodCode != PaymentMethod.CASH
@@ -129,7 +113,9 @@ class RefundState(
         if (!canConfirm) return
         val input = typedInput()
         errors = input?.problems().orEmpty().associateWith(FolioText::problem)
-        if (input != null && errors.isEmpty()) send(input)
+        if (input != null && errors.isEmpty()) {
+            write.send({ refund(input, it) }) { finish() }
+        }
     }
 
     /** "Abrir turno": quem criou o diálogo o fecha e leva ao caixa. Sem o atalho, nada. */
@@ -137,31 +123,7 @@ class RefundState(
         if (offersOpenShift) openShift?.invoke()
     }
 
-    fun close() {
-        closed = true
-        jobs.cancel()
-    }
-
-    private fun send(input: RefundInput) {
-        busy = true
-        message = null
-        shiftRefused = false
-        val current = intent ?: Intent().also { intent = it }
-        ownScope.launch {
-            try {
-                val approved = approve(source.refund(folioId, payment.id, input, current))
-                currentCoroutineContext().ensureActive()
-                if (approved == null) approvalCancelled() else finish()
-            } catch (
-                @Suppress("TooGenericExceptionCaught") e: Exception,
-            ) {
-                currentCoroutineContext().ensureActive()
-                fail(e as? ApiError ?: ApiError.Network(e))
-            } finally {
-                busy = false
-            }
-        }
-    }
+    fun close() = write.close()
 
     /** Uma edição destravada que muda o texto é outra intenção e tira o aviso do campo. */
     private fun edit(
@@ -172,14 +134,14 @@ class RefundState(
     ) {
         if (locked || value == current) return
         change(value)
-        intent = null
+        write.edited()
         errors = errors - problem
     }
 
     /** A entrada com só o que a forma mostra; `null` sem um valor legível, com o texto em [message]. */
     private fun typedInput(): RefundInput? {
         val amount = MoneyInput.parse(amountText)
-        message =
+        write.message =
             when (amount) {
                 is InputResult.Invalid -> amount.message
                 is InputResult.Empty -> FolioText.AMOUNT_REQUIRED
@@ -194,39 +156,24 @@ class RefundState(
         )
     }
 
+    /**
+     * Pede o reembolso pelo [approve]. Aprovação cancelada: o servidor respondeu `APPROVAL_REQUIRED` na mesma chave,
+     * então nada foi feito; o ajudante destrava as entradas (inclusive depois de um resultado desconhecido) e mantém a
+     * intenção (a chave não muda).
+     */
+    private suspend fun refund(
+        input: RefundInput,
+        intent: Intent,
+    ): WriteOutcome<Unit> =
+        approve(source.refund(folioId, payment.id, input, intent))
+            ?.let { WriteOutcome.Done(Unit) }
+            ?: WriteOutcome.Cancelled(FolioText.REFUND_APPROVAL_CANCELLED)
+
+    /** O reembolso foi feito; a intenção já acabou no ajudante. */
     private fun finish() {
-        intent = null
-        unconfirmed = false
-        message = null
+        write.message = null
         done = true
         onChanged()
-    }
-
-    /**
-     * Aprovação cancelada: o servidor respondeu `APPROVAL_REQUIRED` na mesma chave, então nada foi feito. Destrava as
-     * entradas (inclusive depois de um resultado desconhecido) e mantém a intenção (a chave não muda).
-     */
-    private fun approvalCancelled() {
-        unconfirmed = false
-        message = FolioText.REFUND_APPROVAL_CANCELLED
-    }
-
-    private fun fail(failure: ApiError) {
-        val outcome = classifyWriteFailure(failure)
-        if (outcome != WriteFailure.DEFINITIVE) {
-            // A repetição leva a mesma chave; com a resposta guardada, repetir não adianta: feche e confira.
-            unconfirmed = true
-            closeOnly = outcome == WriteFailure.UNKNOWN_STORED
-            message = if (closeOnly) FolioText.REFUND_SERVER_UNCONFIRMED else FolioText.REFUND_UNCONFIRMED
-            return
-        }
-        unconfirmed = false
-        intent = null
-        message = failure.userMessage
-        when ((failure as? ApiError.Problem)?.code) {
-            FOLIO_CLOSED -> onFolioClosed()
-            SHIFT_REQUIRED -> shiftRefused = true
-        }
     }
 
     override fun toString(): String =
