@@ -19,6 +19,12 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // Os opt-ins das verificações ao vivo são estado da tarefa: mudá-los faz os testes rodarem de novo, sem
+    // `--rerun`. Só os opt-ins e o endereço entram; credenciais (senha, PIN) nunca viram entrada da tarefa.
+    inputs.property("zenySeedLive", providers.environmentVariable("ZENY_SEED_LIVE").orElse(""))
+    inputs.property("zenySeedLiveAvailability", providers.environmentVariable("ZENY_SEED_LIVE_AVAILABILITY").orElse(""))
+    inputs.property("zenySeedLiveReservations", providers.environmentVariable("ZENY_SEED_LIVE_RESERVATIONS").orElse(""))
+    inputs.property("zenySeedServer", providers.environmentVariable("ZENY_SEED_SERVER").orElse(""))
 }
 
 // Teste de fumaça contra um servidor de verdade (`./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088`, com os

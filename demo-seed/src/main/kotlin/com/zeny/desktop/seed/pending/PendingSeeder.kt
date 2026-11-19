@@ -16,6 +16,10 @@ data class PendingSeedResult(
  * Semeia o que as listas de pendências precisam: um plano com garantia por cartão vendido só no site, uma
  * pré-reserva nele e uma reserva alocada numa UH que entra em fora de ordem. Confere antes de criar, e os
  * `externalId` ficam fora do prefixo `DEMO-SEED-` que travas, roteiros e testes contam.
+ *
+ * O fora de ordem da UH 208 depende da data operacional do dia da recriação: o período parte dela (mais 5 a mais
+ * 7 dias), então a demo recriada em outro dia tem o fora de ordem noutras datas, e a reserva do seed só aparece em
+ * "Realocação necessária" nas datas dessa recriação. A data vem do servidor (`businessDate`), não do relógio local.
  */
 class PendingSeeder(
     private val gateway: PendingGateway,
@@ -158,8 +162,8 @@ class PendingSeeder(
                         adults = ADULTS,
                     ),
                 )
-        val untouched = ref.status != CONFIRMED || (ref.roomId != null && ref.roomId != resolved.roomId)
-        if (!untouched) {
+        val movedOnByTheDemo = ref.status != CONFIRMED || (ref.roomId != null && ref.roomId != resolved.roomId)
+        if (!movedOnByTheDemo) {
             if (ref.roomId == null) gateway.assignRoom(ref.id, resolved.roomId)
             gateway.openOutOfOrder(
                 resolved.roomId,
