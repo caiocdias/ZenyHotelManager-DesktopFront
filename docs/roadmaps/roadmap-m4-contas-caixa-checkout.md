@@ -213,10 +213,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #concluida | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
 | E03 | Pagamentos | #em-andamento | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
-| E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução, cauções a vencer |
+| E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
 | E04 | Check-out | #pendente | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
-| E05 | Gate do marco M4 | #pendente | E04, E08 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
+| E05 | Gate do marco M4 | #pendente | E04, E08, E10 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -732,7 +733,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ## E09 — Cauções — #em-andamento
 
-**Objetivo:** na conta, a operadora registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra e acompanha as cauções a vencer.
+**Objetivo:** na conta, a operadora registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra. As cauções a vencer passaram à E10 (divisão de 2026-11-18, no histórico).
 
 **Por que agora:** saiu da E03 na divisão de 2026-11-18 (histórico). O check-out (E04) confere e libera as cauções, por isso vem antes dele.
 
@@ -742,10 +743,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - **Cauções:**
   - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
-  - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`;
-  - `GET /api/v1/card-pre-authorizations/expiring`.
+  - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`.
 
-**Fora de escopo:** Pix, TEF e cartão integrados, que não existem no servidor.
+**Fora de escopo:**
+
+- Pix, TEF e cartão integrados, que não existem no servidor;
+- as cauções a vencer (E10).
 
 **Critérios de aceite:**
 
@@ -763,7 +766,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - A captura gera um pagamento (`capturePaymentIds`) e exige turno aberto (`CASHIER_SHIFT_REQUIRED`): o atalho "abrir turno" da E03 serve aqui também. A liberação não exige turno e vale com a conta encerrada.
 - A validade (`expiresAt`) é um instante em UTC, de agora até 90 dias; o plano decide como a tela a recebe (o `DateField` ganha o `enabled` na E03).
-- A lista de cauções a vencer (`GET /api/v1/card-pre-authorizations/expiring`) é leitura à parte, paginada pelo `CursorPager`.
+- **Divisão (2026-11-18):** a revisão de arquitetura do plano (I5) achou as três fatias acima do teto de 60 min com a lista de cauções a vencer; ela é leitura à parte e o check-out não depende dela, e foi para a E10.
 - **Risco:** cálculo de valor monetário, concorrência e dado pessoal ou segredo (dados do cartão) estão na lista fechada.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
@@ -907,13 +910,60 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E10 — Cauções a vencer — #pendente
+
+**Objetivo:** na área "Contas e caixa", a operadora acompanha as cauções do hotel que vencem até uma data e abre a conta de cada uma.
+
+**Por que agora:** saiu da E09 na divisão de 2026-11-18 (histórico). O check-out (E04) não depende dela; o gate (E05) espera por ela.
+
+**Dependências:** E09 (as cauções na conta e a porta). O ID é o próximo livre.
+
+**Escopo:**
+
+- `GET /api/v1/card-pre-authorizations/expiring`, paginada pelo `CursorPager`.
+
+**Fora de escopo:** as escritas da caução (E09).
+
+**Critérios de aceite:**
+
+- [ ] A lista mostra as cauções que o servidor devolve até a data escolhida, em ordem de validade, com a situação, os valores e a validade como a API devolve, e "Carregar mais" segue o cursor (teste do *state holder*).
+- [ ] "Abrir conta" numa linha leva à conta dela na aba "Contas" (teste de UI).
+- [ ] A aba só aparece com `billing.folios.read` no conjunto da casca e não muda a aba padrão ("Caixa").
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Notas da revisão de arquitetura do plano da E09 (M3): a aba só com `wiring.payments`; `start()`/`close()` e a chave do `remember` como o `FolioAccounts`; o padrão do "Até" quando o `businessDay()` falha; reler ao entrar na aba; a linha não identifica a conta (o contrato só traz `folioId`), e "Abrir conta" (`FolioAccounts.select`) é a identificação.
+- Sem `from`, o servidor usa a data operacional.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além dos anteriores.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E05 — Gate do marco M4 — #pendente
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o ciclo completo da hospedagem para a demo.
 
-**Dependências:** E04 e E08 (o gate cobre o marco inteiro).
+**Dependências:** E04, E08 e E10 (o gate cobre o marco inteiro).
 
 **Escopo:**
 
@@ -996,3 +1046,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E02 fecha `#concluida` (`claude --agent orquestrador`). A primeira execução da `LiveFolioCheck` mostrou que a demo não tinha taxa de serviço (o padrão do hotel nasce em 0%). O seed passou a defini-la em 10% (`6c4b66d`). Depois de rodar o seed, o usuário rodou a verificação, que passou. A E03 e a E08 ficam elegíveis.
 - 2026-11-18 — a E03 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01 e a E02: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E03, "Pagamentos", fica com receber e reembolsar, o atalho "abrir turno" e o `A-M7`, com os critérios dela sem mudança. Entra a **E09, "Cauções"**, com registrar, capturar e liberar caução e as cauções a vencer, e os dois critérios da caução, que saíram da E03. A E09 depende da E07, da E02 e da E03 e vem logo depois da E03 no índice; a E04 passa a depender também dela. A E03 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E03.
 - 2026-11-18 — a E03 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `c4016ce`; falta a `LivePaymentCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E03 conta como concluída para a escolha da próxima etapa, e a E09 fica elegível.
+- 2026-11-18 — a E09 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano (I5): as três fatias passavam do teto de 60 min com a lista de cauções a vencer. Entra a **E10, "Cauções a vencer"**, dependente da E09, antes do gate; a E05 passa a depender também dela. Os critérios da E09 não mudam. A divisão está nas "Decisões para o usuário" do handoff da E09.
