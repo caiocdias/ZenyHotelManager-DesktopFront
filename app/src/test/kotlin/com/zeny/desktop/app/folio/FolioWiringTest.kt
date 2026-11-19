@@ -9,6 +9,7 @@ import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.SplitPart
 import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.http.Intent
+import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.pdf.PdfActions
 import com.zeny.desktop.design.pdf.PdfDocumentState
@@ -63,6 +64,19 @@ class FolioWiringTest {
         },
         kind = audience.pdfKind,
     )
+
+    @Test
+    fun wiringCarriesTheExpiringSource() =
+        runTest {
+            val expiring = ExpiringPreAuthorizationSource { _, _, _ -> Page(emptyList(), null) }
+            val connection = FolioConnection(FakeFolioSource(), payments = FakePaymentSource(), expiring = expiring)
+            val wiring = assertNotNull(folioWiring(connection, setOf(READ), backgroundScope, null, null))
+            assertSame(expiring, wiring.expiring)
+
+            val withoutPayments = FolioConnection(FakeFolioSource(), expiring = expiring)
+            val bare = assertNotNull(folioWiring(withoutPayments, setOf(READ), backgroundScope, null, null))
+            assertNull(bare.expiring)
+        }
 
     @Test
     fun guestPdfAsksGuestAndSaysGuest() =

@@ -1,6 +1,7 @@
 package com.zeny.desktop.app.session
 
 import com.zeny.desktop.app.cashier.CashierSource
+import com.zeny.desktop.app.folio.ExpiringPreAuthorizationSource
 import com.zeny.desktop.app.folio.FolioCorrectionSource
 import com.zeny.desktop.app.folio.FolioSource
 import com.zeny.desktop.app.folio.PaymentSource
@@ -185,6 +186,9 @@ interface ServerConnection : AutoCloseable {
 
     /** As correções da conta (ajustar, remover a taxa, transferir, dividir); `null` quando a conexão não as oferece. */
     fun folioCorrectionSource(): FolioCorrectionSource? = null
+
+    /** As cauções a vencer; `null` quando a conexão não as oferece. */
+    fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -646,6 +650,11 @@ class CoreConnection(
             override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
         }
 
+    private val expiring =
+        ExpiringPreAuthorizationSource { to, cursor, limit ->
+            core.payments.expiringPreAuthorizationPage(to, cursor, limit)
+        }
+
     /** Os pagamentos e as cauções da conta sobre `core.payments`, e a data operacional sobre `core.hotel`. */
     override fun paymentSource(): PaymentSource = payments
 
@@ -699,6 +708,9 @@ class CoreConnection(
 
     /** As correções da conta sobre `core.folios`. */
     override fun folioCorrectionSource(): FolioCorrectionSource = corrections
+
+    /** As cauções a vencer sobre `core.payments`. */
+    override fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource = expiring
 
     override fun close() = core.close()
 }

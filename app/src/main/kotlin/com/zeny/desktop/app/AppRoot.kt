@@ -759,16 +759,18 @@ internal fun folioWiring(
 ): FolioWiring? {
     val source = connection.folioSource()
     if (source == null || FOLIOS_READ !in permissions) return null
+    val payments = connection.paymentSource()
     return FolioWiring(
         source = source,
         permissions = permissions,
         approve = { approveAction(approval, it) },
         guestPdf = statementPdfFactory(source, StatementAudience.GUEST, scope, window),
         internalPdf = statementPdfFactory(source, StatementAudience.INTERNAL, scope, window),
-        payments = connection.paymentSource(),
+        payments = payments,
         approveRefund = { approveAction(approval, it) },
         openShift = openShift?.takeIf { CASHIER_OPERATE in permissions },
         corrections = connection.folioCorrectionSource(),
+        expiring = payments?.let { connection.expiringPreAuthorizationSource() },
     )
 }
 

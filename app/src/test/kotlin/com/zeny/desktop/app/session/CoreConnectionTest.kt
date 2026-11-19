@@ -123,6 +123,45 @@ class CoreConnectionTest {
     }
 
     @Test
+    fun expiringSourceIsTheFacade() {
+        val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
+        val queries = mutableListOf<String?>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/v1/card-pre-authorizations/expiring") { exchange ->
+            queries += exchange.requestURI.rawQuery
+            val item =
+                (
+                    """{"amount":"300.00","authorizationCode":"AUT123","businessDate":"2026-11-18",""" +
+                        """"capturableAmount":"300.00","capturePaymentIds":[],"capturedAmount":"0.00",""" +
+                        """"expiresAt":"2026-11-20T02:59:59Z","folioId":"$folio",""" +
+                        """"id":"0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f21","registeredAt":"2026-11-18T10:00:00Z",""" +
+                        """"registeredBy":"0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f14","status":"ACTIVE"}"""
+                )
+            val body = """{"items":[$item],"nextCursor":"c-2"}""".toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            runTest {
+                val url = checkNotNull(ServerUrl.parse("http://127.0.0.1:${server.address.port}"))
+                CoreConnection(ZenyCore(url, MemorySettings())).use { connection ->
+                    val source = assertNotNull(connection.expiringPreAuthorizationSource())
+                    val page = source.page(BusinessDate.parse("2026-11-25"), null, 50)
+                    val item = page.items.single()
+                    assertEquals(folio, item.folioId.toString())
+                    assertEquals("c-2", page.nextCursor)
+                    val query = checkNotNull(queries.single()).split("&").toSet()
+                    assertEquals(setOf("to=2026-11-25", "limit=50"), query)
+                }
+            }
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     fun folioCorrectionSourceIsTheFacade() {
         val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
         val posting = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f04"
