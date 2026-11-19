@@ -68,7 +68,9 @@ Não há `ARCHITECTURE.md` no repositório.
 
 ## Revisão de arquitetura
 
-(a preencher pelo passo 2 do orquestrador)
+- **Veredito:** aprovado com notas, na rodada 1 (rodada 0: bloqueado, 4 Importantes e 8 Menores; corrigidos em `8c07b05`, com a reabertura passada à E13).
+- **Revisor:** `revisor-arquitetura`, modelo fable.
+- **Notas Menores (incorporadas):** N1, o teste da `CoreConnection` usa um servidor HTTP local (a conexão não injeta o engine); N2, a E13 depende também da E08 (a porta nasce aqui); N3, as notas da E08 no roadmap não falam mais da reabertura; N4, corte pré-autorizado da Task 3 (abaixo). Não há `ARCHITECTURE.md`.
 
 ---
 
@@ -78,7 +80,7 @@ Não há `ARCHITECTURE.md` no repositório.
 
 **Critérios de aceite:**
 - `FolioCorrectionsFacadeTest` (novo, `MockEngine`): `adjustSendsAmountReasonAndKey` (decimal exato, `Idempotency-Key`); `adjustApprovedRetriesWithTokenAndNewKey`; `removeServiceChargeSendsNoBody`; `transferSendsIdsTargetAndReason` (motivo em branco não vai); `splitByPercentSendsPercentStrings` e `splitByAmountSendsAmountStrings` (o `by` certo, decimais sem `Double` nem expoente); `splitPartsOutOfShapeFailBeforeTheNetwork` (5 casas no percentual, percentual 0 e 100,0001, partes de tipos misturados, conta repetida, 1 parte, 11 partes, sem a própria conta); `transferOutOfShapeFailsBeforeTheNetwork` (0 ids, 101 ids, repetido, destino igual à conta); `sameIntentKeepsTheKey`; `nonUuidIdFailsBeforeTheNetwork` (mensagem sem o valor). Verifica: `timeout 1500 ./gradlew :core:test --tests 'com.zeny.desktop.core.facade.Folio*' :core:ktlintCheck :core:detekt :core:detektMain :core:detektTest`; o trio do `app` e o do `demo-seed` continuam verdes.
-- `CoreConnectionTest.folioCorrectionSourceIsTheFacade` (o arquivo é do desenvolvedor; confira o `C-M6` antes): a porta devolvida envia pela fachada (um `removeServiceCharge` chega ao `MockEngine` com a chave). `FolioWiringTest.wiringCarriesTheCorrections` (`C-M6` conferido: 0): o `folioWiring` real com uma conexão falsa leva a porta de correções às três entradas, e sem a porta o campo é nulo. Verifica: `timeout 1500 ./gradlew :app:test --tests 'com.zeny.desktop.app.session.*' --tests 'com.zeny.desktop.app.folio.FolioWiring*' --tests 'com.zeny.desktop.app.AppRoot*' :app:ktlintCheck :app:detekt :app:detektMain :app:detektTest`.
+- `CoreConnectionTest.folioCorrectionSourceIsTheFacade` (o arquivo é do desenvolvedor; confira o `C-M6` antes): a porta devolvida envia pela fachada (um `removeServiceCharge` chega a um servidor HTTP local com a chave, no padrão de `paymentSourceReadsTheBusinessDayFromTheHotel`). `FolioWiringTest.wiringCarriesTheCorrections` (`C-M6` conferido: 0): o `folioWiring` real com uma conexão falsa leva a porta de correções às três entradas, e sem a porta o campo é nulo. Verifica: `timeout 1500 ./gradlew :app:test --tests 'com.zeny.desktop.app.session.*' --tests 'com.zeny.desktop.app.folio.FolioWiring*' --tests 'com.zeny.desktop.app.AppRoot*' :app:ktlintCheck :app:detekt :app:detektMain :app:detektTest`.
 
 **Áreas tocadas:** `core/.../facade/FoliosFacade.kt`, `app/.../folio/FolioCorrectionSource.kt` (novo), `app/.../folio/FolioWiring.kt`, `app/.../session/ServerConnection.kt`, `app/.../AppRoot.kt`; testes do `core`, da sessão e do wiring.
 
@@ -122,7 +124,7 @@ Não há `ARCHITECTURE.md` no repositório.
 
 **Áreas tocadas:** `app/.../folio/` (novos: `TransferForms.kt` com o `TransferState` e o `SplitState`, `TransferDialogs.kt`), `FolioCorrectionsState.kt`, `FolioScreen.kt` (menu); testes de `folio/` e a verificação ao vivo.
 
-**Tamanho:** ~60 min; 4 arquivos de produção (2 novos) e dois passos do check ao vivo. Se passar de 60 min, o desenvolvedor para e devolve ao orquestrador; não há corte pré-autorizado.
+**Tamanho:** ~60 min; 4 arquivos de produção (2 novos) e dois passos do check ao vivo. **Corte pré-autorizado (N4):** se passar de 60 min, o desenvolvedor entrega a Task 3 sem os passos 4 e 5 da verificação ao vivo, com `DONE_WITH_CONCERNS`; os dois passos entram na rodada de correção do fim da etapa, pelo mesmo desenvolvedor.
 
 **Depende de:** Task 2.
 
