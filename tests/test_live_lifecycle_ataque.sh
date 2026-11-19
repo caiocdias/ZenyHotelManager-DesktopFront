@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ataque à Task 13 da M3 E04: a verificação ao vivo do cancelamento, da reativação e das pendências
 # (LiveReservationLifecycleCheck) fica pulada sem o opt-in, falha sem credencial, não imprime credencial nem dado de
-# hóspede, tem as asserções que provam os três critérios de aceite e a limpeza só cancela ensaio marcado, nunca uma
+# hóspede, tem as asserções que provam os critérios de aceite (E04 e a isenção da E12) e a limpeza só cancela ensaio marcado, nunca uma
 # reserva do seed. Estático: não chama o Gradle nem o servidor. Cada trava é provada por mutação numa cópia: a cópia
 # limpa passa e cada mutante falha.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,9 +43,10 @@ violacoes() {
   nao_tem 'assumeThat(' "assumeThat (pular em vez de falhar)"
   nao_tem '@Disabled' "teste desligado"
   nao_tem '@Ignore' "teste desligado"
-  [[ "$(grep -oE '@Test' <<<"$kt" | wc -l)" == 3 ]] || echo "falta: as três verificações"
+  [[ "$(grep -oE '@Test' <<<"$kt" | wc -l)" == 4 ]] || echo "falta: as quatro verificações"
   tem '@Test fun cancelAndReactivate()' "critérios 1 e 2"
-  tem '@Test fun pendingListsLoad()' "critério 3"
+  tem '@Test fun pendingListsLoad()' "critério 3 da E04"
+  tem '@Test fun cancelWithWaiver()' "critério 3 da E12: o cancelamento com isenção"
   tem 'fun rehearsalCleanup()' "a limpeza dos ensaios"
 
   # 2. Credenciais: só pelo env(), que falha citando só o nome; nada delas sai.
@@ -149,6 +150,7 @@ muta() {
   [[ -n "$(violacoes "$m_kt" "$m_gradle")" ]] || _assert_fail "mutante não detectado: $1"
 }
 
+muta "verificação da isenção removida" '@Test fun cancelWithWaiver()' 'fun cancelWithWaiver()'
 muta "opt-in removido" 'System.getenv("ZENY_LIVE_LIFECYCLE") == "1"' 'true'
 muta "opt-in fora das entradas" 'inputs.property("zenyLiveLifecycle"' 'inputs.property("zenyLiveOutro"' gradle
 muta "opt-in fora do upToDateWhen" 'liveLifecycle.orNull != "1"' 'true' gradle
