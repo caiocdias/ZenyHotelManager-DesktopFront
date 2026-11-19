@@ -15,6 +15,7 @@ import com.zeny.desktop.core.ZenyCore
 import com.zeny.desktop.core.config.LocalSettings
 import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.facade.PostingInput
+import com.zeny.desktop.core.facade.SplitPart
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.session.SessionState
@@ -24,6 +25,7 @@ import com.zeny.desktop.sdk.model.FolioOwnerDto
 import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.PostingResponse
 import com.zeny.desktop.sdk.model.TransactionCodeResponse
+import com.zeny.desktop.sdk.model.TransferResponse
 import de.quati.kotlin.util.Option
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.emptyFlow
@@ -53,7 +55,10 @@ private const val ADJUSTMENT_REASON = "Verificação ao vivo da M4 E08"
 private const val APPROVAL_REASON = "Ajuste autorizado pelo Gerente na verificação ao vivo"
 private const val POSTINGS_ADJUST = "billing.postings.adjust"
 private const val SERVICE_CHARGE_REMOVE = "billing.servicecharge.remove"
-private const val NO_FOLIO = "NEED_SEED: nenhuma conta aberta de reserva; rode o demo-seed"
+private const val NO_FOLIO = "NEED_SEED: menos de duas contas abertas de reserva; rode o demo-seed"
+private const val HALF = "50"
+private const val MAX_TARGET_PAGES = 20
+private const val POSTINGS_TRANSFER = "billing.postings.transfer"
 private const val NO_CODE = "NEED_SEED: nenhum código ativo de consumo com taxa de serviço; rode o demo-seed"
 private const val NO_CHARGE = "NEED_SEED: o consumo lançado não gerou taxa de serviço; confira o código no demo-seed"
 
@@ -69,16 +74,22 @@ private const val NO_CHARGE = "NEED_SEED: o consumo lançado não gerou taxa de 
  *    "Corrige: <descrição>" na tela e o consumo intacto, com o valor dele (critério 1);
  * 3. exige que o estado oferece "Remover a taxa" na linha real da taxa (`canRemoveServiceCharge`), remove-a pelo
  *    `ServiceChargeRemovalState` e exige o estorno da taxa com o motivo que o servidor registrou, o mesmo do aviso da
- *    tela (critério 3).
+ *    tela (critério 3);
+ * 4. lança um segundo consumo com taxa na conta da tela, divide-o 50% / 50% com uma segunda conta aberta de reserva
+ *    pelo `SplitState` (a segunda escolhida entre as contas de destino do diálogo) e exige, nas duas contas relidas, a
+ *    saída, a entrada e as taxas que a API devolveu (critério 2);
+ * 5. transfere o que resta dele para a segunda conta pelo `TransferState` e exige o mesmo, com a taxa sob o item na
+ *    tabela de um `FolioState` real da segunda conta (critério 2).
  *
  * Nenhuma resposta do `sdk` é impressa, interpolada nem comparada inteira; só valores formatados, tipos e textos da
  * tela.
  *
  * **Escreve na demo e não desfaz:** cada execução deixa na conta um consumo de R$ 10,00 com a taxa de serviço dele, o
- * ajuste de R$ 1,00 (com o que acompanha a taxa) e a remoção da taxa. Por isso tem opt-in próprio: pulada sem
- * `ZENY_LIVE_CORRECTION=1`; com ele, exige `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`, `ZENY_LIVE_VIEWER_PASSWORD`,
- * `ZENY_LIVE_APPROVER_LOGIN` e `ZENY_LIVE_APPROVER_PIN` (só do ambiente, nunca impressas). Sem conta aberta de reserva
- * ou sem o código com taxa, falha com `NEED_SEED`. Grava `build/live/correction.png`. Comando, só num subshell:
+ * ajuste de R$ 1,00 (com o que acompanha a taxa), a remoção da taxa e um segundo consumo de R$ 10,00 dividido e
+ * transferido para a segunda conta. Por isso tem opt-in próprio: pulada sem `ZENY_LIVE_CORRECTION=1`; com ele, exige
+ * `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`, `ZENY_LIVE_VIEWER_PASSWORD`, `ZENY_LIVE_APPROVER_LOGIN` e
+ * `ZENY_LIVE_APPROVER_PIN` (só do ambiente, nunca impressas). Sem duas contas abertas de reserva ou sem o código com
+ * taxa, falha com `NEED_SEED` antes de escrever. Grava `build/live/correction.png`. Comando, só num subshell:
  * `(set -a; . <arquivo>; set +a; ZENY_LIVE_CORRECTION=1 ./gradlew :app:test --tests '*LiveFolioCorrectionCheck'
  * --rerun)`
  */
@@ -110,12 +121,41 @@ class LiveFolioCorrectionCheck {
         val chargeId: String,
     )
 
+    /** A porta real das correções, guardando a última resposta de transferir e de dividir. */
+    private class RecordingCorrections(
+        private val inner: FolioCorrectionSource,
+    ) : FolioCorrectionSource by inner {
+        @Volatile
+        var last: TransferResponse? = null
+
+        override suspend fun transfer(
+            folioId: String,
+            postingIds: List<String>,
+            targetFolioId: String,
+            reason: String?,
+            intent: Intent,
+        ): TransferResponse = inner.transfer(folioId, postingIds, targetFolioId, reason, intent).also { last = it }
+
+        override suspend fun split(
+            folioId: String,
+            postingId: String,
+            parts: List<SplitPart>,
+            reason: String?,
+            intent: Intent,
+        ): TransferResponse = inner.split(folioId, postingId, parts, reason, intent).also { last = it }
+    }
+
+    /** O que os passos usam: as portas, o consumo do passo 1, o código com taxa e a segunda conta de reserva. */
     private class Screen(
         val source: FolioSource,
+        val corrections: RecordingCorrections,
         val item: Item,
+        val code: TransactionCodeResponse,
+        val secondId: String,
     ) {
         lateinit var scope: CoroutineScope
         lateinit var approvals: ApprovalCoordinator
+        lateinit var wiring: FolioWiring
         var shown: FolioState? = null
         val folio: FolioState get() = checkNotNull(shown) { "o painel da conta não foi montado" }
         val holder: FolioCorrectionsState
@@ -132,6 +172,8 @@ class LiveFolioCorrectionCheck {
         withScreen { screen, approver ->
             adjustWithApproval(screen, approver)
             removeTheServiceCharge(screen)
+            val split = splitHalfWithTheSecond(screen)
+            transferTheRestToTheSecond(screen, split)
             capture("correction")
         }
 
@@ -217,6 +259,146 @@ class LiveFolioCorrectionCheck {
         println("Correções ao vivo: taxa removida com o motivo do servidor no aviso")
     }
 
+    /**
+     * Passo 4: um segundo consumo com taxa na conta da tela, dividido 50% / 50% com a segunda conta pelo `SplitState`;
+     * a saída, a entrada e as taxas que a API devolveu estão nas duas contas relidas. Devolve o id do consumo.
+     */
+    private fun DesktopComposeUiTest.splitHalfWithTheSecond(screen: Screen): String {
+        val holder = screen.holder
+        val folioId = screen.item.folioId
+        val description = "Verificação ao vivo E08 divisão ${UUID.randomUUID().toString().take(TAG_LENGTH)}"
+        val input = PostingInput(screen.code.id.toString(), 1, Money.parse(UNIT_PRICE), description)
+        val posted = runBlocking { screen.source.post(folioId, input, Intent()) }
+        if (posted.folioId.toString() !=
+            folioId
+        ) {
+            fail("o segundo consumo foi roteado; a divisão o pede na conta da tela")
+        }
+        val itemId = posted.id.toString()
+        runBlocking { screen.source.postings(folioId) }
+            .singleOrNull { it.type == "SERVICE_CHARGE" && it.chargedItem() == itemId }
+            ?: fail(NO_CHARGE)
+        runOnUiThread { screen.folio.reload() }
+        val row = rowIn(screen, itemId)
+        assertTrue(holder.canTransfer(row), "a Recepcionista não vê \"Dividir\" no consumo (sem $POSTINGS_TRANSFER?)")
+        runOnUiThread { holder.startSplit(row) }
+        val form = assertNotNull(holder.split, "o diálogo de divisão não abriu")
+        assertNotNull(form.remaining, "o diálogo de divisão não mostra o restante do servidor")
+        val target = targetIn(form.targets, screen.secondId)
+        screen.corrections.last = null
+        runOnUiThread {
+            form.addPart(target)
+            form.setPart(0, HALF)
+            form.setPart(1, HALF)
+            form.confirm()
+        }
+        waitUntil("a divisão", LOAD_TIMEOUT_MILLIS) { holder.split == null || (!form.busy && form.message != null) }
+        assertNull(holder.split, "a divisão falhou: ${form.message}")
+        assertEquals(FolioText.splitAmong(2), screen.folio.notice, "o aviso da divisão")
+        val response = screen.corrections.last ?: fail("a divisão não devolveu a resposta")
+        requireMoved(screen, response, folioId, screen.secondId)
+        println("Correções ao vivo: consumo dividido 50% / 50% com a segunda conta; saída, entrada e taxas nas duas")
+        return itemId
+    }
+
+    /**
+     * Passo 5: o que resta do consumo dividido vai para a segunda conta pelo `TransferState`; a saída, a entrada e as
+     * taxas estão nas duas contas relidas, e a taxa vem sob o item na tabela da segunda conta.
+     */
+    private fun DesktopComposeUiTest.transferTheRestToTheSecond(
+        screen: Screen,
+        itemId: String,
+    ) {
+        val holder = screen.holder
+        val row = rowIn(screen, itemId)
+        assertTrue(holder.canTransfer(row), "o resto do consumo dividido não é transferível")
+        runOnUiThread { holder.startTransfer(row) }
+        val form = assertNotNull(holder.transfer, "o diálogo de transferência não abriu")
+        assertEquals(setOf(itemId), form.checked, "o consumo da linha não veio marcado")
+        val target = targetIn(form.targets, screen.secondId)
+        screen.corrections.last = null
+        runOnUiThread {
+            form.chooseTarget(target)
+            form.confirm()
+        }
+        waitUntil("a transferência", LOAD_TIMEOUT_MILLIS) {
+            holder.transfer == null || (!form.busy && form.message != null)
+        }
+        assertNull(holder.transfer, "a transferência falhou: ${form.message}")
+        assertEquals(FolioText.transferredTo(target.number), screen.folio.notice, "o aviso da transferência")
+        val response = screen.corrections.last ?: fail("a transferência não devolveu a resposta")
+        requireMoved(screen, response, screen.item.folioId, screen.secondId)
+        val moved =
+            response.transfers.singleOrNull { it.originalId.toString() == itemId }
+                ?: fail("a resposta não traz o consumo transferido")
+        val chargeId =
+            (moved.serviceChargeIncoming as? Option.Some)?.value?.id?.toString()
+                ?: fail("a resposta veio sem a taxa")
+        requireChargeUnderTheItem(screen, moved.incoming.id.toString(), chargeId)
+        println("Correções ao vivo: o resto foi transferido; a taxa veio sob o item na segunda conta")
+    }
+
+    /** A tabela real da segunda conta mostra a taxa recebida logo abaixo do item recebido, recuada. */
+    private fun DesktopComposeUiTest.requireChargeUnderTheItem(
+        screen: Screen,
+        incomingId: String,
+        chargeId: String,
+    ) {
+        var second: FolioState? = null
+        runOnUiThread { second = FolioState(screen.wiring, screen.scope, screen.secondId).also { it.start() } }
+        val state = checkNotNull(second) { "a segunda conta não foi montada" }
+        try {
+            waitUntil("a segunda conta", LOAD_TIMEOUT_MILLIS) {
+                !state.loading && state.postings.any { it.id == chargeId }
+            }
+            val rows = state.postings
+            val item = rows.indexOfFirst { it.id == incomingId }
+            assertTrue(item >= 0, "a entrada do item não está na tabela da segunda conta")
+            val charge = rows.getOrNull(item + 1)
+            assertEquals(chargeId, charge?.id, "a taxa recebida não veio logo abaixo do item")
+            assertTrue(charge?.serviceCharge == true, "a taxa recebida não veio recuada sob o item")
+        } finally {
+            runOnUiThread { state.close() }
+        }
+    }
+
+    /**
+     * Cada transferência da [response]: a saída e a saída da taxa na conta [from] relida, a entrada e a entrada da taxa
+     * na conta [to] relida. A resposta sem a taxa falha.
+     */
+    private fun requireMoved(
+        screen: Screen,
+        response: TransferResponse,
+        from: String,
+        to: String,
+    ) {
+        assertTrue(response.transfers.isNotEmpty(), "a resposta não trouxe nenhuma transferência")
+        val here = runBlocking { screen.source.postings(from) }.map { it.id }.toSet()
+        val there = runBlocking { screen.source.postings(to) }.map { it.id }.toSet()
+        response.transfers.forEach { moved ->
+            val chargeOut = (moved.serviceChargeOutgoing as? Option.Some)?.value ?: fail("a resposta veio sem a taxa")
+            val chargeIn = (moved.serviceChargeIncoming as? Option.Some)?.value ?: fail("a resposta veio sem a taxa")
+            assertTrue(moved.outgoing.id in here, "a saída não está na conta de origem relida")
+            assertTrue(chargeOut.id in here, "a saída da taxa não está na conta de origem relida")
+            assertTrue(moved.incoming.id in there, "a entrada não está na conta de destino relida")
+            assertTrue(chargeIn.id in there, "a entrada da taxa não está na conta de destino relida")
+        }
+    }
+
+    /** A conta [id] entre as contas de destino do diálogo, carregando mais páginas se preciso. */
+    private fun DesktopComposeUiTest.targetIn(
+        targets: FolioTargets,
+        id: String,
+    ): FolioRow {
+        repeat(MAX_TARGET_PAGES) {
+            waitUntil("as contas de destino", LOAD_TIMEOUT_MILLIS) { !targets.loading }
+            targets.rows.firstOrNull { folio -> folio.id == id }?.let { found -> return found }
+            if (!targets.hasMore) fail("a segunda conta não está entre as contas de destino (${targets.error})")
+            runOnUiThread { targets.loadMore() }
+        }
+        fail("a segunda conta não apareceu em $MAX_TARGET_PAGES páginas")
+    }
+
     /** A linha [id] na tabela da tela, depois da releitura. */
     private fun DesktopComposeUiTest.rowIn(
         screen: Screen,
@@ -240,16 +422,24 @@ class LiveFolioCorrectionCheck {
     private fun withScreen(block: DesktopComposeUiTest.(Screen, Approver) -> Unit) =
         withViewer { connection, approver ->
             val source = checkNotNull(connection.folioSource()) { "a conexão não tem contas" }
-            val corrections = checkNotNull(connection.folioCorrectionSource()) { "a conexão não tem as correções" }
+            val corrections =
+                RecordingCorrections(
+                    checkNotNull(connection.folioCorrectionSource()) { "a conexão não tem as correções" },
+                )
             val permissions = runBlocking { connection.me() }.permissions
-            val screen = Screen(source, postItem(source))
+            // As duas contas e o código são exigidos antes de qualquer escrita.
+            val folios = openReservationFolios(source)
+            val code = serviceChargeCode(source)
+            val item = postItem(source, folios.first(), code)
+            val second = folios.firstOrNull { it.id.toString() != item.folioId } ?: fail(NO_FOLIO)
+            val screen = Screen(source, corrections, item, code, second.id.toString())
             runDesktopComposeUiTest(WIDTH, HEIGHT) {
                 setContent {
                     screen.scope = rememberCoroutineScope()
                     screen.approvals = remember { ApprovalCoordinator(connection::grant, emptyFlow(), screen.scope) }
                     val state =
                         remember {
-                            val wiring =
+                            screen.wiring =
                                 FolioWiring(
                                     source,
                                     permissions,
@@ -258,7 +448,7 @@ class LiveFolioCorrectionCheck {
                                     null,
                                     corrections = corrections,
                                 )
-                            FolioState(wiring, screen.scope, screen.item.folioId).also { it.start() }
+                            FolioState(screen.wiring, screen.scope, screen.item.folioId).also { it.start() }
                         }
                     DisposableEffect(state) { onDispose { state.close() } }
                     screen.shown = state
@@ -293,13 +483,15 @@ class LiveFolioCorrectionCheck {
     }
 
     /**
-     * Passo 1: um consumo de R$ 10,00 com um código que tem taxa de serviço, na primeira conta aberta de reserva; o
+     * Passo 1: um consumo de R$ 10,00 com o [code] que tem taxa de serviço, na primeira conta aberta de reserva; o
      * servidor pode roteá-lo para outra conta, e o resto segue nela. Sem a taxa dele, falha com `NEED_SEED` antes do
      * passo 2.
      */
-    private fun postItem(source: FolioSource): Item {
-        val folio = openReservationFolio(source)
-        val code = serviceChargeCode(source)
+    private fun postItem(
+        source: FolioSource,
+        folio: FolioResponse,
+        code: TransactionCodeResponse,
+    ): Item {
         val description = "Verificação ao vivo E08 ${UUID.randomUUID().toString().take(TAG_LENGTH)}"
         val input = PostingInput(code.id.toString(), 1, Money.parse(UNIT_PRICE), description)
         val posted = runBlocking { source.post(folio.id.toString(), input, Intent()) }
@@ -322,14 +514,16 @@ class LiveFolioCorrectionCheck {
         System.getenv(name)?.takeIf { it.isNotEmpty() } ?: fail("defina $name para a verificação real")
 }
 
-/** A primeira conta aberta de reserva, percorrendo as páginas das abertas pelo `CursorPager`. */
-private fun openReservationFolio(source: FolioSource): FolioResponse =
+/**
+ * As contas abertas de reserva, percorrendo as páginas das abertas pelo `CursorPager`; menos de duas falha com
+ * `NEED_SEED`, antes de qualquer escrita.
+ */
+private fun openReservationFolios(source: FolioSource): List<FolioResponse> =
     runBlocking {
         val pager = CursorPager(OPEN_PAGE_SIZE) { cursor, limit -> source.openFolioPage(cursor, limit) }
-        while (pager.hasMore) {
-            pager.next().firstOrNull { it.owner.type == FolioOwnerDto.Type.RESERVATION }?.let { return@runBlocking it }
-        }
-        fail(NO_FOLIO)
+        val found = mutableListOf<FolioResponse>()
+        while (pager.hasMore) found += pager.next().filter { it.owner.type == FolioOwnerDto.Type.RESERVATION }
+        found.takeIf { it.size >= 2 } ?: fail(NO_FOLIO)
     }
 
 /** Um código ativo de consumo que leva taxa de serviço. */
