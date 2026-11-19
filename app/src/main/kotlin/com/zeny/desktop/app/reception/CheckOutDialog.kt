@@ -114,7 +114,8 @@ private fun PendingSection(
 
         else -> {
             state.pending.forEachIndexed { index, item ->
-                FolioLine("check-out-pending-$index", item.number, item.text, onOpenFolio)
+                val label = "Conta ${item.number}: ${item.text}"
+                FolioLine("check-out-pending-$index", label, state.openFolioEnabled, onOpenFolio)
             }
         }
     }
@@ -149,11 +150,12 @@ private fun DueSection(
     if (lines.isNotEmpty()) {
         SectionTitle("Saldo devido")
         lines.forEachIndexed { index, line ->
-            FolioLine("check-out-due-$index", line.number, line.text, onOpenFolio) {
+            val label = "Conta ${line.number}: ${line.text}"
+            FolioLine("check-out-due-$index", label, state.openFolioEnabled, onOpenFolio) {
                 line.receive?.let { label ->
                     Button(
                         onClick = { state.receiveDue(line.folioId) },
-                        enabled = !state.busy,
+                        enabled = state.receiveEnabled,
                         modifier = Modifier.testTag("check-out-receive-$index"),
                     ) { Text(label) }
                 }
@@ -169,8 +171,8 @@ private fun DueSection(
 @Composable
 private fun FolioLine(
     tag: String,
-    number: String,
-    text: String,
+    label: String,
+    openEnabled: Boolean,
     onOpenFolio: (() -> Unit)?,
     action: @Composable () -> Unit = {},
 ) {
@@ -179,10 +181,14 @@ private fun FolioLine(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Conta $number: $text", modifier = Modifier.weight(1f))
+        Text(label, modifier = Modifier.weight(1f))
         action()
         if (onOpenFolio != null) {
-            OutlinedButton(onClick = onOpenFolio, modifier = Modifier.testTag("$tag-open")) { Text("Abrir conta") }
+            OutlinedButton(
+                onClick = onOpenFolio,
+                enabled = openEnabled,
+                modifier = Modifier.testTag("$tag-open"),
+            ) { Text("Abrir conta") }
         }
     }
 }

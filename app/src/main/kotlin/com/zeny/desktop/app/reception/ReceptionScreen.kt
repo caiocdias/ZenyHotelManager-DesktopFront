@@ -240,9 +240,11 @@ private class OpenCheckOut(
 /**
  * O assistente de check-out e o aviso que ele deixa no painel do dia ("Check-out concluído.", o pagamento sem o
  * check-out ou a reserva que já saiu), até o próximo check-out. Como o diálogo "Conta", o assistente é da reserva que
- * estava aberta no detalhe: trocar de reserva, fechar o detalhe ou sair da composição o fecha, e esse fechamento
- * nunca relê o painel (ele pode estar saindo de cena). O aviso morre com o holder (outra sessão, outro conjunto ou
- * outra área). "Abrir conta" abre a conta da reserva por cima do assistente, que é relido quando ela fecha.
+ * estava aberta no detalhe: trocar de reserva, fechar o detalhe ou sair da composição o fecha. Esse fechamento nunca
+ * relê o painel dentro do dispose: a releitura pedida fica para um efeito, que só roda se o holder segue na composição
+ * (a troca de reserva), nunca com a tela saindo. O aviso de sucesso sai com outra reserva no detalhe; o do pagamento
+ * sem check-out fica; todos morrem com o holder (outra sessão, outro conjunto ou outra área). "Abrir conta" abre a
+ * conta da reserva por cima do assistente; quando ela fecha, o assistente descarta o devido velho e relê.
  */
 @Stable
 private class CheckOutUi(
@@ -253,6 +255,9 @@ private class CheckOutUi(
     private var current by mutableStateOf<OpenCheckOut?>(null)
     private var folioOpen by mutableStateOf(false)
     private var disposing = false
+
+    /** A releitura pedida por um fechamento no dispose: feita pelo efeito, só se o holder segue na composição. */
+    private var pendingReload by mutableStateOf(false)
 
     var notice by mutableStateOf<String?>(null)
         private set
@@ -294,15 +299,32 @@ private class CheckOutUi(
             folioOpen = false
         }
         notice = text
-        if (reloadPanel && !disposing) {
-            panel.refresh()
-            detail.reload()
+        when {
+            !reloadPanel -> Unit
+            disposing -> pendingReload = true
+            else -> reload()
         }
+    }
+
+    private fun reload() {
+        panel.refresh()
+        detail.reload()
     }
 
     @Composable
     fun Show(folio: FolioWiring?) {
-        val shown = current?.takeIf { it.ownerId == detail.openId }
+        val openId = detail.openId
+        LaunchedEffect(openId) {
+            // Outra reserva no detalhe: o aviso de sucesso sai; o do pagamento sem check-out fica.
+            if (notice != CheckOutText.PAID_NOT_CHECKED_OUT) notice = null
+        }
+        LaunchedEffect(pendingReload) {
+            if (pendingReload) {
+                pendingReload = false
+                reload()
+            }
+        }
+        val shown = current?.takeIf { it.ownerId == openId }
         DisposableEffect(shown) {
             onDispose {
                 if (shown != null) {
@@ -321,7 +343,7 @@ private class CheckOutUi(
         if (folioOpen && folio != null) {
             ReservationFolioDialog(folio, shown.reservationId, shown.code) {
                 folioOpen = false
-                shown.state.reload()
+                shown.state.folioClosed()
             }
         }
     }

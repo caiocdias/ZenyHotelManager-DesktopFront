@@ -230,6 +230,22 @@ class CheckOutState(
         readPending(mine)
     }
 
+    /** "Abrir conta": nunca com o check-out em voo nem com o resultado desconhecido. */
+    val openFolioEnabled: Boolean get() = !write.busy && !write.unconfirmed
+
+    /** "Receber" abriria o recebimento: o critério do [receiveDue] (sem envio em voo nem resultado desconhecido). */
+    val receiveEnabled: Boolean get() = canOpenPayment()
+
+    /**
+     * A conta da reserva, aberta por cima do assistente ("Abrir conta"), fechou: o saldo pode ter mudado fora do que o
+     * assistente sabe, então o devido velho sai (com "Confira a conta e conclua de novo.") e o assistente é relido.
+     */
+    fun folioClosed() {
+        if (closed) return
+        dropStaleDue()
+        reload()
+    }
+
     /** Envia o check-out (ou repete a intenção em curso, com o late guardado nela). */
     fun conclude() {
         if (!canConclude) return
@@ -261,18 +277,30 @@ class CheckOutState(
         if (form.busy) return
         form.close()
         payment = null
-        if (form.unconfirmed || form.closeOnly) reload()
+        if (form.unconfirmed || form.closeOnly) {
+            // O servidor pode ter gravado o pagamento: o devido velho não oferece "Receber" de novo.
+            dropStaleDue()
+            reload()
+        }
     }
 
     /**
-     * Fecha o assistente; com um devido recebido e o check-out não concluído, o painel avisa. Com o resultado
+     * Fecha o assistente; com um devido recebido e o check-out não concluído, o painel avisa. Em voo ou com o resultado
      * desconhecido, o servidor pode ter feito o check-out: o painel e o detalhe são relidos.
      */
     fun close() =
         finish(
             CheckOutText.PAID_NOT_CHECKED_OUT.takeIf { dueReceived.isNotEmpty() },
-            write.unconfirmed || write.closeOnly,
+            write.busy || write.unconfirmed || write.closeOnly,
         )
+
+    /** O devido que pode não valer mais sai da tela; o próximo "Concluir" traz o devido novo do servidor. */
+    private fun dropStaleDue() {
+        if (due == null) return
+        due = null
+        dueFee = null
+        notice = CheckOutText.CHECK_AGAIN
+    }
 
     /** Um diálogo por vez, nunca com o check-out em voo ou com o resultado desconhecido. */
     private fun canOpenPayment(): Boolean = !closed && payment == null && !write.locked
@@ -394,6 +422,7 @@ class CheckOutState(
     private fun refused(code: String) {
         responded()
         due = null
+        dueFee = null
         if (code in RESERVATION_GONE) {
             finish(write.message, true)
             return

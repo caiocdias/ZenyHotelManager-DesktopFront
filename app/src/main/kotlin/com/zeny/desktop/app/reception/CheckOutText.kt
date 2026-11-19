@@ -12,6 +12,7 @@ object CheckOutText {
     const val ASK_RECEIVER = "Peça a quem pode receber pagamentos para capturar ou liberar a caução."
     const val CAPTURE_FIRST = "Capture ou libere a caução antes de concluir."
     const val DUE_RECEIVED = "Recebido. Conclua o check-out."
+    const val CHECK_AGAIN = "Confira a conta e conclua de novo."
     const val NOTHING_PENDING = "Nada pendente nas contas e nas cauções."
     const val CHARGE_LATE = "Cobrar o late check-out"
     const val DONE = "Check-out concluído."

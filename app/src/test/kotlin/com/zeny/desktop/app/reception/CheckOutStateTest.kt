@@ -32,6 +32,7 @@ private const val RESERVATION = "20000000-0000-0000-0000-0000000000e1"
 private const val CAPTURE_FIRST = "Capture ou libere a caução antes de concluir."
 private const val CHECK_FAILED = "Não foi possível conferir as contas e as cauções."
 private const val PAID_NOT_CHECKED_OUT = "O pagamento foi registrado, mas o check-out não foi concluído."
+private const val CHECK_AGAIN = "Confira a conta e conclua de novo."
 private val A = FOLIO_ID.toString()
 private val B = OTHER_FOLIO_ID.toString()
 private val LATE = LateCheckOutQuote("14:00", Money.parse("80.00"))
@@ -373,6 +374,104 @@ class CheckOutStateTest {
             runCurrent()
             unwired.receiveDue(A)
             assertNull(unwired.payment, "sem a porta dos pagamentos, nada")
+        }
+
+    @Test
+    fun finishPaymentUnknownDoesNotOfferReceiveAgain() =
+        runTest {
+            val source = FakeCheckOutSource().apply { checkOut = { due(Triple(A, "F-0001", "100.00")) } }
+            val payments = FakePaymentSource().apply { receive = { throw ApiError.Network(IOException("x")) } }
+            val folios = settled()
+            val state = started(source, folios = folios, payments = payments)
+            state.conclude()
+            runCurrent()
+            state.receiveDue(A)
+            val form = assertNotNull(state.payment)
+            form.confirm()
+            runCurrent()
+            assertTrue(form.unconfirmed)
+
+            state.finishPayment()
+            runCurrent()
+
+            assertNull(state.due, "o devido velho não vale: o pagamento pode ter sido gravado")
+            assertTrue(state.dueLines.none { it.receive != null })
+            assertEquals(CHECK_AGAIN, state.notice)
+            state.receiveDue(A)
+            assertNull(state.payment, "sem devido, nada de um segundo recebimento")
+            assertEquals(1, payments.receiveCalls.size)
+            assertEquals(2, folios.reservationCalls.size, "o assistente é relido")
+            assertTrue(state.canConclude, "o próximo envio traz o devido novo do servidor")
+        }
+
+    @Test
+    fun folioClosedDropsTheStaleDue() =
+        runTest {
+            val source = FakeCheckOutSource().apply { checkOut = { due(Triple(A, "F-0001", "100.00")) } }
+            val folios = settled()
+            val payments = FakePaymentSource()
+            val state = started(source, folios = folios, payments = payments)
+            state.conclude()
+            runCurrent()
+            assertNotNull(state.due)
+
+            state.folioClosed()
+            runCurrent()
+
+            assertNull(state.due)
+            assertEquals(CHECK_AGAIN, state.notice)
+            assertEquals(2, folios.reservationCalls.size)
+            assertEquals(2, source.quoteCalls)
+            assertTrue(state.canConclude)
+
+            // Sem devido na tela, fechar a conta só relê, sem o aviso.
+            val plain = started(FakeCheckOutSource())
+            plain.folioClosed()
+            runCurrent()
+            assertNull(plain.notice)
+        }
+
+    @Test
+    fun receiveIsOfferedOnlyWhenItWouldOpen() =
+        runTest {
+            val source = FakeCheckOutSource().apply { checkOut = { due(Triple(A, "F-0001", "100.00")) } }
+            val state = started(source)
+            state.conclude()
+            runCurrent()
+            assertTrue(state.receiveEnabled)
+
+            source.checkOut = { throw ApiError.Network(IOException("x")) }
+            state.conclude()
+            runCurrent()
+            assertTrue(state.unconfirmed)
+
+            assertFalse(state.receiveEnabled, "com o resultado desconhecido, o \"Receber\" não abriria")
+            state.receiveDue(A)
+            assertNull(state.payment)
+        }
+
+    @Test
+    fun refusalForgetsTheLateOfTheDue() =
+        runTest {
+            val source =
+                FakeCheckOutSource().apply {
+                    quote = { LATE }
+                    checkOut = { due(Triple(A, "F-0001", "180.00")) }
+                }
+            val state = started(source)
+            state.chargeLate = true
+            state.conclude()
+            runCurrent()
+            source.checkOut = { throw problem(409, "RESERVATION_CHANGED") }
+            state.conclude()
+            runCurrent()
+            state.chargeLate = false
+            source.checkOut = { CheckOutResult.Done }
+
+            state.conclude()
+            runCurrent()
+
+            assertNull(source.calls.last().lateFee, "depois da recusa, o late do devido antigo não volta")
         }
 
     @Test
@@ -779,7 +878,11 @@ class CheckOutStateTest {
             result.complete(CheckOutResult.Done)
             runCurrent()
 
-            assertEquals(listOf<Pair<String?, Boolean>>(null to false), closings)
+            assertEquals(
+                listOf<Pair<String?, Boolean>>(null to true),
+                closings,
+                "fechado em voo, o resultado é desconhecido: o painel é relido",
+            )
             assertNull(state.quote)
             state.reload()
             state.conclude()

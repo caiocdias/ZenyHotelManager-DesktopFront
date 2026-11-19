@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.v2.runComposeUiTest
 import com.zeny.desktop.app.AreaContent
+import com.zeny.desktop.app.folio.FOLIO_ID
 import com.zeny.desktop.app.folio.FakeFolioSource
 import com.zeny.desktop.app.folio.FakePaymentSource
 import com.zeny.desktop.app.folio.FolioConnection
@@ -26,8 +27,10 @@ import com.zeny.desktop.app.reservations.confirmDetail
 import com.zeny.desktop.app.reservations.searchItemOf
 import com.zeny.desktop.app.shell.Area
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.CheckOutResult
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.http.Page
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.theme.ZenyTheme
 import java.io.IOException
 import kotlin.test.Test
@@ -200,7 +203,7 @@ class ReceptionCheckOutTest {
         }
 
     @Test
-    fun closingUnconfirmedReloadsThePanelButASwitchDoesNot() =
+    fun closingUnconfirmedOrSwitchingTheReservationReloadsThePanel() =
         runComposeUiTest {
             val reception = reception()
             val source = FakeCheckOutSource().apply { checkOut = { throw ApiError.Network(IOException("x")) } }
@@ -222,15 +225,96 @@ class ReceptionCheckOutTest {
             onNodeWithTag("check-out-dialog").assertDoesNotExist()
             assertTrue(reception.dayPageCalls.size > pagesBefore, "o servidor pode ter feito o check-out")
 
-            // A troca de reserva com o resultado desconhecido fecha o assistente sem reler o painel.
+            // A troca de reserva com o resultado desconhecido fecha o assistente e, com a tela ainda de pé, relê o
+            // painel depois do fechamento (nunca dentro dele).
             click("check-out")
             click("check-out-conclude")
             val pagesThen = reception.dayPageCalls.size
             detail.open(SECOND.toString())
             waitForIdle()
             onNodeWithTag("check-out-dialog").assertDoesNotExist()
-            assertEquals(pagesThen, reception.dayPageCalls.size)
+            assertTrue(reception.dayPageCalls.size > pagesThen, "o servidor pode ter feito o check-out")
         }
+
+    @Test
+    fun openFolioOnADueLineDropsTheStaleReceive() =
+        runComposeUiTest {
+            val source = FakeCheckOutSource().apply { checkOut = { dueWith("100.00") } }
+            area(reception(), source)
+            click("row-$FIRST")
+            click("check-out")
+            click("check-out-conclude")
+            onNodeWithTag("check-out-receive-0").assertExists()
+
+            clickInAssistant("check-out-due-0-open")
+            onNodeWithTag("folio-dialog").assertExists()
+            click("folio-dialog-close")
+
+            onNodeWithTag("folio-dialog").assertDoesNotExist()
+            onNodeWithTag("check-out-receive-0").assertDoesNotExist()
+            onNodeWithTag("check-out-notice").assertTextEquals("Confira a conta e conclua de novo.")
+            onNodeWithTag("check-out-conclude").assertIsEnabled()
+        }
+
+    @Test
+    fun openFolioAndReceiveAreDisabledWhileTheResultIsUnknown() =
+        runComposeUiTest {
+            val source = FakeCheckOutSource().apply { checkOut = { dueWith("100.00") } }
+            val folios = FakeFolioSource().apply { byReservation = { listOf(folioOf(balance = "100.00")) } }
+            area(reception(), source, folios = folios)
+            click("row-$FIRST")
+            click("check-out")
+            click("check-out-conclude")
+            onNodeWithTag("check-out-receive-0").assertIsEnabled()
+            onNodeWithTag("check-out-pending-0-open").assertIsEnabled()
+
+            source.checkOut = { throw ApiError.Network(IOException("x")) }
+            click("check-out-conclude")
+
+            onNodeWithTag("check-out-receive-0").assertIsNotEnabled()
+            onNodeWithTag("check-out-pending-0-open").assertIsNotEnabled()
+            onNodeWithTag("check-out-due-0-open").assertIsNotEnabled()
+        }
+
+    @Test
+    fun doneNoticeClearsWithAnotherReservationButThePaidOneStays() =
+        runComposeUiTest {
+            val reception = reception()
+            val source = FakeCheckOutSource()
+            val wiring = wiringOf(settled(), setOf(FOLIOS_READ, RECEIVE), payments = FakePaymentSource())
+            lateinit var detail: ReservationDetailState
+            setContent {
+                val scope = rememberCoroutineScope()
+                val panel = remember { DayPanelState(reception, scope, reception.permissions) }
+                detail = remember { ReservationDetailState(reception, scope) }
+                ZenyTheme { ReceptionScreen(panel, detail, checkOut = source, folio = wiring) }
+            }
+            waitForIdle()
+            click("row-$FIRST")
+            click("check-out")
+            click("check-out-conclude")
+            onNodeWithTag("reception-notice").assertTextEquals("Check-out concluído.")
+
+            click("row-$SECOND")
+
+            onNodeWithTag("reception-notice").assertDoesNotExist()
+
+            source.checkOut = { dueWith("100.00") }
+            click("check-out")
+            click("check-out-conclude")
+            click("check-out-receive-0")
+            click("payment-submit")
+            detail.open(FIRST.toString())
+            waitForIdle()
+
+            onNodeWithTag("check-out-dialog").assertDoesNotExist()
+            onNodeWithTag("reception-notice")
+                .assertTextEquals("O pagamento foi registrado, mas o check-out não foi concluído.")
+        }
+
+    /** O saldo devido do servidor só na primeira conta. */
+    private fun dueWith(balance: String) =
+        CheckOutResult.BalanceDue(listOf(dueOf(FOLIO_ID.toString(), "F-0001", balance)), Money.parse(balance))
 
     @Test
     fun theNoticeDiesWithTheSession() =
