@@ -42,12 +42,13 @@ class PreAuthorizationFormStateTest {
     private fun TestScope.form(
         source: FakePaymentSource,
         zone: ZoneId? = HOTEL_ZONE,
+        clock: Clock = Clock.fixed(NOW, ZoneOffset.UTC),
     ) = PreAuthorizationFormState(
         source,
         backgroundScope,
         FOLIO_ID.toString(),
         zone,
-        Clock.fixed(NOW, ZoneOffset.UTC),
+        clock,
         onRegistered = { registered += Unit },
         onRefused = { refused += it },
     )
@@ -120,6 +121,33 @@ class PreAuthorizationFormStateTest {
 
             val (first, second) = source.registerCalls
             assertSame(first.intent, second.intent)
+            assertEquals(1, registered.size)
+        }
+
+    @Test
+    fun retryAfterDayTurnsResendsTheSameInput() =
+        runTest {
+            val clock = MovableClock(NOW)
+            val source = FakePaymentSource()
+            var failures = 1
+            source.register = {
+                if (failures-- > 0) throw ApiError.Network(IOException("caiu"))
+                preAuthorizationOf()
+            }
+            val form = form(source, clock = clock).apply { fill(expiresOn = "18/11/2026") }
+
+            form.confirm()
+            runCurrent()
+            assertTrue(form.unconfirmed)
+            // Já 19/11 no hotel: a validade "hoje" (18/11) ficaria fora do intervalo se fosse conferida de novo.
+            clock.now = Instant.parse("2026-11-19T11:00:00Z")
+            form.confirm()
+            runCurrent()
+
+            val (first, second) = source.registerCalls
+            assertSame(first.intent, second.intent)
+            assertEquals(first.input, second.input, "a repetição leva a mesma entrada")
+            assertNull(form.validityError)
             assertEquals(1, registered.size)
         }
 
@@ -346,4 +374,15 @@ class PreAuthorizationFormStateTest {
             assertEquals(1, changed, "a conta é relida")
             assertFalse(form.unconfirmed)
         }
+}
+
+/** Um relógio que o teste adianta (a virada do dia no fuso do hotel entre o envio e a repetição). */
+private class MovableClock(
+    var now: Instant,
+) : Clock() {
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+
+    override fun withZone(zone: ZoneId): Clock = Clock.fixed(now, zone)
+
+    override fun instant(): Instant = now
 }

@@ -58,6 +58,9 @@ class PreAuthorizationFormState(
     private var brandText by mutableStateOf("")
     private var last4Text by mutableStateOf("")
 
+    /** A entrada enviada com a intenção em curso. */
+    private var sent: PreAuthorizationInput? = null
+
     override val busy: Boolean get() = write.busy
 
     override val unconfirmed: Boolean get() = write.unconfirmed
@@ -113,21 +116,29 @@ class PreAuthorizationFormState(
         get() = last4Text
         set(value) = edit(PaymentProblem.CARD_LAST4) { last4Text = value }
 
+    /**
+     * Com o resultado desconhecido, a repetição reenvia a entrada da intenção em curso sem conferi-la de novo: a
+     * validade não é recusada porque o dia do hotel virou no meio, e o texto "confira a conta" fica.
+     */
     override fun confirm() {
         val hotelZone = zone
         if (!canConfirm || hotelZone == null) return
-        val expiresAt = expiresAt(hotelZone)
-        val input = typedInput(expiresAt)
-        errors = input?.problems().orEmpty().associateWith(FolioText::problem)
-        if (input != null && errors.isEmpty() && validityError == null) {
-            write.send({
-                source.registerPreAuthorization(folioId, input, it)
-                WriteOutcome.Done(Unit)
-            }) { onRegistered() }
-        }
+        val input = sent.takeIf { write.unconfirmed } ?: checkedInput(hotelZone) ?: return
+        sent = input
+        write.send({
+            source.registerPreAuthorization(folioId, input, it)
+            WriteOutcome.Done(Unit)
+        }) { onRegistered() }
     }
 
     fun close() = write.close()
+
+    /** A entrada digitada, sem problema de formato nem de validade; senão `null`, com os textos nos campos. */
+    private fun checkedInput(zone: ZoneId): PreAuthorizationInput? {
+        val input = typedInput(expiresAt(zone))
+        errors = input?.problems().orEmpty().associateWith(FolioText::problem)
+        return input?.takeIf { errors.isEmpty() && validityError == null }
+    }
 
     private fun edit(
         problem: PaymentProblem,
