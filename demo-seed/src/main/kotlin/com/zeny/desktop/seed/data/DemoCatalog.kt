@@ -127,6 +127,12 @@ data class ReservationSpec(
     val externalId get() = "DEMO-SEED-$slot"
 }
 
+/** Um consumo de exemplo lançado na conta de cada hospedado; `unitPrice` é texto decimal de duas casas. */
+data class ConsumptionSpec(
+    val item: String,
+    val unitPrice: String,
+)
+
 data class DemoData(
     val hotel: HotelSpec,
     val guaranteePolicy: GuaranteePolicySpec,
@@ -143,6 +149,7 @@ data class DemoData(
     val companies: List<CompanySpec>,
     val guests: List<GuestSpec>,
     val reservations: List<ReservationSpec>,
+    val consumptions: List<ConsumptionSpec>,
 )
 
 /** Catálogo fictício e determinístico da demo: mesma data operacional, mesmos dados. */
@@ -154,6 +161,9 @@ object DemoCatalog {
 
     /** Taxa de serviço padrão do hotel, em pontos percentuais (RN-10: 10%). */
     const val SERVICE_CHARGE_RATE = "10"
+
+    /** Nomes aceitos do código de lançamento dos consumos (o do servidor com taxa de serviço), sem caixa. */
+    val CHARGEABLE_CODE_NAMES = listOf("Alimentos e bebidas")
 
     private const val PLAN_CODE = "BALCAO"
     private const val LOW_SEASON = "Baixa (demo)"
@@ -206,6 +216,8 @@ object DemoCatalog {
             companies = companies,
             guests = guests(companies),
             reservations = reservations(businessDate),
+            consumptions =
+                listOf(ConsumptionSpec("Jantar no restaurante", "86.50"), ConsumptionSpec("Frigobar", "32.00")),
         )
     }
 

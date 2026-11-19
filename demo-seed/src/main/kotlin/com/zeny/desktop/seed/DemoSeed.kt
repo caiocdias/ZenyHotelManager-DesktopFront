@@ -9,6 +9,8 @@ import com.zeny.desktop.seed.config.ConfigSeeder
 import com.zeny.desktop.seed.data.DemoCatalog
 import com.zeny.desktop.seed.data.DemoRole
 import com.zeny.desktop.seed.data.SeedReport
+import com.zeny.desktop.seed.folio.FolioGateway
+import com.zeny.desktop.seed.folio.FolioSeeder
 import com.zeny.desktop.seed.frontdesk.TraceGateway
 import com.zeny.desktop.seed.frontdesk.TraceSeeder
 import com.zeny.desktop.seed.pending.FutureGateway
@@ -23,6 +25,7 @@ import com.zeny.desktop.seed.people.UserSeeder
 import com.zeny.desktop.seed.people.shutDown
 import com.zeny.desktop.seed.sdk.SdkBookingGateway
 import com.zeny.desktop.seed.sdk.SdkConfigGateway
+import com.zeny.desktop.seed.sdk.SdkFolioGateway
 import com.zeny.desktop.seed.sdk.SdkPendingGateway
 import com.zeny.desktop.seed.sdk.SdkSessionFactory
 import com.zeny.desktop.seed.sdk.SdkTraceGateway
@@ -42,7 +45,13 @@ data class AdminContext(
     val sessions: SessionFactory<SessionPort>,
     val pending: PendingGateway? = null,
     val future: FutureGateway? = null,
-)
+) {
+    /**
+     * A porta das contas fica fora do construtor, que termina em `pending` e `future` (travado por teste do
+     * testador). Sem ela (`null`), o `DemoSeed` não semeia os consumos.
+     */
+    var folios: FolioGateway? = null
+}
 
 /** O programa: abre o administrador, semeia configuração, usuários e reservas e imprime o relatório. */
 object DemoSeed {
@@ -73,7 +82,7 @@ object DemoSeed {
             sessions = factory,
             pending = pending,
             future = pending,
-        )
+        ).also { it.folios = SdkFolioGateway(seed) }
     }
 
     /** `clock` em nanossegundos. Falhas viram uma linha em pt-BR e o código 1, nunca pilha nem a causa do erro. */
@@ -134,6 +143,7 @@ object DemoSeed {
                 )
             UserSeeder(admin.users, admin.sessions, report).seed(data.users, passwords, config.managerPin)
             BookingSeeder(admin.bookings, report).seed(data, seeded)
+            admin.folios?.let { FolioSeeder(it, report).seed(data, seeded) }
             TraceSeeder(admin.traces, admin.bookings, report).seed(seeded, admin.businessDate())
             admin.pending?.let { PendingSeeder(it).seed(data, seeded, admin.businessDate()) }
             admin.future?.let { FutureSeeder(it).seed(data, seeded, admin.businessDate()) }
