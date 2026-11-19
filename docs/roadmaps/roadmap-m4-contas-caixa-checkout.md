@@ -213,7 +213,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #concluida | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
 | E03 | Pagamentos | #em-andamento | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
-| E09 | Cauções | #pendente | E07, E02, E03 | Registrar, capturar e liberar caução, cauções a vencer |
+| E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução, cauções a vencer |
 | E04 | Check-out | #pendente | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
 | E05 | Gate do marco M4 | #pendente | E04, E08 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
@@ -730,7 +730,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E09 — Cauções — #pendente
+## E09 — Cauções — #em-andamento
 
 **Objetivo:** na conta, a operadora registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra e acompanha as cauções a vencer.
 
