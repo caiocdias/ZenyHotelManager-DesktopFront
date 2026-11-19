@@ -272,7 +272,7 @@ java -jar app\demo-seed.jar --server http://localhost:8088 --admin-login admin
 
 - Avisos que começam com `SLF4J` antes dessas linhas não são erro.
 - As reservas futuras, a cancelada e as pendentes que o seed cria para o M3 não aparecem nesta saída: elas são vistas na área Reservas, nos passos 19 e 26.
-- A linha `consumos` conta os dois consumos de exemplo, `Seed M4: Jantar no restaurante` e `Seed M4: Frigobar`, lançados na conta de cada um dos 7 hospedados, com a taxa de serviço; o passo 41 os mostra.
+- A linha `consumos` conta os dois consumos de exemplo, `Seed M4: Jantar no restaurante` e `Seed M4: Frigobar`, lançados na conta de cada um dos 7 hospedados, com a taxa de serviço; o passo 28 os mostra.
 - Rodar o seed de novo é seguro. Antes da demo, nada é criado de novo e as linhas passam a dizer `0 criados, N já existiam`, com duas diferenças: as reservas que já fizeram check-in não contam mais nas alocações, que ficam em `alocações: 0 criados, 2 já existiam`, e a linha `check-ins` não aparece. Os recados de exemplo ficam em `recados: 0 criados, 3 já existiam`, a taxa em `taxa de serviço: 10% (já configurada)` e os consumos em `consumos: 0 criados, 14 já existiam`. Depois da demo, o passo 41 diz o que muda.
 - Se a saída for uma linha só, com uma mensagem de falha, veja "Erros comuns" no passo 41 antes de repetir.
 
