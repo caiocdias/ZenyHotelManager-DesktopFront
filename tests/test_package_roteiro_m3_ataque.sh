@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Testes adversariais da M3 E05 (testador de etapa): o pacote exige e leva docs/demo/roteiro-m3.md, e o LEIA-ME
-# do pacote cita só roteiros presentes, com o do M3 como o atual. Fronts e servidores falsos; nenhum Gradle.
+# do pacote cita só roteiros presentes, com o roteiro mais novo (M3, depois M4) como o atual. Fronts e servidores falsos; nenhum Gradle.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
 source "$ROOT/tests/lib/fixtures.sh"
@@ -145,7 +145,7 @@ leia_problems() {
     grep -qF "\`$n\`" "$leia" || echo "não cita $n, que está no pacote"
   done
 }
-assert_eq "" "$(leia_problems "$pk5/LEIA-ME.md" "$pk5")" "LEIA-ME do pacote: cita só os roteiros presentes, todos eles, e manda seguir o do M3"
+assert_eq "" "$(leia_problems "$pk5/LEIA-ME.md" "$pk5")" "LEIA-ME do pacote: cita só os roteiros presentes, todos eles, e manda seguir o roteiro mais novo"
 # A conferência reprova um LEIA-ME que cita roteiro ausente, que esquece um presente ou que aponta um roteiro velho.
 # Desde a M4 E05 o pacote leva o roteiro-m4.md: o roteiro ausente do mutante passa a ser o roteiro-m5.md.
 sed 's/`roteiro-m1\.md`\./`roteiro-m1.md` e `roteiro-m5.md`./' "$pk5/LEIA-ME.md" >"$tmp/leia-m5.md"
@@ -158,13 +158,14 @@ assert_contains "$(leia_problems "$tmp/leia-velho.md" "$pk5")" "o topo não mand
 for m in leia-m5 leia-sem-m2 leia-velho; do
   cmp -s "$pk5/LEIA-ME.md" "$tmp/$m.md" && _assert_fail "mutante $m difere do LEIA-ME (a expressão não casou)"
 done
-# README do repositório: cita só roteiros que o pacote leva e aponta o do M3 como o gate atual.
+# README do repositório: cita só roteiros que o pacote leva e aponta o mais novo como o gate atual.
 for n in $(grep -oE 'roteiro-m[0-9]+\.md' "$ROOT/README.md" | sort -u); do
   assert_eq "1" "$(exists "$pk5/$n")" "README cita $n e ele está no pacote"
 done
 assert_eq "1" "$(grep -cF '(gate atual)' "$ROOT/README.md")" "README: um só roteiro marcado como gate atual"
 # Desde a M4 E05, o gate atual é o roteiro mais novo do pacote (era o do M3, o mais novo quando a trava nasceu).
 latest_pkg="$(cd "$pk5" && ls roteiro-m*.md 2>/dev/null | sort -V | tail -1)"
+assert_eq "1" "$([[ -n "$latest_pkg" ]] && echo 1 || echo 0)" "o pacote tem ao menos um roteiro (a busca do mais novo não veio vazia)"
 assert_contains "$(grep -F '(gate atual)' "$ROOT/README.md")" "$latest_pkg" "README: o gate atual é o roteiro mais novo do pacote ($latest_pkg)"
 # O roteiro-m3.md real é versionado, regular, não vazio e começa por um título.
 assert_eq "docs/demo/roteiro-m3.md" "$(git -C "$ROOT" ls-files -- docs/demo/roteiro-m3.md)" "o roteiro-m3.md real é versionado"
