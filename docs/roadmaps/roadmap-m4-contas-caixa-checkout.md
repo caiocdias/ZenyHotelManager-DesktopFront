@@ -1320,7 +1320,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Critérios de aceite:**
 
 - [ ] Reabrir como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, a conta relida aparece aberta, e a reabertura não envia `Idempotency-Key` (teste da fachada).
-- [ ] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
+- [x] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
 - [x] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
 
 **Validação obrigatória:**
@@ -1342,7 +1342,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `419f8ba`. Falta a inspeção manual contra o `zeny-front` (uma conta encerrada, reaberta pela Recepcionista com a aprovação do Gerente), que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa.
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `419f8ba` (código) e no `a6c0863` (com o rascunho deste handoff). Falta a inspeção manual contra o `zeny-front` (uma conta encerrada, reaberta pela Recepcionista com a aprovação do Gerente), que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 1 Importante (a troca da porta sem registro e com o motivo errado); aprovado com notas na rodada 1 (`aa9ea6b`, registro em `1e8afa8`).
 - **Commits** (`MERGE_BASE` `cac0274`, HEAD de código `419f8ba`):
   - `645068d`: o início e o plano.
@@ -1352,7 +1352,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **Correção do fim da etapa** (`419f8ba`): o limite de 500 contado depois de aparar; a falha local (a fachada ou a aprovação pendente, agora `ApprovalPendingException`) é recusa definitiva com texto, sem reler como desconhecido; o KDoc do `ApprovalCoordinator`.
 - **Revisões:**
   - Revisão final (`revisor-seguranca`, fable, `cac0274..40743f2`): 0 Críticos, 1 Importante de processo (o segredo do token fora do `Riscos:`, levado ao testador), 9 Menores, "Ready to merge: Yes".
-  - Re-revisão escopada de `40743f2..`: ver o histórico.
+  - Re-revisão escopada de `40743f2..a6c0863` (os testes do testador, a correção e o rascunho deste handoff): o Importante e os Menores 1 a 4, 6 e 8 resolvidos, os testes do testador aprovados por inteiro, nenhum Crítico nem Importante novo, "Ready to merge: Yes".
+- **Gate no `a6c0863`:** `./gradlew build` → BUILD SUCCESSFUL (app 3210, 53, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 67 arquivos, 0 falhas, 1 com casos pulados (o busybox).
 - **Scanner:** `osv-scanner --recursive --no-ignore ./` no `40743f2` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
 - **Integridade:** `check_test_integrity.py --base cac0274` no `419f8ba` → exit 0, nenhum apontamento.
 - **Critérios:**
@@ -1367,7 +1368,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   4. **A reabertura vai sem `Idempotency-Key`** (o contrato não a declara): o resultado desconhecido relê e pede para conferir; repetir numa conta já aberta é inofensivo (`FOLIO_NOT_CLOSED`).
   5. **Textos novos:** "Reabrir conta", "Informe o motivo.", "Conta reaberta.", "Aprovação cancelada. A conta não foi reaberta.", "Não foi possível confirmar a reabertura. A conta foi relida; confira antes de tentar de novo.", "Não foi possível reabrir a conta agora. Confira o motivo e tente de novo.".
 - **Notas para a próxima etapa:**
-  - **Diferidos (Menores):** o `undoCheckIn` (`ReservationsFacade`) já fazia escrita aprovável sem chave por outro idioma; unificá-lo sobre o `approvableWithoutKey`; o diálogo continua aberto quando a releitura depois do desconhecido mostra a conta já reaberta (o próximo clique dá "A conta ainda não está fechada."); a mensagem "Informe o motivo." persiste até o próximo "Reabrir"; os testes de fachada repetem auxiliares de outros testes do `core`.
+  - **Diferidos (Menores):** o `undoCheckIn` (`ReservationsFacade`) já fazia escrita aprovável sem chave por outro idioma; unificá-lo sobre o `approvableWithoutKey`; o diálogo continua aberto quando a releitura depois do desconhecido mostra a conta já reaberta (o próximo clique dá "A conta ainda não está fechada."); a mensagem "Informe o motivo." persiste até o próximo "Reabrir"; os testes de fachada repetem auxiliares de outros testes do `core`;
+    - da re-revisão: o `catch (IllegalArgumentException)` do `ReopenState.send` envolve também a execução da ação (montar a ação num `try` próprio); o contador do diálogo mostra o texto cru (pode exibir "501/500"); "Confira o motivo e tente de novo." orienta mal quando a causa é outra aprovação aberta; a `ApprovalPendingException` só é tratada como recusa definitiva na reabertura (os outros estados que usam o coordenador ainda a veem como resultado desconhecido); um teste do testador sobre o token no estado é quase vácuo (a prova real está no `core`).
   - **Para o testador:** a troca de sessão pelo `ApprovalCoordinator` real com a reabertura em voo; o diálogo único com correções, pagamentos e cauções abertos; o duplo clique pela UI real.
 
 ---
