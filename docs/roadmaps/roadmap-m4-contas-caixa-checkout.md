@@ -219,7 +219,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E11 | Duplicação entre o painel do dia e a busca | #concluida | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
 | E10 | Cauções a vencer | #em-andamento | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #em-andamento | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
-| E13 | Reabrir conta encerrada | #em-andamento | E02, E08 | Reabrir a conta encerrada, com aprovação de superior |
+| E13 | Reabrir conta encerrada | #em-andamento | E02, E12 | Reabrir a conta encerrada, com aprovação de superior |
 | E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
@@ -1311,7 +1311,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Por que agora:** saiu da E08 em 2026-11-19 (I4 da revisão de arquitetura do plano da E08: as fatias passavam do teto, e a reabertura não depende das correções). Veio da E04, onde não tinha critério. O gate (E05) espera por ela.
 
-**Dependências:** E02 (a tela da conta) e E08 (a porta `FolioCorrectionSource`). O ID é o próximo livre.
+**Dependências:** E02 (a tela da conta) e E12 (a porta `FolioAccountSource`; o plano trocou a `FolioCorrectionSource` da E08 por ela, por coesão — ver as "Decisões para o usuário" da E13). O ID é o próximo livre.
 
 **Escopo:** `POST /api/v1/folios/{id}/reopen` (`FolioReopenRequest`, motivo até 500), ação sensível sem limite de valor, **sem `Idempotency-Key`** no contrato.
 
@@ -1333,7 +1333,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Notas para o plano:**
 
 - Notas da revisão de arquitetura do plano da E08 (I1, M1, M4, M7): o `ReopenState` com envio próprio, com `classifyWriteFailure` direto, como o `TraceFormState`, sem o `FolioWrite` (o `UNKNOWN` e o `UNKNOWN_STORED` relêem e destravam, porque não há chave); o `ApiExecutor` não tem caminho sem `Intent` com o token (`execute(null)` não leva token; `executeApproved` exige `Intent` e manda a chave), então nasce um `internal` no `core`; o `approveReopen` do `FolioWiring` segue o padrão do `approveRefund = { null }` só se um teste do wiring real provar a ligação; a visibilidade de "Reabrir conta" (com `billing.folios.manage` ou `billing.folios.reopen`) é mais restrita que o servidor, que só exige `billing.folios.read` antes da aprovação.
-- A porta é a `FolioCorrectionSource` da E08.
+- ~~A porta é a `FolioCorrectionSource` da E08.~~ Superada pelo plano (2026-11-19): a porta é a `FolioAccountSource` da E12, a das ações sobre a conta.
 - **Risco:** autenticação ou autorização e concorrência estão na lista fechada.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
