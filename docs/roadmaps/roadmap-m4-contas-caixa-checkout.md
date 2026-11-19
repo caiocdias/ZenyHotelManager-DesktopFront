@@ -1079,7 +1079,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   5. **Conta repetida na divisão:** recusada no "Dividir" com "Confira as partes da divisão.", e não ignorada ao acrescentar (o Menor da revisão final conflitava com um teste do testador; ruling deste lote).
   6. **Textos do implementador:** "O valor deve ser maior que zero." (ajuste negativo), "Esta conta (fica)" (a primeira parte da divisão, sem o número), "O servidor registra o motivo: pedido do cliente." (remoção da taxa).
 - **Notas para a próxima etapa:**
-  - **E13 (reabrir):** a porta é a `FolioCorrectionSource`; as notas I1, M1, M4 e M7 da revisão de arquitetura estão na seção dela.
+  - **E13 (reabrir):** a porta é a `FolioCorrectionSource` (superada pelo plano da E13: a porta é a `FolioAccountSource` da E12); as notas I1, M1, M4 e M7 da revisão de arquitetura estão na seção dela.
   - **Dívidas:** o `PostingFormState` e o `ReversalState` ainda têm `send`/`fail` próprios; o `FolioState.kt` segue grande, agora com o `FolioCorrectionsState` à parte; o `FolioCorrectionsState` recebe `clearNotice` por parâmetro.
   - **Diferidos (Menores):** o nome do teste ao vivo `adjustWithApprovalAndRemoveTheServiceCharge` cobre os cinco passos (não renomeado: a trava do testador o referencia); um sucesso de transferência com `transfers` vazio ainda mostra "Transferido para a conta X.".
   - **Para o testador:** um diálogo por vez entre as cauções e as correções (coberto só num sentido, pelo `oneDialogAtATime` da Task 2: falta a correção não abrir com a caução aberta) e a troca de sessão pela casca com uma correção em voo (coberta indiretamente pelo `closeDropsLateAnswers`) não foram atacados no teto de 30 min.

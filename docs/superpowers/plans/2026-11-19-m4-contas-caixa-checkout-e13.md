@@ -56,7 +56,9 @@ Não há `ARCHITECTURE.md` no repositório.
 
 ## Revisão de arquitetura
 
-(a preencher pelo passo 2 do orquestrador)
+- **Veredito:** aprovado com notas, na rodada 1 (rodada 0: bloqueado, 1 Importante e 8 Menores; corrigidos em `aa9ea6b`).
+- **Revisor:** `revisor-arquitetura`, modelo fable.
+- **Notas Menores (incorporadas):** N1, o handoff da E08 marca a porta antiga como superada; N2, o histórico do roadmap registra a troca da dependência da E13 ao fechar a etapa. Não há `ARCHITECTURE.md`.
 
 ---
 
