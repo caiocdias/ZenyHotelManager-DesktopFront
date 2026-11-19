@@ -3,12 +3,9 @@
 package com.zeny.desktop.seed.sdk
 
 import com.zeny.desktop.core.RawSdkAccess
-import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
-import com.zeny.desktop.sdk.model.ListFoliosParamOwnerType
-import com.zeny.desktop.sdk.model.ListFoliosParamStatus
 import com.zeny.desktop.sdk.model.PostingRequest
 import com.zeny.desktop.sdk.model.ReservationListItemResponse
 import com.zeny.desktop.sdk.model.TransactionCodeResponse
@@ -45,31 +42,28 @@ class SdkFolioGateway(
                         }.value
                 Page(page.items, (page.nextCursor as? Option.Some)?.value)
             }
-        while (pager.hasMore) {
-            pager
-                .next()
-                .firstOrNull { (it.externalId as? Option.Some)?.value == externalId }
-                ?.let { return it.id.toString() }
+        return redactingServerDetail {
+            var found: String? = null
+            while (found == null && pager.hasMore) {
+                found =
+                    pager
+                        .next()
+                        .firstOrNull { (it.externalId as? Option.Some)?.value == externalId }
+                        ?.id
+                        ?.toString()
+            }
+            found
         }
-        return null
     }
 
+    /** A conta é a que a própria reserva traz (`folioId`): determinística, sem escolher entre várias. */
     override suspend fun reservationFolioId(reservationId: String): String? =
-        executor
-            .execute {
-                billing.listFolios(
-                    ListFoliosParamOwnerType.RESERVATION,
-                    Uuid.parse(reservationId),
-                    ListFoliosParamStatus.OPEN,
-                    null,
-                    null,
-                    PAGE_SIZE,
-                    it.headers,
-                )
-            }.value.items
-            .firstOrNull()
-            ?.id
-            ?.toString()
+        redactingServerDetail {
+            executor
+                .execute { seed.apis.reservations.getReservation(Uuid.parse(reservationId), it.headers) }
+                .value.reservation.folioId
+                .toString()
+        }
 
     override suspend fun postingDescriptions(folioId: String): List<String> =
         readAll { cursor, limit ->
@@ -89,7 +83,6 @@ class SdkFolioGateway(
         }?.id
             ?.toString()
 
-    @Suppress("SwallowedException") // o erro original traz o detail do servidor, descartado de propósito
     override suspend fun post(
         folioId: String,
         codeId: String,
@@ -103,19 +96,17 @@ class SdkFolioGateway(
                 transactionCodeId = Uuid.parse(codeId),
                 unitPrice = unitPrice,
             )
-        try {
+        redactingServerDetail {
             executor.execute(Intent()) {
                 billing.createPosting(Uuid.parse(folioId), it.requireIdempotencyKey(), request, it.headers)
             }
-        } catch (e: ApiError) {
-            throw e.withoutServerDetail()
         }
     }
 
     private suspend fun <I> readAll(fetch: suspend (cursor: String?, limit: Int) -> Page<I>): List<I> {
         val pager = CursorPager(PAGE_SIZE, fetch)
         val all = mutableListOf<I>()
-        while (pager.hasMore) all += pager.next()
+        redactingServerDetail { while (pager.hasMore) all += pager.next() }
         return all
     }
 }

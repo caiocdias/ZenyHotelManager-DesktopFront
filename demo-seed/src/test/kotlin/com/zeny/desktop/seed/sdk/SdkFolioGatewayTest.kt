@@ -131,6 +131,27 @@ class SdkFolioGatewayTest {
         }
 
     @Test
+    fun readsRedactTheServerDetailToo() =
+        runTest {
+            val body = """{"code":"FORBIDDEN","title":"T","status":403,"detail":"$ECHO_DETAIL"}"""
+            val gateway = gateway { json(body, HttpStatusCode.Forbidden, "application/problem+json") }
+            val reads: List<suspend () -> Any?> =
+                listOf(
+                    { gateway.reservationId("DEMO-SEED-H1") },
+                    { gateway.reservationFolioId(RESERVATION) },
+                    { gateway.postingDescriptions(FOLIO) },
+                    { gateway.chargeableCodeId(listOf("Alimentos e bebidas")) },
+                )
+            for (read in reads) {
+                val error = assertFailsWith<ApiError.Problem> { read() }
+                assertEquals(403, error.status)
+                assertEquals("FORBIDDEN", error.code)
+                assertNull(error.detail)
+                assertTrue("Sigilosa" !in error.toString() && "Sigilosa" !in error.message.orEmpty())
+            }
+        }
+
+    @Test
     fun chargeableCodeIsTheActiveServiceChargeOneByName() =
         runTest {
             val gateway =
@@ -158,21 +179,22 @@ class SdkFolioGatewayTest {
         }
 
     @Test
-    fun reservationFolioIsTheOpenOneOfTheReservation() =
+    fun reservationFolioIsTheOneTheReservationCarries() =
         runTest {
-            val folio =
-                """{"balance":"0.00","creditLimitExceeded":false,"id":"$FOLIO","number":"C-2026-000001",
-                   |"openedAt":"2026-11-19T09:00:00Z","openedOn":"2026-11-19",
-                   |"owner":{"id":"$RESERVATION","type":"RESERVATION"},"status":"OPEN",
-                   |"updatedAt":"2026-11-19T09:00:00Z"}
+            val detail =
+                """{"bookingCode":"B","holderGuestId":"$RESERVATION","restrictionAlerts":[],"reservation":{
+                   |"additionalPackagesTotal":"0.00","adults":1,"arrival":"2026-11-19","bookingId":"$RESERVATION",
+                   |"cancellationTerms":{"deadlineHours":24,"name":"C","penaltyType":"NIGHTS","policyId":"$RESERVATION",
+                   |"version":1},"childAges":[],"code":"R","createdAt":"2026-11-19T09:00:00Z","dayUse":false,
+                   |"departure":"2026-11-20","folioId":"$FOLIO",
+                   |"guaranteeTerms":{"name":"G","policyId":"$RESERVATION","type":"NONE","version":1},"guests":[],
+                   |"id":"$RESERVATION","nightlyRates":[],"penaltiesCharged":"0.00","ratePlanCategory":"NORMAL",
+                   |"ratePlanId":"$RESERVATION","roomTotal":"0.00","roomTypeId":"$RESERVATION","segment":"LEISURE",
+                   |"status":"IN_HOUSE","total":"0.00","version":1}}
                 """.trimMargin()
-            val gateway = gateway { json(page(listOf(folio))) }
+            val gateway = gateway { json(detail) }
             assertEquals(FOLIO, gateway.reservationFolioId(RESERVATION))
-            val query = requests.single().url.parameters
-            assertEquals("RESERVATION", query["ownerType"])
-            assertEquals(RESERVATION, query["ownerId"])
-            assertEquals("OPEN", query["status"])
-            assertEquals("/api/v1/folios", requests.single().url.encodedPath)
+            assertEquals("/api/v1/reservations/$RESERVATION", requests.single().url.encodedPath)
         }
 
     @Test
@@ -192,11 +214,5 @@ class SdkFolioGatewayTest {
             val gateway = gateway { json("""{"items":[$other,$wanted]}""") }
             assertEquals(RESERVATION, gateway.reservationId("DEMO-SEED-H1"))
             assertNull(gateway.reservationId("DEMO-SEED-ZZ"))
-        }
-
-    @Test
-    fun reservationWithoutOpenFolioIsNull() =
-        runTest {
-            assertNull(gateway { json(page(emptyList())) }.reservationFolioId(RESERVATION))
         }
 }

@@ -58,7 +58,7 @@ class SdkPendingGateway(
 
     override suspend fun createCardGuaranteePolicy(name: String): String {
         val request = GuaranteePolicyRequest(name = name, type = GuaranteePolicyRequest.Type.CARD)
-        return withoutDetail {
+        return redactingServerDetail {
             executor
                 .execute { rates.createGuaranteePolicy(request, it.headers) }
                 .value.id
@@ -91,7 +91,7 @@ class SdkPendingGateway(
                 packageIds = emptyList(),
                 roomTypeIds = listOf(Uuid.parse(spec.roomTypeId)),
             )
-        return withoutDetail {
+        return redactingServerDetail {
             executor
                 .execute { rates.createRatePlan(request, it.headers) }
                 .value.id
@@ -122,14 +122,14 @@ class SdkPendingGateway(
                 to = Option.Some(prices.to.toString()),
                 weekdays = emptyList(),
             )
-        withoutDetail {
+        redactingServerDetail {
             executor.execute { rates.updateRatePlanPrices(Uuid.parse(ratePlanId), null, request, it.headers) }
         }
     }
 
     override suspend fun guestId(cpf: String): String? {
         val request = GuestDocumentSearchRequest(number = cpf, type = GuestDocumentSearchRequest.Type.CPF)
-        return withoutDetail {
+        return redactingServerDetail {
             redactingValues(listOf(cpf)) {
                 executor
                     .execute { guestsApi.searchGuestsByDocument(request, it.headers) }
@@ -160,7 +160,7 @@ class SdkPendingGateway(
                         }.value
                 Page(page.items, (page.nextCursor as? Option.Some)?.value)
             }
-        return withoutDetail {
+        return redactingServerDetail {
             var found: PendingReservationRef? = null
             while (found == null && pager.hasMore) {
                 found =
@@ -204,7 +204,7 @@ class SdkPendingGateway(
             )
         val intent = Intent()
         val response =
-            withoutDetail {
+            redactingServerDetail {
                 executor.execute(intent) {
                     reservationsApi.createBooking(it.requireIdempotencyKey(), null, request, it.headers)
                 }
@@ -219,7 +219,7 @@ class SdkPendingGateway(
     ) {
         val request =
             RoomAssignRequest(roomId = Uuid.parse(roomId), reason = Option.Some(RoomAssignRequest.Reason.INITIAL))
-        withoutDetail {
+        redactingServerDetail {
             executor.execute { reservationsApi.assignReservationRoom(Uuid.parse(reservationId), request, it.headers) }
         }
     }
@@ -234,7 +234,7 @@ class SdkPendingGateway(
     ) {
         val request =
             ReservationCancelRequest(reason = ReservationCancelRequest.Reason.fromSerial(reason), waivePenalty = false)
-        withoutDetail {
+        redactingServerDetail {
             executor.execute(Intent()) {
                 reservationsApi.cancelReservation(
                     Uuid.parse(reservationId),
@@ -263,7 +263,7 @@ class SdkPendingGateway(
                 startsOn = from.toString(),
             )
         return try {
-            withoutDetail {
+            redactingServerDetail {
                 executor.execute { roomsApi.openOutOfOrder(Uuid.parse(roomId), null, request, it.headers) }
             }
             true
@@ -275,18 +275,9 @@ class SdkPendingGateway(
     private suspend fun <I> readAll(fetch: suspend (cursor: String?, limit: Int) -> Page<I>): List<I> {
         val pager = CursorPager(fetch = fetch)
         val all = mutableListOf<I>()
-        withoutDetail { while (pager.hasMore) all += pager.next() }
+        redactingServerDetail { while (pager.hasMore) all += pager.next() }
         return all
     }
-
-    /** Todo erro que sai do adaptador perde o `detail` do servidor (`B-M4`): o código e o status ficam. */
-    @Suppress("SwallowedException") // o erro original traz o detail do servidor, descartado de propósito
-    private suspend fun <T> withoutDetail(block: suspend () -> T): T =
-        try {
-            block()
-        } catch (e: ApiError) {
-            throw e.withoutServerDetail()
-        }
 
     private fun BigDecimal.money(): String = setScale(MONEY_SCALE, RoundingMode.UNNECESSARY).toPlainString()
 

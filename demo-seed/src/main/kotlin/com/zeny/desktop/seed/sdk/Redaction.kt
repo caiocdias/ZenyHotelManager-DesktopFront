@@ -61,3 +61,12 @@ internal fun ApiError.withoutServerDetail(): ApiError =
             this
         }
     }
+
+/** Todo erro que sai do bloco perde o `detail` do servidor (`B-M4`): o código e o status ficam. */
+@Suppress("SwallowedException") // o erro original traz o detail do servidor, descartado de propósito
+internal suspend fun <T> redactingServerDetail(block: suspend () -> T): T =
+    try {
+        block()
+    } catch (e: ApiError) {
+        throw e.withoutServerDetail()
+    }

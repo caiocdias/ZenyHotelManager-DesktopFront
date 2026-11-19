@@ -5,7 +5,7 @@ interface FolioGateway {
     /** O id da reserva de exemplo pelo `externalId`, ou `null` se ela não existe. */
     suspend fun reservationId(externalId: String): String?
 
-    /** O id da conta aberta da reserva, ou `null` se ela não tem uma. */
+    /** O id da conta da reserva (a que a própria reserva traz), ou `null` se não há. */
     suspend fun reservationFolioId(reservationId: String): String?
 
     /** As descrições de todos os lançamentos da conta. */

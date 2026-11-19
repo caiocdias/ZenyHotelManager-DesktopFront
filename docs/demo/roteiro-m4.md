@@ -912,7 +912,7 @@ O seed lançou dois consumos de exemplo na conta de cada hospedado, com a taxa d
 - a seção "Lançamentos", com os dois consumos do seed, cada um com o dia, a descrição, o tipo "Lançamento", a quantidade, o valor e o botão "Ações": `Seed M4: Jantar no restaurante`, de R$ 86,50, e `Seed M4: Frigobar`, de R$ 32,00; logo abaixo de cada um, recuada, a linha da taxa de serviço dele: R$ 8,65 e R$ 3,20;
 - as seções "Pagamentos" (com o botão "Receber" e "Nenhum pagamento nesta conta."), "Cauções" (com "Registrar caução" e "Nenhuma caução nesta conta.") e "Extrato".
 
-Num servidor recém-criado, o saldo é R$ 130,35, a soma dos dois consumos e das duas taxas (a conta pode ter também as diárias que o servidor já lançou). Deixe este diálogo aberto: os passos 28.3 a 34 trabalham nele.
+Num servidor recém-criado, o saldo é R$ 130,35, a soma dos dois consumos e das duas taxas (a conta pode ter também as diárias que o servidor já lançou). Deixe este diálogo aberto: os passos 28.3 a 32 trabalham nele.
 
 **28.3. Lançar um consumo.** Clique em **Lançar**.
 
@@ -1018,7 +1018,7 @@ Clique em **Fechar** no diálogo da conta. No menu, clique em **Contas e caixa**
 
 **Resultado esperado:** a lista "Contas abertas", uma linha por conta, com o número, o dono e o saldo. A linha da conta do Hóspede Sete traz, embaixo, "Limite excedido".
 
-Clique na linha da conta do Hóspede Sete: a conta abre à direita, a mesma do diálogo. Os passos 34 e 35 trabalham nela, nesta aba.
+Clique na linha da conta do Hóspede Sete: a conta abre à direita, a mesma do diálogo. O passo 34 trabalha nela, nesta aba.
 
 **Reprovação:** o limite não é salvo; a conta acima do limite não mostra "Limite excedido"; outra estação alterou a conta e o diálogo grava por cima sem dizer "Os valores foram relidos; confira e salve de novo."; uma mensagem com código técnico.
 
@@ -1042,7 +1042,7 @@ Em **Valor**, troque o sugerido por `10,00`; em **Motivo**, digite `Devolução 
 
 **Resultado esperado:** os diálogos fecham, o painel mostra "Reembolso registrado." e a linha do recebimento ganha "Reembolsado" com o valor devolvido. O "Saldo" sobe R$ 10,00.
 
-**Reprovação:** o recebimento entra em dobro com um clique duplo; o troco não aparece; o reembolso conclui sem a aprovação; o PIN aparece na tela ou numa mensagem; o recebimento sem turno aberto não oferece o turno; uma mensagem com código técnico.
+**Reprovação:** o recebimento entra em dobro com um clique duplo; o troco não aparece; o reembolso conclui sem a aprovação; o PIN aparece na tela ou numa mensagem; uma mensagem com código técnico.
 
 ## 35. Caução e cauções a vencer
 
