@@ -12,14 +12,18 @@ import com.zeny.desktop.sdk.model.ApprovalRequest
 import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpResponseTyped
 
-/** Uma ação que pode pedir aprovação: `run(null)` tenta sem token; `run(token)` repete com o token e chave nova. */
+/**
+ * Uma ação que pode pedir aprovação: `run(null)` tenta sem token; `run(token)` repete com o token (e, nas escritas
+ * com `Idempotency-Key`, com chave nova; as sem chave levam só o token).
+ */
 fun interface ApprovableAction<T : Any> {
     suspend fun run(approvalToken: String?): ApiResponse<T>
 }
 
 /**
- * O ajudante único das escritas que podem pedir aprovação: a mesma `Intent` vale na tentativa e na repetição aprovada
- * (decisão D2). Sem token, `execute`; com token, `executeApproved`, que renova a chave e anexa o token.
+ * O ajudante das escritas com `Idempotency-Key` que podem pedir aprovação: a mesma `Intent` vale na tentativa e na
+ * repetição aprovada (decisão D2). Sem token, `execute`; com token, `executeApproved`, que renova a chave e anexa o
+ * token.
  */
 internal fun <T : Any> ApiExecutor.approvable(
     intent: Intent,
@@ -28,6 +32,11 @@ internal fun <T : Any> ApiExecutor.approvable(
     ApprovableAction { token ->
         if (token == null) execute(intent, call = call) else executeApproved(intent, token, call)
     }
+
+/** O ajudante das escritas sem `Idempotency-Key` que podem pedir aprovação: a repetição leva só o token. */
+internal fun <T : Any> ApiExecutor.approvableWithoutKey(
+    call: suspend (CallOptions) -> HttpResponseTyped<T>,
+): ApprovableAction<T> = ApprovableAction { token -> executeWithoutKey(token, call) }
 
 /** Para as fachadas das features: o mesmo ajudante sobre o executor do `core`. */
 internal fun <T : Any> ZenyCore.approvable(

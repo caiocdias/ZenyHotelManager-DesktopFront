@@ -1,14 +1,18 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.VersionedFolio
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.Money
+import com.zeny.desktop.sdk.model.FolioResponse
 
 /**
- * A porta do pagador e do limite da conta: a leitura da conta com o `ETag`, o `PUT` com `If-Match` (que substitui os
- * dois campos) e as empresas (a lista das ativas e uma por id). Um id que não é UUID, `etag` em branco ou limite
- * negativo lançam `IllegalArgumentException` antes da rede. O CNPJ das empresas não chega ao `app`.
+ * A porta da conta em si: a leitura com o `ETag`, o `PUT` do pagador e do limite com `If-Match` (que substitui os
+ * dois campos), as empresas (a lista das ativas e uma por id) e a reabertura da conta encerrada, que pode pedir
+ * aprovação e não leva `Idempotency-Key`. Um id que não é UUID, `etag` em branco, limite negativo ou motivo da
+ * reabertura vazio ou acima de 500 caracteres lançam `IllegalArgumentException` antes da rede. O CNPJ das
+ * empresas não chega ao `app`.
  */
 interface FolioAccountSource {
     suspend fun versionedFolio(folioId: String): VersionedFolio
@@ -27,4 +31,10 @@ interface FolioAccountSource {
     ): Page<CompanyChoice>
 
     suspend fun company(companyId: String): CompanyChoice
+
+    /** A ação que reabre a conta encerrada com o [reason] aparado; `run(null)` tenta e `run(token)` repete aprovada. */
+    fun reopen(
+        folioId: String,
+        reason: String,
+    ): ApprovableAction<FolioResponse>
 }

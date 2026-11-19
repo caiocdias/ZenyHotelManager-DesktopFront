@@ -10,6 +10,7 @@ import com.zeny.desktop.core.http.ResponseFormatException
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.client.BillingApi
 import com.zeny.desktop.sdk.model.AdjustmentRequest
+import com.zeny.desktop.sdk.model.FolioReopenRequest
 import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.FolioStatementResponse
 import com.zeny.desktop.sdk.model.FolioUpdateRequest
@@ -80,7 +81,8 @@ sealed interface SplitPart {
 
 /**
  * As contas da hospedagem: lista, leitura, lançamentos, lançar, estornar, as correções (ajustar, remover a taxa de
- * serviço, transferir e dividir) e extrato. As escritas levam `Idempotency-Key` pela `Intent`; o estorno e o ajuste
+ * serviço, transferir e dividir), a reabertura da conta encerrada e o extrato. As escritas levam `Idempotency-Key`
+ * pela `Intent`, menos o `PUT` do pagador e a reabertura, que não a levam; o estorno, o ajuste e a reabertura
  * podem pedir aprovação (`ApprovableAction`). O front não calcula saldo nem total. Um `id` que não é UUID
  * lança `IllegalArgumentException` antes de ir à rede, sem o valor na mensagem.
  */
@@ -158,6 +160,22 @@ class FoliosFacade internal constructor(
                 payerCompanyId = Option.Some(payer),
             )
         return versionOf(executor.execute { billing.updateFolio(id, etag, request, it.headers) })
+    }
+
+    /**
+     * Reabre a conta encerrada, sem `Idempotency-Key` (nem na repetição aprovada, que leva só o `X-Approval-Token`).
+     * `reason` é aparado e vai de 1 a 500 caracteres; id fora de UUID ou motivo fora das regras lançam
+     * `IllegalArgumentException` ao montar a ação, antes da rede, sem o valor na mensagem.
+     */
+    fun reopen(
+        folioId: String,
+        reason: String,
+    ): ApprovableAction<FolioResponse> {
+        val id = idOf(folioId, "conta")
+        val text = reason.trim()
+        require(text.isNotEmpty() && text.length <= MAX_REASON_LENGTH) { "motivo da reabertura fora das regras" }
+        val request = FolioReopenRequest(text)
+        return executor.approvableWithoutKey { billing.reopenFolio(id, it.approvalToken, request, it.headers) }
     }
 
     /** Todos os lançamentos da conta, todas as páginas, na ordem do servidor. */

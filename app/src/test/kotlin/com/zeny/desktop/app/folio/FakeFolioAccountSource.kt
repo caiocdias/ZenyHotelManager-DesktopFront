@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.VersionedFolio
 import com.zeny.desktop.core.http.Page
@@ -68,6 +69,11 @@ class FakeFolioAccountSource : FolioAccountSource {
         companyPageCalls += Triple(name, cursor, limit)
         return companies(name, cursor)
     }
+
+    override fun reopen(
+        folioId: String,
+        reason: String,
+    ): ApprovableAction<FolioResponse> = error("não usado")
 
     override suspend fun company(companyId: String): CompanyChoice {
         companyCalls += companyId

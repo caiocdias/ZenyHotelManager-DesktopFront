@@ -193,7 +193,10 @@ interface ServerConnection : AutoCloseable {
     /** As cauções a vencer; `null` quando a conexão não as oferece. */
     fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource? = null
 
-    /** O pagador e o limite da conta (leitura com o `ETag`, `PUT` e empresas); `null` sem a conexão que os ofereça. */
+    /**
+     * O pagador, o limite e a reabertura da conta (leitura com o `ETag`, `PUT`, empresas e reabrir); `null` sem a
+     * conexão que os ofereça.
+     */
     fun folioAccountSource(): FolioAccountSource? = null
 }
 
@@ -729,6 +732,11 @@ class CoreConnection(
                 creditLimit: Money?,
             ): VersionedFolio = core.folios.updateFolio(folioId, etag, payerCompanyId, creditLimit)
 
+            override fun reopen(
+                folioId: String,
+                reason: String,
+            ): ApprovableAction<FolioResponse> = core.folios.reopen(folioId, reason)
+
             override suspend fun activeCompanyPage(
                 name: String?,
                 cursor: String?,
@@ -738,7 +746,7 @@ class CoreConnection(
             override suspend fun company(companyId: String): CompanyChoice = core.companies.company(companyId)
         }
 
-    /** O pagador e o limite da conta sobre `core.folios` e `core.companies`. */
+    /** O pagador, o limite e a reabertura da conta sobre `core.folios` e `core.companies`. */
     override fun folioAccountSource(): FolioAccountSource = account
 
     override fun close() = core.close()
