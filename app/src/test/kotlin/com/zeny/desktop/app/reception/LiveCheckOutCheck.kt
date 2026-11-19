@@ -132,6 +132,9 @@ class LiveCheckOutCheck {
             throw ApiError.Network(IOException("resposta perdida pela verificação"))
         }
 
+        /** O servidor devolveu saldo devido mais de uma vez: o check-out depois do recebimento ainda tinha devido. */
+        fun dueAgain(): Boolean = dueKeys.size > 1
+
         /** A repetição depois da resposta perdida levou a mesma chave do envio que deu certo. */
         fun retriedWithTheSameKey(): Boolean = keys.size >= 2 && keys[keys.size - 1] == keys[keys.size - 2]
 
@@ -207,7 +210,8 @@ class LiveCheckOutCheck {
         if (state.due != null) {
             receiveEachDue(screen)
             conclude(screen)
-            if (state.due != null) fail(CREDIT_DUE)
+            // Pelo que o servidor respondeu: o devido da tela fica até a próxima resposta, e a do sucesso se perde.
+            if (screen.probe.dueAgain()) fail(CREDIT_DUE)
         }
         assertTrue(state.unconfirmed, "a resposta perdida não deixou o check-out sem confirmação")
         runOnUiThread { state.conclude() }
