@@ -102,6 +102,7 @@ object FolioText {
     const val REMOVAL_DONE = "Taxa de serviço removida."
     const val TRANSFER_NOTHING_CHECKED = "Marque ao menos um lançamento."
     const val TRANSFER_TARGET_REQUIRED = "Escolha a conta de destino."
+    const val TRANSFER_TOO_MANY_CHECKED = "Marque no máximo 100 lançamentos."
     const val TRANSFER_UNCONFIRMED =
         "Não foi possível confirmar a transferência. Transfira de novo sem mudar nada; " +
             "se fechar, confira a conta antes de refazer."
@@ -259,11 +260,13 @@ object FolioText {
     /** A linha do ajuste ou do estorno: a descrição do lançamento que ele corrige. */
     fun corrects(description: String): String = "Corrige: $description"
 
-    /** O aviso da taxa removida, com o motivo que o servidor registrou (sem ele, só que foi removida). */
+    /** O aviso da transferência feita, com o número da conta de destino. */
     fun transferredTo(number: String): String = "Transferido para a conta $number."
 
+    /** O aviso da divisão feita, com o número de partes enviadas (a própria conta conta). */
     fun splitAmong(parts: Int): String = "Dividido entre $parts contas."
 
+    /** O aviso da taxa removida, com o motivo que o servidor registrou (sem ele, só que foi removida). */
     fun serviceChargeRemoved(reason: String?): String =
         if (reason == null) REMOVAL_DONE else "Taxa de serviço removida: $reason"
 

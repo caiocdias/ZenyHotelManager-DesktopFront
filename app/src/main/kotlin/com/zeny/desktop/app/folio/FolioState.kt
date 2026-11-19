@@ -283,6 +283,7 @@ class FolioState(
                 notify = { notice = it },
                 onChanged = ::rereadAfterWrite,
                 postings = { postings },
+                clearNotice = { notice = null },
             )
         }
 

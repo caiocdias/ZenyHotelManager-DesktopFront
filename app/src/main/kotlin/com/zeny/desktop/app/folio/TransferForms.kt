@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import java.math.BigDecimal
 
 private const val MAX_SPLIT_PARTS = 10
+private const val MAX_TRANSFER_POSTINGS = 100
 private val HUNDRED = BigDecimal(100)
 
 /** O percentual digitado: até 3 dígitos inteiros e até 4 casas, com vírgula ou ponto (o padrão do contrato). */
@@ -44,7 +45,8 @@ class FolioTargets(
  * O diálogo "Transferir" a partir do lançamento [row] da conta [folioId]: os lançamentos transferíveis da conta
  * ([candidates], a taxa de serviço nunca à parte: ela segue o item no servidor), com [row] já marcado; a conta de
  * destino escolhida entre as abertas ([targets], sem a própria) e o motivo opcional (até 500, sem os espaços das
- * pontas; em branco não vai). Nenhum marcado ou sem destino é recusado com texto antes da porta.
+ * pontas; em branco não vai). Nenhum marcado, mais de 100 marcados ou sem destino é recusado com texto antes da
+ * porta.
  *
  * O envio, a `Idempotency-Key` por intenção, a classificação da falha e o fechamento são do ajudante comum
  * `FolioWrite`: o sucesso vai a [onTransferred] com o número da conta de destino; a recusa definitiva, depois do texto
@@ -128,6 +130,10 @@ class TransferState(
         when {
             ids.isEmpty() -> {
                 write.message = FolioText.TRANSFER_NOTHING_CHECKED
+            }
+
+            ids.size > MAX_TRANSFER_POSTINGS -> {
+                write.message = FolioText.TRANSFER_TOO_MANY_CHECKED
             }
 
             chosen == null -> {
@@ -217,12 +223,13 @@ class SplitState(
     /** As entradas estão travadas (em voo, resultado desconhecido ou fechado). */
     val locked: Boolean get() = write.locked
 
-    /** "Por percentual" ou "Por valor"; travado, não muda. */
+    /** "Por percentual" ou "Por valor"; a troca limpa o digitado nas partes. Travado, não muda. */
     var by: SplitBy
         get() = chosenBy
         set(value) {
             if (locked || value == chosenBy) return
             chosenBy = value
+            parts = parts.map { it.copy(value = "") }
             write.edited()
         }
 

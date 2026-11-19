@@ -269,11 +269,8 @@ class LiveFolioCorrectionCheck {
         val description = "Verificação ao vivo E08 divisão ${UUID.randomUUID().toString().take(TAG_LENGTH)}"
         val input = PostingInput(screen.code.id.toString(), 1, Money.parse(UNIT_PRICE), description)
         val posted = runBlocking { screen.source.post(folioId, input, Intent()) }
-        if (posted.folioId.toString() !=
-            folioId
-        ) {
-            fail("o segundo consumo foi roteado; a divisão o pede na conta da tela")
-        }
+        val routed = posted.folioId.toString() != folioId
+        if (routed) fail("o segundo consumo foi roteado; a divisão o pede na conta da tela")
         val itemId = posted.id.toString()
         runBlocking { screen.source.postings(folioId) }
             .singleOrNull { it.type == "SERVICE_CHARGE" && it.chargedItem() == itemId }

@@ -33,7 +33,8 @@ private val REREADS =
  * taxa de serviço, com `billing.servicecharge.remove`; "Transferir" ([startTransfer]) e "Dividir" ([startSplit]), num
  * lançamento transferível, com `billing.postings.transfer`. A transferência lista os lançamentos transferíveis da
  * tabela ([postings]); as duas escolhem as contas entre as abertas da porta da conta. Um diálogo por vez: nunca com
- * outro do painel aberto ([otherDialogOpen]).
+ * outro do painel aberto ([otherDialogOpen]). Abrir uma correção tira o aviso anterior do painel ([clearNotice]), como
+ * "Receber" e "Reembolsar".
  *
  * O sucesso fecha o diálogo, chama [onChanged] (a conta, os lançamentos, o extrato à vista e a lista das contas) e
  * avisa o painel por [notify]. As recusas que dizem que a conta mudou em outro lugar (`FOLIO_CLOSED`,
@@ -50,6 +51,7 @@ class FolioCorrectionsState(
     private val notify: (String) -> Unit,
     private val onChanged: () -> Unit,
     private val postings: () -> List<PostingRow> = { emptyList() },
+    private val clearNotice: () -> Unit = {},
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
@@ -92,6 +94,7 @@ class FolioCorrectionsState(
     fun startAdjustment(row: PostingRow) {
         val source = wiring.corrections
         if (!canAdjust(row) || !noDialogOpen() || source == null) return
+        clearNotice()
         adjustment = AdjustmentState(source, ownScope, folioId, row, wiring.approve, ::adjusted, ::refused)
     }
 
@@ -108,6 +111,7 @@ class FolioCorrectionsState(
     fun startRemoval(row: PostingRow) {
         val source = wiring.corrections
         if (!canRemoveServiceCharge(row) || !noDialogOpen() || source == null) return
+        clearNotice()
         removal = ServiceChargeRemovalState(source, ownScope, folioId, row, ::removed, ::refused)
     }
 
@@ -124,6 +128,7 @@ class FolioCorrectionsState(
     fun startTransfer(row: PostingRow) {
         val source = wiring.corrections
         if (!canTransfer(row) || !noDialogOpen() || source == null) return
+        clearNotice()
         transfer =
             TransferState(source, wiring.source, ownScope, folioId, row, postings(), ::transferred, ::refused)
     }
@@ -141,6 +146,7 @@ class FolioCorrectionsState(
     fun startSplit(row: PostingRow) {
         val source = wiring.corrections
         if (!canTransfer(row) || !noDialogOpen() || source == null) return
+        clearNotice()
         split = SplitState(source, wiring.source, ownScope, folioId, row, ::splitDone, ::refused)
     }
 

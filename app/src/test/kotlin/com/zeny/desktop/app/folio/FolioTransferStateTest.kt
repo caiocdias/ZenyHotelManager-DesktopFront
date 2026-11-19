@@ -413,9 +413,76 @@ class FolioTransferStateTest {
             form.setPart(1, "1,234")
             refused("valor com 3 casas")
 
-            repeat(12) { form.addOther() }
+            repeat(12) { form.addPart(FolioRow(Uuid.random().toString(), "F-9$it", "Reserva", "R$ 0,00", false)) }
             assertEquals(10, form.parts.size, "mais de 10 partes")
             assertTrue(corrections.splitCalls.isEmpty(), "a entrada fora das regras foi à porta")
+        }
+
+    @Test
+    fun switchingTheModeClearsTheTypedValues() =
+        runTest {
+            val folio = folio()
+            val form = splitForm(folio)
+            form.addOther()
+            form.setPart(0, "50")
+            form.setPart(1, "50")
+
+            form.by = SplitBy.AMOUNT
+
+            assertEquals(listOf("", ""), form.parts.map { it.value }, "o percentual virou valor em reais")
+            form.setPart(0, "12,00")
+            form.by = SplitBy.PERCENT
+            assertEquals(listOf("", ""), form.parts.map { it.value }, "o valor virou percentual")
+        }
+
+    @Test
+    fun transferOfMoreThanAHundredIsRefusedWithText() =
+        runTest {
+            val many = (0..100).map { postingOf(description = "Consumo $it", amount = "1.00").withRemaining("1.00") }
+            val corrections = FakeFolioCorrectionSource()
+            val folio = folio(sourceOf(Ledger(many)), corrections)
+            folio.fix().startTransfer(folio.row(many.first().id))
+            runCurrent()
+            val form = assertNotNull(folio.fix().transfer)
+            many.drop(1).forEach { form.toggle(it.id.toString()) }
+            form.chooseOther()
+
+            form.confirm()
+            runCurrent()
+
+            assertEquals("Marque no máximo 100 lançamentos.", form.message)
+            assertFalse(form.locked)
+            assertTrue(corrections.transferCalls.isEmpty(), "mais de 100 lançamentos foram à porta")
+        }
+
+    @Test
+    fun startingACorrectionClearsTheNotice() =
+        runTest {
+            val ledger = Ledger(listOf(item, charge, coffee))
+            val corrections = FakeFolioCorrectionSource().apply { transferred = movesTheItem(ledger) }
+            val permissions = setOf(READ, TRANSFER, "billing.postings.create", "billing.servicecharge.remove")
+            val folio = folio(sourceOf(ledger), corrections, permissions)
+            val holder = folio.fix()
+
+            fun noticeThenStart(
+                start: () -> Unit,
+                finish: () -> Unit,
+            ) {
+                transferForm(folio).apply { chooseOther() }.confirm()
+                runCurrent()
+                assertEquals("Transferido para a conta F-0002.", folio.notice)
+                ledger.postings[FOLIO_ID.toString()] = listOf(item, charge, coffee)
+                folio.reload()
+                runCurrent()
+                start()
+                assertNull(folio.notice, "abrir a correção deixou o aviso anterior")
+                finish()
+            }
+
+            noticeThenStart({ holder.startTransfer(folio.row(ITEM)) }, holder::finishTransfer)
+            noticeThenStart({ holder.startSplit(folio.row(ITEM)) }, holder::finishSplit)
+            noticeThenStart({ holder.startAdjustment(folio.row(ITEM)) }, holder::finishAdjustment)
+            noticeThenStart({ holder.startRemoval(folio.row(CHARGE)) }, holder::finishRemoval)
         }
 
     @Test

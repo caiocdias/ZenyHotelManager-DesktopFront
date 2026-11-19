@@ -142,14 +142,8 @@ private fun Targets(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         targets.rows.forEach { folio ->
-            val border =
-                if (folio.id ==
-                    selected
-                ) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.outline
-                }
+            val chosen = folio.id == selected
+            val border = if (chosen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
             Text(
                 "${folio.number} · ${folio.owner} · ${folio.balance}",
                 modifier =
