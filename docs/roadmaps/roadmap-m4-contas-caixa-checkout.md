@@ -220,7 +220,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E10 | Cauções a vencer | #em-andamento | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #em-andamento | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
 | E13 | Reabrir conta encerrada | #em-andamento | E02, E12 | Reabrir a conta encerrada, com aprovação de superior |
-| E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E05 | Gate do marco M4 | #em-andamento | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -1374,7 +1374,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E05 — Gate do marco M4 — #pendente
+## E05 — Gate do marco M4 — #em-andamento
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
