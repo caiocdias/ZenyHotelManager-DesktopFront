@@ -3,6 +3,7 @@ package com.zeny.desktop.app.folio
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.zeny.desktop.app.approval.ApprovalPendingException
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.error.WriteFailure
 import com.zeny.desktop.core.error.classifyWriteFailure
@@ -58,11 +59,11 @@ class ReopenState(
 
     val canConfirm: Boolean get() = !locked
 
-    /** O motivo, até 500 caracteres; o excesso é recusado. */
+    /** O motivo, até 500 caracteres depois de aparar; o excesso é recusado. */
     var reason: String
         get() = reasonText
         set(value) {
-            if (!locked && value.length <= CORRECTION_REASON_MAX) reasonText = value
+            if (!locked && value.trim().length <= CORRECTION_REASON_MAX) reasonText = value
         }
 
     fun confirm() {
@@ -90,17 +91,30 @@ class ReopenState(
     }
 
     private suspend fun send(text: String) {
+        var failed = false
         val response =
             try {
                 approve(source.reopen(folioId, text))
+            } catch (
+                @Suppress("SwallowedException") e: IllegalArgumentException,
+            ) {
+                failed = localFailure()
+                null
+            } catch (
+                @Suppress("SwallowedException") e: ApprovalPendingException,
+            ) {
+                failed = localFailure()
+                null
             } catch (
                 @Suppress("TooGenericExceptionCaught") e: Exception,
             ) {
                 currentCoroutineContext().ensureActive()
                 fail(e as? ApiError ?: ApiError.Network(e))
-                return
+                failed = true
+                null
             }
         currentCoroutineContext().ensureActive()
+        if (failed) return
         if (response == null) {
             // O servidor respondeu `APPROVAL_REQUIRED` agora: a conta continua encerrada, sem resultado desconhecido.
             unconfirmed = false
@@ -109,6 +123,14 @@ class ReopenState(
             unconfirmed = false
             onDone()
         }
+    }
+
+    /** A falha daqui (a fachada ou a aprovação pendente): nada foi ao servidor, então não é resultado desconhecido. */
+    private suspend fun localFailure(): Boolean {
+        currentCoroutineContext().ensureActive()
+        unconfirmed = false
+        message = FolioText.REOPEN_LOCAL_FAILURE
+        return true
     }
 
     private fun fail(failure: ApiError) {

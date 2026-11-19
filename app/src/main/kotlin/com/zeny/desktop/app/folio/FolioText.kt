@@ -131,6 +131,7 @@ object FolioText {
     const val REOPEN_APPROVAL_CANCELLED = "Aprovação cancelada. A conta não foi reaberta."
     const val REOPEN_UNCONFIRMED =
         "Não foi possível confirmar a reabertura. A conta foi relida; confira antes de tentar de novo."
+    const val REOPEN_LOCAL_FAILURE = "Não foi possível reabrir a conta agora. Confira o motivo e tente de novo."
     const val REOPEN_DONE = "Conta reaberta."
     private const val UNKNOWN = "—"
 

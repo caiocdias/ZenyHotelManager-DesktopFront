@@ -1,5 +1,6 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.app.approval.ApprovalPendingException
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.http.ApiResponse
@@ -125,6 +126,26 @@ class ReopenStateTest {
 
             assertFalse(state.unconfirmed)
             assertEquals("Aprovação cancelada. A conta não foi reaberta.", state.message)
+        }
+
+    @Test
+    fun localFailuresAreDefiniteWithoutReread() =
+        runTest {
+            val failures = listOf(IllegalArgumentException("x"), ApprovalPendingException())
+            failures.forEach {
+                rereads = 0
+                val source = FakeFolioAccountSource().apply { reopenAction = { _ -> throw it } }
+                val state = reopen(source)
+                state.reason = "Engano"
+
+                state.confirm()
+                runCurrent()
+
+                assertEquals(FolioText.REOPEN_LOCAL_FAILURE, state.message, "${it::class}")
+                assertFalse(state.unconfirmed)
+                assertEquals(0, rereads)
+                assertTrue(state.canConfirm)
+            }
         }
 
     @Test

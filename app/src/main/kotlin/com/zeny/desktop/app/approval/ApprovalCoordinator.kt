@@ -20,13 +20,16 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 
+/** Já há uma aprovação pendente: nada foi enviado por esta chamada, e quem a fez pode tentar de novo depois. */
+class ApprovalPendingException : IllegalStateException("Já há uma aprovação pendente.")
+
 /**
  * Aprovação de superior para qualquer ação: `run` tenta sem token e, no `APPROVAL_REQUIRED`, abre o diálogo e
- * espera. "Aprovar" pede o token (`grant`) e repete a ação uma vez com ele (nova `Idempotency-Key`, D2);
- * "Cancelar" devolve `null`. Uma recusa do aprovador mantém o diálogo com a mensagem e limpa o PIN; a sessão
- * encerrada no `grant` fecha o diálogo e sobe. Cada emissão de `sessionEnded` cancela a pendência (`run` devolve
- * `null`) e limpa login, PIN e motivo. Uma pendência por vez. Estado confinado à thread da UI, como as telas;
- * quem cria chama `close()` quando a sessão sai de cena.
+ * espera. "Aprovar" pede o token (`grant`) e repete a ação uma vez com ele (nas escritas com chave, com nova
+ * `Idempotency-Key`, D2; a reabertura vai sem chave); "Cancelar" devolve `null`. Uma recusa do aprovador mantém o
+ * diálogo com a mensagem e limpa o PIN; a sessão encerrada no `grant` fecha o diálogo e sobe. Cada emissão de
+ * `sessionEnded` cancela a pendência (`run` devolve `null`) e limpa login, PIN e motivo. Uma pendência por vez.
+ * Estado confinado à thread da UI, como as telas; quem cria chama `close()` quando a sessão sai de cena.
  */
 class ApprovalCoordinator(
     private val grant: suspend (ApiError.ApprovalRequired, ApprovalInput) -> String,
@@ -57,7 +60,7 @@ class ApprovalCoordinator(
      * `ApiError.SessionEnded` se o servidor já não aceitar a sessão.
      */
     suspend fun <T : Any> run(action: ApprovableAction<T>): ApiResponse<T>? {
-        check(request == null) { "Já há uma aprovação pendente." }
+        if (request != null) throw ApprovalPendingException()
         val required =
             try {
                 return action.run(null)
@@ -100,7 +103,7 @@ class ApprovalCoordinator(
 
     /** Devolve o token, ou `null` se o usuário cancelou ou a sessão acabou. */
     private suspend fun approve(required: ApiError.ApprovalRequired): String? {
-        check(request == null) { "Já há uma aprovação pendente." }
+        if (request != null) throw ApprovalPendingException()
         val current = Request()
         request = current
         pending = required
