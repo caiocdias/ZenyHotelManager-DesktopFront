@@ -3,6 +3,7 @@ package com.zeny.desktop.app.folio
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.VersionedFolio
+import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.model.FolioResponse
@@ -29,6 +30,12 @@ data class AccountUpdate(
     val creditLimit: Money?,
 )
 
+/** Uma chamada da reabertura: a conta e o motivo enviado. */
+data class ReopenCall(
+    val folioId: String,
+    val reason: String,
+)
+
 /** Servidor de mentira do pagador e do limite: as respostas são lambdas trocáveis, e cada chamada é registrada. */
 class FakeFolioAccountSource : FolioAccountSource {
     var folio: suspend () -> VersionedFolio = { VersionedFolio(accountFolioOf(), "\"v1\"") }
@@ -40,7 +47,13 @@ class FakeFolioAccountSource : FolioAccountSource {
     }
     var companyById: suspend (String) -> CompanyChoice = { CompanyChoice(it, "Acme Turismo") }
 
+    /** A ação da reabertura: sem token e com token, como o `core` a devolve. */
+    var reopenAction: (ReopenCall) -> ApprovableAction<FolioResponse> = {
+        ApprovableAction { ApiResponse(accountFolioOf(), null, 200) }
+    }
+
     var folioCalls = 0
+    val reopens = mutableListOf<ReopenCall>()
     val updates = mutableListOf<AccountUpdate>()
     val companyPageCalls = mutableListOf<Triple<String?, String?, Int>>()
     val companyCalls = mutableListOf<String>()
@@ -73,7 +86,10 @@ class FakeFolioAccountSource : FolioAccountSource {
     override fun reopen(
         folioId: String,
         reason: String,
-    ): ApprovableAction<FolioResponse> = error("não usado")
+    ): ApprovableAction<FolioResponse> {
+        reopens += ReopenCall(folioId, reason)
+        return reopenAction(ReopenCall(folioId, reason))
+    }
 
     override suspend fun company(companyId: String): CompanyChoice {
         companyCalls += companyId

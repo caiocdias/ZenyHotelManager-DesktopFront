@@ -28,6 +28,7 @@ private const val REVERSE = "billing.postings.reverse"
 private const val RECEIVE = "billing.payments.receive"
 private const val REFUND = "billing.payments.refund"
 private const val MANAGE = "billing.folios.manage"
+private const val REOPEN = "billing.folios.reopen"
 private const val COMPANIES_READ = "guests.companies.read"
 private const val REGULAR = "REGULAR"
 private const val TRANSFER_IN = "TRANSFER_IN"
@@ -152,6 +153,11 @@ data class StatementView(
  * conta aberta) abre o [account] (o `FolioAccountFormState`), que só escolhe a empresa com `guests.companies.read`.
  * Depois do sucesso, o diálogo sai, a conta e a lista são relidas e o aviso diz "Pagador e limite atualizados."; o
  * `412` e o resultado desconhecido também releem a conta, com o diálogo aberto.
+ *
+ * Com a mesma porta, "Reabrir conta" ([startReopen], com `billing.folios.manage` ou `billing.folios.reopen` e a conta
+ * encerrada) abre o [reopen] (o `ReopenState`), que passa pela aprovação da reabertura do [wiring]. Depois do
+ * sucesso, o diálogo sai, a conta e a lista são relidas e o aviso diz "Conta reaberta."; fechá-lo com o resultado
+ * desconhecido relê a conta.
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
@@ -248,6 +254,10 @@ class FolioState(
     var account by mutableStateOf<FolioAccountFormState?>(null)
         private set
 
+    /** O diálogo "Reabrir conta" aberto. */
+    var reopen by mutableStateOf<ReopenState?>(null)
+        private set
+
     private val canCreate = CREATE in wiring.permissions
     private val canReverseAny = canCreate || REVERSE in wiring.permissions
 
@@ -269,8 +279,7 @@ class FolioState(
                 folioId,
                 folioOpen = { view?.closed == false },
                 otherDialogOpen = {
-                    posting != null || reversal != null || payment != null || refund != null || account != null ||
-                        corrections?.dialogOpen == true
+                    ownDialogOpen || corrections?.dialogOpen == true
                 },
                 notify = { notice = it },
                 onChanged = ::rereadFolio,
@@ -288,8 +297,7 @@ class FolioState(
                 folioId,
                 folioOpen = { view?.closed == false },
                 otherDialogOpen = {
-                    posting != null || reversal != null || payment != null || refund != null || account != null ||
-                        preAuthorizations?.dialogOpen == true
+                    ownDialogOpen || preAuthorizations?.dialogOpen == true
                 },
                 notify = { notice = it },
                 onChanged = ::rereadAfterWrite,
@@ -298,10 +306,14 @@ class FolioState(
             )
         }
 
-    private val dialogOpen: Boolean
+    /** Um dos diálogos que o próprio estado abre está aberto. */
+    private val ownDialogOpen: Boolean
         get() =
             posting != null || reversal != null || payment != null || refund != null || account != null ||
-                preAuthorizations?.dialogOpen == true || corrections?.dialogOpen == true
+                reopen != null
+
+    private val dialogOpen: Boolean
+        get() = ownDialogOpen || preAuthorizations?.dialogOpen == true || corrections?.dialogOpen == true
 
     /** "Lançar": com `billing.postings.create` e a conta aberta. */
     val canPost: Boolean get() = !closed && canCreate && view?.closed == false
@@ -321,6 +333,12 @@ class FolioState(
     /** "Pagador e limite": com a porta dele, `billing.folios.manage` e a conta aberta. */
     val canEditAccount: Boolean
         get() = !closed && MANAGE in wiring.permissions && wiring.account != null && view?.closed == false
+
+    /** "Reabrir conta": com a porta da conta, `billing.folios.manage` ou `.reopen` e a conta encerrada. */
+    val canReopen: Boolean
+        get() =
+            !closed && (MANAGE in wiring.permissions || REOPEN in wiring.permissions) &&
+                wiring.account != null && view?.closed == true
 
     /** O extrato em PDF aberto (o visualizador da ficha). */
     var pdf by mutableStateOf<RegistrationCardState?>(null)
@@ -521,9 +539,27 @@ class FolioState(
         account = null
     }
 
+    /** Abre "Reabrir conta"; com outro diálogo aberto, nada. */
+    fun startReopen() {
+        val source = wiring.account
+        if (!canReopen || dialogOpen || source == null) return
+        notice = null
+        reopen = ReopenState(source, ownScope, folioId, wiring.approveReopen, ::reopened, ::rereadAfterWrite)
+    }
+
+    /** "Voltar" de "Reabrir conta"; com o envio em curso, nada; com o resultado desconhecido, relê a conta. */
+    fun dismissReopen() {
+        val form = reopen ?: return
+        if (form.busy) return
+        form.close()
+        reopen = null
+        if (form.unconfirmed) rereadAfterWrite()
+    }
+
     fun close() {
         closed = true
         jobs.cancel()
+        reopen?.close()
         account?.close()
         posting?.close()
         reversal?.close()
@@ -549,6 +585,14 @@ class FolioState(
         account = null
         rereadAfterWrite()
         notice = FolioText.ACCOUNT_SAVED
+    }
+
+    /** A conta foi reaberta: o diálogo sai, a conta e a lista são relidas, e o aviso diz que foi feito. */
+    private fun reopened() {
+        reopen?.close()
+        reopen = null
+        rereadAfterWrite()
+        notice = FolioText.REOPEN_DONE
     }
 
     /** O reembolso deu certo: o diálogo sai, a conta e os pagamentos são relidos, e o aviso diz que foi feito. */
