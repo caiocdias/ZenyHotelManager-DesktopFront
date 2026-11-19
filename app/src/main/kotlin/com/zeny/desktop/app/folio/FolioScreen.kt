@@ -190,9 +190,9 @@ private fun ReservationFolios(
 
 /**
  * O painel da conta: cabeçalho, "Lançar", lançamentos (a taxa de serviço recuada sob o item dela, cada um com o menu
- * dele), os pagamentos (com "Receber", quando há a porta deles), o extrato da audiência escolhida e os dois botões do
- * extrato em PDF, independentes dela. Tudo como o servidor devolve. O PDF aberto fecha quando o painel sai de cena
- * (trocar de aba).
+ * dele), os pagamentos (com "Receber", quando há a porta deles), as cauções (com a mesma porta), o extrato da
+ * audiência escolhida e os dois botões do extrato em PDF, independentes dela. Tudo como o servidor devolve. O PDF
+ * aberto fecha quando o painel sai de cena (trocar de aba).
  */
 @Composable
 fun FolioPanel(
@@ -227,6 +227,7 @@ fun FolioPanel(
                 Actions(state)
                 Postings(state)
                 Payments(state)
+                state.preAuthorizations?.let { PreAuthorizationSection(it) }
                 Statement(state)
             }
         }
@@ -235,6 +236,7 @@ fun FolioPanel(
     state.posting?.let { PostingDialog(it, onLeave = state::dismissPosting) }
     state.payment?.let { PaymentDialog(it, onLeave = state::finishPayment) }
     state.refund?.let { RefundDialog(it, onLeave = state::finishRefund) }
+    state.preAuthorizations?.let { PreAuthorizationDialogs(it) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
