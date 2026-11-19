@@ -1041,7 +1041,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `756db61`. Falta a `LiveFolioCorrectionCheck` contra o `zeny-front`, que pede as credenciais do usuário e do Gerente. Pela instrução do usuário (intervenção só para arquitetura), a espera não trava: a E08 conta como concluída para a escolha da próxima etapa.
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `756db61` (código) e no `46dac25` (com o rascunho deste handoff). Falta a `LiveFolioCorrectionCheck` contra o `zeny-front`, que pede as credenciais do usuário e do Gerente. Pela instrução do usuário (intervenção só para arquitetura), a espera não trava: a E08 conta como concluída para a escolha da próxima etapa.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e08.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e08.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 4 Importantes:
   - I1: o contrato do `ReopenState` com o `FolioWrite` em aberto;
   - I2: a divisão sem teste de idempotência;
@@ -1058,7 +1058,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **Correção do fim da etapa** (`756db61`): a recusa de mais de 100 lançamentos com texto antes da porta; o aviso do painel limpo ao abrir uma correção; a troca de modo da divisão limpa os valores; KDoc e formatação.
 - **Revisões:**
   - Revisão final (`revisor-seguranca`, fable, `c7fc188..6382e74`): 0 Críticos, 1 Importante (o mesmo defeito do testador), 7 Menores, "Ready to merge: With fixes".
-  - Re-revisão de `6382e74..756db61`: ver o fechamento abaixo.
+  - Re-revisão escopada de `6382e74..46dac25` (os testes do testador, a correção e o rascunho do handoff): o Importante e os Menores 1, 2, 3, 5 e 7 corrigidos; os Menores 4 (conta repetida ignorada ao acrescentar) e 6 (nome do teste ao vivo) ficam por ruling; os testes do testador aprovados por inteiro; nenhum Crítico nem Importante novo; "Ready to merge: Yes".
+- **Gate no `46dac25`:** `./gradlew build` → BUILD SUCCESSFUL. Contagens (testes, pulados, falhas): app 3068, 51, 0; core 1298, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0. `bash tests/run.sh` → 66 arquivos, 0 falhas, 1 com casos pulados (o busybox).
 - **Scanner:** `osv-scanner --recursive --no-ignore ./` no `6382e74` → 6 lockfiles do Gradle (1429 pacotes), "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_CORRECTION`.
 - **Integridade:** `check_test_integrity.py --base c7fc188` no `756db61` → exit 0, nenhum apontamento.
 - **Critérios** (testes com porta falsa; os marcados "ao vivo" esperam a `LiveFolioCorrectionCheck`):
@@ -1081,7 +1082,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **E13 (reabrir):** a porta é a `FolioCorrectionSource`; as notas I1, M1, M4 e M7 da revisão de arquitetura estão na seção dela.
   - **Dívidas:** o `PostingFormState` e o `ReversalState` ainda têm `send`/`fail` próprios; o `FolioState.kt` segue grande, agora com o `FolioCorrectionsState` à parte; o `FolioCorrectionsState` recebe `clearNotice` por parâmetro.
   - **Diferidos (Menores):** o nome do teste ao vivo `adjustWithApprovalAndRemoveTheServiceCharge` cobre os cinco passos (não renomeado: a trava do testador o referencia); um sucesso de transferência com `transfers` vazio ainda mostra "Transferido para a conta X.".
-  - **Para o testador:** um diálogo por vez entre as cauções e as correções (coberto só pelo `oneDialogAtATime` da Task 2) e a troca de sessão pela casca com uma correção em voo (coberta indiretamente pelo `closeDropsLateAnswers`) não foram atacados no teto de 30 min.
+  - **Para o testador:** um diálogo por vez entre as cauções e as correções (coberto só num sentido, pelo `oneDialogAtATime` da Task 2: falta a correção não abrir com a caução aberta) e a troca de sessão pela casca com uma correção em voo (coberta indiretamente pelo `closeDropsLateAnswers`) não foram atacados no teto de 30 min.
 
 ---
 
@@ -1371,3 +1372,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E04 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `2ba7a31`; falta a `LiveCheckOutCheck`, que pede as credenciais do usuário.
 - 2026-11-19 — a E08 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação registrada na conferência do contrato do lote anterior: o escopo não cabia em três fatias de até 60 min. A E08, "Correções da conta", fica com ajustar, dividir, transferir, remover a taxa e reabrir, com os critérios dela sem mudança. Entra a **E12, "Pagador, limite de crédito e multa de cancelamento"**, com o `PUT` da conta, o `B-M5` e a isenção ao vivo, e os três critérios deles, que saíram da E08. A E12 depende da E02 e vem antes da E05 no índice; a E05 passa a depender também dela. A E08 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E08.
 - 2026-11-19 — a reabertura da conta encerrada saiu da E08 para a **E13, "Reabrir conta encerrada"** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E08 (I4: as fatias passavam do teto; a reabertura não tinha critério e não depende das correções). A E13 depende da E02 e da E08 (a porta); a E05 passa a depender também dela. Os critérios da E08 não mudaram.
+- 2026-11-19 — a E08 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `756db61`; falta a `LiveFolioCorrectionCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
