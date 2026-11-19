@@ -25,6 +25,17 @@ private const val PAGE_SIZE = 50
 private const val MIN_NAME = 2
 private const val MAX_NAME = 200
 private const val FOLIO_CLOSED = "FOLIO_CLOSED"
+private const val HTTP_CONFLICT = 409
+
+/**
+ * Os textos de uma releitura pedida por um envio: [done] com a conta relida e aberta, [closed] com ela relida e
+ * encerrada (salvar fica desligado) e [failed] antes do texto da falha, quando a releitura falha.
+ */
+private class RereadTexts(
+    val done: String,
+    val closed: String,
+    val failed: String,
+)
 
 /**
  * As empresas ativas para escolher o pagador, uma página de 50 por vez pelo `CursorPager`, na ordem do servidor. [search]
@@ -146,6 +157,10 @@ class FolioAccountFormState(
     var payerName by mutableStateOf<String?>(null)
         private set
 
+    /** O pagador vigente foi lido: antes disso, ou com a última leitura falhando, a tela não afirma qual é. */
+    var payerKnown by mutableStateOf(false)
+        private set
+
     var message by mutableStateOf<String?>(null)
         private set
 
@@ -231,11 +246,13 @@ class FolioAccountFormState(
     private suspend fun fail(failure: ApiError) {
         when {
             failure is ApiError.PreconditionFailed -> {
-                rereadAll("${failure.userMessage} ${FolioText.ACCOUNT_REREAD}")
+                val stale = failure.userMessage
+                rereadAll(RereadTexts("$stale ${FolioText.ACCOUNT_REREAD}", FOLIO_CLOSED_TEXT, stale))
             }
 
             classifyWriteFailure(failure) != WriteFailure.DEFINITIVE -> {
-                rereadAll(FolioText.ACCOUNT_UNCONFIRMED)
+                val start = FolioText.ACCOUNT_UNCONFIRMED_START
+                rereadAll(RereadTexts(FolioText.ACCOUNT_UNCONFIRMED, "$start $FOLIO_CLOSED_TEXT", start))
             }
 
             (failure as? ApiError.Problem)?.code == FOLIO_CLOSED -> {
@@ -250,29 +267,33 @@ class FolioAccountFormState(
         }
     }
 
-    /** O painel relê a conta, e o formulário também: fica com os valores e o `ETag` relidos e com [notice]. */
-    private suspend fun rereadAll(notice: String) {
+    /** O painel relê a conta, e o formulário também: fica com os valores e o `ETag` relidos e com os [texts]. */
+    private suspend fun rereadAll(texts: RereadTexts) {
         onReread()
-        reread(++generation, notice)
+        reread(++generation, texts)
     }
 
-    /** Lê a conta e a aplica; a falha apaga o `ETag` (o salvamento fica bloqueado) e mostra o texto dela. */
+    /**
+     * Lê a conta e a aplica; a falha apaga o `ETag` (o salvamento fica bloqueado) e mostra o texto dela, depois do
+     * aviso que pediu a releitura.
+     */
     private suspend fun reread(
         mine: Int,
-        notice: String?,
+        texts: RereadTexts?,
     ) {
         val read = attempt { source.versionedFolio(folioId) }
         if (closed || mine != generation) return
-        read.fold({ apply(it, mine, notice) }, {
+        read.fold({ apply(it, mine, texts) }, {
             etag = null
-            message = apiErrorOf(it).userMessage
+            payerKnown = false
+            message = listOfNotNull(texts?.failed, apiErrorOf(it).userMessage).joinToString(" ")
         })
     }
 
     private suspend fun apply(
         version: VersionedFolio,
         mine: Int,
-        notice: String?,
+        texts: RereadTexts?,
     ) {
         val folio = version.folio
         val payerId = (folio.payerCompanyId as? Option.Some)?.value?.toString()
@@ -280,10 +301,11 @@ class FolioAccountFormState(
         if (closed || mine != generation) return
         payer = if (payerId != null && name != null) CompanyChoice(payerId, name) else null
         payerName = name
+        payerKnown = true
         limitValue = limitTextOf(folio.creditLimit)
         etag = version.etag
         folioClosed = folio.status == FolioResponse.Status.CLOSED
-        message = notice
+        message = if (folioClosed) texts?.closed else texts?.done
     }
 
     /** O nome do pagador por id; sem a leitura das empresas, ou com ela falhando, "Empresa pagadora definida". */
@@ -296,6 +318,9 @@ class FolioAccountFormState(
 
     override fun toString(): String = "FolioAccountFormState(busy=$busy, saved=$saved)"
 }
+
+/** O texto do catálogo para a conta encerrada. */
+private val FOLIO_CLOSED_TEXT: String = ApiError.Problem(HTTP_CONFLICT, FOLIO_CLOSED, null, emptyList()).userMessage
 
 /** O limite digitado: [value] nulo é "Sem limite"; com [error], nada vai à rede. */
 private class TypedLimit(

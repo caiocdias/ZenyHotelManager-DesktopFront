@@ -42,10 +42,7 @@ internal fun FolioAccountDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (form.loading) Text("Carregando…")
-                Text(
-                    "Pagador atual: ${form.payerName ?: FolioText.NO_PAYER}",
-                    modifier = Modifier.testTag("account-current"),
-                )
+                Text("Pagador atual: ${currentPayer(form)}", modifier = Modifier.testTag("account-current"))
                 val companies = form.companies
                 if (companies == null) {
                     form.payerHint?.let { Text(it, modifier = Modifier.testTag("account-payer-hint")) }
@@ -83,6 +80,14 @@ internal fun FolioAccountDialog(
     )
 }
 
+/** O pagador vigente; sem a leitura da conta (em voo ou com falha), não afirma qual é. */
+private fun currentPayer(form: FolioAccountFormState): String =
+    when {
+        form.payerKnown -> form.payerName ?: FolioText.NO_PAYER
+        form.loading -> FolioText.PAYER_READING
+        else -> FolioText.PAYER_UNREAD
+    }
+
 /** O pagador escolhido, "Sem pagador", a busca por nome e as empresas ativas, com "Carregar mais". */
 @Composable
 private fun PayerChoice(
@@ -90,11 +95,13 @@ private fun PayerChoice(
     companies: CompanyList,
     editable: Boolean,
 ) {
-    Text(
-        "Pagador escolhido: ${form.payer?.name ?: FolioText.NO_PAYER}",
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.testTag("account-payer"),
-    )
+    if (form.payerKnown) {
+        Text(
+            "Pagador escolhido: ${form.payer?.name ?: FolioText.NO_PAYER}",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.testTag("account-payer"),
+        )
+    }
     FilterChip(
         selected = form.payer == null,
         onClick = { form.choose(null) },

@@ -117,12 +117,15 @@ object FolioText {
         "O servidor não confirmou a divisão. Feche e confira a conta antes de refazer."
     const val NO_PAYER = "Sem pagador"
     const val PAYER_SET = "Empresa pagadora definida"
+    const val PAYER_READING = "lendo a conta…"
+    const val PAYER_UNREAD = "não foi possível ler"
     const val PAYER_CHOICE_FORBIDDEN = "Seu perfil não pode escolher a empresa pagadora."
     const val NO_COMPANIES = "Nenhuma empresa ativa encontrada."
     const val LIMIT_NEGATIVE = "O limite não pode ser negativo."
     const val ACCOUNT_REREAD = "Os valores foram relidos; confira e salve de novo."
+    const val ACCOUNT_UNCONFIRMED_START = "Não foi possível confirmar a alteração."
     const val ACCOUNT_UNCONFIRMED =
-        "Não foi possível confirmar a alteração. A conta foi relida; confira antes de salvar de novo."
+        "$ACCOUNT_UNCONFIRMED_START A conta foi relida; confira antes de salvar de novo."
     const val ACCOUNT_SAVED = "Pagador e limite atualizados."
     private const val UNKNOWN = "—"
 

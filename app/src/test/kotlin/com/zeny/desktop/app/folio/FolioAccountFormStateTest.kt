@@ -6,6 +6,7 @@ import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.VersionedFolio
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.Money
+import com.zeny.desktop.sdk.model.FolioResponse
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -244,6 +245,26 @@ class FolioAccountFormStateTest {
             runCurrent()
             assertEquals("\"v9\"", source.updates.last().etag)
             assertEquals("$OTHER_PAYER_ID", source.updates.last().payerCompanyId)
+        }
+
+    @Test
+    fun staleVersionWithTheFolioClosedSaysItIsClosed() =
+        runTest {
+            val source = FakeFolioAccountSource()
+            source.update = {
+                val closedFolio = accountFolioOf(status = FolioResponse.Status.CLOSED)
+                source.folio = { VersionedFolio(closedFolio, "\"v9\"") }
+                throw ApiError.PreconditionFailed(null)
+            }
+            val form = form(source)
+
+            form.save()
+            runCurrent()
+
+            assertEquals("A conta já está fechada.", form.message)
+            assertFalse(form.canSave)
+            assertEquals(1, rereadCalls)
+            assertEquals(1, source.updates.size)
         }
 
     @Test
