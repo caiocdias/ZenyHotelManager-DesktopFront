@@ -1124,12 +1124,33 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `298e2a9`. Falta a `LiveExpiringPreAuthorizationCheck` (só leitura) contra o `zeny-front`, que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa. **A base (E09) também não foi verificada ao vivo.**
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e10.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e10.md). Revisão de arquitetura **dispensada** pelo orquestrador (porta nova, campo do wiring e aba nos padrões da E03/E09; sem ADR, contrato público, persistência, fronteira nem runtime novo); a revisão final conferiu a dispensa contra o diff e a confirmou.
+- **Commits** (`MERGE_BASE` `a10f7ec`, HEAD de código `298e2a9`):
+  - `73a9e08`: o início e o plano.
+  - **Task 1:** `PaymentsFacade.expiringPreAuthorizationPage` (só `to`, sem `from`), a porta `ExpiringPreAuthorizationSource` (a `PaymentSource` não mudou), o `FolioWiring.expiring` (nulo sem a porta de pagamentos) e o `ExpiringPreAuthorizationsState` (`4678e1b`, `16f08a4`). Revisão de fatia aprovada.
+  - **Task 2:** a tela, a terceira aba "Cauções a vencer" (depois de "Caixa" e "Contas"), "Abrir conta" e a `LiveExpiringPreAuthorizationCheck`, com o opt-in `ZENY_LIVE_EXPIRING`; junto, o `search()` sem cancelar o `enter()` com data inválida (`6e7029c`). Revisão de fatia aprovada.
+  - **Testador de etapa:** `97cb5c8` (a trava `tests/test_live_expiring_ataque.sh`, com cerca de 50 mutantes; concorrência, tela, NSU; três testes vermelhos que documentaram os defeitos abaixo) e `298e2a9` (a espera da verificação ao vivo por `loaded`, sem atraso fixo, o estado num `runBlocking` só e o formato da validade conferido antes de comparar).
+  - **Correção do fim da etapa** (`1c36cb2`): "Nenhuma caução a vencer até a data." só depois de uma leitura concluída (`loaded`), e não durante a leitura da data operacional; "Buscar" com a entrada em voo não perde o fuso do hotel; "Data inválida." some ao digitar.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `a10f7ec..6e7029c`): 0 Críticos, 2 Importantes (o texto de lista vazia durante a leitura da data; a concorrência fora do `Riscos:` do plano, acrescentada depois), 7 Menores, "Ready to merge: With fixes".
+  - Re-revisão escopada de `6e7029c..` (os testes do testador, a correção e este handoff): ver o histórico.
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `6e7029c` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_EXPIRING`.
+- **Integridade:** `check_test_integrity.py --base a10f7ec` no `298e2a9` → exit 0, nenhum apontamento.
+- **Critérios:**
+  1. **A lista mostra o que o servidor devolve até a data, em ordem de validade, com situação, valores e validade, e "Carregar mais" segue o cursor** — `ExpiringPreAuthorizationsStateTest.entersWithTheBusinessDayPlusSevenAndReads`, `loadMoreFollowsTheCursor`, `malformedFieldsShowDashes`, `rowsNeverCarryCardData`; `PaymentsFacadeExpiringTest`. **Ao vivo:** a `LiveExpiringPreAuthorizationCheck` (ao menos uma linha, validades em ordem, a conta da primeira linha existe).
+  2. **"Abrir conta" leva à conta na aba "Contas"** — `ExpiringPreAuthorizationsScreenTest.openFolioGoesToTheAccountsTabWithTheFolio`.
+  3. **A aba só com `billing.folios.read` e sem mudar a aba padrão** — `tabOnlyWithFolioReadAndKeepsCashierAsDefault`; `FolioWiringTest.wiringCarriesTheExpiringSource`.
+- **Como fazer a verificação ao vivo** (só lê; não escreve na demo):
+  - No worktree, ponha `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD` (a Recepcionista) no ambiente de um subshell e rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_EXPIRING=1 timeout 1500 ./gradlew :app:test --tests '*LiveExpiringPreAuthorizationCheck' --rerun)`.
+  - Rode antes a `LivePreAuthorizationCheck` da E09, que deixa uma caução. `NEED_SEED` quer dizer que não há caução a vencer em 89 dias.
+  - Passando, a E10 fecha `#concluida`.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **"Até" padrão:** a data operacional mais 7 dias ao entrar na aba com o "Até" em branco; preenchido, a entrada relê com o texto vigente. Sem a data operacional, "Informe até quando." e nada é lido.
+  2. **A linha não mostra o número da conta** (o contrato só traz o `folioId`): "Abrir conta" é a identificação, para não multiplicar as leituras. Nem o cartão (bandeira, últimos dígitos, autorização, NSU).
+- **Notas para a próxima etapa:**
+  - **Diferidos (Menores):** a chave do `remember` do estado usa a porta da conta, o `sessionId` e as permissões, e não o wiring; a aba escolhida guarda "Cauções a vencer" quando ela some, e a exibição cai em "Caixa".
+  - **Para o testador:** a troca de sessão só no nível da tela (o fechamento do estado está coberto pelos testes de `close`).
 
 ---
 
@@ -1387,3 +1408,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a reabertura da conta encerrada saiu da E08 para a **E13, "Reabrir conta encerrada"** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E08 (I4: as fatias passavam do teto; a reabertura não tinha critério e não depende das correções). A E13 depende da E02 e da E08 (a porta); a E05 passa a depender também dela. Os critérios da E08 não mudaram.
 - 2026-11-19 — a E08 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `756db61`; falta a `LiveFolioCorrectionCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
 - 2026-11-19 — a E11 fecha `#concluida` (`claude --agent orquestrador`): o painel do dia e a busca de reservas montam as colunas, leem os tipos de UH e travam as leituras auxiliares por uma função só (`259e6e4`); revisão final e re-revisão limpas.
+- 2026-11-19 — a E10 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `298e2a9`; falta a `LiveExpiringPreAuthorizationCheck` (só leitura), que pede as credenciais do usuário.

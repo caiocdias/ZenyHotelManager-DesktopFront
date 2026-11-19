@@ -15,7 +15,7 @@
 
 Não há `ARCHITECTURE.md` no repositório.
 
-**Riscos:** autenticação ou autorização (a aba só com `billing.folios.read` no conjunto da casca); dado pessoal ou segredo (a caução traz bandeira, últimos dígitos, autorização e NSU, que a lista não mostra nem põe em `toString`); parsing de entrada externa não confiável (decimais, instantes e `status` extensível do servidor; o cursor); as credenciais da verificação ao vivo.
+**Riscos:** autenticação ou autorização (a aba só com `billing.folios.read` no conjunto da casca); concorrência ("Buscar" e "Carregar mais" em voo, a entrada na aba com a leitura da data em voo, a resposta depois do `close`; acrescentado depois da revisão final, I2); dado pessoal ou segredo (a caução traz bandeira, últimos dígitos, autorização e NSU, que a lista não mostra nem põe em `toString`); parsing de entrada externa não confiável (decimais, instantes e `status` extensível do servidor; o cursor); as credenciais da verificação ao vivo.
 
 ## Global Constraints
 
