@@ -16,6 +16,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.uuid.Uuid
 
 private const val READ = "billing.folios.read"
 private const val RECEIVE = "billing.payments.receive"
@@ -302,5 +303,45 @@ class CaptureStateTest {
             form.authorizationCode = "OUTRA"
             assertEquals("50,00", form.amount)
             assertEquals("", form.authorizationCode)
+        }
+
+    @Test
+    fun capturableFollowsTheReloadAfterExceeds() =
+        runTest {
+            val id = Uuid.random()
+            val failure = ApiError.Problem(422, "CAPTURE_EXCEEDS_AUTHORIZED", null, emptyList())
+            val source =
+                FakePaymentSource().apply {
+                    preAuthorizations = { listOf(preAuthorizationOf(id = id)) }
+                    capture = { throw failure }
+                }
+            val holder = holder(source)
+            val form = holder.opened()
+            assertEquals("Capturável: R$ 300,00", form.capturable)
+
+            source.preAuthorizations = {
+                val partial = "PARTIALLY_CAPTURED"
+                listOf(preAuthorizationOf(id = id, captured = "180.00", capturable = "120.00", status = partial))
+            }
+            form.confirm()
+            runCurrent()
+
+            assertEquals(failure.userMessage, form.message)
+            assertEquals("Capturável: R$ 120,00", form.capturable, "o diálogo mostra o capturável relido")
+        }
+
+    @Test
+    fun notFoundReloadsThePreAuthorizations() =
+        runTest {
+            val failure = ApiError.Problem(404, "PRE_AUTHORIZATION_NOT_FOUND", null, emptyList())
+            val source = source().apply { capture = { throw failure } }
+            val holder = holder(source)
+            val form = holder.opened()
+
+            form.confirm()
+            runCurrent()
+
+            assertEquals(failure.userMessage, form.message)
+            assertEquals(2, source.preAuthorizationCalls.size, "as cauções são relidas")
         }
 }

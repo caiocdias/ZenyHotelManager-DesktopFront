@@ -6,13 +6,15 @@ import androidx.compose.runtime.setValue
 import com.zeny.desktop.core.facade.CaptureInput
 import com.zeny.desktop.core.facade.PaymentProblem
 import com.zeny.desktop.core.facade.problems
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.input.InputResult
 import com.zeny.desktop.design.input.MoneyInput
 import kotlinx.coroutines.CoroutineScope
 
 /**
  * O diálogo "Capturar" da caução [row] da conta [folioId]: o valor (sugerido com o capturável do servidor, copiado sem
- * conta, e mostrado em [capturable]) e, opcionais, o NSU e a autorização da captura. As regras de formato são as de
+ * conta) e, opcionais, o NSU e a autorização da captura. [capturable] mostra o capturável mais recente da caução
+ * ([latest], o da tabela relida; sem ele, nada), não o da abertura. As regras de formato são as de
  * `CaptureInput.problems()`, cada uma com o texto dela em [errors]; com problema, nada vai à rede.
  *
  * O envio, a `Idempotency-Key` por intenção, a classificação da falha e o fechamento são do ajudante comum
@@ -31,20 +33,20 @@ class CaptureState(
     private val openShift: (() -> Unit)?,
     private val onCaptured: () -> Unit,
     onRefused: (code: String) -> Unit,
+    private val latest: () -> Money? = { row.capturable },
 ) : FolioWriteForm {
     private val write =
         FolioWrite(scope, FolioText.CAPTURE_UNCONFIRMED, FolioText.CAPTURE_SERVER_UNCONFIRMED, openShift, onRefused)
 
-    private val suggested = row.capturable?.let(MoneyInput::format)
-    private var amountText by mutableStateOf(suggested.orEmpty())
+    private var amountText by mutableStateOf(row.capturable?.let(MoneyInput::format).orEmpty())
     private var nsuText by mutableStateOf("")
     private var authorizationText by mutableStateOf("")
 
     /** A entrada enviada com a intenção em curso. */
     private var sent: CaptureInput? = null
 
-    /** "Capturável: <valor>", o que o servidor devolveu. */
-    val capturable: String? = suggested?.let(FolioText::capturable)
+    /** "Capturável: <valor>", o último que o servidor devolveu para esta caução. */
+    val capturable: String? get() = latest()?.let(MoneyInput::format)?.let(FolioText::capturable)
 
     override val busy: Boolean get() = write.busy
 

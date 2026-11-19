@@ -1,6 +1,8 @@
 package com.zeny.desktop.app.folio
 
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.BusinessDay
+import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
 import kotlinx.coroutines.CompletableDeferred
@@ -9,6 +11,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -220,5 +223,40 @@ class PreAuthorizationsStateTest {
 
             folio.close()
             assertTrue(assertNotNull(holder.register).locked, "fecha com a conta")
+        }
+
+    @Test
+    fun registerWaitsForTheFirstRead() =
+        runTest {
+            val gate = CompletableDeferred<BusinessDay>()
+            val source = FakePaymentSource().apply { businessDay = { gate.await() } }
+            val holder = holder(source)
+
+            assertFalse(holder.loaded)
+            holder.startRegister()
+            assertNull(holder.register, "antes da primeira leitura, o fuso ainda não chegou")
+
+            gate.complete(BusinessDay(BusinessDate.parse("2026-11-18"), ZoneId.of("America/Sao_Paulo")))
+            runCurrent()
+            assertTrue(holder.canRegister)
+            holder.startRegister()
+            assertNull(assertNotNull(holder.register).message, "sem o falso erro de fuso")
+        }
+
+    @Test
+    fun transientZoneFailureKeepsTheKnownZone() =
+        runTest {
+            val source = FakePaymentSource().apply { preAuthorizations = { listOf(preAuthorizationOf()) } }
+            val holder = holder(source)
+            assertEquals("19/11/2026 23:59", holder.rows.single().expiresAt)
+
+            source.businessDay = { throw ApiError.Network(IOException("caiu")) }
+            holder.reload()
+            runCurrent()
+
+            assertEquals("19/11/2026 23:59", holder.rows.single().expiresAt, "a validade segue no fuso conhecido")
+            holder.startRegister()
+            assertNull(assertNotNull(holder.register).message, "o registro não perde o fuso conhecido")
+            assertEquals(2, source.businessDayCalls, "abrir com o fuso conhecido não relê")
         }
 }

@@ -2,6 +2,8 @@ package com.zeny.desktop.app.folio
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -18,7 +20,9 @@ import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.design.theme.ZenyTheme
+import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
 import com.zeny.desktop.sdk.model.FolioResponse
+import kotlinx.coroutines.CompletableDeferred
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.Test
@@ -215,5 +219,18 @@ class PreAuthorizationSectionTest {
 
             onNodeWithText("Turno de caixa").assertExists()
             onNodeWithTag("capture-dialog").assertDoesNotExist()
+        }
+
+    @Test
+    fun registerIsDisabledUntilTheFirstRead() =
+        runComposeUiTest {
+            val gate = CompletableDeferred<List<CardPreAuthorizationResponse>>()
+            accounts(FakePaymentSource().apply { preAuthorizations = { gate.await() } })
+
+            onNodeWithTag("folio-panel").performScrollToNode(hasTestTag("register-pre-authorization"))
+            onNodeWithTag("register-pre-authorization").assertIsNotEnabled()
+            gate.complete(emptyList())
+            waitForIdle()
+            onNodeWithTag("register-pre-authorization").assertIsEnabled()
         }
 }

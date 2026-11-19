@@ -29,7 +29,12 @@ import com.zeny.desktop.design.input.MoneyInput
 internal fun PreAuthorizationSection(state: PreAuthorizationsState) {
     Text("Cauções", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
     if (state.canRegister) {
-        Button(onClick = state::startRegister, modifier = Modifier.testTag("register-pre-authorization")) {
+        // Antes da primeira leitura o fuso não chegou: o botão aparece, mas só habilita depois dela.
+        Button(
+            onClick = state::startRegister,
+            enabled = state.loaded,
+            modifier = Modifier.testTag("register-pre-authorization"),
+        ) {
             Text("Registrar caução")
         }
     }
