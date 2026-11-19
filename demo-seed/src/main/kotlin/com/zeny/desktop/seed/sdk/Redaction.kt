@@ -37,3 +37,27 @@ internal suspend fun <T> redactingValues(
         )
     }
 }
+
+/**
+ * Ponto único da mitigação do `B-M4`: todo erro que carrega o `detail` do servidor (que pode ecoar dado do
+ * hóspede) é refeito sem ele e sem as mensagens de campo, com o mesmo status, código e ação; os demais seguem
+ * como estão.
+ */
+internal fun ApiError.withoutServerDetail(): ApiError =
+    when (this) {
+        is ApiError.Problem -> {
+            ApiError.Problem(status, code, null, emptyList())
+        }
+
+        is ApiError.ApprovalRequired -> {
+            ApiError.ApprovalRequired(action, permission, resourceRef, limit, null)
+        }
+
+        is ApiError.PreconditionFailed -> {
+            ApiError.PreconditionFailed(null)
+        }
+
+        else -> {
+            this
+        }
+    }

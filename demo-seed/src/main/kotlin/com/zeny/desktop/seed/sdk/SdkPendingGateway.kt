@@ -227,29 +227,9 @@ class SdkPendingGateway(
                 )
             }
         } catch (e: ApiError) {
-            throw withoutServerDetail(e)
+            throw e.withoutServerDetail()
         }
     }
-
-    /** Ponto único: todo erro que carrega o `detail` do servidor é refeito sem ele; os demais seguem como estão. */
-    private fun withoutServerDetail(e: ApiError): ApiError =
-        when (e) {
-            is ApiError.Problem -> {
-                ApiError.Problem(e.status, e.code, null, emptyList())
-            }
-
-            is ApiError.ApprovalRequired -> {
-                ApiError.ApprovalRequired(e.action, e.permission, e.resourceRef, e.limit, null)
-            }
-
-            is ApiError.PreconditionFailed -> {
-                ApiError.PreconditionFailed(null)
-            }
-
-            else -> {
-                e
-            }
-        }
 
     /** `false` só no `409 OUT_OF_ORDER_OVERLAP` (período já aberto); qualquer outra recusa sobe. */
     override suspend fun openOutOfOrder(

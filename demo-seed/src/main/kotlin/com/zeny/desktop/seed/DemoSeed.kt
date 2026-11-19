@@ -48,7 +48,8 @@ data class AdminContext(
 ) {
     /**
      * A porta das contas fica fora do construtor, que termina em `pending` e `future` (travado por teste do
-     * testador). Sem ela (`null`), o `DemoSeed` não semeia os consumos.
+     * testador). Sem ela (`null`), o `DemoSeed` não semeia os consumos. Por estar no corpo da `data class`, o campo
+     * fica fora de `copy()`, `equals` e `toString`: não sobrevive a um `copy`, que o devolve a `null`.
      */
     var folios: FolioGateway? = null
 }
