@@ -216,7 +216,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
 | E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta | #em-andamento | E02 | Ajustar, dividir, transferir e remover a taxa a pedido |
-| E11 | Duplicação entre o painel do dia e a busca | #pendente | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
+| E11 | Duplicação entre o painel do dia e a busca | #em-andamento | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
 | E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #pendente | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
 | E13 | Reabrir conta encerrada | #pendente | E02, E08 | Reabrir a conta encerrada, com aprovação de superior |
@@ -1133,7 +1133,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E11 — Duplicação entre o painel do dia e a busca — #pendente
+## E11 — Duplicação entre o painel do dia e a busca — #em-andamento
 
 **Objetivo:** o painel do dia (Recepção) e a busca de reservas montam as colunas da tabela, leem os nomes dos tipos de UH e travam as leituras auxiliares pela mesma função.
 
