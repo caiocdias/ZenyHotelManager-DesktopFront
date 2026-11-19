@@ -1174,8 +1174,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **Testador de etapa** (`5725fcf`): `ReservationRowResolverAtaqueTest`, 9 testes (falhas de titular e de tipos, a trava solta depois de falha e de cancelamento, a trava dos tipos com páginas em voo, o cache depois do `forgetRoomTypes`). Nenhum defeito.
 - **Revisões:**
   - Revisão final (`revisor-seguranca`, fable, `b347973..259e6e4`): 0 Críticos, 0 Importantes, 4 Menores, "Ready to merge: Yes".
-  - Re-revisão escopada dos testes do testador: ver o fechamento no histórico.
-- **Gate no `259e6e4`:** `./gradlew build` → BUILD SUCCESSFUL (app 3073, 51, 0; core 1298, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 66 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+  - Re-revisão escopada de `259e6e4..46bc4b5` (os 9 testes do testador e este handoff): os Menores 1 e 2 cobertos pelo testador, os testes aprovados por inteiro, nenhum Crítico nem Importante novo, "Ready to merge: Yes".
+- **Gate no `46bc4b5`** (com os testes do testador): `./gradlew build` → BUILD SUCCESSFUL (app 3082, 51, 0; core 1298, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 66 arquivos, 0 falhas, 1 com casos pulados.
+- **Gate no `259e6e4`** (fim da construção): `./gradlew build` → BUILD SUCCESSFUL (app 3073, 51, 0; core 1298, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 66 arquivos, 0 falhas, 1 com casos pulados (o busybox).
 - **Scanner:** `osv-scanner --recursive --no-ignore ./` no `259e6e4` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
 - **Integridade:** `check_test_integrity.py --base b347973` no `5725fcf` → exit 0, nenhum apontamento. Nenhum teste existente foi alterado.
 - **Critério:** `grep -rn 'fun readRoomTypeNames' app/src/main` → uma linha (`reception/ReservationRows.kt`); o `DayPanelState` e o `ReservationSearchState` usam `reservationColumns` e `ReservationRowResolver`; os testes existentes das duas telas (`DayPanelState*Test`, `ReservationSearchState*Test`) e de `ReservationRows*Test` verdes no gate, sem mudança.
@@ -1183,7 +1184,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   1. **O plano pedia também `Column("code", "Reserva")` com uma linha só**, mas o `reservations/PendingListsState.kt` tem outra tabela (`PendingRow`, cinco colunas). Ruling: defeito do plano; vale o critério do roadmap.
 - **Notas para a próxima etapa:**
   - **Comportamento herdado, documentado:** uma página da carga anterior do painel, ainda lendo os tipos quando a data muda, regrava o cache com a leitura antiga, e a carga nova não relê (`ReservationRowResolverAtaqueTest.typesReadInFlightWhenTheLoadChangesStayCachedForTheNewLoadToday`). Se a regra mudar, o teste se inverte.
-  - **Diferidos (Menores):** o KDoc do `ReservationRowResolver` não diz que o `forgetRoomTypes()` conta com o confinamento à thread da UI; o `PendingListsState` tem um `HolderNames` próprio e o `ReservationDetailState` um `roomTypeNames()` próprio, duplicações parecidas fora do escopo.
+  - **Diferidos (Menores):** o KDoc do `ReservationRowResolver` não diz que o `forgetRoomTypes()` conta com o confinamento à thread da UI; o `PendingListsState` tem um `HolderNames` próprio e o `ReservationDetailState` um `roomTypeNames()` próprio, duplicações parecidas fora do escopo; o `Riscos:` do plano não citou dado pessoal (os nomes de titular passam pelo código movido, sem exposição nova: o `ReservationRow.toString` continua sem o titular).
 
 ---
 
