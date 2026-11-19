@@ -28,6 +28,7 @@ import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CancelInput
+import com.zeny.desktop.core.facade.CaptureInput
 import com.zeny.desktop.core.facade.CashCount
 import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.facade.CheckInInput
@@ -41,6 +42,7 @@ import com.zeny.desktop.core.facade.NewTrace
 import com.zeny.desktop.core.facade.PaymentInput
 import com.zeny.desktop.core.facade.PdfDocument
 import com.zeny.desktop.core.facade.PostingInput
+import com.zeny.desktop.core.facade.PreAuthorizationInput
 import com.zeny.desktop.core.facade.RefundInput
 import com.zeny.desktop.core.facade.ReservationChangeInput
 import com.zeny.desktop.core.facade.ReservationFilter
@@ -59,6 +61,7 @@ import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.model.AvailabilityResponse
+import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
 import com.zeny.desktop.sdk.model.CashMovementResponse
 import com.zeny.desktop.sdk.model.CashPointResponse
 import com.zeny.desktop.sdk.model.CashierShiftReportResponse
@@ -71,6 +74,7 @@ import com.zeny.desktop.sdk.model.FolioStatementResponse
 import com.zeny.desktop.sdk.model.PaymentResponse
 import com.zeny.desktop.sdk.model.PendingGuaranteeResponse
 import com.zeny.desktop.sdk.model.PostingResponse
+import com.zeny.desktop.sdk.model.PreAuthorizationCaptureResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReallocationRequiredResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
@@ -603,9 +607,34 @@ class CoreConnection(
                 input: RefundInput,
                 intent: Intent,
             ): ApprovableAction<PaymentResponse> = core.payments.refund(folioId, paymentId, input, intent)
+
+            override suspend fun preAuthorizations(folioId: String): List<CardPreAuthorizationResponse> =
+                core.payments.preAuthorizations(folioId)
+
+            override suspend fun registerPreAuthorization(
+                folioId: String,
+                input: PreAuthorizationInput,
+                intent: Intent,
+            ): CardPreAuthorizationResponse = core.payments.registerPreAuthorization(folioId, input, intent)
+
+            override suspend fun capturePreAuthorization(
+                folioId: String,
+                preAuthorizationId: String,
+                input: CaptureInput,
+                intent: Intent,
+            ): PreAuthorizationCaptureResponse =
+                core.payments.capturePreAuthorization(folioId, preAuthorizationId, input, intent)
+
+            override suspend fun releasePreAuthorization(
+                folioId: String,
+                preAuthorizationId: String,
+                intent: Intent,
+            ): CardPreAuthorizationResponse = core.payments.releasePreAuthorization(folioId, preAuthorizationId, intent)
+
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
         }
 
-    /** Os pagamentos da conta sobre `core.payments`. */
+    /** Os pagamentos e as cauções da conta sobre `core.payments`, e a data operacional sobre `core.hotel`. */
     override fun paymentSource(): PaymentSource = payments
 
     override fun close() = core.close()
