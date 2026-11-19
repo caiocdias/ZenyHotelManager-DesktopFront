@@ -1260,12 +1260,45 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `85e8869`. Faltam a parte ao vivo do critério 2 e o critério 3, pela `LiveReservationLifecycleCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e12.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e12.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 5 Importantes:
+  - I1: o quarto `@Test` contra a trava do testador;
+  - I2: a isenção numa reserva do seed, contra o invariante da verificação;
+  - I3: o `412` com as entradas mantidas desfaria a alteração da outra estação;
+  - I4: sem leitura do nome do pagador vigente;
+  - I5: o comando ao vivo fora do critério.
+
+  Aprovado com notas na rodada 1 (`897ecda`, registro em `68633c3`).
+- **Commits** (`MERGE_BASE` `5d851a8`, HEAD de código `85e8869`):
+  - `8e14919`: o início e o plano.
+  - **Task 1:** o texto da multa pelo `penaltiesCharged` (`B-M5`) no resumo e no diálogo; na `LiveReservationLifecycleCheck`, a conferência do recancelamento e a quarta verificação, `cancelWithWaiver`, numa reserva de ensaio, com o PIN por um ajudante só (`d4ae979`, `9e096b7`); o testador, num despacho escopado, levou a trava a quatro verificações (`86f0d6b`). Revisão de fatia aprovada.
+  - **Task 2:** no `core`, `versionedFolio`, `updateFolio` com `If-Match` e a `CompaniesFacade` (ativas e por id, sem CNPJ); a porta `FolioAccountSource` e o `FolioWiring.account` (`c31d22a`, `ac1ef3d`). Revisão de fatia aprovada.
+  - **Task 3:** o `FolioAccountFormState` e o diálogo "Pagador e limite" no cabeçalho da conta (`dda1724`, `93721b3`). Revisão de fatia aprovada.
+  - **Rodada de correção 1** (o gate do fim da construção vermelho): o literal "Multa lançada na conta: …" que o roteiro do M3 confere, e a verificação ao vivo da isenção e do resumo apertada (`864f2b8`, `72f67cf`).
+  - **Testador de etapa:** `c8b60c9` (a trava do ciclo protege as asserções da E12, com 30 mutantes), `dd94846` (a trava do roteiro do M3 confere a saída, não a linha que a monta), `b6dc3bb` (o `core`), `42f8976` (o texto da multa com `penaltiesCharged` negativo, menor, de outra escala e ilegível) e `eca7e79` (o formulário; quatro testes vermelhos que documentaram dois defeitos).
+  - **Rodada de correção 2** (`128ed58`, `85e8869`): a releitura que falha mantém o aviso que a pediu; "Pagador atual" só com a conta lida; a conta relida encerrada depois do `412` diz "A conta já está fechada."; a isenção ao vivo exige o pedido de aprovação quando o perfil não tem `reservations.penalties.waive`.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `5d851a8..72f67cf`): 0 Críticos, 1 Importante (o aviso perdido na releitura que falha), 7 Menores, "Ready to merge: With fixes".
+  - Re-revisão escopada de `72f67cf..`: ver o histórico.
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `93721b3` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
+- **Integridade:** `check_test_integrity.py --base 5d851a8` no `85e8869` → exit 1, 3 apontamentos julgados justificados (a contagem de `@Test` da trava de 3 para 4, estrita; a descrição de uma regra trocada; a asserção "Sem multa." do recancelamento, que fixava o defeito `B-M5`, trocada pela comparação do resumo inteiro).
+- **Critérios:**
+  1. **Trocar o limite com versão velha (`412`) mostra a mensagem em pt-BR e relê a conta** — `FolioAccountFormStateTest.staleVersionTakesTheOtherStationsValues`, `FolioAccountDialogTest.staleVersionShowsTextAndRereads`, `FolioAccountFormAttackTest.failedRereadAfterStaleVersionKeepsTheStaleNotice`. O formulário adota os valores relidos, sem desfazer a outra estação.
+  2. **`B-M5`** — `ReservationCancelStateTest.secondCancellationKeepsThePreviousPenaltyInTheText`, `newPenaltyWithPreviousShowsTheTotal`, `unreadablePenaltiesSayNothing`; `ReservationCancelDialogTest.dialogWarnsOfThePenaltyAlreadyOnTheFolio`; os ataques de `42f8976`. **Ao vivo:** o recancelamento da `LiveReservationLifecycleCheck` (o resumo inteiro "Sem multa nova. A conta já tem …" e a multa do primeiro cancelamento na conta, não estornada, igual ao `penaltiesCharged`).
+  3. **Isenção ao vivo** — **ao vivo:** `cancelWithWaiver` (reserva de ensaio com o hóspede do seed, "Isentar a multa", a aprovação do Gerente se pedida, "Multa isenta" e nenhum lançamento de multa na conta).
+- **Como fazer a verificação ao vivo.** Ela escreve na demo e não desfaz: cria reservas de ensaio com o hóspede do seed, cancela, reativa, recancela e cancela com isenção.
+  - No worktree, ponha `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN`, `ZENY_LIVE_VIEWER_PASSWORD` (a Recepcionista), `ZENY_LIVE_APPROVER_LOGIN` e `ZENY_LIVE_APPROVER_PIN` (o Gerente) no ambiente de um subshell e rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_LIFECYCLE=1 timeout 1500 ./gradlew :app:test --tests '*LiveReservationLifecycleCheck*' --rerun --max-workers=2)`.
+  - Supõe que a lista de lançamentos traz os estornados com `reversedBy`, que a conta de uma reserva cancelada continua legível e que a demo tem oferta para dois ensaios no mesmo dia.
+  - Passando, a E12 fecha `#concluida`. O pagador e o limite pedem inspeção manual na conta (o `412` é provado por teste).
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **"Reserva do seed" nos critérios 2 e 3** lê-se "reserva do hóspede do seed criada pela verificação", como na M3 E04 (I2 da revisão de arquitetura): a verificação nunca cancela uma reserva `DEMO-…`, que o roteiro usa.
+  2. **O `PUT` da conta vai sem `Idempotency-Key`**, porque o contrato não a declara; repetir depois de um resultado desconhecido relê e usa o `ETag` novo, e o `ETag` velho dá `412`, nunca alteração em dobro. Diverge do invariante "toda operação financeira leva `Idempotency-Key`".
+  3. **No `412`, o formulário adota o pagador e o limite relidos**, sem salvar (precedente do `TraceFormState`): a operadora redigita o que tinha mudado, mas nada da outra estação é desfeito em silêncio.
+  4. **O pagador não aparece no cabeçalho do painel da conta**: só no diálogo "Pagador e limite".
+  5. **Textos novos:** "Sem multa nova. A conta já tem <valor> de multa de cancelamento anterior.", "Total de multas de cancelamento desta reserva: <valor>.", "Esta reserva já tem <valor> de multa de cancelamento na conta.", "Os valores foram relidos; confira e salve de novo.", "Não foi possível confirmar a alteração. A conta foi relida; confira antes de salvar de novo.", "Pagador e limite atualizados.", "Seu perfil não pode escolher a empresa pagadora.", "Empresa pagadora definida".
+- **Notas para a próxima etapa:**
+  - **Diferidos (Menores):** o `CompanyChoice.toString()` (data class) mostra o nome, que é a razão social quando não há fantasia (pode trazer o nome de um MEI; nada o registra em log hoje); sem "Tentar de novo" quando a leitura da conta falha no diálogo (fechar e abrir); a `CompaniesFacade` não aplica os tetos do contrato de `limit` e `name` (o `app` corta em 200 e usa 50); com `penaltiesCharged` negativo e multa zero, o resumo diz "Sem multa." (ambiguidade do contrato, não defeito).
+  - **Para o testador:** o trio do `demo-seed` não foi rodado por ele (o gate o roda); o assert de CNPJ do `FolioAccountDialogTest` não pode falhar, e a garantia é provada no `core` (`b6dc3bb`).
 
 ---
 
@@ -1414,3 +1447,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E08 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `756db61`; falta a `LiveFolioCorrectionCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
 - 2026-11-19 — a E11 fecha `#concluida` (`claude --agent orquestrador`): o painel do dia e a busca de reservas montam as colunas, leem os tipos de UH e travam as leituras auxiliares por uma função só (`259e6e4`); revisão final e re-revisão limpas.
 - 2026-11-19 — a E10 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `298e2a9`; falta a `LiveExpiringPreAuthorizationCheck` (só leitura), que pede as credenciais do usuário.
+- 2026-11-19 — a E12 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `85e8869`; faltam a parte ao vivo do critério 2 e o critério 3 (`LiveReservationLifecycleCheck`), que pedem as credenciais do usuário e do Gerente.
