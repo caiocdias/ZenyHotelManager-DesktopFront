@@ -1134,7 +1134,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **Correção do fim da etapa** (`1c36cb2`): "Nenhuma caução a vencer até a data." só depois de uma leitura concluída (`loaded`), e não durante a leitura da data operacional; "Buscar" com a entrada em voo não perde o fuso do hotel; "Data inválida." some ao digitar.
 - **Revisões:**
   - Revisão final (`revisor-seguranca`, fable, `a10f7ec..6e7029c`): 0 Críticos, 2 Importantes (o texto de lista vazia durante a leitura da data; a concorrência fora do `Riscos:` do plano, acrescentada depois), 7 Menores, "Ready to merge: With fixes".
-  - Re-revisão escopada de `6e7029c..` (os testes do testador, a correção e este handoff): ver o histórico.
+  - Re-revisão escopada de `6e7029c..730f7ed` (os testes do testador, a correção e o rascunho deste handoff): os dois Importantes e os Menores 1 a 5 resolvidos, os testes do testador aprovados por inteiro, nenhum Crítico nem Importante novo, "Ready to merge: Yes".
+- **Gate no `730f7ed`:** `./gradlew build` → BUILD SUCCESSFUL (app 3118, 52, 0; core 1301, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 67 arquivos, 0 falhas, 1 com casos pulados (o busybox).
 - **Scanner:** `osv-scanner --recursive --no-ignore ./` no `6e7029c` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_EXPIRING`.
 - **Integridade:** `check_test_integrity.py --base a10f7ec` no `298e2a9` → exit 0, nenhum apontamento.
 - **Critérios:**
@@ -1149,7 +1150,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   1. **"Até" padrão:** a data operacional mais 7 dias ao entrar na aba com o "Até" em branco; preenchido, a entrada relê com o texto vigente. Sem a data operacional, "Informe até quando." e nada é lido.
   2. **A linha não mostra o número da conta** (o contrato só traz o `folioId`): "Abrir conta" é a identificação, para não multiplicar as leituras. Nem o cartão (bandeira, últimos dígitos, autorização, NSU).
 - **Notas para a próxima etapa:**
-  - **Diferidos (Menores):** a chave do `remember` do estado usa a porta da conta, o `sessionId` e as permissões, e não o wiring; a aba escolhida guarda "Cauções a vencer" quando ela some, e a exibição cai em "Caixa".
+  - **Diferidos (Menores, por ruling: sem nova rodada):**
+    - depois de uma leitura vazia, "Buscar" com data inválida mostra "Nenhuma caução a vencer até a data." ao lado de "Data inválida." (a condição da tela não olha `error` nem `untilError`; correção de uma linha);
+    - "Buscar" durante a entrada na aba não mostra "Carregando…" enquanto a data operacional é lida;
+    - dois testes novos com asserção fraca (`searchByTheUiReadsTheTypedDate` não confere a data enviada; `searchDuringTheEnterStillShowsTheHotelZone` não confere uma leitura só);
+    - a chave do `remember` do estado usa a porta da conta, o `sessionId` e as permissões, e não o wiring; a aba escolhida guarda "Cauções a vencer" quando ela some, e a exibição cai em "Caixa".
   - **Para o testador:** a troca de sessão só no nível da tela (o fechamento do estado está coberto pelos testes de `close`).
 
 ---
