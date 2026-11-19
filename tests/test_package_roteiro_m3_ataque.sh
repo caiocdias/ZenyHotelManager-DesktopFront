@@ -152,7 +152,8 @@ sed 's/`roteiro-m1\.md`\./`roteiro-m1.md` e `roteiro-m5.md`./' "$pk5/LEIA-ME.md"
 assert_contains "$(leia_problems "$tmp/leia-m5.md" "$pk5")" "cita roteiro-m5.md, que não está no pacote" "mutante: o LEIA-ME cita um roteiro ausente"
 sed 's/`roteiro-m2\.md` e `roteiro-m1\.md`/`roteiro-m1.md`/' "$pk5/LEIA-ME.md" >"$tmp/leia-sem-m2.md"
 assert_contains "$(leia_problems "$tmp/leia-sem-m2.md" "$pk5")" "não cita roteiro-m2.md" "mutante: o LEIA-ME esquece um roteiro do pacote"
-sed 's/siga `roteiro-m3\.md` do início ao fim/siga `roteiro-m2.md` do início ao fim/' "$pk5/LEIA-ME.md" >"$tmp/leia-velho.md"
+# O topo manda seguir o roteiro mais novo (o m3 até a M3, o m4 desde a M4 E05): o mutante o troca pelo do M2.
+sed -E 's/siga `roteiro-m[0-9]+\.md` do início ao fim/siga `roteiro-m2.md` do início ao fim/' "$pk5/LEIA-ME.md" >"$tmp/leia-velho.md"
 assert_contains "$(leia_problems "$tmp/leia-velho.md" "$pk5")" "o topo não manda seguir o roteiro mais novo" "mutante: o topo aponta o roteiro do M2"
 for m in leia-m5 leia-sem-m2 leia-velho; do
   cmp -s "$pk5/LEIA-ME.md" "$tmp/$m.md" && _assert_fail "mutante $m difere do LEIA-ME (a expressão não casou)"

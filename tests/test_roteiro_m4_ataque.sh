@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ataque ao roteiro do M4 (M4 E05, testador escopado): docs/demo/roteiro-m4.md, "contas, caixa e check-out", do zero e
 # acumulando os roteiros do M3, do M2 e do M1. Aplica as travas genéricas de tests/lib/roteiro_checks.sh e acrescenta o
-# que é do M4: os passos 0 a 26 iguais aos do M3 salvo nos passos 0, 1, 5, 6 e 11 (e na folha e nas remissões ao "No
+# que é do M4: os passos 0 a 26 iguais aos do M3 salvo nos passos 5, 6 e 11 (e no "(este)", na folha e nas remissões ao "No
 # fim"), a estrutura dos passos 27 a 41, a recriação no dia (regra 5) e o B-M8 no cabeçalho, a saída do seed com a taxa
 # e os consumos lida do SeedReport e do DemoCatalog, os hóspedes e valores da conta do catálogo, as aprovações contra o
 # item certo da folha, todo texto entre aspas e todo negrito dos passos 27 a 39 existindo no código e o "No fim" com o
@@ -134,13 +134,14 @@ m4_l1="$(list_of "$rot" 'a lista tem `app`' 'Não pode ter')"
 assert_contains "$m4_l0" "roteiro-m4.md" "passo 0: o pacote leva o roteiro-m4.md"
 assert_contains "$m4_l1" "roteiro-m4.md" "passo 1: o Get-ChildItem espera o roteiro-m4.md"
 assert_eq "$m4_l0" "$m4_l1" "passos 0 e 1: a mesma lista do pacote"
-assert_eq "$(printf '%s\nroteiro-m4.md' "$(list_of "$rot1" 'Ela tem as pastas' 'Você não precisa')" | sort -u)" "$m4_l0" \
-  "passo 0: o conteúdo do pacote é o do roteiro-m1 mais o roteiro-m4.md"
+# Desde a correção do D1 (b54092f), todos os roteiros listam o mesmo pacote, com o roteiro-m4.md.
+assert_eq "$(list_of "$rot1" 'Ela tem as pastas' 'Você não precisa')" "$m4_l0" "passo 0: o conteúdo do pacote é o do roteiro-m1"
+assert_eq "$(list_of "$rot1" 'a lista tem `app`' 'Não pode ter')" "$m4_l1" "passo 1: o Get-ChildItem espera o conteúdo do roteiro-m1"
 assert_contains "$(grep -F 'Ela tem as pastas' "$rot")" '`roteiro-m4.md` (este)' "passo 0: \"(este)\" ao lado do roteiro-m4.md"
 assert_eq "1" "$(grep -oF '(este)' "$rot" | grep -c .)" "passo 0: um só \"(este)\""
 
 # =============================================================================================================
-# 4. Os passos 0 a 26 são os do M3, salvo nos passos 0, 1, 5, 6 e 11, na folha e nas remissões ao "No fim"
+# 4. Os passos 0 a 26 são os do M3, salvo nos passos 5, 6 e 11, no "(este)", na folha e nas remissões ao "No fim"
 # =============================================================================================================
 body() { awk '/^## 0\. /{on = 1} /^## 27\. /{exit} on' "$1"; }
 m3_folha_said="$(grep -oE 'precisar deles nos passos [0-9]+((, | e )[0-9]+)*' "$rot3" | head -1)"
@@ -151,6 +152,7 @@ m4_folha_said="precisar deles nos passos $said_list"
 assert_contains "$(rc_folha "$rot")" "$m4_folha_said," "folha: o M3 com os passos do M4 que pedem senha ou PIN ($(tr '\n' ' ' <<<"$m4_extra_steps"))"
 [[ -n "$m4_extra_steps" ]] || _assert_fail "algum passo do M4 pede um item da folha (as aprovações)"
 expected_body="$(body "$rot3" | sed -E \
+  -e 's/`roteiro-m3\.md` \(este\), `roteiro-m4\.md`/`roteiro-m3.md`, `roteiro-m4.md` (este)/' \
   -e "s/$m3_folha_said,/$m4_folha_said,/" \
   -e "s/passo $last3([^0-9])/passo $last_step\\1/g; s/passo $last3\$/passo $last_step/")"
 m4_body="$(body "$rot")"
@@ -167,13 +169,13 @@ removed_steps="$(changed_steps '%L' '' <(printf '%s\n' "$expected_body"))"
 added_steps="$(changed_steps '' '%L' "$rot")"
 for s in $removed_steps $added_steps; do
   case "$s" in
-    0 | 1 | 5 | 6 | 11) ;;
-    *) _assert_fail "passos 0 a 26: o passo $s mudou em relação ao M3 (só os passos 0, 1, 5, 6 e 11 mudam)" \
+    5 | 6 | 11) ;;
+    *) _assert_fail "passos 0 a 26: o passo $s mudou em relação ao M3 (só os passos 5, 6 e 11 mudam)" \
       "passos com linha removida: $removed_steps; com linha acrescentada: $added_steps" ;;
   esac
 done
 [[ -n "$added_steps" ]] || _assert_fail "passos 0 a 26: li as diferenças em relação ao M3"
-assert_eq "0 1 5 6 11 " "$added_steps" "passos 0 a 26: as linhas novas ficam nos passos 0, 1, 5, 6 e 11"
+assert_eq "5 6 11 " "$added_steps" "passos 0 a 26: as linhas novas ficam nos passos 5, 6 e 11"
 ger="$(grep -E '^Do passo 11 ao [0-9]+, quem trabalha é a Recepcionista\.' "$rot")"
 assert_eq "11" "$(rc_step_of_line "$rot" "$(grep -nxF -- "$ger" "$rot" | head -1 | cut -d: -f1)")" "a frase do Gerente fica no passo 11"
 assert_contains "$ger" "Do passo 11 ao ${n_sair:-?}," "passo 11: a Recepcionista trabalha até Sair"

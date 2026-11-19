@@ -158,7 +158,8 @@ kills seed-diferente-do-leia "LEIA-ME" "linha do seed diferente da do LEIA-ME"
 MUT='s/"Process"\)$/"Process"); $env:ZENY_SEED_ADMIN_'"PASS"'WORD="abc"/'
 kills segredo-literal-no-env "ZENY_SEED" "valor de segredo atribuído numa linha"
 # roteiro_check_md_refs (M3 E05): um roteiro inexistente, um .md fora da lista e um roteiro que o pacote não exige.
-MUT='s/`roteiro-m3\.md`, `LEIA-ME\.md`/`roteiro-m3.md`, `roteiro-m9.md`, `LEIA-ME.md`/'
+# Desde a M4 E05 o roteiro-m4.md fica entre o m3 e o LEIA-ME: o m9 entra antes do LEIA-ME, na lista do passo 0.
+MUT='/Ela tem as pastas/s/, `LEIA-ME\.md`, /, `roteiro-m9.md`, `LEIA-ME.md`, /'
 kills cita-roteiro-m9 "roteiro-m9.md" "roteiro citando um roteiro que não existe"
 MUT='s/Você não precisa abrir o `LEIA-ME\.md`/Você não precisa abrir o `NOTAS.md`/'
 kills cita-outro-md "não remete a outro .md" "roteiro citando um .md fora da lista"
