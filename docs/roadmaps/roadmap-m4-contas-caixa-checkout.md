@@ -216,8 +216,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
 | E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
+| E11 | Duplicação entre o painel do dia e a busca | #pendente | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
 | E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
-| E05 | Gate do marco M4 | #pendente | E04, E08, E10 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -870,7 +871,6 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - liberação de cauções (E09);
   - `POST /api/v1/reservations/{id}/check-out`, que no servidor encerra as contas, libera as cauções não encerradas e lança o late na mesma transação (conferência de 2026-11-19: o front não chama `POST /api/v1/folios/{id}/close` à parte).
 - **Erros:** com pendências, mensagens em pt-BR por `code`.
-- **Duplicação com o `DayPanelState` (estacionado da M3 E01, destino da M3 E06):** o assistente parte de uma saída do painel do dia. Por isso, a duplicação entre o `DayPanelState` e o `ReservationSearchState` sai nesta etapa: as colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares. O destino previsto na M3 E01 era `reservationColumns()` e um leitor de página compartilhado em `ReservationRows.kt`.
 
 **Fora de escopo:**
 
@@ -883,7 +883,6 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Check-out com caução ainda capturável mostra a pendência e não conclui até a liberação.
 - [ ] Se o servidor recusar o check-out, a mensagem vem em pt-BR e nada fica pela metade na tela (recarga do estado).
 - [ ] Late check-out cotado aparece como lançamento na conta antes do saldo final, se a política lançar.
-- [ ] **Duplicação:** `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
 
 **Validação obrigatória:**
 
@@ -895,7 +894,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Notas para o plano:**
 
 - A M5 E04 do servidor define o check-out (saldo zero, cauções liberadas, contas encerradas, UH Vago + Sujo, late check-out). Leia o handoff dela e a H14 do roadmap do M5 do servidor.
-- **Duplicação:** no `dbeacff`, `readRoomTypeNames` está em `reception/DayPanelState.kt` e em `reservations/ReservationSearchState.kt`. A origem é a decisão 2 do handoff da M3 E01. Essa extração não depende do assistente e pode ir na primeira onda. Se um teste da tabela procura por texto uma linha que não é a primeira, vale a nota de rolar até a linha.
+- **Duplicação:** passou à E11 em 2026-11-19 (I7 da revisão de arquitetura do plano: as fatias passavam do teto).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -1025,13 +1024,55 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E11 — Duplicação entre o painel do dia e a busca — #pendente
+
+**Objetivo:** o painel do dia (Recepção) e a busca de reservas montam as colunas da tabela, leem os nomes dos tipos de UH e travam as leituras auxiliares pela mesma função.
+
+**Por que agora:** saiu da E04 em 2026-11-19 (I7 da revisão de arquitetura do plano: as fatias passavam do teto). É o achado estacionado da M3 E01, destinado ao M4 pela M3 E06.
+
+**Dependências:** nenhuma. O ID é o próximo livre; a posição no índice segue o valor para a demo.
+
+**Escopo:** as colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares (`lookups.withLock`), hoje copiados em `reception/DayPanelState.kt` e `reservations/ReservationSearchState.kt`.
+
+**Fora de escopo:** funcionalidade nova.
+
+**Critérios de aceite:**
+
+- [ ] `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Notas da revisão de arquitetura do plano da E04 (I8): o destino é o `reception/ReservationRows.kt` que já existe (o pacote `reservations` importa `reception`, não o contrário); as assinaturas recebem a leitura como função, porque as duas telas usam portas diferentes (`ReceptionSource` e `ReservationSearchSource`); `ReservationRowsTest` e `ReservationRowsAtaqueTest` passam pela conferência do `C-M6`.
+- Se um teste da tabela procura por texto uma linha que não é a primeira, vale a nota de rolar até a linha.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além de afrouxar testes, proibido pelo critério.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E05 — Gate do marco M4 — #pendente
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o ciclo completo da hospedagem para a demo.
 
-**Dependências:** E04, E08 e E10 (o gate cobre o marco inteiro).
+**Dependências:** E04, E08, E10 e E11 (o gate cobre o marco inteiro).
 
 **Escopo:**
 
@@ -1117,3 +1158,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E09 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano (I5): as três fatias passavam do teto de 60 min com a lista de cauções a vencer. Entra a **E10, "Cauções a vencer"**, dependente da E09, antes do gate; a E05 passa a depender também dela. Os critérios da E09 não mudam. A divisão está nas "Decisões para o usuário" do handoff da E09.
 - 2026-11-19 — a E09 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `e3227ee`; falta a `LivePreAuthorizationCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E04 fica elegível.
 - 2026-11-19 — conferência da E04 pelo orquestrador (`claude --agent orquestrador`): o check-out do servidor encerra as contas, libera as cauções e lança o late na mesma transação, então o assistente não chama o encerramento à parte. A reabertura de conta (`…/reopen`, com aprovação) passou à E08, onde ficam as ações da conta com aprovação. Os critérios não mudaram.
+- 2026-11-19 — a duplicação entre o painel do dia e a busca saiu da E04 para a **E11** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E04 (I7: as fatias passavam do teto, e a duplicação não depende do assistente). A E05 passa a depender também da E11. O critério da duplicação foi junto, sem mudança.
