@@ -38,7 +38,8 @@ class BinaryResponse(
  *
  * Contrato da `Intent` (decisão D2): `execute(intent)` envia a chave atual e, se a intenção já foi aprovada,
  * o token da última `executeApproved`; assim o reenvio por falha de rede mantém chave e token. Cada
- * `executeApproved` (token novo) gira a chave e guarda o novo token.
+ * `executeApproved` (token novo) gira a chave e guarda o novo token. As escritas sem `Idempotency-Key` (a reabertura
+ * da conta) usam `executeWithoutKey`: sem `Intent`, e com o token, só o `X-Approval-Token`.
  */
 class ApiExecutor {
     suspend fun <T : Any> execute(
@@ -57,6 +58,12 @@ class ApiExecutor {
         intent.approvalToken = approvalToken
         return run(CallOptions(key, approvalToken), call)
     }
+
+    /** Executa uma escrita sem `Idempotency-Key` nem `Intent`; com `approvalToken`, o único header é o do token. */
+    internal suspend fun <T : Any> executeWithoutKey(
+        approvalToken: String?,
+        call: suspend (CallOptions) -> HttpResponseTyped<T>,
+    ): ApiResponse<T> = run(CallOptions(null, approvalToken), call)
 
     /**
      * Executa uma chamada que devolve um corpo binário (sem `Intent`), com os mesmos erros tipados do `execute`.

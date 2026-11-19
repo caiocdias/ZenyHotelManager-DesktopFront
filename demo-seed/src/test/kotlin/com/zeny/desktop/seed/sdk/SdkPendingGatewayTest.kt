@@ -29,7 +29,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -374,7 +373,7 @@ class SdkPendingGatewayTest {
             assertFalse(P_CPF in error.userMessage, error.userMessage)
             assertFalse(P_CPF in error.toString(), error.toString())
             assertFalse(P_CPF in gateway.toString())
-            assertNotEquals(null, error.detail)
+            assertNull(error.detail)
         }
 
     @Test
@@ -435,6 +434,57 @@ class SdkPendingGatewayTest {
             listOf(error.detail.orEmpty(), error.userMessage, error.toString(), error.message.orEmpty()).forEach {
                 assertFalse(P_CPF in it, it)
                 assertFalse("Fulano" in it, it)
+            }
+        }
+
+    @Test
+    fun markedDetailNeverLeavesTheAdapter() =
+        runTest {
+            val marked = "DETALHE-MARCADO-DO-SERVIDOR"
+            val operations: Map<String, suspend SdkPendingGateway.() -> Unit> =
+                mapOf(
+                    "guaranteePolicyId" to { guaranteePolicyId("x") },
+                    "createCardGuaranteePolicy" to { createCardGuaranteePolicy("x") },
+                    "cancellationPolicyId" to { cancellationPolicyId("x") },
+                    "ratePlanId" to { ratePlanId("x") },
+                    "createWebsiteRatePlan" to {
+                        createWebsiteRatePlan(PendingPlanSpec("C", "N", P_POLICY, P_CANCELLATION, P_TYPE))
+                    },
+                    "writePrices" to {
+                        writePrices(
+                            P_PLAN,
+                            PendingPriceSpec(P_TYPE, BigDecimal("300"), BigDecimal("320"), P_TODAY, P_TODAY),
+                        )
+                    },
+                    "guestId" to { guestId(P_CPF) },
+                    "findReservation" to { findReservation("DEMO-PEND-R1") },
+                    "createReservation" to { createReservation(pendingReservationSpec()) },
+                    "assignRoom" to { assignRoom(P_RESERVATION, P_ROOM) },
+                    "cancelReservation" to { cancelReservation(P_RESERVATION, "GUEST_REQUEST") },
+                    "openOutOfOrder" to { openOutOfOrder(P_ROOM, P_TODAY, P_TODAY, "x") },
+                )
+            for ((name, operation) in operations) {
+                val failures =
+                    listOf(
+                        HttpStatusCode.UnprocessableEntity to pendingProblem(422, "ALGUM_CODIGO", marked),
+                        HttpStatusCode.Forbidden to
+                            """{"code":"APPROVAL_REQUIRED","title":"T","status":403,"detail":"$marked",
+                            |"action":"x","permission":"p","resourceRef":"r"}
+                            """.trimMargin(),
+                    )
+                for ((status, reply) in failures) {
+                    val gateway = gateway { pendingReply(reply, status) }
+                    val failure = assertFailsWith<ApiError>(name) { gateway.operation() }
+                    generateSequence<Throwable>(failure) { it.cause }.forEach {
+                        assertFalse(marked in it.message.orEmpty(), "$name: $it")
+                        assertFalse(marked in it.toString(), "$name: $it")
+                    }
+                    when (failure) {
+                        is ApiError.Problem -> assertNull(failure.detail, name)
+                        is ApiError.ApprovalRequired -> assertNull(failure.detail, name)
+                        else -> Unit
+                    }
+                }
             }
         }
 }

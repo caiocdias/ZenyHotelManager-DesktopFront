@@ -30,7 +30,7 @@ mutants=(
   'seed-sem-linha-m3|/^- As reservas futuras, a cancelada e as pendentes/d|passos 0 a 18'
   'walkin-sem-reserva|s/Esse hóspede do seed é o titular das reservas futuras e pendentes do seed, nenhuma delas de hoje: o walk-in com ele vale do mesmo jeito\./Esse hóspede do seed não tem reserva./|passos 0 a 18'
   'folha-sem-25|s/nos passos 5, 7, 8, 10, 11, 16, 18, 22 e 25,/nos passos 5, 7, 8, 10, 11, 16, 18 e 22,/|folha'
-  'pacote-sem-m3|s/`roteiro-m2\.md`, `roteiro-m3\.md` \(este\), `LEIA-ME\.md`/`roteiro-m2.md` (este), `LEIA-ME.md`/|pacote'
+  'pacote-sem-m3|s/`roteiro-m2\.md`, `roteiro-m3\.md` \(este\), `roteiro-m4\.md`, /`roteiro-m2.md` (este), `roteiro-m4.md`, /|pacote'
   'cabecalho-intervalo|s/^(Ele vai do zero.*)Do passo 11 ao 26, cada passo/\1Do passo 11 ao 18, cada passo/|intervalo'
   # estrutura
   'titulo-24|s/^## 24\. Cancelar com a multa$/## 24. Cancelar com multa/|passos do M3'

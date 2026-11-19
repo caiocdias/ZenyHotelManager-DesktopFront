@@ -134,6 +134,7 @@ for path in sys.argv[1:]:
   printf '# Roteiro falso da M1\n\nTexto de teste.\n' >"$dir/docs/demo/roteiro-m1.md"
   printf '# Roteiro falso da M2\n\nTexto de teste.\n' >"$dir/docs/demo/roteiro-m2.md"
   printf '# Roteiro falso da M3\n\nTexto de teste.\n' >"$dir/docs/demo/roteiro-m3.md"
+  printf '# Roteiro falso da M4\n\nTexto de teste.\n' >"$dir/docs/demo/roteiro-m4.md"
   common="$(git -C "$dir" rev-parse --path-format=absolute --git-common-dir)" || return 1
   mkdir -p "$common/info"
   # Um exclude sem quebra de linha final colaria o primeiro padrão na última linha.

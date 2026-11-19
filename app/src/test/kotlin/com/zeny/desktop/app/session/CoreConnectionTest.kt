@@ -205,6 +205,46 @@ class CoreConnectionTest {
     }
 
     @Test
+    fun reopenGoesThroughTheFacade() {
+        val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
+        val keys = mutableListOf<String?>()
+        val bodies = mutableListOf<String>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/v1/folios/$folio/reopen") { exchange ->
+            keys += exchange.requestHeaders.getFirst("Idempotency-Key")
+            bodies += exchange.requestBody.readBytes().decodeToString()
+            val body =
+                (
+                    """{"balance":"0.00","creditLimitExceeded":false,"id":"$folio","number":"F-1",""" +
+                        """"openedAt":"2026-11-18T10:00:00Z","openedOn":"2026-11-18",""" +
+                        """"owner":{"id":"$folio","type":"RESERVATION"},"status":"OPEN",""" +
+                        """"updatedAt":"2026-11-18T10:00:00Z"}"""
+                ).toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            runTest {
+                val url = checkNotNull(ServerUrl.parse("http://127.0.0.1:${server.address.port}"))
+                CoreConnection(ZenyCore(url, MemorySettings())).use { connection ->
+                    val source = assertNotNull(connection.folioAccountSource())
+                    val done = source.reopen(folio, " engano ").run(null)
+                    assertEquals(folio, done.value.id.toString())
+                    assertEquals(listOf<String?>(null), keys)
+                    assertTrue("\"reason\":\"engano\"" in bodies.single())
+                    // O id é validado pela fachada do `core`, antes de ir à rede.
+                    assertFailsWith<IllegalArgumentException> { source.reopen("não-é-uuid", "engano") }
+                    assertEquals(1, keys.size)
+                }
+            }
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     fun folioCorrectionSourceIsTheFacade() {
         val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
         val posting = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f04"

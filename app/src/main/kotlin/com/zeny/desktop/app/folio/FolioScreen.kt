@@ -245,6 +245,7 @@ private fun OpenDialogs(state: FolioState) {
     state.preAuthorizations?.let { PreAuthorizationDialogs(it) }
     state.corrections?.let { CorrectionDialogs(it) }
     state.account?.let { FolioAccountDialog(it, onLeave = state::dismissAccount) }
+    state.reopen?.let { ReopenDialog(it, onLeave = state::dismissReopen) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
@@ -273,6 +274,11 @@ private fun Header(
             OutlinedButton(onClick = state::startAccount, modifier = Modifier.testTag("folio-account")) {
                 Text("Pagador e limite")
             }
+        }
+    }
+    if (state.canReopen) {
+        OutlinedButton(onClick = state::startReopen, modifier = Modifier.testTag("folio-reopen")) {
+            Text("Reabrir conta")
         }
     }
     if (view.limitExceeded) Text(FolioText.LIMIT_EXCEEDED, color = MaterialTheme.colorScheme.error)

@@ -35,6 +35,7 @@ seed_jar="$root/demo-seed/build/libs/demo-seed.jar"
 roteiro="$root/docs/demo/roteiro-m1.md"
 roteiro_m2="$root/docs/demo/roteiro-m2.md"
 roteiro_m3="$root/docs/demo/roteiro-m3.md"
+roteiro_m4="$root/docs/demo/roteiro-m4.md"
 
 # require_artifact FILE HINT [zip] : arquivo regular (não symlink), legível, não vazio e, com zip, assinatura PK\x03\x04
 # e ZIP íntegro (diretório central e CRC de cada entrada, pelo zipfile do python3; um build interrompido falha).
@@ -65,6 +66,7 @@ require_artifact "$seed_jar" "gere com ./gradlew :demo-seed:seedJar" zip
 require_artifact "$roteiro" "o roteiro docs/demo/roteiro-m1.md é versionado no front"
 require_artifact "$roteiro_m2" "o roteiro docs/demo/roteiro-m2.md é versionado no front"
 require_artifact "$roteiro_m3" "o roteiro docs/demo/roteiro-m3.md é versionado no front"
+require_artifact "$roteiro_m4" "o roteiro docs/demo/roteiro-m4.md é versionado no front"
 # Os arquivos de origem que o pacote copia ou lê de tools/server-env (render_override lê o compose.override.yaml)
 # também são conferidos antes do rm -rf: arquivo regular, não symlink (um link para um segredo sairia com outro
 # nome, fora da salvaguarda *.env) e legível.
@@ -92,6 +94,7 @@ cp -- "$seed_jar" "$pkg/app/demo-seed.jar" || die 1 "falha ao copiar demo-seed.j
 cp -- "$roteiro" "$pkg/roteiro-m1.md" || die 1 "falha ao copiar o roteiro"
 cp -- "$roteiro_m2" "$pkg/roteiro-m2.md" || die 1 "falha ao copiar o roteiro do M2"
 cp -- "$roteiro_m3" "$pkg/roteiro-m3.md" || die 1 "falha ao copiar o roteiro do M3"
+cp -- "$roteiro_m4" "$pkg/roteiro-m4.md" || die 1 "falha ao copiar o roteiro do M4"
 
 # Origem dos artefatos, sem caminho absoluto. O sha256 é dos JARs copiados; não prova que saíram de front_commit.
 front_commit="$(git -C "$root" rev-parse HEAD)" || die 1 "não foi possível ler o HEAD do front"

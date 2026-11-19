@@ -812,6 +812,7 @@ internal fun folioWiring(
         corrections = connection.folioCorrectionSource(),
         expiring = payments?.let { connection.expiringPreAuthorizationSource() },
         account = connection.folioAccountSource(),
+        approveReopen = { approveAction(approval, it) },
     )
 }
 

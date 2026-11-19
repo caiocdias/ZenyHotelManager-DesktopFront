@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Ataque ao aviso do fechamento automático das 03:00 (M0 E03, Task 3): posição fixada, unicidade por documento
 # e chegada ao pacote (package.sh com Docker, servidor e JARs falsos; sem Gradle). Desde a M3 E05, os laços
-# percorrem também o roteiro-m3.md, e todo roteiro de docs/demo tem de estar neles.
+# percorrem também o roteiro-m3.md (e, desde a M4 E05, o roteiro-m4.md), e todo roteiro de docs/demo tem de estar neles.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/tests/lib/assert.sh"
 source "$ROOT/tests/lib/fixtures.sh"
@@ -17,7 +17,7 @@ linha_de() { grep -nxF -- "$1" "$2" | head -1 | cut -d: -f1; }
 
 # --- 1. Unicidade e posição nas fontes ---
 leia="$ROOT/tools/server-env/LEIA-ME.md"
-roteiros=(roteiro-m1 roteiro-m2 roteiro-m3)
+roteiros=(roteiro-m1 roteiro-m2 roteiro-m3 roteiro-m4)
 # Um roteiro novo em docs/demo sem entrar nos laços passaria sem o aviso: a lista é a de docs/demo.
 assert_eq "$(printf '%s\n' "${roteiros[@]}")" "$(find "$ROOT/docs/demo" -maxdepth 1 -name 'roteiro-m*.md' -printf '%f\n' | sed 's/\.md$//' | sort -V)" \
   "os laços percorrem todos os roteiros de docs/demo"
@@ -45,7 +45,7 @@ assert_contains "$(sed -n "$((n_aviso + 2))p" "$leia")" "Depois de recriar, popu
 assert_eq "1" "$(rc_section "$leia" '## 3. Parar e recriar a demo' | grep -c 'down -v$')" "LEIA-ME: um só comando down -v na seção 3"
 
 # Passo 13 do M2 (herdado pelo M3): a frase velha não sobrou em lugar nenhum dos roteiros.
-for r in roteiro-m2 roteiro-m3; do
+for r in roteiro-m2 roteiro-m3 roteiro-m4; do
   assert_eq "0" "$(grep -cF -- "$ficha_velha" "$ROOT/docs/demo/$r.md")" "$r: sem a frase velha dos rótulos FNRH"
 done
 # O roteiro do M3 remete ao aviso no cabeçalho e no passo das pendências (no-shows previstos somem às 03:00).
@@ -53,6 +53,11 @@ assert_contains "$(awk '/^## /{exit} {print}' "$ROOT/docs/demo/roteiro-m3.md")" 
   "roteiro-m3: o cabeçalho remete ao aviso das 03:00"
 assert_contains "$(rc_section "$ROOT/docs/demo/roteiro-m3.md" '## 26. Pendências')" "às 03:00 o servidor as marca como \"Não compareceu\" (o aviso do passo 0)" \
   "roteiro-m3: os no-shows previstos remetem ao aviso"
+# O roteiro do M4 herda as duas remissões do M3 (o cabeçalho e o passo das pendências).
+assert_contains "$(awk '/^## /{exit} {print}' "$ROOT/docs/demo/roteiro-m4.md")" "como diz o aviso das 03:00 no passo 0" \
+  "roteiro-m4: o cabeçalho remete ao aviso das 03:00"
+assert_contains "$(rc_section "$ROOT/docs/demo/roteiro-m4.md" '## 26. Pendências')" "às 03:00 o servidor as marca como \"Não compareceu\" (o aviso do passo 0)" \
+  "roteiro-m4: os no-shows previstos remetem ao aviso"
 
 # --- 2. O pacote leva o aviso, uma vez por documento ---
 tmp="$(mktemp -d)"
@@ -71,14 +76,17 @@ make_fake_jars "$front"
 cp -- "$ROOT/docs/demo/roteiro-m1.md" "$front/docs/demo/roteiro-m1.md"
 cp -- "$ROOT/docs/demo/roteiro-m2.md" "$front/docs/demo/roteiro-m2.md"
 cp -- "$ROOT/docs/demo/roteiro-m3.md" "$front/docs/demo/roteiro-m3.md"
+cp -- "$ROOT/docs/demo/roteiro-m4.md" "$front/docs/demo/roteiro-m4.md"
 cp -- "$ROOT/tools/server-env/LEIA-ME.md" "$front/tools/server-env/LEIA-ME.md"
 assert_exit 0 "pacote com os documentos reais" -- timeout 60 bash "$front/tools/server-env/package.sh"
 pkg="$front/build/demo-package"
-for p in LEIA-ME.md roteiro-m1.md roteiro-m2.md roteiro-m3.md; do
+for p in LEIA-ME.md roteiro-m1.md roteiro-m2.md roteiro-m3.md roteiro-m4.md; do
   assert_eq "1" "$(conta "$pkg/$p")" "pacote: $p traz o aviso uma vez"
 done
 assert_eq "0" "$(grep -cF -- "$ficha_velha" "$pkg/roteiro-m2.md")" "pacote: roteiro-m2 sem a frase velha"
 assert_eq "0" "$(grep -cF -- "$ficha_velha" "$pkg/roteiro-m3.md")" "pacote: roteiro-m3 sem a frase velha"
 assert_eq "1" "$(cmp -s "$ROOT/docs/demo/roteiro-m3.md" "$pkg/roteiro-m3.md" && echo 1 || echo 0)" "pacote: o roteiro-m3 real, byte a byte"
+assert_eq "0" "$(grep -cF -- "$ficha_velha" "$pkg/roteiro-m4.md")" "pacote: roteiro-m4 sem a frase velha"
+assert_eq "1" "$(cmp -s "$ROOT/docs/demo/roteiro-m4.md" "$pkg/roteiro-m4.md" && echo 1 || echo 0)" "pacote: o roteiro-m4 real, byte a byte"
 
 finish

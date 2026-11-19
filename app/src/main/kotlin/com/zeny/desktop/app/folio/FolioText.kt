@@ -127,6 +127,12 @@ object FolioText {
     const val ACCOUNT_UNCONFIRMED =
         "$ACCOUNT_UNCONFIRMED_START A conta foi relida; confira antes de salvar de novo."
     const val ACCOUNT_SAVED = "Pagador e limite atualizados."
+    const val REOPEN_REASON_REQUIRED = "Informe o motivo."
+    const val REOPEN_APPROVAL_CANCELLED = "Aprovação cancelada. A conta não foi reaberta."
+    const val REOPEN_UNCONFIRMED =
+        "Não foi possível confirmar a reabertura. A conta foi relida; confira antes de tentar de novo."
+    const val REOPEN_LOCAL_FAILURE = "Não foi possível reabrir a conta agora. Confira o motivo e tente de novo."
+    const val REOPEN_DONE = "Conta reaberta."
     private const val UNKNOWN = "—"
 
     private val postingTypes =

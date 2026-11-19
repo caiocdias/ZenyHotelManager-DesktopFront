@@ -362,7 +362,8 @@ ZENY_SEED_RECEPTIONIST_PASSWORD ZENY_SEED_HOUSEKEEPER_PASSWORD ZENY_SEED_MANAGER
     assert_eq "" "$(grep -nE 'eyJ[A-Za-z0-9_-]{8,}' "$f")" "${f#"$ROOT"/}: sem JWT literal"
     assert_eq "" "$(grep -nE 'Bearer[[:space:]]+[^$[:space:]`…<]' "$f" | grep -vE 'Bearer[[:space:]]+(…|\.\.\.)')" \
       "${f#"$ROOT"/}: Bearer só com variável"
-    assert_eq "" "$(grep -nE '(^|[^A-Za-z])PIN([^A-Za-z]|$)' "$f" | grep -E '(^|[^0-9A-Za-z-])[0-9]{4,8}([^0-9]|$)')" \
+    # O número da linha do grep -n fica fora da busca: a partir da linha 1000 ele mesmo tem 4 dígitos (M4 E05).
+    assert_eq "" "$(grep -nE '(^|[^A-Za-z])PIN([^A-Za-z]|$)' "$f" | grep -E '^[0-9]+:(.*[^0-9A-Za-z-])?[0-9]{4,8}([^0-9]|$)')" \
       "${f#"$ROOT"/}: sem PIN literal"
   done
 }

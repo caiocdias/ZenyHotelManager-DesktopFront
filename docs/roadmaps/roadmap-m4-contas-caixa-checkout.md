@@ -219,8 +219,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E11 | Duplicação entre o painel do dia e a busca | #concluida | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
 | E10 | Cauções a vencer | #em-andamento | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #em-andamento | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
-| E13 | Reabrir conta encerrada | #pendente | E02, E08 | Reabrir a conta encerrada, com aprovação de superior |
-| E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E13 | Reabrir conta encerrada | #em-andamento | E02, E12 | Reabrir a conta encerrada, com aprovação de superior |
+| E05 | Gate do marco M4 | #em-andamento | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -1079,7 +1079,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   5. **Conta repetida na divisão:** recusada no "Dividir" com "Confira as partes da divisão.", e não ignorada ao acrescentar (o Menor da revisão final conflitava com um teste do testador; ruling deste lote).
   6. **Textos do implementador:** "O valor deve ser maior que zero." (ajuste negativo), "Esta conta (fica)" (a primeira parte da divisão, sem o número), "O servidor registra o motivo: pedido do cliente." (remoção da taxa).
 - **Notas para a próxima etapa:**
-  - **E13 (reabrir):** a porta é a `FolioCorrectionSource`; as notas I1, M1, M4 e M7 da revisão de arquitetura estão na seção dela.
+  - **E13 (reabrir):** a porta é a `FolioCorrectionSource` (superada pelo plano da E13: a porta é a `FolioAccountSource` da E12); as notas I1, M1, M4 e M7 da revisão de arquitetura estão na seção dela.
   - **Dívidas:** o `PostingFormState` e o `ReversalState` ainda têm `send`/`fail` próprios; o `FolioState.kt` segue grande, agora com o `FolioCorrectionsState` à parte; o `FolioCorrectionsState` recebe `clearNotice` por parâmetro.
   - **Diferidos (Menores):** o nome do teste ao vivo `adjustWithApprovalAndRemoveTheServiceCharge` cobre os cinco passos (não renomeado: a trava do testador o referencia); um sucesso de transferência com `transfers` vazio ainda mostra "Transferido para a conta X.".
   - **Para o testador:** um diálogo por vez entre as cauções e as correções (coberto só num sentido, pelo `oneDialogAtATime` da Task 2: falta a correção não abrir com a caução aberta) e a troca de sessão pela casca com uma correção em voo (coberta indiretamente pelo `closeDropsLateAnswers`) não foram atacados no teto de 30 min.
@@ -1305,13 +1305,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E13 — Reabrir conta encerrada — #pendente
+## E13 — Reabrir conta encerrada — #em-andamento
 
 **Objetivo:** na conta encerrada, o usuário com a permissão (ou com a aprovação de um superior) reabre a conta, com o motivo.
 
 **Por que agora:** saiu da E08 em 2026-11-19 (I4 da revisão de arquitetura do plano da E08: as fatias passavam do teto, e a reabertura não depende das correções). Veio da E04, onde não tinha critério. O gate (E05) espera por ela.
 
-**Dependências:** E02 (a tela da conta) e E08 (a porta `FolioCorrectionSource`). O ID é o próximo livre.
+**Dependências:** E02 (a tela da conta) e E12 (a porta `FolioAccountSource`; o plano trocou a `FolioCorrectionSource` da E08 por ela, por coesão — ver as "Decisões para o usuário" da E13). O ID é o próximo livre.
 
 **Escopo:** `POST /api/v1/folios/{id}/reopen` (`FolioReopenRequest`, motivo até 500), ação sensível sem limite de valor, **sem `Idempotency-Key`** no contrato.
 
@@ -1320,8 +1320,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Critérios de aceite:**
 
 - [ ] Reabrir como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, a conta relida aparece aberta, e a reabertura não envia `Idempotency-Key` (teste da fachada).
-- [ ] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
-- [ ] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
+- [x] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
+- [x] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
 
 **Validação obrigatória:**
 
@@ -1333,7 +1333,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Notas para o plano:**
 
 - Notas da revisão de arquitetura do plano da E08 (I1, M1, M4, M7): o `ReopenState` com envio próprio, com `classifyWriteFailure` direto, como o `TraceFormState`, sem o `FolioWrite` (o `UNKNOWN` e o `UNKNOWN_STORED` relêem e destravam, porque não há chave); o `ApiExecutor` não tem caminho sem `Intent` com o token (`execute(null)` não leva token; `executeApproved` exige `Intent` e manda a chave), então nasce um `internal` no `core`; o `approveReopen` do `FolioWiring` segue o padrão do `approveRefund = { null }` só se um teste do wiring real provar a ligação; a visibilidade de "Reabrir conta" (com `billing.folios.manage` ou `billing.folios.reopen`) é mais restrita que o servidor, que só exige `billing.folios.read` antes da aprovação.
-- A porta é a `FolioCorrectionSource` da E08.
+- ~~A porta é a `FolioCorrectionSource` da E08.~~ Superada pelo plano (2026-11-19): a porta é a `FolioAccountSource` da E12, a das ações sobre a conta.
 - **Risco:** autenticação ou autorização e concorrência estão na lista fechada.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
@@ -1342,16 +1342,39 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `419f8ba` (código) e no `a6c0863` (com o rascunho deste handoff). Falta a inspeção manual contra o `zeny-front` (uma conta encerrada, reaberta pela Recepcionista com a aprovação do Gerente), que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 1 Importante (a troca da porta sem registro e com o motivo errado); aprovado com notas na rodada 1 (`aa9ea6b`, registro em `1e8afa8`).
+- **Commits** (`MERGE_BASE` `cac0274`, HEAD de código `419f8ba`):
+  - `645068d`: o início e o plano.
+  - **Task 1** (`03ea5d6`): `FoliosFacade.reopen` sem `Idempotency-Key` (o caminho `internal` `ApiExecutor.executeWithoutKey` e o `approvableWithoutKey` em `Approval.kt`), `FolioAccountSource.reopen` e o `FolioWiring.approveReopen` ligado ao coordenador. Revisão de fatia aprovada.
+  - **Task 2** (`90abb43`, `40743f2`): o `ReopenState` (envio próprio com `classifyWriteFailure`), o diálogo e "Reabrir conta" no cabeçalho da conta encerrada. Revisão de fatia: uma rodada (o teste de "um diálogo por vez" não provava nada; a aprovação cancelada depois do desconhecido mantinha o `unconfirmed`; o "Voltar" sem teste).
+  - **Testador de etapa** (`b4d2f31`): o limite de 500 rodado no fio, o token sentinela fora de mensagem, `toString` e causas, o `X-Approval-Token` uma vez só, o retorno do `approveReopen`, as recusas definitivas e desconhecidas; um teste vermelho documentou um defeito.
+  - **Correção do fim da etapa** (`419f8ba`): o limite de 500 contado depois de aparar; a falha local (a fachada ou a aprovação pendente, agora `ApprovalPendingException`) é recusa definitiva com texto, sem reler como desconhecido; o KDoc do `ApprovalCoordinator`.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `cac0274..40743f2`): 0 Críticos, 1 Importante de processo (o segredo do token fora do `Riscos:`, levado ao testador), 9 Menores, "Ready to merge: Yes".
+  - Re-revisão escopada de `40743f2..a6c0863` (os testes do testador, a correção e o rascunho deste handoff): o Importante e os Menores 1 a 4, 6 e 8 resolvidos, os testes do testador aprovados por inteiro, nenhum Crítico nem Importante novo, "Ready to merge: Yes".
+- **Gate no `a6c0863`:** `./gradlew build` → BUILD SUCCESSFUL (app 3210, 53, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 67 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `40743f2` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
+- **Integridade:** `check_test_integrity.py --base cac0274` no `419f8ba` → exit 0, nenhum apontamento.
+- **Critérios:**
+  1. **Reabrir como Recepcionista pede aprovação; aprovado, a conta relida aparece aberta, sem `Idempotency-Key`** — `ReopenStateTest.reopenAsksApprovalAndRereads`; `FolioReopenScreenTest.reopenFromTheHeaderRereadsTheFolio`; `FolioReopenFacadeTest.reopenSendsTheTrimmedReasonAndNoIdempotencyKey` e `reopenApprovedSendsOnlyTheToken`; `CoreConnectionTest.reopenGoesThroughTheFacade`. **Inspeção ao vivo:** pendente.
+  2. **Resultado desconhecido relê e diz para conferir; repetir numa conta já aberta mostra `FOLIO_NOT_CLOSED` e relê** — `reopenUnknownRereadsAndAllowsRetryByClick`, `reopenNotClosedShowsTextAndRereads` e os ataques de `b4d2f31`.
+  3. **O wiring real liga a aprovação ao coordenador nas três entradas** — `FolioWiringTest.wiringCarriesTheReopenApproval` e o retorno afirmado pelo testador.
+- **Como fazer a verificação ao vivo:** com a demo recriada e uma conta encerrada (a `LiveCheckOutCheck` da E04 deixa uma), entre como a Recepcionista, abra a conta encerrada na aba "Contas" (ou pela reserva que saiu), clique em "Reabrir conta", informe o motivo e aprove como o Gerente; a conta relida aparece aberta, com "Conta reaberta.". Passando, a E13 fecha `#concluida`.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **A porta da reabertura é a `FolioAccountSource` (E12)**, e não a `FolioCorrectionSource` (E08) que a nota da etapa citava: a reabertura age sobre a conta encerrada, sem `Intent`, como o `updateFolio`; as correções são de lançamento, com `Intent` e conta aberta. A E13 passou a depender da E12. Custo se errado: mover um método de interface interna.
+  2. **"Reabrir conta" aparece com `billing.folios.manage` ou `billing.folios.reopen`**: mais restrito que o servidor, que só exige `billing.folios.read` antes da aprovação.
+  3. **O motivo é obrigatório** (o contrato aceita vazio, mas a descrição da operação o exige).
+  4. **A reabertura vai sem `Idempotency-Key`** (o contrato não a declara): o resultado desconhecido relê e pede para conferir; repetir numa conta já aberta é inofensivo (`FOLIO_NOT_CLOSED`).
+  5. **Textos novos:** "Reabrir conta", "Informe o motivo.", "Conta reaberta.", "Aprovação cancelada. A conta não foi reaberta.", "Não foi possível confirmar a reabertura. A conta foi relida; confira antes de tentar de novo.", "Não foi possível reabrir a conta agora. Confira o motivo e tente de novo.".
+- **Notas para a próxima etapa:**
+  - **Diferidos (Menores):** o `undoCheckIn` (`ReservationsFacade`) já fazia escrita aprovável sem chave por outro idioma; unificá-lo sobre o `approvableWithoutKey`; o diálogo continua aberto quando a releitura depois do desconhecido mostra a conta já reaberta (o próximo clique dá "A conta ainda não está fechada."); a mensagem "Informe o motivo." persiste até o próximo "Reabrir"; os testes de fachada repetem auxiliares de outros testes do `core`;
+    - da re-revisão: o `catch (IllegalArgumentException)` do `ReopenState.send` envolve também a execução da ação (montar a ação num `try` próprio); o contador do diálogo mostra o texto cru (pode exibir "501/500"); "Confira o motivo e tente de novo." orienta mal quando a causa é outra aprovação aberta; a `ApprovalPendingException` só é tratada como recusa definitiva na reabertura (os outros estados que usam o coordenador ainda a veem como resultado desconhecido); um teste do testador sobre o token no estado é quase vácuo (a prova real está no `core`).
+  - **Para o testador:** a troca de sessão pelo `ApprovalCoordinator` real com a reabertura em voo; o diálogo único com correções, pagamentos e cauções abertos; o duplo clique pela UI real.
 
 ---
 
-## E05 — Gate do marco M4 — #pendente
+## E05 — Gate do marco M4 — #em-andamento
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
@@ -1374,12 +1397,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Clone limpo: build, teste e lint verdes.
+- [x] Clone limpo: build, teste e lint verdes.
 - [ ] `smokeTest` verde, e o seed termina em menos de 2 minutos.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
-- [ ] **`B-M4`/`C-M2`:** um teste do `SdkPendingGateway` com um `detail` marcado do servidor prova que o texto marcado não aparece na mensagem nem na causa da exceção que sai do adaptador. O KDoc do `cancelReservation` descreve o que o adaptador devolve.
-- [ ] **`B-M8`:** o `untouched` do `PendingSeeder` tem nome que diz o que guarda, e os testes do seeder seguem verdes. O KDoc do seeder e o `roteiro-m4.md` dizem que o fora de ordem da UH 208 depende da data operacional do dia da recriação. O handoff registra se o planejador mudou o cálculo da data, e por quê.
-- [ ] **`C-M8`:** os opt-ins ao vivo do `demo-seed` são entradas da tarefa de teste do Gradle. Mudar um opt-in invalida o resultado em cache da tarefa, e um teste estático ou de script prova isso.
+- [x] **`B-M4`/`C-M2`:** um teste do `SdkPendingGateway` com um `detail` marcado do servidor prova que o texto marcado não aparece na mensagem nem na causa da exceção que sai do adaptador. O KDoc do `cancelReservation` descreve o que o adaptador devolve.
+- [x] **`B-M8`:** o `untouched` do `PendingSeeder` tem nome que diz o que guarda, e os testes do seeder seguem verdes. O KDoc do seeder e o `roteiro-m4.md` dizem que o fora de ordem da UH 208 depende da data operacional do dia da recriação. O handoff registra se o planejador mudou o cálculo da data, e por quê.
+- [x] **`C-M8`:** os opt-ins ao vivo do `demo-seed` são entradas da tarefa de teste do Gradle. Mudar um opt-in invalida o resultado em cache da tarefa, e um teste estático ou de script prova isso.
 
 **Validação obrigatória:**
 
@@ -1401,12 +1424,43 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **aguardando a revisão humana** (2026-11-19, `Revisão humana: sim`). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `39e435a` (código) e no `d5352f0` (com o rascunho deste handoff), e o clone limpo foi verificado (abaixo). Falta o que só o usuário faz: recriar a demo no dia, rodar o seed (medindo o tempo) e o `smokeTest`, rodar as verificações ao vivo pendentes do marco e executar o `roteiro-m4.md` no Windows com o pacote.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md). Revisão de arquitetura **dispensada** pelo orquestrador (o seed só consome a API existente; o roteiro e o pacote seguem o gate do M3); a revisão final conferiu a dispensa contra o diff e a confirmou.
+- **Commits** (`MERGE_BASE` `e54a5e8`, HEAD de código `39e435a`):
+  - `d04feec`: o início e o plano.
+  - **Task 1** (`2602ec1`, `3a63af1`): o `FolioSeeder` (porta `FolioGateway`, adaptador `SdkFolioGateway`) lança dois consumos "Seed M4: <item>" com taxa de serviço (código "Alimentos e bebidas", `serviceChargeApplies`) nas contas dos hospedados, de forma idempotente; a linha "consumos: N criados, M já existiam" no relatório; a redação do `detail` do servidor numa função única (`ApiError.withoutServerDetail()`). Revisão de fatia: uma rodada (a redação estava duplicada).
+  - **Task 2** (`b3ff918`): `B-M4`/`C-M2` (as 12 operações do `SdkPendingGateway` redigem o `detail`; o KDoc do `cancelReservation`), `B-M8` (o `untouched` virou `movedOnByTheDemo`; o cálculo da data **não mudou**: ela vem do `businessDate()` do servidor, não do relógio, e não havia defeito), `C-M8` (os opt-ins `ZENY_SEED_LIVE`, `ZENY_SEED_LIVE_AVAILABILITY`, `ZENY_SEED_LIVE_RESERVATIONS` e `ZENY_SEED_SERVER` como `inputs.property` da tarefa `test`, sem credenciais; o script `tests/test_seed_live_optins.sh`). Revisão de fatia aprovada.
+  - **Task 3** (`c858746`, `b54092f`): o `docs/demo/roteiro-m4.md` (acumula o do M3; passos 27 a 39 da hospedagem) e o `package.sh` levando-o; os roteiros m1–m3, o `LEIA-ME.md` e o `README.md` citam o m4. O testador estendeu as travas ao M4 em despachos escopados (`81ef477`, `342e2e8`, `25b8241`: `test_roteiro_m4_ataque.sh`, os 31 mutantes e o `test_package_roteiro_m4_ataque.sh`; corrigiu um falso positivo do PIN a partir da linha 1000). Revisão de fatia aprovada.
+  - **Testador de etapa** (`5532acd`, `1a4f73d`): a ligação dos consumos no `DemoSeed`, o vazamento do `detail` em todos os formatos (412, corpo malformado, `fieldErrors`) nos dois adaptadores, a retomada do seed e as travas do opt-in; um teste vermelho documentou um defeito.
+  - **Correção do fim da etapa** (`39e435a`): as quatro leituras do `SdkFolioGateway` redigem o `detail` (o ajudante `redactingServerDetail` em `Redaction.kt`); a conta do consumo vem do `folioId` da própria reserva; três ajustes de redação no roteiro.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `e54a5e8..25b8241`): 0 Críticos, 1 Importante (as leituras do `SdkFolioGateway` sem redação), 10 Menores, "Ready to merge: With fixes".
+  - Re-revisão escopada de `25b8241..d5352f0` (os testes do testador, a correção e o rascunho deste handoff): o Importante e os Menores da redação do roteiro resolvidos, os testes do testador aprovados por inteiro, nenhum Crítico nem Importante novo, "Ready to merge: Yes".
+- **Gate no `d5352f0`:** `./gradlew build` → BUILD SUCCESSFUL (app 3210, 53, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 758, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 72 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `25b8241` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
+- **Integridade:** `check_test_integrity.py --base e54a5e8` → exit 1, apontamentos `ASSERCAO_REMOVIDA` todos julgados justificados: a troca `assertNotEquals(null, detail)` → `assertNull` que o `B-M4` exige; o falso positivo do PIN; trocas de m3 por m4 nas travas; e, na correção, as asserções do comportamento antigo da escolha da conta.
+- **Critérios:**
+  1. **Clone limpo: build, teste e lint verdes** — ver "Clone limpo" abaixo.
+  2. **`smokeTest` verde, e o seed em menos de 2 minutos** — pendente (usuário, contra o ambiente recriado).
+  3. **Roteiro executado no Windows e aprovado** — pendente (usuário).
+  4. **`B-M4`/`C-M2`** — `SdkPendingGatewayTest.markedDetailNeverLeavesTheAdapter`, `SdkDetailLeakAtaqueTest` (do testador, nos dois adaptadores e em todos os formatos), `WithoutServerDetailTest`; o KDoc do `cancelReservation`.
+  5. **`B-M8`** — o nome `movedOnByTheDemo`, os testes do seeder verdes, o KDoc do `PendingSeeder` e o cabeçalho do `roteiro-m4.md` (o fora de ordem da UH 208 depende da data operacional do dia da recriação; o cálculo não mudou, como diz o item 2 dos commits).
+  6. **`C-M8`** — `tests/test_seed_live_optins.sh` e o ataque `tests/test_seed_live_optins_ataque.sh` (no Gradle real, mudar `ZENY_SEED_LIVE_RESERVATIONS` refez `:demo-seed:test`).
+- **Clone limpo** (clone novo do branch em pasta temporária, no `39e435a`): `./gradlew build ktlintCheck detekt` → BUILD SUCCESSFUL em 7 min (testes, pulados, falhas: app 3210, 53, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 758, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 72 arquivos, 0 falhas, 5 com casos pulados (no clone não há o repositório do servidor, o `.server/` nem o busybox).
+- **O que o usuário faz para fechar a E05 (e as etapas aguardando a verificação ao vivo):**
+  1. Recriar a demo no dia (`down -v`, `up -d`, o seed), medindo o tempo do seed (menos de 2 minutos).
+  2. `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088` com os `ZENY_SEED_*`.
+  3. As verificações ao vivo pendentes, nesta ordem (os comandos estão nos handoffs): `LivePaymentCheck` (E03), `LivePreAuthorizationCheck` (E09), `LiveCheckOutCheck` (E04), `LiveFolioCorrectionCheck` (E08), `LiveExpiringPreAuthorizationCheck` (E10), `LiveReservationLifecycleCheck` (E12) e a inspeção da reabertura (E13). Elas escrevem na demo: recrie de novo antes do roteiro.
+  4. Gerar o pacote (`./gradlew :app:desktopJar :demo-seed:seedJar` e `tools/server-env/package.sh`; as imagens com `save-images.sh`) e executar o `roteiro-m4.md` no Windows, do zero.
+  - Aprovando, a E05 e as etapas aguardando fecham `#concluida`; uma reprovação reabre a etapa com uma rodada de correção.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **H2: o turno é aberto à mão no roteiro** (passo 27), e não pelo seed: o turno é pessoal da Recepcionista.
+  2. **Consumos do seed:** dois por conta de hospedado ("Seed M4: <item>", R$ 86,50 e R$ 32,00, com a taxa de 10%), no código "Alimentos e bebidas"; sem um código que aplique a taxa, o seed avisa e segue.
+  3. **O roteiro do M4 acumula o do M3 por inteiro** (passos 0 a 26 iguais, salvo os 5, 6 e 11) e acrescenta os passos 27 a 39.
+  4. **Duas imprecisões de redação ficam no roteiro**, porque as travas do testador fixam o texto: a crase em "à mais 7 dias" no cabeçalho do `B-M8` e, no passo herdado do M3 (~linha 867), "o registro do depósito na conta da reserva só chega no M4".
+- **Notas para a próxima etapa:**
+  - **Diferidos (Menores):** o `AdminContext.folios` é um `var` fora do construtor (não sobrevive a um `copy`; o construtor está travado por um teste do testador); o `FolioSeeder` não usa o parâmetro `seeded`; a idempotência é presa à conta de origem (um consumo do seed transferido seria relançado); **o seed rodado sobre uma demo já usada aborta numa conta encerrada que não tem os consumos do seed** (desde `39e435a` a conta vem do `folioId` da reserva, e o lançamento numa conta encerrada recebe `409 FOLIO_CLOSED`, o seed sai com 1 e os seeders seguintes não rodam; com os consumos já lá, eles contam como mantidos, sem aviso). Só acontece fora do roteiro, que manda recriar a demo do zero; a correção é tratar o `FOLIO_CLOSED` como aviso no `FolioSeeder` ou pular a reserva que não está hospedada; o KDoc do `FolioGateway` ("ou `null` se não há") e o aviso "sem conta aberta" do `FolioSeeder` ficaram desatualizados pela mesma mudança; o pager do `SdkFolioGateway.reservationId` repete o do `SdkPendingGateway`; o `ZENY_SEED_ADMIN_LOGIN` e as credenciais não são entrada da tarefa `test` (de propósito); duas execuções simultâneas do seed não têm trava.
+  - **Para o testador:** a corrida de duas execuções simultâneas do seed.
 
 ---
 
@@ -1451,3 +1505,5 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E11 fecha `#concluida` (`claude --agent orquestrador`): o painel do dia e a busca de reservas montam as colunas, leem os tipos de UH e travam as leituras auxiliares por uma função só (`259e6e4`); revisão final e re-revisão limpas.
 - 2026-11-19 — a E10 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `298e2a9`; falta a `LiveExpiringPreAuthorizationCheck` (só leitura), que pede as credenciais do usuário.
 - 2026-11-19 — a E12 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `85e8869`; faltam a parte ao vivo do critério 2 e o critério 3 (`LiveReservationLifecycleCheck`), que pedem as credenciais do usuário e do Gerente.
+- 2026-11-19 — a E13 passou a depender da E12, e não da E08: a reabertura ficou na `FolioAccountSource` da E12 (decisão do plano da E13, por coesão; nas "Decisões para o usuário" dela). A E13 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `419f8ba`; falta a inspeção manual da reabertura contra o `zeny-front`.
+- 2026-11-19 — a E05 (gate do marco) fica `#em-andamento`, **aguardando a revisão humana** (`claude --agent orquestrador`): o seed lança consumos nas contas dos hospedados, os achados `B-M4`/`C-M2`, `B-M8` e `C-M8` estão resolvidos, o `roteiro-m4.md` existe e entra no pacote, e o clone limpo está verde. Faltam o seed medido, o `smokeTest`, as verificações ao vivo pendentes do marco e a execução do roteiro no Windows, que ficam com o usuário.

@@ -33,7 +33,8 @@ import kotlin.uuid.Uuid
  * Pendências e reservas futuras sobre o `sdk`: política de garantia por cartão, plano só no site, preços por período,
  * reservas por `externalId`, a UH fora de ordem e o cancelamento. `createBooking` e `cancelReservation` exigem
  * `Idempotency-Key`: cada chamada cria a sua `Intent` (chave nova), como o `SdkBookingGateway`.
- * O CPF vai só no corpo, e o erro dessa busca sai sem ele.
+ * O CPF vai só no corpo, e o erro dessa busca sai sem ele. Em nenhuma operação o `detail` do servidor sai na
+ * mensagem nem na causa do erro (`B-M4`).
  *
  * Os nomes e códigos são comparados sem diferenciar maiúsculas, porque o servidor os trata assim.
  */
@@ -57,10 +58,12 @@ class SdkPendingGateway(
 
     override suspend fun createCardGuaranteePolicy(name: String): String {
         val request = GuaranteePolicyRequest(name = name, type = GuaranteePolicyRequest.Type.CARD)
-        return executor
-            .execute { rates.createGuaranteePolicy(request, it.headers) }
-            .value.id
-            .toString()
+        return redactingServerDetail {
+            executor
+                .execute { rates.createGuaranteePolicy(request, it.headers) }
+                .value.id
+                .toString()
+        }
     }
 
     override suspend fun cancellationPolicyId(name: String): String? =
@@ -88,10 +91,12 @@ class SdkPendingGateway(
                 packageIds = emptyList(),
                 roomTypeIds = listOf(Uuid.parse(spec.roomTypeId)),
             )
-        return executor
-            .execute { rates.createRatePlan(request, it.headers) }
-            .value.id
-            .toString()
+        return redactingServerDetail {
+            executor
+                .execute { rates.createRatePlan(request, it.headers) }
+                .value.id
+                .toString()
+        }
     }
 
     /**
@@ -117,18 +122,22 @@ class SdkPendingGateway(
                 to = Option.Some(prices.to.toString()),
                 weekdays = emptyList(),
             )
-        executor.execute { rates.updateRatePlanPrices(Uuid.parse(ratePlanId), null, request, it.headers) }
+        redactingServerDetail {
+            executor.execute { rates.updateRatePlanPrices(Uuid.parse(ratePlanId), null, request, it.headers) }
+        }
     }
 
     override suspend fun guestId(cpf: String): String? {
         val request = GuestDocumentSearchRequest(number = cpf, type = GuestDocumentSearchRequest.Type.CPF)
-        return redactingValues(listOf(cpf)) {
-            executor
-                .execute { guestsApi.searchGuestsByDocument(request, it.headers) }
-                .value.items
-                .firstOrNull()
-                ?.id
-                ?.toString()
+        return redactingServerDetail {
+            redactingValues(listOf(cpf)) {
+                executor
+                    .execute { guestsApi.searchGuestsByDocument(request, it.headers) }
+                    .value.items
+                    .firstOrNull()
+                    ?.id
+                    ?.toString()
+            }
         }
     }
 
@@ -151,17 +160,23 @@ class SdkPendingGateway(
                         }.value
                 Page(page.items, (page.nextCursor as? Option.Some)?.value)
             }
-        while (pager.hasMore) {
-            val item = pager.next().firstOrNull { (it.externalId as? Option.Some)?.value == externalId }
-            if (item != null) {
-                return PendingReservationRef(
-                    item.id.toString(),
-                    item.status,
-                    (item.roomAssignment as? Option.Some)?.value?.roomId?.toString(),
-                )
+        return redactingServerDetail {
+            var found: PendingReservationRef? = null
+            while (found == null && pager.hasMore) {
+                found =
+                    pager
+                        .next()
+                        .firstOrNull { (it.externalId as? Option.Some)?.value == externalId }
+                        ?.let {
+                            PendingReservationRef(
+                                it.id.toString(),
+                                it.status,
+                                (it.roomAssignment as? Option.Some)?.value?.roomId?.toString(),
+                            )
+                        }
             }
+            found
         }
-        return null
     }
 
     /** A origem é um valor de `BookingRequest.Origin`; outro valor lança `IllegalArgumentException`, sem rede. */
@@ -189,8 +204,10 @@ class SdkPendingGateway(
             )
         val intent = Intent()
         val response =
-            executor.execute(intent) {
-                reservationsApi.createBooking(it.requireIdempotencyKey(), null, request, it.headers)
+            redactingServerDetail {
+                executor.execute(intent) {
+                    reservationsApi.createBooking(it.requireIdempotencyKey(), null, request, it.headers)
+                }
             }
         val created = response.value.reservations.single()
         return PendingReservationRef(created.id.toString(), created.status, null)
@@ -202,21 +219,22 @@ class SdkPendingGateway(
     ) {
         val request =
             RoomAssignRequest(roomId = Uuid.parse(roomId), reason = Option.Some(RoomAssignRequest.Reason.INITIAL))
-        executor.execute { reservationsApi.assignReservationRoom(Uuid.parse(reservationId), request, it.headers) }
+        redactingServerDetail {
+            executor.execute { reservationsApi.assignReservationRoom(Uuid.parse(reservationId), request, it.headers) }
+        }
     }
 
     /**
-     * Cancela sem isentar a multa, com chave própria. O `detail` do servidor pode ecoar dado do hóspede: numa
-     * recusa só o status e o código sobem.
+     * Cancela sem isentar a multa, com chave própria, e não devolve nada: o êxito é só não lançar. Numa recusa sobe
+     * um `ApiError` com o status e o código do servidor, sem o `detail` (que pode ecoar dado do hóspede).
      */
-    @Suppress("SwallowedException") // o erro original traz o detail do servidor, descartado de propósito
     override suspend fun cancelReservation(
         reservationId: String,
         reason: String,
     ) {
         val request =
             ReservationCancelRequest(reason = ReservationCancelRequest.Reason.fromSerial(reason), waivePenalty = false)
-        try {
+        redactingServerDetail {
             executor.execute(Intent()) {
                 reservationsApi.cancelReservation(
                     Uuid.parse(reservationId),
@@ -226,30 +244,8 @@ class SdkPendingGateway(
                     it.headers,
                 )
             }
-        } catch (e: ApiError) {
-            throw withoutServerDetail(e)
         }
     }
-
-    /** Ponto único: todo erro que carrega o `detail` do servidor é refeito sem ele; os demais seguem como estão. */
-    private fun withoutServerDetail(e: ApiError): ApiError =
-        when (e) {
-            is ApiError.Problem -> {
-                ApiError.Problem(e.status, e.code, null, emptyList())
-            }
-
-            is ApiError.ApprovalRequired -> {
-                ApiError.ApprovalRequired(e.action, e.permission, e.resourceRef, e.limit, null)
-            }
-
-            is ApiError.PreconditionFailed -> {
-                ApiError.PreconditionFailed(null)
-            }
-
-            else -> {
-                e
-            }
-        }
 
     /** `false` só no `409 OUT_OF_ORDER_OVERLAP` (período já aberto); qualquer outra recusa sobe. */
     override suspend fun openOutOfOrder(
@@ -267,7 +263,9 @@ class SdkPendingGateway(
                 startsOn = from.toString(),
             )
         return try {
-            executor.execute { roomsApi.openOutOfOrder(Uuid.parse(roomId), null, request, it.headers) }
+            redactingServerDetail {
+                executor.execute { roomsApi.openOutOfOrder(Uuid.parse(roomId), null, request, it.headers) }
+            }
             true
         } catch (e: ApiError.Problem) {
             if (e.status == CONFLICT && e.code == OVERLAP_CODE) false else throw e
@@ -277,7 +275,7 @@ class SdkPendingGateway(
     private suspend fun <I> readAll(fetch: suspend (cursor: String?, limit: Int) -> Page<I>): List<I> {
         val pager = CursorPager(fetch = fetch)
         val all = mutableListOf<I>()
-        while (pager.hasMore) all += pager.next()
+        redactingServerDetail { while (pager.hasMore) all += pager.next() }
         return all
     }
 

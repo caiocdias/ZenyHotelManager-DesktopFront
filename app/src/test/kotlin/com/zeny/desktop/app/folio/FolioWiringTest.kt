@@ -16,6 +16,7 @@ import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.pdf.PdfActions
 import com.zeny.desktop.design.pdf.PdfDocumentState
 import com.zeny.desktop.design.pdf.PrintOutcome
+import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.PaymentResponse
 import com.zeny.desktop.sdk.model.PostingResponse
 import com.zeny.desktop.sdk.model.TransferResponse
@@ -170,6 +171,27 @@ class FolioWiringTest {
         }
 
     @Test
+    fun wiringCarriesTheReopenApproval() =
+        runTest {
+            val coordinator = ApprovalCoordinator({ _, _ -> "tok" }, emptyFlow(), backgroundScope)
+            val connection = FolioConnection(FakeFolioSource(), account = account)
+            val wiring = assertNotNull(folioWiring(connection, setOf(READ), backgroundScope, coordinator, null))
+            val tokens = mutableListOf<String?>()
+            val action =
+                ApprovableAction<FolioResponse> { token ->
+                    tokens += token
+                    throw ApiError.ApprovalRequired("billing.folio.reopen", "billing.folios.reopen", "f", null, null)
+                }
+
+            backgroundScope.launch { wiring.approveReopen(action) }
+            runCurrent()
+
+            assertEquals(listOf<String?>(null), tokens, "a ação rodou, ao contrário do padrão { null }")
+            assertNotNull(coordinator.dialog, "o coordenador viu o pedido de aprovação")
+            coordinator.cancel()
+        }
+
+    @Test
     fun openShiftNeedsCashierOperate() =
         runTest {
             var opened = 0
@@ -237,6 +259,11 @@ class FolioWiringTest {
             ): Page<CompanyChoice> = error("não usado")
 
             override suspend fun company(companyId: String): CompanyChoice = error("não usado")
+
+            override fun reopen(
+                folioId: String,
+                reason: String,
+            ): ApprovableAction<FolioResponse> = error("não usado")
         }
 
     @Test
