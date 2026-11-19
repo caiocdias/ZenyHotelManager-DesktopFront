@@ -18,10 +18,15 @@ private const val SHIFT_REQUIRED = "CASHIER_SHIFT_REQUIRED"
 
 /** O desfecho de um envio que terminou sem exceção; a falha vem pela exceção e passa por `classifyWriteFailure`. */
 sealed interface WriteOutcome<out T> {
-    /** O servidor fez a escrita: a intenção acaba e [value] vai a quem enviou. */
+    /**
+     * O servidor fez a escrita: a intenção acaba e [value] vai a quem enviou. O `toString()` não mostra [value] (a
+     * resposta da caução imprime o cartão no dela).
+     */
     data class Done<out T>(
         val value: T,
-    ) : WriteOutcome<T>
+    ) : WriteOutcome<T> {
+        override fun toString(): String = "Done"
+    }
 
     /** Nada foi feito (a aprovação cancelada): destrava, mantém a intenção e mostra [message]. */
     data class Cancelled(
@@ -95,28 +100,33 @@ class FolioWrite(
         shiftRefused = false
         val current = intent ?: Intent().also { intent = it }
         ownScope.launch {
-            try {
-                val outcome = write(current)
-                currentCoroutineContext().ensureActive()
-                when (outcome) {
-                    is WriteOutcome.Done -> {
-                        intent = null
-                        unconfirmed = false
-                        onDone(outcome.value)
-                    }
-
-                    is WriteOutcome.Cancelled -> {
-                        unconfirmed = false
-                        message = outcome.message
-                    }
+            // Só a escrita é classificada: a falha de [onDone] não é resultado desconhecido.
+            val outcome =
+                try {
+                    write(current)
+                } catch (
+                    @Suppress("TooGenericExceptionCaught") e: Exception,
+                ) {
+                    currentCoroutineContext().ensureActive()
+                    fail(e as? ApiError ?: ApiError.Network(e))
+                    null
+                } finally {
+                    busy = false
                 }
-            } catch (
-                @Suppress("TooGenericExceptionCaught") e: Exception,
-            ) {
-                currentCoroutineContext().ensureActive()
-                fail(e as? ApiError ?: ApiError.Network(e))
-            } finally {
-                busy = false
+            currentCoroutineContext().ensureActive()
+            when (outcome) {
+                is WriteOutcome.Done -> {
+                    intent = null
+                    unconfirmed = false
+                    onDone(outcome.value)
+                }
+
+                is WriteOutcome.Cancelled -> {
+                    unconfirmed = false
+                    message = outcome.message
+                }
+
+                null -> {}
             }
         }
     }

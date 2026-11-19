@@ -3,7 +3,10 @@ package com.zeny.desktop.app.folio
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.Intent
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.plus
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -262,5 +265,37 @@ class FolioWriteTest {
             write.sendNext()
             runCurrent()
             assertEquals(1, intents.size, "depois de fechado, nenhum envio roda")
+        }
+
+    @Test
+    fun doneToStringHidesTheValue() {
+        val done = WriteOutcome.Done("Visa final 1234")
+
+        assertFalse("1234" in done.toString(), "a resposta (com o cartão) nunca aparece no toString")
+        assertEquals("Done", done.toString())
+    }
+
+    @Test
+    fun callbackFailureIsNotClassifiedAsNetwork() =
+        runTest {
+            val failures = mutableListOf<Throwable>()
+            val handler = CoroutineExceptionHandler { _, e -> failures += e }
+            lateinit var write: FolioWrite
+            // A falha do callback sobe ao tratador do escopo, fora do teste.
+            write =
+                FolioWrite(this + handler + SupervisorJob(), UNKNOWN_TEXT, STORED_TEXT, null) {
+                    refused += it to write.message
+                }
+            write.send({ intent ->
+                intents += intent
+                WriteOutcome.Done("ok")
+            }) { error("a tela falhou") }
+            runCurrent()
+
+            assertFalse(write.unconfirmed, "a escrita foi feita: não é resultado desconhecido")
+            assertFalse(write.busy)
+            assertNull(write.message)
+            assertEquals(1, failures.size, "a falha do callback não é engolida como rede")
+            write.close()
         }
 }
