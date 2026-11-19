@@ -28,6 +28,16 @@ private val RELOADS = setOf(SETTLED, EXPIRED, EXCEEDS, NOT_FOUND)
 /** As situações em que a caução ainda tem o que capturar (com o capturável maior que zero). */
 private val CAPTURABLE = setOf("ACTIVE", "PARTIALLY_CAPTURED")
 
+/**
+ * A caução ainda tem o que capturar, só pelo que o servidor devolveu (nunca pelo relógio local): a situação
+ * [statusCode] ativa ou capturada em parte e o [capturable] maior que zero. É o mesmo critério do "Capturar" da seção
+ * "Cauções" e da pendência de caução do check-out.
+ */
+internal fun isCapturable(
+    statusCode: String,
+    capturable: Money?,
+): Boolean = statusCode in CAPTURABLE && capturable != null && capturable.amount.signum() > 0
+
 /** As situações em que a caução ainda tem o que liberar. */
 private val RELEASABLE = setOf("ACTIVE", "PARTIALLY_CAPTURED", "EXPIRED")
 
@@ -119,7 +129,7 @@ class PreAuthorizationsState(
 
     /** "Capturar" na linha: com `billing.payments.receive` e a conta aberta, numa caução com capturável. */
     fun canCapture(row: PreAuthorizationRow): Boolean =
-        !closed && canWrite && folioOpen() && row.statusCode in CAPTURABLE && row.capturable != null
+        !closed && canWrite && folioOpen() && isCapturable(row.statusCode, row.capturable)
 
     /** "Liberar" na linha: com `billing.payments.receive`, numa caução com o que liberar (conta aberta ou não). */
     fun canRelease(row: PreAuthorizationRow): Boolean = !closed && canWrite && row.statusCode in RELEASABLE
