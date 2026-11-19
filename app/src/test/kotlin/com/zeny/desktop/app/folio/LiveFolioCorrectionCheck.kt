@@ -55,6 +55,7 @@ private const val POSTINGS_ADJUST = "billing.postings.adjust"
 private const val SERVICE_CHARGE_REMOVE = "billing.servicecharge.remove"
 private const val NO_FOLIO = "NEED_SEED: nenhuma conta aberta de reserva; rode o demo-seed"
 private const val NO_CODE = "NEED_SEED: nenhum código ativo de consumo com taxa de serviço; rode o demo-seed"
+private const val NO_CHARGE = "NEED_SEED: o consumo lançado não gerou taxa de serviço; confira o código no demo-seed"
 
 /**
  * Verificação das correções da conta contra um servidor real (o ambiente `zeny-front`), com a Recepcionista e a
@@ -62,7 +63,7 @@ private const val NO_CODE = "NEED_SEED: nenhum código ativo de consumo com taxa
  * `AdjustmentState`, `ServiceChargeRemovalState`), pelo painel real e pelo `ApprovalCoordinator` real. Numa conta
  * aberta de reserva do seed:
  * 1. lança um consumo de R$ 10,00 com um código que tem taxa de serviço (se o servidor o rotear, o resto segue na
- *    conta de destino) e exige a taxa dele;
+ *    conta de destino) e exige a taxa dele logo ali, antes de escrever mais (sem ela, `NEED_SEED`);
  * 2. ajusta R$ 1,00 do consumo pelo `AdjustmentState`: exige o `APPROVAL_REQUIRED` (a Recepcionista não tem
  *    `billing.postings.adjust`), aprova como o Gerente e exige o ajuste com o `correctsId` do consumo, a linha
  *    "Corrige: <descrição>" na tela e o consumo intacto, com o valor dele (critério 1);
@@ -97,12 +98,16 @@ class LiveFolioCorrectionCheck {
         override fun toString(): String = "Approver(***)"
     }
 
-    /** O consumo lançado no passo 1: a conta dele (a de destino, se o servidor rotear), o id e a descrição. */
+    /**
+     * O consumo lançado no passo 1: a conta dele (a de destino, se o servidor rotear), o id, a descrição e a taxa de
+     * serviço que ele gerou.
+     */
     private class Item(
         val folioId: String,
         val id: String,
         val description: String,
         val amount: String,
+        val chargeId: String,
     )
 
     private class Screen(
@@ -190,12 +195,7 @@ class LiveFolioCorrectionCheck {
     private fun DesktopComposeUiTest.removeTheServiceCharge(screen: Screen) {
         val holder = screen.holder
         val item = screen.item
-        val chargeId =
-            postingsOf(screen)
-                .singleOrNull { it.type == "SERVICE_CHARGE" && it.chargedItem() == item.id }
-                ?.id
-                ?.toString()
-                ?: fail("o consumo lançado não trouxe a taxa de serviço")
+        val chargeId = item.chargeId
         val row = rowIn(screen, chargeId)
         assertTrue(
             holder.canRemoveServiceCharge(row),
@@ -294,7 +294,8 @@ class LiveFolioCorrectionCheck {
 
     /**
      * Passo 1: um consumo de R$ 10,00 com um código que tem taxa de serviço, na primeira conta aberta de reserva; o
-     * servidor pode roteá-lo para outra conta, e o resto segue nela.
+     * servidor pode roteá-lo para outra conta, e o resto segue nela. Sem a taxa dele, falha com `NEED_SEED` antes do
+     * passo 2.
      */
     private fun postItem(source: FolioSource): Item {
         val folio = openReservationFolio(source)
@@ -302,7 +303,16 @@ class LiveFolioCorrectionCheck {
         val description = "Verificação ao vivo E08 ${UUID.randomUUID().toString().take(TAG_LENGTH)}"
         val input = PostingInput(code.id.toString(), 1, Money.parse(UNIT_PRICE), description)
         val posted = runBlocking { source.post(folio.id.toString(), input, Intent()) }
-        val item = Item(posted.folioId.toString(), posted.id.toString(), posted.description, posted.amount)
+        val folioId = posted.folioId.toString()
+        val itemId = posted.id.toString()
+        // A taxa é exigida aqui, antes de o ajuste do passo 2 escrever na demo.
+        val chargeId =
+            runBlocking { source.postings(folioId) }
+                .singleOrNull { it.type == "SERVICE_CHARGE" && it.chargedItem() == itemId }
+                ?.id
+                ?.toString()
+                ?: fail(NO_CHARGE)
+        val item = Item(folioId, itemId, posted.description, posted.amount, chargeId)
         if (item.folioId != folio.id.toString()) println("Correções ao vivo: o consumo foi roteado pelo servidor")
         println("Correções ao vivo: consumo de ${FolioText.money(item.amount)} lançado")
         return item

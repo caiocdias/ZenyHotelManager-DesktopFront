@@ -13,7 +13,8 @@ import com.zeny.desktop.design.input.MoneyInput
 import com.zeny.desktop.sdk.model.PostingResponse
 import kotlinx.coroutines.CoroutineScope
 
-private const val REASON_MAX = 500
+/** O limite do motivo das correções da conta (o do contrato), nos estados e nos diálogos. */
+internal const val CORRECTION_REASON_MAX = 500
 
 /**
  * O diálogo "Ajustar" do lançamento [row] da conta [folioId]: o valor (`MoneyField`, sem sugestão, maior que zero; o
@@ -75,7 +76,7 @@ class AdjustmentState(
     var reason: String
         get() = reasonText
         set(value) {
-            if (value.length <= REASON_MAX) edit(reasonText, value) { reasonText = it }
+            if (value.length <= CORRECTION_REASON_MAX) edit(reasonText, value) { reasonText = it }
         }
 
     override fun confirm() {

@@ -8,8 +8,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.zeny.desktop.design.input.MoneyField
 
-private const val REASON_MAX = 500
-
 /** Os diálogos abertos das correções da conta, um por vez. */
 @Composable
 internal fun CorrectionDialogs(state: FolioCorrectionsState) {
@@ -43,7 +41,7 @@ private fun AdjustmentDialog(
             value = form.reason,
             onValueChange = { form.reason = it },
             label = { Text("Motivo") },
-            supportingText = { Text("${form.reason.length}/$REASON_MAX") },
+            supportingText = { Text("${form.reason.length}/$CORRECTION_REASON_MAX") },
             enabled = !form.locked,
             modifier = Modifier.fillMaxWidth().testTag("adjustment-reason"),
         )
