@@ -11,6 +11,11 @@ import com.zeny.desktop.design.input.MoneyInput
 import com.zeny.desktop.sdk.model.FolioOwnerDto
 import com.zeny.desktop.sdk.model.FolioResponse
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 /** Os textos da conta. Os valores vêm do servidor e só são formatados em BRL, nunca calculados; nenhum id. */
 @Suppress("TooManyFunctions") // um rótulo por enum e um texto por regra, num lugar só
@@ -57,6 +62,23 @@ object FolioText {
         "O servidor não confirmou o reembolso. Feche e confira a conta antes de refazer."
     const val REFUND_APPROVAL_CANCELLED = "Aprovação cancelada. O reembolso não foi feito."
     const val REFUND_RECORDED = "Reembolso registrado."
+    const val NO_PRE_AUTHORIZATIONS = "Nenhuma caução nesta conta."
+    const val PRE_AUTHORIZATIONS_FAILED = "Não foi possível ler as cauções."
+    const val VALIDITY_REQUIRED = "Informe a validade."
+    const val VALIDITY_RANGE = "A validade vai de hoje até 89 dias."
+    const val ZONE_MISSING = "Não foi possível ler o fuso do hotel. Feche e abra de novo."
+    const val PRE_AUTHORIZATION_UNCONFIRMED =
+        "Não foi possível confirmar o registro da caução. Registre de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de registrar de novo."
+    const val PRE_AUTHORIZATION_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o registro da caução. Feche e confira a conta antes de registrar de novo."
+    const val PRE_AUTHORIZATION_RECORDED = "Caução registrada."
+    const val RELEASE_UNCONFIRMED =
+        "Não foi possível confirmar a liberação. Libere de novo; " +
+            "se fechar, confira a conta antes de liberar de novo."
+    const val RELEASE_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a liberação. Feche e confira a conta antes de liberar de novo."
+    const val RELEASE_DONE = "Sobra liberada."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -74,6 +96,20 @@ object FolioText {
     private val statementKinds = ExtensibleEnumLabels(mapOf("POSTING" to "Lançamento", "PAYMENT" to "Pagamento"))
 
     private val paymentTypes = ExtensibleEnumLabels(mapOf("PAYMENT" to "Recebimento", "REFUND" to "Reembolso"))
+
+    private val preAuthorizationStatuses =
+        ExtensibleEnumLabels(
+            mapOf(
+                "ACTIVE" to "Ativa",
+                "PARTIALLY_CAPTURED" to "Capturada em parte",
+                "CAPTURED" to "Capturada",
+                "RELEASED" to "Liberada",
+                "EXPIRED" to "Vencida",
+            ),
+        )
+
+    private val expiresFormat = DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm")
+    private val utcDateFormat = DateTimeFormatter.ofPattern("dd/MM/uuuu")
 
     private val paymentMethods = ExtensibleEnumLabels(PaymentMethod.entries.associate { it.name to method(it) })
 
@@ -118,6 +154,36 @@ object FolioText {
 
     /** O tipo do pagamento (`x-extensible-enum`): o desconhecido aparece como "Outro (VALOR)". */
     fun paymentType(value: String): String = paymentTypes.label(value)
+
+    /** A situação da caução (`x-extensible-enum`): a desconhecida aparece como "Outro (VALOR)". */
+    fun preAuthorizationStatus(value: String): String = preAuthorizationStatuses.label(value)
+
+    /**
+     * A validade da caução (um instante do servidor) em `dd/MM/aaaa HH:mm` no fuso do hotel; sem o fuso, só a data UTC
+     * com "(UTC)"; fora do formato, "—".
+     */
+    fun expiresAt(
+        iso: String,
+        zone: ZoneId?,
+    ): String =
+        try {
+            val instant = Instant.parse(iso)
+            if (zone == null) {
+                "${utcDateFormat.format(instant.atZone(ZoneOffset.UTC))} (UTC)"
+            } else {
+                expiresFormat.format(instant.atZone(zone))
+            }
+        } catch (_: DateTimeParseException) {
+            UNKNOWN
+        }
+
+    /** O que a liberação faz, com o capturável que o servidor devolveu, já formatado (sem ele, só o texto). */
+    fun release(capturable: String?): String =
+        if (capturable == null) {
+            "A sobra será liberada na maquininha."
+        } else {
+            "A sobra de $capturable será liberada na maquininha."
+        }
 
     /** A forma do pagamento lida do servidor (`x-extensible-enum`): a desconhecida aparece como "Outro (VALOR)". */
     fun paymentMethod(value: String): String = paymentMethods.label(value)

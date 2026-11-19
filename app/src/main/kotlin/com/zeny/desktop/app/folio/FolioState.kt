@@ -123,6 +123,9 @@ data class StatementView(
  * positivo. "Reembolsar" ([startRefund], com `billing.payments.receive` ou `billing.payments.refund`, num
  * recebimento com reembolsável e a conta aberta) passa pela aprovação do reembolso do [wiring]. O atalho "Abrir turno"
  * que os dois diálogos recebem fecha o diálogo antes de chamar o do [wiring].
+ *
+ * Com a mesma porta, as cauções ficam no [preAuthorizations] (o `PreAuthorizationsState`), relido junto da conta e
+ * fechado com ela; o diálogo aberto dele conta como diálogo do painel, e o painel não abre outro.
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
@@ -222,8 +225,29 @@ class FolioState(
     private val canRefundAny =
         (RECEIVE in wiring.permissions || REFUND in wiring.permissions) && wiring.payments != null
 
+    /**
+     * A seção "Cauções", com a porta dos pagamentos: relida junto da conta, fechada com ela e com o diálogo dela
+     * contado no [dialogOpen] daqui.
+     */
+    val preAuthorizations: PreAuthorizationsState? =
+        if (wiring.payments == null) {
+            null
+        } else {
+            PreAuthorizationsState(
+                wiring,
+                ownScope,
+                folioId,
+                folioOpen = { view?.closed == false },
+                otherDialogOpen = { posting != null || reversal != null || payment != null || refund != null },
+                notify = { notice = it },
+                onChanged = ::rereadFolio,
+            )
+        }
+
     private val dialogOpen: Boolean
-        get() = posting != null || reversal != null || payment != null || refund != null
+        get() =
+            posting != null || reversal != null || payment != null || refund != null ||
+                preAuthorizations?.dialogOpen == true
 
     /** "Lançar": com `billing.postings.create` e a conta aberta. */
     val canPost: Boolean get() = !closed && canCreate && view?.closed == false
@@ -249,9 +273,15 @@ class FolioState(
 
     fun start() = reload()
 
-    /** Relê a conta, os lançamentos e os pagamentos; a leitura anterior em voo é descartada. */
+    /** Relê a conta, os lançamentos, os pagamentos e as cauções; a leitura anterior em voo é descartada. */
     fun reload() {
         if (closed) return
+        readFolio()
+        preAuthorizations?.reload()
+    }
+
+    /** A conta, os lançamentos e os pagamentos. */
+    private fun readFolio() {
         val mine = ++generation
         loading = true
         error = null
@@ -420,6 +450,7 @@ class FolioState(
         reversal?.close()
         payment?.close()
         refund?.close()
+        preAuthorizations?.close()
         closePdf()
     }
 
@@ -476,6 +507,14 @@ class FolioState(
     private fun rereadAfterWrite() {
         if (closed) return
         reload()
+        if (statementShown) showStatement()
+        onWritten()
+    }
+
+    /** Depois de uma escrita das cauções (que já as relê): a conta, os pagamentos, o extrato à vista e a lista. */
+    private fun rereadFolio() {
+        if (closed) return
+        readFolio()
         if (statementShown) showStatement()
         onWritten()
     }
@@ -571,7 +610,7 @@ private fun paymentRowOf(payment: PaymentResponse): PaymentRow {
 }
 
 /** O decimal do servidor como `Money`; fora do formato do contrato, nulo. */
-private fun moneyOrNull(decimal: String): Money? =
+internal fun moneyOrNull(decimal: String): Money? =
     try {
         Money.parse(decimal)
     } catch (_: IllegalArgumentException) {

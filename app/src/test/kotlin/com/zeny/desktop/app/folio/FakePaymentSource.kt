@@ -58,6 +58,8 @@ fun preAuthorizationOf(
     status: String = "ACTIVE",
     expiresAt: String = "2026-11-20T02:59:59Z",
     released: String? = null,
+    cardBrand: String? = null,
+    cardLast4: String? = null,
 ) = CardPreAuthorizationResponse(
     amount = amount,
     authorizationCode = "AUT123",
@@ -65,6 +67,8 @@ fun preAuthorizationOf(
     capturableAmount = capturable,
     capturePaymentIds = emptyList(),
     capturedAmount = captured,
+    cardBrand = cardBrand?.let { Option.Some(it) } ?: Option.Undefined,
+    cardLast4 = cardLast4?.let { Option.Some(it) } ?: Option.Undefined,
     expiresAt = expiresAt,
     folioId = FOLIO_ID,
     id = id,
