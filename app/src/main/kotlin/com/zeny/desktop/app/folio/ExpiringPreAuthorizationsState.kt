@@ -104,8 +104,9 @@ class ExpiringPreAuthorizationsState(
     /** Relê da primeira página com o "Até" digitado; data em branco ou inválida mostra o texto e não lê. */
     fun search() {
         if (closed) return
+        val to = parseUntil() ?: return
         enterJob?.cancel()
-        parseUntil()?.let(::startReading)
+        startReading(to)
     }
 
     /** A página seguinte; depois de uma leitura que falhou, a mesma página de novo. */

@@ -2,6 +2,7 @@ package com.zeny.desktop.app.folio
 
 import com.zeny.desktop.app.cashier.LateAnswer
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
@@ -9,6 +10,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -142,6 +144,28 @@ class ExpiringPreAuthorizationsStateTest {
             assertEquals(listOf("R$ 2,00"), state.rows.map { it.amount })
             assertFalse(state.hasMore)
             assertFalse(state.loading)
+        }
+
+    @Test
+    fun searchWithoutADateKeepsTheEnterInFlight() =
+        runTest {
+            val lateDay = LateAnswer<BusinessDay>()
+            payments.businessDay = { lateDay.await() }
+            val state = state()
+            state.enter()
+            runCurrent()
+            assertTrue(lateDay.asked)
+
+            state.search()
+            runCurrent()
+            assertEquals("Informe até quando.", state.untilError)
+
+            lateDay.answer(BusinessDay(BusinessDate.parse("2026-11-18"), ZoneId.of("America/Sao_Paulo")))
+            runCurrent()
+
+            assertEquals("25/11/2026", state.untilText)
+            assertNull(state.untilError)
+            assertEquals(1, source.calls.size)
         }
 
     @Test
