@@ -1321,7 +1321,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - [ ] Reabrir como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, a conta relida aparece aberta, e a reabertura não envia `Idempotency-Key` (teste da fachada).
 - [ ] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
-- [ ] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
+- [x] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
 
 **Validação obrigatória:**
 
@@ -1342,12 +1342,33 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `419f8ba`. Falta a inspeção manual contra o `zeny-front` (uma conta encerrada, reaberta pela Recepcionista com a aprovação do Gerente), que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 1 Importante (a troca da porta sem registro e com o motivo errado); aprovado com notas na rodada 1 (`aa9ea6b`, registro em `1e8afa8`).
+- **Commits** (`MERGE_BASE` `cac0274`, HEAD de código `419f8ba`):
+  - `645068d`: o início e o plano.
+  - **Task 1** (`03ea5d6`): `FoliosFacade.reopen` sem `Idempotency-Key` (o caminho `internal` `ApiExecutor.executeWithoutKey` e o `approvableWithoutKey` em `Approval.kt`), `FolioAccountSource.reopen` e o `FolioWiring.approveReopen` ligado ao coordenador. Revisão de fatia aprovada.
+  - **Task 2** (`90abb43`, `40743f2`): o `ReopenState` (envio próprio com `classifyWriteFailure`), o diálogo e "Reabrir conta" no cabeçalho da conta encerrada. Revisão de fatia: uma rodada (o teste de "um diálogo por vez" não provava nada; a aprovação cancelada depois do desconhecido mantinha o `unconfirmed`; o "Voltar" sem teste).
+  - **Testador de etapa** (`b4d2f31`): o limite de 500 rodado no fio, o token sentinela fora de mensagem, `toString` e causas, o `X-Approval-Token` uma vez só, o retorno do `approveReopen`, as recusas definitivas e desconhecidas; um teste vermelho documentou um defeito.
+  - **Correção do fim da etapa** (`419f8ba`): o limite de 500 contado depois de aparar; a falha local (a fachada ou a aprovação pendente, agora `ApprovalPendingException`) é recusa definitiva com texto, sem reler como desconhecido; o KDoc do `ApprovalCoordinator`.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `cac0274..40743f2`): 0 Críticos, 1 Importante de processo (o segredo do token fora do `Riscos:`, levado ao testador), 9 Menores, "Ready to merge: Yes".
+  - Re-revisão escopada de `40743f2..`: ver o histórico.
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `40743f2` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
+- **Integridade:** `check_test_integrity.py --base cac0274` no `419f8ba` → exit 0, nenhum apontamento.
+- **Critérios:**
+  1. **Reabrir como Recepcionista pede aprovação; aprovado, a conta relida aparece aberta, sem `Idempotency-Key`** — `ReopenStateTest.reopenAsksApprovalAndRereads`; `FolioReopenScreenTest.reopenFromTheHeaderRereadsTheFolio`; `FolioReopenFacadeTest.reopenSendsTheTrimmedReasonAndNoIdempotencyKey` e `reopenApprovedSendsOnlyTheToken`; `CoreConnectionTest.reopenGoesThroughTheFacade`. **Inspeção ao vivo:** pendente.
+  2. **Resultado desconhecido relê e diz para conferir; repetir numa conta já aberta mostra `FOLIO_NOT_CLOSED` e relê** — `reopenUnknownRereadsAndAllowsRetryByClick`, `reopenNotClosedShowsTextAndRereads` e os ataques de `b4d2f31`.
+  3. **O wiring real liga a aprovação ao coordenador nas três entradas** — `FolioWiringTest.wiringCarriesTheReopenApproval` e o retorno afirmado pelo testador.
+- **Como fazer a verificação ao vivo:** com a demo recriada e uma conta encerrada (a `LiveCheckOutCheck` da E04 deixa uma), entre como a Recepcionista, abra a conta encerrada na aba "Contas" (ou pela reserva que saiu), clique em "Reabrir conta", informe o motivo e aprove como o Gerente; a conta relida aparece aberta, com "Conta reaberta.". Passando, a E13 fecha `#concluida`.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **A porta da reabertura é a `FolioAccountSource` (E12)**, e não a `FolioCorrectionSource` (E08) que a nota da etapa citava: a reabertura age sobre a conta encerrada, sem `Intent`, como o `updateFolio`; as correções são de lançamento, com `Intent` e conta aberta. A E13 passou a depender da E12. Custo se errado: mover um método de interface interna.
+  2. **"Reabrir conta" aparece com `billing.folios.manage` ou `billing.folios.reopen`**: mais restrito que o servidor, que só exige `billing.folios.read` antes da aprovação.
+  3. **O motivo é obrigatório** (o contrato aceita vazio, mas a descrição da operação o exige).
+  4. **A reabertura vai sem `Idempotency-Key`** (o contrato não a declara): o resultado desconhecido relê e pede para conferir; repetir numa conta já aberta é inofensivo (`FOLIO_NOT_CLOSED`).
+  5. **Textos novos:** "Reabrir conta", "Informe o motivo.", "Conta reaberta.", "Aprovação cancelada. A conta não foi reaberta.", "Não foi possível confirmar a reabertura. A conta foi relida; confira antes de tentar de novo.", "Não foi possível reabrir a conta agora. Confira o motivo e tente de novo.".
+- **Notas para a próxima etapa:**
+  - **Diferidos (Menores):** o `undoCheckIn` (`ReservationsFacade`) já fazia escrita aprovável sem chave por outro idioma; unificá-lo sobre o `approvableWithoutKey`; o diálogo continua aberto quando a releitura depois do desconhecido mostra a conta já reaberta (o próximo clique dá "A conta ainda não está fechada."); a mensagem "Informe o motivo." persiste até o próximo "Reabrir"; os testes de fachada repetem auxiliares de outros testes do `core`.
+  - **Para o testador:** a troca de sessão pelo `ApprovalCoordinator` real com a reabertura em voo; o diálogo único com correções, pagamentos e cauções abertos; o duplo clique pela UI real.
 
 ---
 
@@ -1451,3 +1472,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E11 fecha `#concluida` (`claude --agent orquestrador`): o painel do dia e a busca de reservas montam as colunas, leem os tipos de UH e travam as leituras auxiliares por uma função só (`259e6e4`); revisão final e re-revisão limpas.
 - 2026-11-19 — a E10 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `298e2a9`; falta a `LiveExpiringPreAuthorizationCheck` (só leitura), que pede as credenciais do usuário.
 - 2026-11-19 — a E12 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `85e8869`; faltam a parte ao vivo do critério 2 e o critério 3 (`LiveReservationLifecycleCheck`), que pedem as credenciais do usuário e do Gerente.
+- 2026-11-19 — a E13 passou a depender da E12, e não da E08: a reabertura ficou na `FolioAccountSource` da E12 (decisão do plano da E13, por coesão; nas "Decisões para o usuário" dela). A E13 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `419f8ba`; falta a inspeção manual da reabertura contra o `zeny-front`.
