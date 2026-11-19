@@ -383,6 +383,7 @@ private fun ReceptionArea(
                 traces = traces,
                 registrationCard = registrationCardFactory(connection, scope, LocalWindowFrame.current),
                 folio = rememberFolioWiring(connection, sessionId, permissions, scope, onOpenShift),
+                checkOut = remember(connection) { connection.checkOutSource() },
             )
         }
     }

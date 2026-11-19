@@ -1,6 +1,7 @@
 package com.zeny.desktop.app.folio
 
 import com.zeny.desktop.app.cashier.CashierSource
+import com.zeny.desktop.app.reception.CheckOutSource
 import com.zeny.desktop.app.reception.ReceptionSource
 import com.zeny.desktop.app.reservations.ReservationSearchSource
 import com.zeny.desktop.app.session.ServerConnection
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import java.time.LocalDate
 
 /** Uma conexão de mentira já na sessão [sessionId], com as portas que os testes das contas usam. */
+@Suppress("LongParameterList") // uma porta opcional por área, com padrão nulo
 class FolioConnection(
     private val folios: FolioSource?,
     private val cashier: CashierSource? = null,
@@ -21,6 +23,7 @@ class FolioConnection(
     private val search: ReservationSearchSource? = null,
     sessionId: String = "A",
     private val payments: PaymentSource? = null,
+    private val checkOut: CheckOutSource? = null,
 ) : ServerConnection {
     override val state = MutableStateFlow<SessionState>(SessionState.Active("u-1", sessionId, false))
 
@@ -58,6 +61,8 @@ class FolioConnection(
     override fun receptionSource(): ReceptionSource? = reception
 
     override fun reservationSearchSource(): ReservationSearchSource? = search
+
+    override fun checkOutSource(): CheckOutSource? = checkOut
 
     override fun close() = Unit
 }

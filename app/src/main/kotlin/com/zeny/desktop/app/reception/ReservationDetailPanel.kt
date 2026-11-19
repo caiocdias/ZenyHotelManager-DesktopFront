@@ -42,6 +42,7 @@ data class DetailActions(
     val onCancel: (() -> Unit)? = null,
     val onReactivate: (() -> Unit)? = null,
     val onFolio: (() -> Unit)? = null,
+    val onCheckOut: (() -> Unit)? = null,
 )
 
 /** A falha de uma releitura com o conteúdo antigo à vista: o conteúdo fica, e a falha aparece por cima dele. */
@@ -104,6 +105,9 @@ internal fun ReservationDetailPanel(
 private fun DetailActionButtons(actions: DetailActions) {
     if (actions.onCheckIn != null) {
         Button(onClick = actions.onCheckIn, modifier = Modifier.testTag("open-check-in")) { Text("Fazer check-in") }
+    }
+    if (actions.onCheckOut != null) {
+        Button(onClick = actions.onCheckOut, modifier = Modifier.testTag("check-out")) { Text("Check-out") }
     }
     if (actions.onMove != null) {
         Button(onClick = actions.onMove, modifier = Modifier.testTag("open-room-move")) { Text("Trocar UH") }
