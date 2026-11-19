@@ -87,7 +87,8 @@ fun PaymentInput.problems(): Set<PaymentProblem> =
 fun RefundInput.problems(): Set<PaymentProblem> =
     buildSet {
         if (!amount.positive()) add(PaymentProblem.AMOUNT)
-        if (reason.present() == null || reason.length > MAX_REASON) add(PaymentProblem.REASON)
+        // O limite é o do texto enviado, sem os espaços das pontas.
+        if (reason.present() == null || reason.trim().length > MAX_REASON) add(PaymentProblem.REASON)
         addAll(codeProblems(nsu, authorizationCode, allowed = true))
     }
 

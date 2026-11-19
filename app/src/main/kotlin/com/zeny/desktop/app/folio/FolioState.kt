@@ -185,6 +185,10 @@ class FolioState(
     var payments by mutableStateOf<List<PaymentRow>>(emptyList())
         private set
 
+    /** A primeira leitura dos pagamentos terminou (bem ou mal): antes dela, a tela não afirma que não há nenhum. */
+    var paymentsLoaded by mutableStateOf(false)
+        private set
+
     /** A falha da leitura dos pagamentos; a conta continua à vista. */
     var paymentsError by mutableStateOf<String?>(null)
         private set
@@ -290,6 +294,7 @@ class FolioState(
         if (mine != generation) return
         payments = read.orEmpty()
         paymentsError = if (read == null) FolioText.PAYMENTS_FAILED else null
+        paymentsLoaded = true
     }
 
     /** Lê o extrato da [audience] escolhida; o pedido anterior em voo é descartado. */

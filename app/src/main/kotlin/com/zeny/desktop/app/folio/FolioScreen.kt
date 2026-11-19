@@ -321,7 +321,7 @@ private fun Payments(state: FolioState) {
     state.paymentsError?.let {
         Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("payments-error"))
     }
-    if (state.paymentsError == null && state.payments.isEmpty()) Text(FolioText.NO_PAYMENTS)
+    if (state.paymentsLoaded && state.paymentsError == null && state.payments.isEmpty()) Text(FolioText.NO_PAYMENTS)
     state.payments.forEachIndexed { index, row ->
         // A chave é o pagamento: "Reembolsar" segue a linha dele quando a lista relida muda de ordem.
         key(row.id) {

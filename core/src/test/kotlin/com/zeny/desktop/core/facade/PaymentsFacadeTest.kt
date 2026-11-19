@@ -306,6 +306,12 @@ class PaymentsFacadeTest {
     }
 
     @Test
+    fun reasonLimitCountsTheTrimmedText() {
+        assertEquals(emptySet(), refund(reason = "  ${"a".repeat(200)}  ").problems(), "o servidor recebe 200")
+        assertEquals(setOf(PaymentProblem.REASON), refund(reason = "  ${"a".repeat(201)}  ").problems())
+    }
+
+    @Test
     fun toStringHidesCardData() {
         val input =
             PaymentInput(

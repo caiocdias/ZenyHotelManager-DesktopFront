@@ -32,6 +32,8 @@ import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.design.theme.ZenyTheme
 import com.zeny.desktop.sdk.model.FolioResponse
+import com.zeny.desktop.sdk.model.PaymentResponse
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.emptyFlow
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -157,6 +159,23 @@ class FolioPaymentsScreenTest {
             onNodeWithTag("receive-payment").assertDoesNotExist()
         }
     }
+
+    @Test
+    fun noPaymentsTextWaitsForTheFirstRead() =
+        runComposeUiTest {
+            val gate = CompletableDeferred<List<PaymentResponse>>()
+            val payments = FakePaymentSource().apply { this.payments = { gate.await() } }
+            accounts(FakeFolioSource(), payments, setOf(READ, OPERATE, RECEIVE))
+
+            onNodeWithTag("folio-balance").assertExists()
+            onNodeWithText("Pagamentos").assertExists()
+            onNodeWithText("Nenhum pagamento nesta conta.").assertDoesNotExist()
+
+            gate.complete(emptyList())
+            waitForIdle()
+
+            onNodeWithText("Nenhum pagamento nesta conta.").assertExists()
+        }
 
     @Test
     fun newPaymentShowsInTheTableAfterConfirm() =
