@@ -217,7 +217,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta | #em-andamento | E02 | Ajustar, dividir, transferir e remover a taxa a pedido |
 | E11 | Duplicação entre o painel do dia e a busca | #concluida | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
-| E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
+| E10 | Cauções a vencer | #em-andamento | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #pendente | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
 | E13 | Reabrir conta encerrada | #pendente | E02, E08 | Reabrir a conta encerrada, com aprovação de superior |
 | E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
@@ -1086,7 +1086,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E10 — Cauções a vencer — #pendente
+## E10 — Cauções a vencer — #em-andamento
 
 **Objetivo:** na área "Contas e caixa", a operadora acompanha as cauções do hotel que vencem até uma data e abre a conta de cada uma.
 
