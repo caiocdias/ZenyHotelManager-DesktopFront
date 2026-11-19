@@ -55,7 +55,9 @@ private const val SERVER_UNCONFIRMED_TEXT =
  * cancela com o motivo, a observação e a isenção escolhidos.
  *
  * - O contrato não tem prévia da multa, e o front não calcula preço nem prazo: antes de cancelar só há os termos, e a
- *   multa vem do servidor depois, em [done]. [confirm] só vale com os termos lidos: com a carga em voo ou com falha
+ *   multa vem do servidor depois, em [done], com o total de multas da reserva (`penaltiesCharged`) copiado, nunca
+ *   somado; a multa que a reserva já tem na conta aparece antes, em [previousPenalty]. [confirm] só vale com os
+ *   termos lidos: com a carga em voo ou com falha
  *   (o [error] mostra, e [start] tenta de novo), nada vai à rede.
  * - Como o `WalkInState`: as mutações correm no escopo da UI (uma thread só) e [close] cancela só o que é daqui. A
  *   conclusão leva uma `Idempotency-Key` por intenção: a mesma `Intent` vale enquanto o resultado é desconhecido
@@ -87,6 +89,13 @@ class ReservationCancelState(
 
     /** Os termos da política de cancelamento da reserva lida; `null` até a carga dar certo. */
     var terms by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * O aviso da multa de cancelamento que a reserva lida já tem na conta (o `penaltiesCharged` do servidor, maior que
+     * zero); `null` sem multa anterior, com o valor ilegível ou até a carga dar certo.
+     */
+    var previousPenalty by mutableStateOf<String?>(null)
         private set
 
     /** Só valores de [CANCEL_REASONS]; o padrão é `GUEST_REQUEST`. */
@@ -165,6 +174,7 @@ class ReservationCancelState(
                     if (mine == generation) {
                         code = reservation.code
                         terms = BookingText.cancellationTerms(reservation.cancellationTerms)
+                        previousPenalty = previousPenaltyNotice(reservation.penaltiesCharged)
                     }
                 } catch (
                     @Suppress("TooGenericExceptionCaught") e: Exception,
@@ -172,6 +182,7 @@ class ReservationCancelState(
                     currentCoroutineContext().ensureActive()
                     if (mine == generation) {
                         terms = null
+                        previousPenalty = null
                         error = (e as? ApiError ?: ApiError.Network(e)).userMessage
                     }
                 } finally {
@@ -220,22 +231,13 @@ class ReservationCancelState(
         dropIntent()
         unconfirmed = false
         error = null
-        done = if (penalty == null) text else "$text ${penaltyText(penalty.amount, penalty.waived)}".trimEnd()
+        done =
+            if (penalty == null) {
+                text
+            } else {
+                "$text ${penaltyText(penalty.amount, penalty.waived, reservation.penaltiesCharged)}".trimEnd()
+            }
         onChanged()
-    }
-
-    /** A multa como o servidor a decidiu: isenta, lançada ou sem multa; um valor ilegível não afirma nada. */
-    private fun penaltyText(
-        amount: String,
-        waived: Boolean,
-    ): String {
-        val owed = runCatching { Money.parse(amount).amount.signum() > 0 }.getOrNull()
-        return when {
-            waived -> "Multa isenta: ${ReceptionText.money(amount)}."
-            owed == true -> "Multa lançada na conta: ${ReceptionText.money(amount)}."
-            owed == false -> "Sem multa."
-            else -> ""
-        }
     }
 
     private fun fail(failure: ApiError) {
@@ -258,3 +260,45 @@ class ReservationCancelState(
     override fun toString(): String =
         "ReservationCancelState(reservationId=$reservationId, busy=$busy, unconfirmed=$unconfirmed, done=$done)"
 }
+
+/**
+ * A multa como o servidor a decidiu ([amount], isenta ou não) e, ao lado, o total de multas da reserva ([charged], o
+ * `penaltiesCharged` relido), sem somar nada: isenta, lançada, sem multa nova com a anterior na conta ou sem multa. Um
+ * valor ilegível, em qualquer dos dois, não afirma nada.
+ */
+private fun penaltyText(
+    amount: String,
+    waived: Boolean,
+    charged: String,
+): String {
+    val owed = positive(amount)
+    val hasCharges = positive(charged)
+    if (owed == null || hasCharges == null) return ""
+    val totalShown = if (waived) hasCharges else owed && exceeds(charged, amount)
+    val total = if (totalShown) " Total de multas de cancelamento desta reserva: ${money(charged)}." else ""
+    return when {
+        waived -> "Multa isenta: ${money(amount)}.$total"
+        owed -> "Multa lançada na conta: ${money(amount)}.$total"
+        hasCharges -> "Sem multa nova. A conta já tem ${money(charged)} de multa de cancelamento anterior."
+        else -> "Sem multa."
+    }
+}
+
+/** O aviso, antes de cancelar, da multa que a reserva já tem na conta ([charged] maior que zero). */
+private fun previousPenaltyNotice(charged: String): String? =
+    if (positive(charged) == true) {
+        "Esta reserva já tem ${money(charged)} de multa de cancelamento na conta."
+    } else {
+        null
+    }
+
+/** O decimal do servidor é maior que zero; `null` fora do formato. */
+private fun positive(decimal: String): Boolean? = runCatching { Money.parse(decimal).amount.signum() > 0 }.getOrNull()
+
+/** O total [charged] passa da multa [amount] deste cancelamento: há multa anterior na conta. */
+private fun exceeds(
+    charged: String,
+    amount: String,
+): Boolean = Money.parse(charged).amount > Money.parse(amount).amount
+
+private fun money(decimal: String): String = ReceptionText.money(decimal)

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -42,6 +43,8 @@ private const val CD_UNCONFIRMED_TEXT =
 
 private const val CD_SERVER_UNCONFIRMED_TEXT =
     "O servidor não confirmou o cancelamento. Feche e confira a reserva na Busca antes de refazer."
+
+private const val CD_PREVIOUS_PENALTY = "Esta reserva já tem R$ 150,00 de multa de cancelamento na conta."
 
 private fun cdCancelled(
     amount: String,
@@ -105,6 +108,35 @@ class ReservationCancelDialogTest {
             onNodeWithTag("cancel-submit").assertIsEnabled()
             onNodeWithTag("cancel-done").assertDoesNotExist()
             assertTrue(source.calls.isEmpty())
+        }
+
+    @Test
+    fun dialogWarnsOfThePenaltyAlreadyOnTheFolio() =
+        runComposeUiTest {
+            val source =
+                source().apply {
+                    val read = confirmDetail(cdRes, code = "R1", status = "CONFIRMED")
+                    reservations[cdRes.toString()] =
+                        read.copy(reservation = read.reservation.copy(penaltiesCharged = "150.00"))
+                }
+            dialog(source)
+
+            val policy = onNodeWithText("A multa é lançada na conta da reserva conforme o prazo da política.")
+            val previous = onNodeWithText(CD_PREVIOUS_PENALTY)
+            assertTrue(
+                previous.getUnclippedBoundsInRoot().top > policy.getUnclippedBoundsInRoot().top,
+                "o aviso da multa anterior vem abaixo do texto da política",
+            )
+            assertTrue(source.calls.isEmpty())
+        }
+
+    @Test
+    fun dialogSaysNothingOfPreviousPenaltyWithoutOne() =
+        runComposeUiTest {
+            dialog(source())
+
+            onNodeWithTag("cancel-terms").assertTextEquals(CD_TERMS)
+            onNodeWithText("de multa de cancelamento na conta", substring = true).assertDoesNotExist()
         }
 
     @Test
