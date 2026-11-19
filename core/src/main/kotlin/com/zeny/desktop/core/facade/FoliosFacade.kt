@@ -1,14 +1,18 @@
 package com.zeny.desktop.core.facade
 
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.http.ApiExecutor
+import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
+import com.zeny.desktop.core.http.ResponseFormatException
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.client.BillingApi
 import com.zeny.desktop.sdk.model.AdjustmentRequest
 import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.FolioStatementResponse
+import com.zeny.desktop.sdk.model.FolioUpdateRequest
 import com.zeny.desktop.sdk.model.GetFolioStatementParamAudience
 import com.zeny.desktop.sdk.model.ListFoliosParamOwnerType
 import com.zeny.desktop.sdk.model.ListFoliosParamStatus
@@ -37,6 +41,12 @@ private const val MIN_SPLIT_PARTS = 2
 private const val MAX_SPLIT_PARTS = 10
 private const val MAX_PERCENT_SCALE = 4
 private val MAX_PERCENT = BigDecimal(100)
+
+/** A conta com o `ETag` da resposta, que o `updateFolio` devolve no `If-Match`. */
+data class VersionedFolio(
+    val folio: FolioResponse,
+    val etag: String,
+)
 
 /** Para quem é o extrato: o hóspede (`GUEST`, o padrão do contrato) ou o uso interno (`INTERNAL`). */
 enum class StatementAudience { GUEST, INTERNAL }
@@ -119,6 +129,35 @@ class FoliosFacade internal constructor(
     suspend fun folio(folioId: String): FolioResponse {
         val id = idOf(folioId, "conta")
         return executor.execute { billing.getFolio(id, it.headers) }.value
+    }
+
+    /** A conta com o `ETag` da resposta; sem `ETag`, o servidor quebrou o contrato: `IncompatibleResponse`. */
+    suspend fun versionedFolio(folioId: String): VersionedFolio {
+        val id = idOf(folioId, "conta")
+        return versionOf(executor.execute { billing.getFolio(id, it.headers) })
+    }
+
+    /**
+     * Troca o pagador e o limite de crédito: o `PUT` substitui os dois campos (`null` limpa), com `If-Match = etag`,
+     * sem `Idempotency-Key`; `412` sobe como `ApiError.PreconditionFailed`. `etag` em branco ou limite negativo
+     * lançam `IllegalArgumentException` antes da rede. A resposta traz a conta e o `ETag` novo.
+     */
+    suspend fun updateFolio(
+        folioId: String,
+        etag: String,
+        payerCompanyId: String?,
+        creditLimit: Money?,
+    ): VersionedFolio {
+        val id = idOf(folioId, "conta")
+        require(etag.isNotBlank()) { "etag inválido" }
+        val payer = payerCompanyId?.let { idOf(it, "empresa") }
+        require(creditLimit == null || creditLimit.amount.signum() >= 0) { "limite de crédito negativo" }
+        val request =
+            FolioUpdateRequest(
+                creditLimit = Option.Some(creditLimit?.toApi()),
+                payerCompanyId = Option.Some(payer),
+            )
+        return versionOf(executor.execute { billing.updateFolio(id, etag, request, it.headers) })
     }
 
     /** Todos os lançamentos da conta, todas as páginas, na ordem do servidor. */
@@ -278,6 +317,13 @@ class FoliosFacade internal constructor(
         val id = idOf(folioId, "conta")
         val wire = GetFolioStatementParamAudience.fromSerial(audience.name)
         return executor.execute { billing.getFolioStatement(id, wire, it.headers) }.value
+    }
+
+    private fun versionOf(response: ApiResponse<FolioResponse>): VersionedFolio {
+        val etag =
+            response.etag?.takeIf { it.isNotBlank() }
+                ?: throw ApiError.IncompatibleResponse(ResponseFormatException(IllegalStateException("sem ETag")))
+        return VersionedFolio(response.value, etag)
     }
 
     private suspend fun <T : Any> readAll(fetch: suspend (String?, Int) -> Page<T>): List<T> {
