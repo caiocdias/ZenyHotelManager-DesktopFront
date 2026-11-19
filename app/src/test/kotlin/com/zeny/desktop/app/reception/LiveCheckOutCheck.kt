@@ -64,6 +64,7 @@ private const val IN_HOUSE = "IN_HOUSE"
 private const val DONE = "Check-out concluído."
 private const val CAPTURE_FIRST = CheckOutText.CAPTURE_FIRST
 private const val NO_DEPARTURE = "NEED_SEED: nenhuma saída do dia hospedada, com UH e com conta; rode o demo-seed"
+private const val CREDIT_DUE = "conta credora no devido: o check-out depois do recebimento voltou com saldo devido"
 private const val NO_POINT = "NEED_SEED: sem o ponto de caixa \"Recepção\" ativo; rode o demo-seed"
 
 /**
@@ -148,6 +149,7 @@ class LiveCheckOutCheck {
         var panelShown: DayPanelState? = null
         var mapShown: RoomMapState? = null
         var dirtyAt: TimeSource.Monotonic.ValueTimeMark? = null
+        var postingsBefore: Set<String> = emptySet()
         var closings = 0
         var notice: String? = null
         var reloadPanel = false
@@ -199,11 +201,13 @@ class LiveCheckOutCheck {
         waitUntil("o mapa ao vivo", LOAD_TIMEOUT_MILLIS) {
             !screen.map.loading && screen.map.live == RealtimeStatus.Live
         }
+        screen.postingsBefore = postingIds(screen)
         screen.probe.loseNextDone = true
         conclude(screen)
         if (state.due != null) {
             receiveEachDue(screen)
             conclude(screen)
+            if (state.due != null) fail(CREDIT_DUE)
         }
         assertTrue(state.unconfirmed, "a resposta perdida não deixou o check-out sem confirmação")
         runOnUiThread { state.conclude() }
@@ -223,8 +227,15 @@ class LiveCheckOutCheck {
         val lines = state.dueLines.filter { it.receive != null }
         check(lines.isNotEmpty()) { "o saldo devido não oferece \"Receber\" (conta credora?)" }
         for (line in lines) {
+            val owed =
+                state.due
+                    ?.folios
+                    ?.firstOrNull { it.folioId == line.folioId }
+                    ?.balance
             runOnUiThread { state.receiveDue(line.folioId) }
             val form = checkNotNull(state.payment) { "o recebimento do devido não abriu" }
+            val suggested = owed != null && form.amount == MoneyInput.format(owed)
+            check(suggested) { "o valor sugerido não é o devido do servidor" }
             runOnUiThread { form.confirm() }
             waitUntil("o recebimento", LOAD_TIMEOUT_MILLIS) {
                 state.payment == null || (!form.busy && form.message != null)
@@ -244,7 +255,10 @@ class LiveCheckOutCheck {
         if (!state.unconfirmed) assertNull(state.message, "o check-out foi recusado: ${state.message}")
     }
 
-    /** Critério 4: com late, uma conta relida da reserva tem um lançamento com o valor do late. */
+    /**
+     * Critério 4: com late, uma conta relida da reserva tem um lançamento novo (que não existia antes do check-out) com
+     * o valor do late, comparado sem a escala (o `Money` guarda a do servidor).
+     */
     private fun lateWasPosted(
         screen: Screen,
         fee: Money?,
@@ -255,9 +269,12 @@ class LiveCheckOutCheck {
         }
         val posted =
             screen.departure.folioIds.any { id ->
-                runBlocking { screen.folios.postings(id) }.any { moneyOrNull(it.amount) == fee }
+                runBlocking { screen.folios.postings(id) }.any {
+                    val isNew = it.id.toString() !in screen.postingsBefore
+                    isNew && moneyOrNull(it.amount)?.amount?.compareTo(fee.amount) == 0
+                }
             }
-        check(posted) { "nenhuma conta relida tem o lançamento do late" }
+        check(posted) { "nenhuma conta relida tem um lançamento novo com o valor do late" }
         println("Check-out ao vivo: late de ${MoneyInput.format(fee)} lançado na conta")
     }
 
@@ -281,6 +298,12 @@ class LiveCheckOutCheck {
         }
         println("Check-out ao vivo: a reserva saiu de \"Hospedados\" no painel do dia")
     }
+
+    /** Os ids dos lançamentos de todas as contas da reserva (para achar o lançamento novo do late). */
+    private fun postingIds(screen: Screen): Set<String> =
+        screen.departure.folioIds
+            .flatMap { id -> runBlocking { screen.folios.postings(id) }.map { it.id.toString() } }
+            .toSet()
 
     /** Libera as cauções capturáveis das contas da reserva (registra uma de R$ 50,00 antes, se não há nenhuma). */
     private fun releaseCapturable(screen: Screen): Int =
