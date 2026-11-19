@@ -1041,12 +1041,47 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `756db61`. Falta a `LiveFolioCorrectionCheck` contra o `zeny-front`, que pede as credenciais do usuário e do Gerente. Pela instrução do usuário (intervenção só para arquitetura), a espera não trava: a E08 conta como concluída para a escolha da próxima etapa.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e08.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e08.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 4 Importantes:
+  - I1: o contrato do `ReopenState` com o `FolioWrite` em aberto;
+  - I2: a divisão sem teste de idempotência;
+  - I3: o wiring sem teste;
+  - I4: as fatias acima do teto.
+
+  Aprovado com notas na rodada 1 (`8c07b05`, registro em `a91e8f6`), com a reabertura passada à E13.
+- **Commits** (`MERGE_BASE` `c7fc188`, HEAD de código `756db61`):
+  - Antes das fatias: `bb3b849` (divisão E08/E12), `5ddb619` (plano), `8c07b05` (correção do plano e E13), `a91e8f6` (revisão de arquitetura).
+  - **Task 1:** as quatro escritas na `FoliosFacade` (`adjust` aprovável, `removeServiceCharge`, `transfer`, `split` com `SplitPart.Percent`/`Amount`), a porta `FolioCorrectionSource` e o `FolioWiring.corrections` (`94aaa7e`, `a64f79d`). Revisão de fatia aprovada.
+  - **Task 2:** o `FolioCorrectionsState` (fora do `FolioState`), ajustar com aprovação e remover a taxa pelo menu da linha, a linha "Corrige: …", os campos novos do `PostingRow` e a `LiveFolioCorrectionCheck` (passos 1 a 3) (`5b6269c`, `1ec3a29`). Revisão de fatia aprovada.
+  - **Task 3:** transferir (lançamentos marcados, destino entre as contas abertas) e dividir (por percentual ou por valor, de 2 a 10 partes), e os passos 4 e 5 ao vivo; junto, a taxa exigida já no passo 1 ao vivo e o limite do motivo num só `CORRECTION_REASON_MAX` (`ad0fe9d`, `9e989df`, `6382e74`). Revisão de fatia aprovada.
+  - **Testador de etapa:** `b812b2d` (a trava `tests/test_live_correction_ataque.sh`, com 39 mutantes, que pega também o PIN do aprovador) e `c1a07e1` (`FolioCorrectionsAttackTest`, 12 testes, e `FolioTransferAttackScreenTest`). Um defeito de produção: mais de 100 lançamentos marcados viravam "resultado desconhecido".
+  - **Correção do fim da etapa** (`756db61`): a recusa de mais de 100 lançamentos com texto antes da porta; o aviso do painel limpo ao abrir uma correção; a troca de modo da divisão limpa os valores; KDoc e formatação.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `c7fc188..6382e74`): 0 Críticos, 1 Importante (o mesmo defeito do testador), 7 Menores, "Ready to merge: With fixes".
+  - Re-revisão de `6382e74..756db61`: ver o fechamento abaixo.
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `6382e74` → 6 lockfiles do Gradle (1429 pacotes), "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_CORRECTION`.
+- **Integridade:** `check_test_integrity.py --base c7fc188` no `756db61` → exit 0, nenhum apontamento.
+- **Critérios** (testes com porta falsa; os marcados "ao vivo" esperam a `LiveFolioCorrectionCheck`):
+  1. **Ajustar acima do limite pede aprovação; aprovado, o ajuste aparece vinculado e o original intacto** — `FolioCorrectionsStateTest.adjustOverTheLimitAsksApprovalAndShowsTheLinkedPosting`, `approvalCancelledKeepsTheIntent`; `FolioCorrectionsFacadeTest.adjustApprovedRetriesWithTokenAndNewKey`. **Ao vivo:** o passo 2 (o `APPROVAL_REQUIRED` com `billing.postings.adjust`, a aprovação do Gerente, o ajuste com `correctsId` do consumo e o consumo intacto).
+  2. **Dividir e transferir mostram nas duas contas o que a API devolve, com a taxa junto do item** — `FolioTransferStateTest.transferMovesTheCheckedPostingsAndRereads`, `serviceChargeFollowsTheItem`, `splitByPercentSendsTheTypedParts`, `splitByAmountSendsTheTypedParts`; `FolioTransferScreenTest` e `FolioTransferAttackScreenTest` (as duas contas). **Ao vivo:** os passos 4 e 5, com as duas contas relidas.
+  3. **Remover a taxa gera o estorno com o motivo do servidor, só em linha de taxa** — `removalShowsTheServerReason`, `removalOnlyOnServiceChargeRows` e os casos do testador (`TRANSFER_IN` sem vínculo, correções com restante). **Ao vivo:** o passo 3 (a ação oferecida na linha real da taxa e o estorno com o `reason` do servidor).
+  4. **Mesma chave depois de erro de rede, pela regra única (D1)** — `retryAfterNetworkKeepsTheKey`, `removalRetryKeepsTheKey`, `retryAfterNetworkKeepsTheTransferKey`, `splitRetryAfterNetworkKeepsTheKey` e os `doubleConfirm…Once`; `FolioCorrectionsFacadeTest.sameIntentKeepsTheKey`. Os greps da E01 seguem sem linha.
+- **Como fazer a verificação ao vivo.** Ela escreve na demo e não desfaz: dois consumos com taxa de serviço na primeira conta aberta de reserva do seed, um ajuste de R$ 1,00 aprovado pelo Gerente, a taxa do primeiro consumo removida, o segundo dividido 50/50 com a segunda conta e o resto dele transferido para ela.
+  - No worktree, ponha `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD` (a Recepcionista), `ZENY_LIVE_APPROVER_LOGIN` e `ZENY_LIVE_APPROVER_PIN` (o Gerente) no ambiente de um subshell e rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_CORRECTION=1 timeout 1500 ./gradlew :app:test --tests '*LiveFolioCorrectionCheck' --rerun)`. Confira no relatório de testes que ela não foi pulada.
+  - `NEED_SEED` quer dizer que faltam duas contas abertas de reserva ou um código de lançamento com taxa: rode o seed.
+  - Passando, a E08 fecha `#concluida`.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **Divisões da E08.** O pagador, o limite de crédito, o `B-M5` e a isenção ao vivo passaram à **E12**, e a reabertura da conta encerrada à **E13** (I4 da revisão de arquitetura). Custo se errado: reorganizar o índice. A E13 ganhou critérios escritos pelo orquestrador (a reabertura não tinha critério na E04).
+  2. **Visibilidade mais restrita que o servidor:** "Ajustar" com `billing.postings.create` ou `billing.postings.adjust`, "Remover a taxa" com `billing.servicecharge.remove`, "Transferir" e "Dividir" com `billing.postings.transfer`. O servidor só exige `billing.folios.read` antes da aprovação.
+  3. **O front não confere a soma da divisão:** a divisão que não fecha é recusada pelo servidor (`SPLIT_TOTAL_MISMATCH`, texto do catálogo).
+  4. **Ação só com `remainingAmount` lido diferente de zero:** sem ele, ou fora do formato, nenhuma correção aparece. O crédito (negativo) continua corrigível. A divisão "por valor" exige partes maiores que zero; num crédito, só o servidor ao vivo diz se ela vale.
+  5. **Conta repetida na divisão:** recusada no "Dividir" com "Confira as partes da divisão.", e não ignorada ao acrescentar (o Menor da revisão final conflitava com um teste do testador; ruling deste lote).
+  6. **Textos do implementador:** "O valor deve ser maior que zero." (ajuste negativo), "Esta conta (fica)" (a primeira parte da divisão, sem o número), "O servidor registra o motivo: pedido do cliente." (remoção da taxa).
+- **Notas para a próxima etapa:**
+  - **E13 (reabrir):** a porta é a `FolioCorrectionSource`; as notas I1, M1, M4 e M7 da revisão de arquitetura estão na seção dela.
+  - **Dívidas:** o `PostingFormState` e o `ReversalState` ainda têm `send`/`fail` próprios; o `FolioState.kt` segue grande, agora com o `FolioCorrectionsState` à parte; o `FolioCorrectionsState` recebe `clearNotice` por parâmetro.
+  - **Diferidos (Menores):** o nome do teste ao vivo `adjustWithApprovalAndRemoveTheServiceCharge` cobre os cinco passos (não renomeado: a trava do testador o referencia); um sucesso de transferência com `transfers` vazio ainda mostra "Transferido para a conta X.".
+  - **Para o testador:** um diálogo por vez entre as cauções e as correções (coberto só pelo `oneDialogAtATime` da Task 2) e a troca de sessão pela casca com uma correção em voo (coberta indiretamente pelo `closeDropsLateAnswers`) não foram atacados no teto de 30 min.
 
 ---
 
