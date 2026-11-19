@@ -215,11 +215,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E03 | Pagamentos | #em-andamento | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
 | E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
 | E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
-| E08 | Correções da conta | #em-andamento | E02 | Ajustar, dividir, transferir, remover a taxa a pedido e reabrir a conta encerrada |
+| E08 | Correções da conta | #em-andamento | E02 | Ajustar, dividir, transferir e remover a taxa a pedido |
 | E11 | Duplicação entre o painel do dia e a busca | #pendente | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
 | E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #pendente | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
-| E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11, E12 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E13 | Reabrir conta encerrada | #pendente | E02 | Reabrir a conta encerrada, com aprovação de superior |
+| E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -988,7 +989,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ## E08 — Correções da conta — #em-andamento
 
-**Objetivo:** na conta aberta pela E02, o usuário ajusta um lançamento, divide-o entre contas, transfere lançamentos para outra conta e remove a taxa de serviço a pedido do cliente. Ele também reabre uma conta encerrada, com aprovação. O pagador, o limite de crédito, a multa de cancelamento (`B-M5`) e a isenção ao vivo passaram à E12 (divisão de 2026-11-19, no histórico).
+**Objetivo:** na conta aberta pela E02, o usuário ajusta um lançamento, divide-o entre contas, transfere lançamentos para outra conta e remove a taxa de serviço a pedido do cliente. O pagador, o limite de crédito, a multa de cancelamento (`B-M5`) e a isenção ao vivo passaram à E12, e a reabertura da conta encerrada à E13 (divisões de 2026-11-19, no histórico).
 
 **Por que agora:** saiu da E02 na divisão de 2026-11-18 (histórico). Não é pré-requisito do pagamento nem do check-out, por isso vem depois da E04; o gate (E05) espera por ela.
 
@@ -997,13 +998,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Escopo:**
 
 - **Correções:** `/adjust`, `/split` e `/remove-service-charge` em `POST /api/v1/folios/{id}/postings/{postingId}/…` e `POST /api/v1/folios/{id}/postings/transfer`.
-- **Reabrir conta encerrada:** `POST /api/v1/folios/{id}/reopen`, com aprovação (veio da E04 em 2026-11-19: ação da conta com aprovação, sem critério na E04).
 - **Aprovação de superior:** diálogo onde o servidor exigir (o ajuste é ação sensível com limite).
 
 **Fora de escopo:**
 
 - encerrar a conta, que o check-out do servidor faz (E04);
-- o pagador, o limite de crédito, o `B-M5` e a isenção ao vivo (E12).
+- o pagador, o limite de crédito, o `B-M5` e a isenção ao vivo (E12);
+- reabrir a conta encerrada (E13).
 
 **Critérios de aceite:**
 
@@ -1021,7 +1022,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Notas para o plano:**
 
-- Partes independentes, para as ondas do plano: o ajuste e a remoção da taxa não dependem da transferência e da divisão; a reabertura não depende de nenhuma delas.
+- Partes independentes, para as ondas do plano: o ajuste e a remoção da taxa não dependem da transferência e da divisão.
 - **Risco:** cálculo de valor monetário e concorrência estão na lista fechada.
 - **Divisão (2026-11-19):** pela recomendação do orquestrador na conferência do contrato, aplicada no início do lote seguinte: o escopo não cabia em três fatias de até 60 min. A E08 fica com as correções da conta (ajustar, dividir, transferir, remover a taxa e reabrir); a **E12** fica com o pagador e o limite de crédito (`PUT`), o `B-M5` e a isenção ao vivo, com os critérios deles.
 
@@ -1193,13 +1194,59 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E13 — Reabrir conta encerrada — #pendente
+
+**Objetivo:** na conta encerrada, o usuário com a permissão (ou com a aprovação de um superior) reabre a conta, com o motivo.
+
+**Por que agora:** saiu da E08 em 2026-11-19 (I4 da revisão de arquitetura do plano da E08: as fatias passavam do teto, e a reabertura não depende das correções). Veio da E04, onde não tinha critério. O gate (E05) espera por ela.
+
+**Dependências:** E02 (a tela da conta, a fachada e a porta). O ID é o próximo livre.
+
+**Escopo:** `POST /api/v1/folios/{id}/reopen` (`FolioReopenRequest`, motivo até 500), ação sensível sem limite de valor, **sem `Idempotency-Key`** no contrato.
+
+**Fora de escopo:** encerrar a conta, que o check-out do servidor faz (E04).
+
+**Critérios de aceite:**
+
+- [ ] Reabrir como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, a conta relida aparece aberta, e a reabertura não envia `Idempotency-Key` (teste da fachada).
+- [ ] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
+- [ ] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Notas da revisão de arquitetura do plano da E08 (I1, M1, M4, M7): o `ReopenState` com envio próprio, com `classifyWriteFailure` direto, como o `TraceFormState`, sem o `FolioWrite` (o `UNKNOWN` e o `UNKNOWN_STORED` relêem e destravam, porque não há chave); o `ApiExecutor` não tem caminho sem `Intent` com o token (`execute(null)` não leva token; `executeApproved` exige `Intent` e manda a chave), então nasce um `internal` no `core`; o `approveReopen` do `FolioWiring` segue o padrão do `approveRefund = { null }` só se um teste do wiring real provar a ligação; a visibilidade de "Reabrir conta" (com `billing.folios.manage` ou `billing.folios.reopen`) é mais restrita que o servidor, que só exige `billing.folios.read` antes da aprovação.
+- A porta é a `FolioCorrectionSource` da E08.
+- **Risco:** autenticação ou autorização e concorrência estão na lista fechada.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além dos anteriores.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E05 — Gate do marco M4 — #pendente
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o ciclo completo da hospedagem para a demo.
 
-**Dependências:** E04, E08, E10, E11 e E12 (o gate cobre o marco inteiro).
+**Dependências:** E04, E08, E10, E11, E12 e E13 (o gate cobre o marco inteiro).
 
 **Escopo:**
 
@@ -1288,3 +1335,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a duplicação entre o painel do dia e a busca saiu da E04 para a **E11** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E04 (I7: as fatias passavam do teto, e a duplicação não depende do assistente). A E05 passa a depender também da E11. O critério da duplicação foi junto, sem mudança.
 - 2026-11-19 — a E04 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `2ba7a31`; falta a `LiveCheckOutCheck`, que pede as credenciais do usuário.
 - 2026-11-19 — a E08 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação registrada na conferência do contrato do lote anterior: o escopo não cabia em três fatias de até 60 min. A E08, "Correções da conta", fica com ajustar, dividir, transferir, remover a taxa e reabrir, com os critérios dela sem mudança. Entra a **E12, "Pagador, limite de crédito e multa de cancelamento"**, com o `PUT` da conta, o `B-M5` e a isenção ao vivo, e os três critérios deles, que saíram da E08. A E12 depende da E02 e vem antes da E05 no índice; a E05 passa a depender também dela. A E08 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E08.
+- 2026-11-19 — a reabertura da conta encerrada saiu da E08 para a **E13, "Reabrir conta encerrada"** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E08 (I4: as fatias passavam do teto; a reabertura não tinha critério e não depende das correções). A E13 depende da E02; a E05 passa a depender também dela. Os critérios da E08 não mudaram.
