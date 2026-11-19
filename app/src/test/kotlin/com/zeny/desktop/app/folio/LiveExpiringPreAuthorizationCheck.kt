@@ -7,9 +7,6 @@ import com.zeny.desktop.core.config.ServerUrl
 import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.input.DateInput
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
@@ -29,6 +26,7 @@ private const val LOAD_TIMEOUT_MILLIS = 60_000L
 private const val POLL_MILLIS = 100L
 private const val DAYS_AHEAD = 89L
 private const val NEED_SEED = "NEED_SEED: nenhuma caução a vencer; rode a verificação das cauções ou o demo-seed"
+private val VALIDITY_SHAPE = Regex("""\d{2}/\d{2}/\d{4} \d{2}:\d{2}""")
 private val VALIDITY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm")
 
 /**
@@ -62,46 +60,49 @@ class LiveExpiringPreAuthorizationCheck {
             val port = checkNotNull(connection.expiringPreAuthorizationSource()) { "a conexão não tem a lista" }
             val payments = checkNotNull(connection.paymentSource()) { "a conexão não tem pagamentos" }
             val folios = checkNotNull(connection.folioSource()) { "a conexão não tem contas" }
-            val scope = CoroutineScope(SupervisorJob())
-            val state = ExpiringPreAuthorizationsState(port, payments, scope)
-            try {
-                val today = runBlocking { payments.businessDay() }.date.value
-                state.enter()
-                awaitIdle(state)
-                assertNull(state.error, "a leitura inicial falhou")
+            // O estado vive no escopo deste runBlocking (uma thread só): nenhum campo é lido de outra thread.
+            runBlocking {
+                val state = ExpiringPreAuthorizationsState(port, payments, this)
+                try {
+                    val today = payments.businessDay().date.value
+                    state.enter()
+                    awaitRead(state)
+                    assertNull(state.error, "a leitura inicial falhou")
 
-                state.untilText = DateInput.format(BusinessDate(today.plusDays(DAYS_AHEAD)))
-                state.search()
-                awaitIdle(state)
-                assertNull(state.untilError, "o \"Até\" foi recusado")
-                assertNull(state.error, "a leitura falhou")
-                val rows = state.rows
-                assertTrue(rows.isNotEmpty(), NEED_SEED)
+                    state.untilText = DateInput.format(BusinessDate(today.plusDays(DAYS_AHEAD)))
+                    state.search()
+                    awaitRead(state)
+                    assertNull(state.untilError, "o \"Até\" foi recusado")
+                    assertNull(state.error, "a leitura falhou")
+                    val rows = state.rows
+                    assertTrue(rows.isNotEmpty(), NEED_SEED)
+                    assertTrue(
+                        rows.all { VALIDITY_SHAPE.matches(it.expires) },
+                        "uma validade não veio no formato dd/MM/aaaa HH:mm",
+                    )
 
-                val times = rows.map { LocalDateTime.parse(it.expires, VALIDITY_FORMAT) }
-                assertEquals(times.sorted(), times, "as validades não vieram em ordem não decrescente")
-                println("Cauções a vencer ao vivo: ${rows.size} linha(s) em ordem")
+                    val times = rows.map { LocalDateTime.parse(it.expires, VALIDITY_FORMAT) }
+                    assertEquals(times.sorted(), times, "as validades não vieram em ordem não decrescente")
+                    println("Cauções a vencer ao vivo: ${rows.size} linha(s) em ordem")
 
-                val folio = runBlocking { folios.folio(rows.first().folioId) }
-                assertEquals(rows.first().folioId, folio.id.toString(), "a conta da primeira linha não foi lida")
-                println("Cauções a vencer ao vivo: a conta da primeira linha existe")
-            } finally {
-                state.close()
-                scope.cancel()
+                    val folio = folios.folio(rows.first().folioId)
+                    assertEquals(rows.first().folioId, folio.id.toString(), "a conta da primeira linha não foi lida")
+                    println("Cauções a vencer ao vivo: a conta da primeira linha existe")
+                } finally {
+                    state.close()
+                }
             }
         }
 
-    /** Espera a leitura do estado terminar: o "Até" preenchido, nada em voo e linhas ou erro. */
-    private fun awaitIdle(state: ExpiringPreAuthorizationsState) {
+    /**
+     * Espera a leitura que acabou de começar terminar: `enter()` e `search()` desligam o `loaded` na hora, então só
+     * `loaded` (ou um erro) vindo depois deles marca a leitura nova, sem atraso fixo. A espera tem teto.
+     */
+    private suspend fun awaitRead(state: ExpiringPreAuthorizationsState) {
         val done =
-            runBlocking {
-                withTimeoutOrNull(LOAD_TIMEOUT_MILLIS) {
-                    while (state.untilText.isBlank() || state.loading) delay(POLL_MILLIS)
-                    // A releitura de uma busca começa no mesmo instante: dá a vez ao `loading` antes da checagem.
-                    delay(POLL_MILLIS)
-                    while (state.loading) delay(POLL_MILLIS)
-                    true
-                }
+            withTimeoutOrNull(LOAD_TIMEOUT_MILLIS) {
+                while (!state.loaded && state.error == null) delay(POLL_MILLIS)
+                true
             }
         assertEquals(true, done, "a lista não terminou de carregar a tempo")
     }

@@ -56,7 +56,7 @@ argumentos_assert() {
 # validades, o identificador da conta e o texto de erro do estado). Nunca a resposta inteira do sdk, a linha inteira
 # nem um campo de cartão. Um argumento novo não entra sem mudar aqui.
 ARGUMENTOS_ASSERT=' done true times times.sorted() rows.isNotEmpty() rows.first().folioId folio.id.toString() '
-ARGUMENTOS_ASSERT+='state.error state.untilError connection.state.value '
+ARGUMENTOS_ASSERT+='state.error state.untilError connection.state.value rows.all { VALIDITY_SHAPE.matches(it.expires) } '
 
 argumento_permitido() {
   local a="$1"
@@ -224,12 +224,12 @@ muta "o NSU num literal" '"a leitura inicial falhou"' '"a leitura inicial falhou
 muta "concatenação com a linha" '"a leitura inicial falhou"' '"a leitura inicial falhou: " + rows' app
 muta "concatenação ao contrário" '"a leitura falhou"' 'rows.toString() + " a leitura falhou"' app
 muta "concatenação com plus" '"a leitura falhou"' '"a leitura falhou".plus(rows)' app
-muta "error com a linha" 'val folio = runBlocking' \
-  'if (rows.isEmpty()) error(rows.toString()); val folio = runBlocking' app
-muta "error com variável" 'val folio = runBlocking' 'if (rows.isEmpty()) error(rows); val folio = runBlocking' app
-muta "throw com a linha" 'val folio = runBlocking' \
-  'if (rows.isEmpty()) throw IllegalStateException(rows.toString()); val folio = runBlocking' app
-muta "throw de variável" 'val folio = runBlocking' 'if (rows.isEmpty()) throw failure; val folio = runBlocking' app
+muta "error com a linha" 'val folio = folios.folio(' \
+  'if (rows.isEmpty()) error(rows.toString()); val folio = folios.folio(' app
+muta "error com variável" 'val folio = folios.folio(' 'if (rows.isEmpty()) error(rows); val folio = folios.folio(' app
+muta "throw com a linha" 'val folio = folios.folio(' \
+  'if (rows.isEmpty()) throw IllegalStateException(rows.toString()); val folio = folios.folio(' app
+muta "throw de variável" 'val folio = folios.folio(' 'if (rows.isEmpty()) throw failure; val folio = folios.folio(' app
 muta "check com mensagem não literal" 'checkNotNull(connection.expiringPreAuthorizationSource()) { "a conexão não tem a lista" }' \
   'checkNotNull(connection.expiringPreAuthorizationSource()) { rows.toString() }' app
 muta "assertEquals com a linha inteira" 'assertEquals(rows.first().folioId' 'assertEquals(rows.first()' app
