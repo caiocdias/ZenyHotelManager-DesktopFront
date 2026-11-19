@@ -1,6 +1,8 @@
 package com.zeny.desktop.app.folio
 
 import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.types.BusinessDate
+import com.zeny.desktop.design.input.DateInput
 import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.PreAuthorizationCaptureResponse
 import kotlinx.coroutines.CompletableDeferred
@@ -11,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import java.io.IOException
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlin.test.Test
@@ -337,11 +340,14 @@ class PreAuthorizationAtaqueTest {
             holder.startRegister()
             val form = assertNotNull(holder.register)
             form.amount = "100,00"
-            form.expiresOn = "19/11/2026"
+            // O holder pelo FolioState usa o relógio real: a validade é amanhã no fuso do hotel do falso.
+            form.expiresOn = DateInput.format(BusinessDate(LocalDate.now(ZoneId.of("America/Sao_Paulo")).plusDays(1)))
             form.authorizationCode = "AUT1"
             form.confirm()
             runCurrent()
             val sent = source.registerCalls.size
+            assertEquals(1, sent, "o primeiro registro foi à rede")
+            assertTrue(form.unconfirmed, "e ficou sem confirmação")
 
             folio.close()
             form.confirm()
