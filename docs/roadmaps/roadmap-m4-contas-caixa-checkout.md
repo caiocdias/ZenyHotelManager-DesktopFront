@@ -904,7 +904,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `0bb5f1e`. Falta a `LiveCheckOutCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava a escolha da próxima etapa. **A base (E03 e E09) também não foi verificada ao vivo.**
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `2ba7a31`. Falta a `LiveCheckOutCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava a escolha da próxima etapa. **A base (E03 e E09) também não foi verificada ao vivo.**
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 9 Importantes:
   - `extensions` público;
   - o `until` contra o contrato;
@@ -917,7 +917,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - `Riscos:` incompleto.
 
   Aprovado com notas na rodada 1 (`9b25b52`), com a divisão da E11.
-- **Commits** (`MERGE_BASE` `e3227ee`, HEAD de código `0bb5f1e`):
+- **Commits** (`MERGE_BASE` `e3227ee`, HEAD de código `2ba7a31`):
   - **Task 1:** a `CheckOutFacade` (`ZenyCore.checkOut`): cotação do late e check-out com o resultado tipado `BalanceDue`. Também `ApiError.Problem.extensions` (`internal`) e a porta `CheckOutSource` (`8086cb0`). Sem late, o check-out vai sem corpo, porque o `sdk` mandava o JSON `null` (conferido contra o servidor, `@RequestBody(required = false)`). Revisão de fatia aprovada.
   - **Task 2:** o `CheckOutState` e o `CheckOutDialog`: pendências por leitura, bloqueio por caução capturável, devido por conta com "Receber", late na intenção, `FolioWrite` (`04acc16`). Revisão de fatia aprovada.
   - **Task 3:** "Check-out" no detalhe da reserva na Recepção, "Abrir conta" pelo `ReservationFolioDialog`, o aviso no painel e a `LiveCheckOutCheck`. Entraram também os itens da revisão da Task 2 (`f21ba00`, `7d22a2c`, `2ed0126`):
@@ -936,14 +936,16 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
     - o aviso "Check-out concluído." some ao trocar de reserva;
     - fechar com o check-out em voo relê o painel;
     - a conferência do late na verificação ao vivo compara por valor e exige um lançamento novo.
+  - **Rodada 2** (`2ba7a31`): a verificação ao vivo decide "conta credora no devido" pelo que o servidor respondeu, e não pelo devido da tela. Antes, ela falharia no caminho feliz com devido.
 - **Revisões:**
   - Revisão final (`revisor-seguranca`, fable, `e3227ee..2ed0126`): 0 Críticos, 1 Importante, 7 Menores, "Ready to merge: With fixes".
-  - Re-revisão de `2ed0126..0bb5f1e`: no ledger.
-- **Gate no `0bb5f1e`:**
+  - Re-revisão de `2ed0126..0bb5f1e`: o Importante e os Menores corrigidos, os testes do testador sólidos e 1 Importante novo (o falso "conta credora no devido" na verificação ao vivo).
+  - Re-revisão de `0bb5f1e..2ba7a31`: corrigido, "Ready to merge: Yes".
+- **Gate no `7ca42b9`** (o `2ba7a31` mais o rascunho deste handoff):
   - `./gradlew build` → BUILD SUCCESSFUL. Contagens (testes, pulados, falhas): app 3013, 50, 0; core 1286, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0.
   - `bash tests/run.sh` → 65 arquivos, 0 falhas, 1 com casos pulados (o busybox).
 - **Scanner:** `osv-scanner --recursive --no-ignore ./` no `2ed0126` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_CHECKOUT`.
-- **Integridade:** `check_test_integrity.py --base e3227ee` no `0bb5f1e` → exit 0. Na Task 3 (`--base 04acc16`), houve 1 `ASSERCAO_REMOVIDA`: uma asserção tautológica trocada pelo texto fixo do catálogo, julgada justificada.
+- **Integridade:** `check_test_integrity.py --base e3227ee` no `2ba7a31` → exit 0. Na Task 3 (`--base 04acc16`), houve 1 `ASSERCAO_REMOVIDA`: uma asserção tautológica trocada pelo texto fixo do catálogo, julgada justificada.
 - **Critérios:**
   1. **Saída do seed até o saldo zero, com a UH Vaga e Suja em até 2 s.** Testes: `CheckOutStateTest.balanceDueShowsEachFolioAndRetriesWithANewKey`, `receiveDueSuggestsTheServerAmount` e `successCallsOnDoneAndCloses`; `ReceptionCheckOutTest`. **Ao vivo:** os passos 3 a 5 da `LiveCheckOutCheck`, com o mapa assinado em paralelo e os 2 s contados da resposta do servidor.
   2. **Caução capturável mostra a pendência e não conclui até a liberação.** Testes: `capturablePreAuthorizationBlocksConclude`, `releasingTheCautionUnblocks`, `malformedCapturableBlocksConclude` e `preAuthorizationReadFailureBlocksConclude`; `ReceptionCheckOutTest.openFolioReleasesTheCautionAndTheReloadedAssistantUnlocks`. **Ao vivo:** o passo 2.
@@ -976,9 +978,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
     - a rolagem do assistente se perde ao voltar do recebimento;
     - ao reabrir o assistente, o "recebido" se perde e a conta aparece como credora; o aviso "pagamento registrado" no painel é a mitigação;
     - depois de um pagamento incerto ou feito pela conta, fechar o assistente não avisa;
-    - "Abrir conta" segue habilitado com `closeOnly`;
+    - depois do descarte do devido velho, a seção "Pendências" relida pode mostrar "Conta credora" ao lado de "Confira a conta e conclua de novo.", e a caixa do late não trava; o servidor recusa com devido credor;
+    - o aviso "pagamento registrado" só sai no próximo check-out ou com a troca de sessão;
     - a cotação que não responde bloqueia "Concluir" até o tempo limite do cliente.
-  - **Para o testador:** o duplo clique pela UI real (coberto no estado e pelo `enabled`).
+  - **Para o testador:** o duplo clique pela UI real (coberto no estado e pelo `enabled`); em `ReceptionCheckOutAtaqueTest.sessionSwitchWithTheCheckOutInFlightClosesWithoutNoticeNorReload`, contar as páginas antes da troca, para provar que o próprio dispose não relê.
 
 ---
 
@@ -1228,3 +1231,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E09 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `e3227ee`; falta a `LivePreAuthorizationCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E04 fica elegível.
 - 2026-11-19 — conferência da E04 pelo orquestrador (`claude --agent orquestrador`): o check-out do servidor encerra as contas, libera as cauções e lança o late na mesma transação, então o assistente não chama o encerramento à parte. A reabertura de conta (`…/reopen`, com aprovação) passou à E08, onde ficam as ações da conta com aprovação. Os critérios não mudaram.
 - 2026-11-19 — a duplicação entre o painel do dia e a busca saiu da E04 para a **E11** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E04 (I7: as fatias passavam do teto, e a duplicação não depende do assistente). A E05 passa a depender também da E11. O critério da duplicação foi junto, sem mudança.
+- 2026-11-19 — a E04 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `2ba7a31`; falta a `LiveCheckOutCheck`, que pede as credenciais do usuário.
