@@ -21,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class CoreConnectionTest {
     private class MemorySettings : LocalSettings {
@@ -114,6 +115,47 @@ class CoreConnectionTest {
                     val day = assertNotNull(connection.paymentSource()).businessDay()
                     assertEquals(BusinessDate.parse("2026-11-18"), day.date)
                     assertEquals(ZoneId.of("America/Sao_Paulo"), day.zone)
+                }
+            }
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
+    fun folioCorrectionSourceIsTheFacade() {
+        val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
+        val posting = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f04"
+        val keys = mutableListOf<String?>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/v1/folios/$folio/postings/$posting/remove-service-charge") { exchange ->
+            keys += exchange.requestHeaders.getFirst("Idempotency-Key")
+            val code = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f06"
+            val body =
+                (
+                    """{"amount":"-5.00","businessDate":"2026-11-18","description":"Taxa","folioId":"$folio",""" +
+                        """"id":"$posting","postedAt":"2026-11-18T10:00:00Z","quantity":1.0,"source":"MANUAL",""" +
+                        """"transactionCodeId":"$code","type":"REVERSAL","unitPrice":"5.00"}"""
+                ).toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.sendResponseHeaders(201, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            runTest {
+                val url = checkNotNull(ServerUrl.parse("http://127.0.0.1:${server.address.port}"))
+                CoreConnection(ZenyCore(url, MemorySettings())).use { connection ->
+                    val source = connection.folioCorrectionSource()
+                    val done = source.removeServiceCharge(folio, posting, Intent())
+                    assertEquals(posting, done.id.toString())
+                    assertEquals(1, keys.size)
+                    assertTrue(!keys.single().isNullOrBlank())
+                    // O id é validado pela fachada do `core`, antes de ir à rede.
+                    assertFailsWith<IllegalArgumentException> {
+                        source.removeServiceCharge("não-é-uuid", posting, Intent())
+                    }
+                    assertEquals(1, keys.size)
                 }
             }
         } finally {

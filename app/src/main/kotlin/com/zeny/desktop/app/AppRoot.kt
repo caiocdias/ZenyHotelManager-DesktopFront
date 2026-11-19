@@ -768,6 +768,7 @@ internal fun folioWiring(
         payments = connection.paymentSource(),
         approveRefund = { approveAction(approval, it) },
         openShift = openShift?.takeIf { CASHIER_OPERATE in permissions },
+        corrections = connection.folioCorrectionSource(),
     )
 }
 

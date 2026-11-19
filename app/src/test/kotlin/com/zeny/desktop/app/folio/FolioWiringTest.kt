@@ -6,11 +6,16 @@ import com.zeny.desktop.app.reception.PdfKind
 import com.zeny.desktop.app.reception.RegistrationCardState
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.facade.SplitPart
 import com.zeny.desktop.core.facade.StatementAudience
+import com.zeny.desktop.core.http.Intent
+import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.design.pdf.PdfActions
 import com.zeny.desktop.design.pdf.PdfDocumentState
 import com.zeny.desktop.design.pdf.PrintOutcome
 import com.zeny.desktop.sdk.model.PaymentResponse
+import com.zeny.desktop.sdk.model.PostingResponse
+import com.zeny.desktop.sdk.model.TransferResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.emptyFlow
@@ -163,5 +168,50 @@ class FolioWiringTest {
             assertEquals(1, opened)
             val withoutShortcut = folioWiring(connection, setOf(READ, OPERATE), backgroundScope, null, null)
             assertNull(assertNotNull(withoutShortcut).openShift)
+        }
+
+    private val corrections =
+        object : FolioCorrectionSource {
+            override fun adjust(
+                folioId: String,
+                postingId: String,
+                amount: Money,
+                reason: String,
+                intent: Intent,
+            ): ApprovableAction<PostingResponse> = error("não usado")
+
+            override suspend fun removeServiceCharge(
+                folioId: String,
+                postingId: String,
+                intent: Intent,
+            ): PostingResponse = error("não usado")
+
+            override suspend fun transfer(
+                folioId: String,
+                postingIds: List<String>,
+                targetFolioId: String,
+                reason: String?,
+                intent: Intent,
+            ): TransferResponse = error("não usado")
+
+            override suspend fun split(
+                folioId: String,
+                postingId: String,
+                parts: List<SplitPart>,
+                reason: String?,
+                intent: Intent,
+            ): TransferResponse = error("não usado")
+        }
+
+    @Test
+    fun wiringCarriesTheCorrections() =
+        runTest {
+            val with = FolioConnection(FakeFolioSource(), corrections = corrections)
+            val wiring = assertNotNull(folioWiring(with, setOf(READ), backgroundScope, null, null))
+            assertSame(corrections, wiring.corrections)
+
+            val bare = FolioConnection(FakeFolioSource())
+            val without = assertNotNull(folioWiring(bare, setOf(READ), backgroundScope, null, null))
+            assertNull(without.corrections)
         }
 }

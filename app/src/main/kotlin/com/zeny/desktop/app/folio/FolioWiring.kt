@@ -14,7 +14,8 @@ import com.zeny.desktop.sdk.model.PostingResponse
  * O que as três entradas da conta (a aba "Contas", "Conta" na Recepção e "Conta" nas Reservas e pendências) recebem
  * do `AppRoot`: a porta, o conjunto de permissões da casca, a aprovação da sessão e as fábricas do extrato em PDF de
  * cada audiência (nulas sem visualizador); a porta dos pagamentos (nula, sem a seção "Pagamentos"), a aprovação do
- * reembolso e o atalho "Abrir turno" (nulo sem `billing.cashier.operate`). O `AppRoot` monta as três entradas com o
+ * reembolso, o atalho "Abrir turno" (nulo sem `billing.cashier.operate`) e a porta das correções da conta (nula, sem
+ * ajustar, remover a taxa, transferir nem dividir). O `AppRoot` monta as três entradas com o
  * coordenador de aprovação da sessão. O padrão de [approveRefund] nunca roda a ação (equivale à aprovação cancelada):
  * existe só para quem monta o portador sem coordenador compilar, e uma entrada assim não reembolsa por engano.
  */
@@ -28,6 +29,7 @@ class FolioWiring(
     val payments: PaymentSource? = null,
     val approveRefund: suspend (ApprovableAction<PaymentResponse>) -> ApiResponse<PaymentResponse>? = { null },
     val openShift: (() -> Unit)? = null,
+    val corrections: FolioCorrectionSource? = null,
 )
 
 /**
