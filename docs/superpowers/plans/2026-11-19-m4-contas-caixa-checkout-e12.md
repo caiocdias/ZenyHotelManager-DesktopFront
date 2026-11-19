@@ -4,7 +4,7 @@
 
 **Goal:** o texto da multa de uma reserva cancelada mais de uma vez bate com o que a conta mostra (`B-M5`), a isenção da multa é verificada ao vivo, e na conta aberta o usuário troca o pagador (uma empresa do servidor) e o limite de crédito com `If-Match`.
 
-**Architecture:** a multa fica no `ReservationCancelState` (pacote `reservations`), que passa a ler o `penaltiesCharged` da reserva (o total de multas já lançadas, que o contrato devolve) além da multa do cancelamento corrente. A verificação ao vivo da multa e da isenção amplia a `LiveReservationLifecycleCheck` (M3 E04). Para a conta, o `core` ganha a leitura da conta com o `ETag` e o `updateFolio` com `If-Match` na `FoliosFacade`, e uma fachada nova de leitura das empresas ativas (`CompaniesFacade`, só `listCompanies`); o `app` ganha uma porta `FolioAccountSource` (as portas existentes não mudam: arquivos do testador as implementam) e o formulário `FolioAccountFormState` no cabeçalho da conta. A `CompaniesFacade` lê a lista das ativas e uma empresa por id (o pagador vigente).
+**Architecture:** a multa fica no `ReservationCancelState` (pacote `reservations`), que passa a ler o `penaltiesCharged` da reserva (o total de multas já lançadas, que o contrato devolve) além da multa do cancelamento corrente. A verificação ao vivo da multa e da isenção amplia a `LiveReservationLifecycleCheck` (M3 E04). Para a conta, o `core` ganha a leitura da conta com o `ETag` e o `updateFolio` com `If-Match` na `FoliosFacade`, e uma fachada nova de leitura das empresas ativas (`CompaniesFacade`, com `listCompanies` e `getCompany`); o `app` ganha uma porta `FolioAccountSource` (as portas existentes não mudam: arquivos do testador as implementam) e o formulário `FolioAccountFormState` no cabeçalho da conta. A `CompaniesFacade` lê a lista das ativas e uma empresa por id (o pagador vigente).
 
 **Tech Stack:** Kotlin, Compose Multiplatform, kotlinx.coroutines, Ktor (via `sdk`), Gradle.
 
@@ -57,7 +57,9 @@ Não há `ARCHITECTURE.md` no repositório.
 
 ## Revisão de arquitetura
 
-(a preencher pelo passo 2 do orquestrador)
+- **Veredito:** aprovado com notas, na rodada 1 (rodada 0: bloqueado, 5 Importantes e 7 Menores; corrigidos em `897ecda`).
+- **Revisor:** `revisor-arquitetura`, modelo fable.
+- **Notas Menores (incorporadas):** N1, o parágrafo "Architecture" cita `listCompanies` e `getCompany`; N2, a Task 3 está no teto, com a regra de parar e devolver. O `C-M6` do `ReservationCancelDialogTest.kt` é 0. Não há `ARCHITECTURE.md`.
 
 ---
 
