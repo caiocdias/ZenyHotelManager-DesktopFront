@@ -1,6 +1,9 @@
 package com.zeny.desktop.app.session
 
 import com.zeny.desktop.app.cashier.CashierSource
+import com.zeny.desktop.app.folio.ExpiringPreAuthorizationSource
+import com.zeny.desktop.app.folio.FolioAccountSource
+import com.zeny.desktop.app.folio.FolioCorrectionSource
 import com.zeny.desktop.app.folio.FolioSource
 import com.zeny.desktop.app.folio.PaymentSource
 import com.zeny.desktop.app.reception.CheckOutSource
@@ -34,6 +37,7 @@ import com.zeny.desktop.core.facade.CashCount
 import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.CheckOutResult
+import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.DocumentQuery
@@ -51,10 +55,12 @@ import com.zeny.desktop.core.facade.ReservationChangeInput
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
 import com.zeny.desktop.core.facade.RoomMoveInput
+import com.zeny.desktop.core.facade.SplitPart
 import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.facade.TraceChange
 import com.zeny.desktop.core.facade.TraceFilter
 import com.zeny.desktop.core.facade.TraceVersion
+import com.zeny.desktop.core.facade.VersionedFolio
 import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -91,6 +97,7 @@ import com.zeny.desktop.sdk.model.RoomSuggestionResponse
 import com.zeny.desktop.sdk.model.RoomTypeResponse
 import com.zeny.desktop.sdk.model.TraceResponse
 import com.zeny.desktop.sdk.model.TransactionCodeResponse
+import com.zeny.desktop.sdk.model.TransferResponse
 import com.zeny.desktop.sdk.model.UndoCheckInResponse
 import com.zeny.desktop.sdk.model.WalkInResponse
 import kotlinx.coroutines.flow.Flow
@@ -179,6 +186,15 @@ interface ServerConnection : AutoCloseable {
 
     /** O check-out e a cotação do late check-out; `null` quando a conexão não os oferece. */
     fun checkOutSource(): CheckOutSource? = null
+
+    /** As correções da conta (ajustar, remover a taxa, transferir, dividir); `null` quando a conexão não as oferece. */
+    fun folioCorrectionSource(): FolioCorrectionSource? = null
+
+    /** As cauções a vencer; `null` quando a conexão não as oferece. */
+    fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource? = null
+
+    /** O pagador e o limite da conta (leitura com o `ETag`, `PUT` e empresas); `null` sem a conexão que os ofereça. */
+    fun folioAccountSource(): FolioAccountSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -640,6 +656,11 @@ class CoreConnection(
             override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
         }
 
+    private val expiring =
+        ExpiringPreAuthorizationSource { to, cursor, limit ->
+            core.payments.expiringPreAuthorizationPage(to, cursor, limit)
+        }
+
     /** Os pagamentos e as cauções da conta sobre `core.payments`, e a data operacional sobre `core.hotel`. */
     override fun paymentSource(): PaymentSource = payments
 
@@ -657,6 +678,68 @@ class CoreConnection(
 
     /** O check-out e a cotação do late check-out sobre `core.checkOut`. */
     override fun checkOutSource(): CheckOutSource = checkOut
+
+    private val corrections =
+        object : FolioCorrectionSource {
+            override fun adjust(
+                folioId: String,
+                postingId: String,
+                amount: Money,
+                reason: String,
+                intent: Intent,
+            ): ApprovableAction<PostingResponse> = core.folios.adjust(folioId, postingId, amount, reason, intent)
+
+            override suspend fun removeServiceCharge(
+                folioId: String,
+                postingId: String,
+                intent: Intent,
+            ): PostingResponse = core.folios.removeServiceCharge(folioId, postingId, intent)
+
+            override suspend fun transfer(
+                folioId: String,
+                postingIds: List<String>,
+                targetFolioId: String,
+                reason: String?,
+                intent: Intent,
+            ): TransferResponse = core.folios.transfer(folioId, postingIds, targetFolioId, reason, intent)
+
+            override suspend fun split(
+                folioId: String,
+                postingId: String,
+                parts: List<SplitPart>,
+                reason: String?,
+                intent: Intent,
+            ): TransferResponse = core.folios.split(folioId, postingId, parts, reason, intent)
+        }
+
+    /** As correções da conta sobre `core.folios`. */
+    override fun folioCorrectionSource(): FolioCorrectionSource = corrections
+
+    /** As cauções a vencer sobre `core.payments`. */
+    override fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource = expiring
+
+    private val account =
+        object : FolioAccountSource {
+            override suspend fun versionedFolio(folioId: String): VersionedFolio = core.folios.versionedFolio(folioId)
+
+            override suspend fun updateFolio(
+                folioId: String,
+                etag: String,
+                payerCompanyId: String?,
+                creditLimit: Money?,
+            ): VersionedFolio = core.folios.updateFolio(folioId, etag, payerCompanyId, creditLimit)
+
+            override suspend fun activeCompanyPage(
+                name: String?,
+                cursor: String?,
+                limit: Int,
+            ): Page<CompanyChoice> = core.companies.activeCompanyPage(name, cursor, limit)
+
+            override suspend fun company(companyId: String): CompanyChoice = core.companies.company(companyId)
+        }
+
+    /** O pagador e o limite da conta sobre `core.folios` e `core.companies`. */
+    override fun folioAccountSource(): FolioAccountSource = account
 
     override fun close() = core.close()
 }

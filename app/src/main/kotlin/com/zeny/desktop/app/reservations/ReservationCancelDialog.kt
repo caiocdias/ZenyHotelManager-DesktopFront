@@ -28,9 +28,10 @@ private val DIALOG_WIDTH = 560.dp
 
 /**
  * Diálogo que cancela uma reserva. Abre lendo a reserva ([state] `start()`) e mostra os termos da política copiada
- * nela, sem valor calculado: a multa só aparece depois, como o servidor a decidiu. Motivo em chips, observação e a
- * opção de isentar a multa (ação sensível: a aprovação de superior, se o servidor pedir, vem do `ApprovalCoordinator`
- * por cima). Com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção);
+ * nela, sem valor calculado: a multa só aparece depois, como o servidor a decidiu; a que a reserva já tem na
+ * conta ([previousPenalty][ReservationCancelState.previousPenalty]) aparece abaixo dos termos. Motivo em chips,
+ * observação e a opção de isentar a multa (ação sensível: a aprovação de superior, se o servidor pedir, vem do
+ * `ApprovalCoordinator` por cima). Com resultado desconhecido o botão vira "Tentar de novo" (a mesma intenção);
  * se a leitura da reserva falhar, "Tentar de novo" ao lado do erro lê de novo. Depois do cancelamento, só
  * o texto e "Fechar"; com [closeOnly][ReservationCancelState.closeOnly] (a falha guardada no servidor), as entradas
  * travam e também só resta "Fechar". "Voltar"/"Fechar" (desabilitados enquanto escreve) encerram o [state] e chamam
@@ -87,6 +88,7 @@ private fun CancelForm(state: ReservationCancelState) {
     state.terms?.let {
         Text(it, modifier = Modifier.testTag("cancel-terms"))
         Text("A multa é lançada na conta da reserva conforme o prazo da política.")
+        state.previousPenalty?.let { previous -> Text(previous) }
     }
     Text("Motivo", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

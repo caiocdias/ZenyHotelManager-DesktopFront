@@ -50,6 +50,7 @@ private fun rxCancellation(
 private fun rxDetail(
     status: String = "CONFIRMED",
     cancellation: CancellationResponse? = null,
+    penaltiesCharged: String = "0.00",
 ) = ReservationDetailResponse(
     bookingCode = "B-1",
     holderGuestId = Uuid.random(),
@@ -85,7 +86,7 @@ private fun rxDetail(
             guests = emptyList(),
             id = rxRes,
             nightlyRates = emptyList(),
-            penaltiesCharged = "0.00",
+            penaltiesCharged = penaltiesCharged,
             ratePlanCategory = ReservationResponse.RatePlanCategory.NORMAL,
             ratePlanId = Uuid.random(),
             roomTotal = "960.00",
@@ -125,7 +126,7 @@ private class RxApprover(
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
-@Suppress("TooManyFunctions") // um teste por regra do brief
+@Suppress("LargeClass", "TooManyFunctions") // um teste por regra do brief
 class ReservationCancelStateTest {
     private val id = rxRes.toString()
     private var changes = 0
@@ -357,6 +358,85 @@ class ReservationCancelStateTest {
 
                 assertEquals(expected, state.done)
                 assertNull(state.error)
+            }
+        }
+
+    /** O resumo do cancelamento com a multa [amount] (isenta ou não) e o total [charged] relido da reserva. */
+    private fun TestScope.doneWith(
+        amount: String,
+        waived: Boolean,
+        charged: String,
+    ): String? {
+        val source = source().apply { response = rxDetail("CANCELLED", rxCancellation(amount, waived), charged) }
+        val state = started(source)
+        confirmNow(state)
+        assertNull(state.error)
+        return state.done
+    }
+
+    @Test
+    fun secondCancellationKeepsThePreviousPenaltyInTheText() =
+        runTest {
+            assertEquals(
+                "Reserva R1 cancelada. Sem multa nova. A conta já tem R$ 150,00 de multa de cancelamento anterior.",
+                doneWith("0.00", false, "150.00"),
+            )
+        }
+
+    @Test
+    fun newPenaltyWithPreviousShowsTheTotal() =
+        runTest {
+            assertEquals(
+                "Reserva R1 cancelada. Multa lançada na conta: R$ 320,00. " +
+                    "Total de multas de cancelamento desta reserva: R$ 470,00.",
+                doneWith("320.00", false, "470.00"),
+            )
+        }
+
+    @Test
+    fun firstPenaltyShowsOnlyTheNewOne() =
+        runTest {
+            assertEquals(
+                "Reserva R1 cancelada. Multa lançada na conta: R$ 320,00.",
+                doneWith("320.00", false, "320.00"),
+            )
+        }
+
+    @Test
+    fun noPenaltyEverSaysSemMulta() =
+        runTest {
+            assertEquals("Reserva R1 cancelada. Sem multa.", doneWith("0.00", false, "0.00"))
+        }
+
+    @Test
+    fun waivedSaysWaived() =
+        runTest {
+            assertEquals("Reserva R1 cancelada. Multa isenta: R$ 320,00.", doneWith("320.00", true, "0.00"))
+        }
+
+    @Test
+    fun waivedWithPreviousShowsTheTotal() =
+        runTest {
+            assertEquals(
+                "Reserva R1 cancelada. Multa isenta: R$ 320,00. " +
+                    "Total de multas de cancelamento desta reserva: R$ 150,00.",
+                doneWith("320.00", true, "150.00"),
+            )
+        }
+
+    @Test
+    fun unreadablePenaltiesSayNothing() =
+        runTest {
+            val cases =
+                listOf(
+                    Triple("trezentos", false, "0.00"),
+                    Triple("320.00", false, "cento e cinquenta"),
+                    Triple("0.00", false, "1.2.3"),
+                    Triple("320.00", true, ""),
+                    Triple("trezentos", true, "150.00"),
+                )
+            for ((amount, waived, charged) in cases) {
+                assertEquals("Reserva R1 cancelada.", doneWith(amount, waived, charged), "$amount/$waived/$charged")
             }
         }
 

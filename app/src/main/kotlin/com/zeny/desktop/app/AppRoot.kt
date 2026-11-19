@@ -32,6 +32,8 @@ import com.zeny.desktop.app.approval.LocalApprovalCoordinator
 import com.zeny.desktop.app.approval.LocalApprovalCoordinatorOrNull
 import com.zeny.desktop.app.cashier.CashierScreen
 import com.zeny.desktop.app.cashier.CashierState
+import com.zeny.desktop.app.folio.ExpiringPreAuthorizationsScreen
+import com.zeny.desktop.app.folio.ExpiringPreAuthorizationsState
 import com.zeny.desktop.app.folio.FolioAccounts
 import com.zeny.desktop.app.folio.FolioListScreen
 import com.zeny.desktop.app.folio.FolioSource
@@ -274,7 +276,24 @@ private fun CashierArea(
             val wiring = rememberFolioWiring(connection, sessionId, permissions, scope) { tab = AccountsTab.CASHIER }
             val folios = wiring?.let { remember(it.source, sessionId, permissions) { FolioAccounts(it, scope) } }
             DisposableEffect(folios) { onDispose { folios?.close() } }
-            if (folios == null) CashierScreen(cashier) else AccountsTabs(cashier, folios, tab) { tab = it }
+            val expiring =
+                wiring?.let { w ->
+                    remember(w.source, sessionId, permissions) {
+                        val port = w.expiring
+                        val payments = w.payments
+                        if (port != null && payments != null) {
+                            ExpiringPreAuthorizationsState(port, payments, scope)
+                        } else {
+                            null
+                        }
+                    }
+                }
+            DisposableEffect(expiring) { onDispose { expiring?.close() } }
+            if (folios == null) {
+                CashierScreen(cashier)
+            } else {
+                AccountsTabs(cashier, folios, expiring, tab) { tab = it }
+            }
         }
     }
 }
@@ -284,26 +303,47 @@ private enum class AccountsTab(
 ) {
     CASHIER("Caixa"),
     FOLIOS("Contas"),
+    EXPIRING("Cauções a vencer"),
 }
 
-/** As abas da área: "Caixa" (a primeira e a padrão) e "Contas". Os estados e a aba escolhida vivem na área. */
+/**
+ * As abas da área: "Caixa" (a primeira e a padrão), "Contas" e, com a porta das cauções a vencer, "Cauções a vencer".
+ * Os estados e a aba escolhida vivem na área; "Abrir conta" da terceira abre a conta na segunda.
+ */
 @Composable
 private fun AccountsTabs(
     cashier: CashierState,
     folios: FolioAccounts,
-    selected: AccountsTab,
+    expiring: ExpiringPreAuthorizationsState?,
+    chosen: AccountsTab,
     onSelect: (AccountsTab) -> Unit,
 ) {
+    val tabs = AccountsTab.entries.filter { it != AccountsTab.EXPIRING || expiring != null }
+    val selected = chosen.takeIf { it in tabs } ?: AccountsTab.CASHIER
     Column(Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = selected.ordinal) {
-            AccountsTab.entries.forEach {
+        PrimaryTabRow(selectedTabIndex = tabs.indexOf(selected)) {
+            tabs.forEach {
                 Tab(selected = selected == it, onClick = { onSelect(it) }, text = { Text(it.label) })
             }
         }
         Box(Modifier.weight(1f)) {
             when (selected) {
-                AccountsTab.CASHIER -> CashierScreen(cashier)
-                AccountsTab.FOLIOS -> FolioListScreen(folios)
+                AccountsTab.CASHIER -> {
+                    CashierScreen(cashier)
+                }
+
+                AccountsTab.FOLIOS -> {
+                    FolioListScreen(folios)
+                }
+
+                AccountsTab.EXPIRING -> {
+                    expiring?.let {
+                        ExpiringPreAuthorizationsScreen(it) { folioId ->
+                            folios.select(folioId)
+                            onSelect(AccountsTab.FOLIOS)
+                        }
+                    }
+                }
             }
         }
     }
@@ -759,15 +799,19 @@ internal fun folioWiring(
 ): FolioWiring? {
     val source = connection.folioSource()
     if (source == null || FOLIOS_READ !in permissions) return null
+    val payments = connection.paymentSource()
     return FolioWiring(
         source = source,
         permissions = permissions,
         approve = { approveAction(approval, it) },
         guestPdf = statementPdfFactory(source, StatementAudience.GUEST, scope, window),
         internalPdf = statementPdfFactory(source, StatementAudience.INTERNAL, scope, window),
-        payments = connection.paymentSource(),
+        payments = payments,
         approveRefund = { approveAction(approval, it) },
         openShift = openShift?.takeIf { CASHIER_OPERATE in permissions },
+        corrections = connection.folioCorrectionSource(),
+        expiring = payments?.let { connection.expiringPreAuthorizationSource() },
+        account = connection.folioAccountSource(),
     )
 }
 

@@ -4,6 +4,7 @@ import com.zeny.desktop.core.http.ApiExecutor
 import com.zeny.desktop.core.http.CursorPager
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
+import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.core.types.toApi
 import com.zeny.desktop.sdk.client.BillingApi
@@ -20,6 +21,9 @@ import kotlin.uuid.Uuid
 
 /** Maior página que o contrato aceita: a lista completa vem com o mínimo de idas ao servidor. */
 private const val ALL_PAGES_SIZE = 200
+
+/** O tamanho padrão da página das cauções a vencer. */
+private const val EXPIRING_PAGE_SIZE = 50
 
 private const val MAX_BRAND = 20
 private const val MAX_CODE = 20
@@ -230,6 +234,29 @@ class PaymentsFacade internal constructor(
         val all = mutableListOf<CardPreAuthorizationResponse>()
         while (pager.hasMore) all += pager.next()
         return all
+    }
+
+    /**
+     * Uma página das cauções a vencer, na ordem de validade do servidor, até o dia [to] (inclusive). Sem `from`: o
+     * servidor parte da data operacional. A tela percorre com o `CursorPager`. A resposta de caução imprime o cartão no
+     * `toString`: nunca a logue.
+     */
+    suspend fun expiringPreAuthorizationPage(
+        to: BusinessDate,
+        cursor: String?,
+        limit: Int = EXPIRING_PAGE_SIZE,
+    ): Page<CardPreAuthorizationResponse> {
+        val page =
+            executor
+                .execute {
+                    billing.listExpiringCardPreAuthorizations(
+                        to = to.toApi(),
+                        cursor = cursor,
+                        limit = limit,
+                        block = it.headers,
+                    )
+                }.value
+        return Page(page.items, (page.nextCursor as? Option.Some)?.value?.takeIf { it.isNotBlank() })
     }
 
     suspend fun registerPreAuthorization(

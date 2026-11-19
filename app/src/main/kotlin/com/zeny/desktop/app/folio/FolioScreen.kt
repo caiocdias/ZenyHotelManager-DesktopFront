@@ -223,7 +223,7 @@ fun FolioPanel(
                         modifier = Modifier.testTag("folio-error"),
                     )
                 }
-                Header(view)
+                Header(view, state)
                 Actions(state)
                 Postings(state)
                 Payments(state)
@@ -232,11 +232,19 @@ fun FolioPanel(
             }
         }
     }
+    OpenDialogs(state)
+}
+
+/** Os diálogos abertos do painel (um por vez) e o PDF aberto. */
+@Composable
+private fun OpenDialogs(state: FolioState) {
     state.pdf?.let { RegistrationCardDialog(it, onClose = state::closePdf) }
     state.posting?.let { PostingDialog(it, onLeave = state::dismissPosting) }
     state.payment?.let { PaymentDialog(it, onLeave = state::finishPayment) }
     state.refund?.let { RefundDialog(it, onLeave = state::finishRefund) }
     state.preAuthorizations?.let { PreAuthorizationDialogs(it) }
+    state.corrections?.let { CorrectionDialogs(it) }
+    state.account?.let { FolioAccountDialog(it, onLeave = state::dismissAccount) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
@@ -249,13 +257,24 @@ private fun Actions(state: FolioState) {
     state.notice?.let { Text(it, modifier = Modifier.testTag("folio-notice")) }
 }
 
+/** O cabeçalho da conta; "Pagador e limite" fica ao lado do limite quando o estado o oferece. */
 @Composable
-private fun Header(view: FolioView) {
+private fun Header(
+    view: FolioView,
+    state: FolioState,
+) {
     Text("Conta ${view.number}", style = MaterialTheme.typography.titleLarge)
     Text("Dono: ${view.owner}")
     Text("Situação: ${view.status}", modifier = Modifier.testTag("folio-status"))
     Text("Saldo: ${view.balance}", modifier = Modifier.testTag("folio-balance"))
-    Text("Limite: ${view.creditLimit}")
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Limite: ${view.creditLimit}", modifier = Modifier.testTag("folio-limit"))
+        if (state.canEditAccount) {
+            OutlinedButton(onClick = state::startAccount, modifier = Modifier.testTag("folio-account")) {
+                Text("Pagador e limite")
+            }
+        }
+    }
     if (view.limitExceeded) Text(FolioText.LIMIT_EXCEEDED, color = MaterialTheme.colorScheme.error)
 }
 
@@ -266,18 +285,46 @@ private fun Postings(state: FolioState) {
     if (rows.isEmpty()) Text(FolioText.NO_POSTINGS)
     rows.forEachIndexed { index, row ->
         // A chave é o lançamento: o menu aberto segue a linha dele quando a tabela relida muda de ordem.
-        key(row.id) {
-            PostingLine(index, row, onReverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null)
-        }
+        key(row.id) { PostingLine(index, row, postingActions(state, row)) }
     }
 }
 
-/** Uma linha da tabela; com [onReverse], o menu dela oferece "Estornar". */
+/** O que o menu de uma linha oferece; cada ação nula fica fora do menu. */
+private class PostingActions(
+    val reverse: (() -> Unit)?,
+    val adjust: (() -> Unit)?,
+    val removeServiceCharge: (() -> Unit)?,
+    val transfer: (() -> Unit)?,
+    val split: (() -> Unit)?,
+) {
+    val any: Boolean
+        get() = reverse != null || adjust != null || removeServiceCharge != null || transfer != null || split != null
+}
+
+private fun postingActions(
+    state: FolioState,
+    row: PostingRow,
+): PostingActions {
+    val corrections = state.corrections
+    return PostingActions(
+        reverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null,
+        adjust = corrections?.takeIf { it.canAdjust(row) }?.let { { it.startAdjustment(row) } },
+        removeServiceCharge =
+            corrections?.takeIf { it.canRemoveServiceCharge(row) }?.let { { it.startRemoval(row) } },
+        transfer = corrections?.takeIf { it.canTransfer(row) }?.let { { it.startTransfer(row) } },
+        split = corrections?.takeIf { it.canTransfer(row) }?.let { { it.startSplit(row) } },
+    )
+}
+
+/**
+ * Uma linha da tabela; o ajuste ou o estorno mostra "Corrige: <descrição do original>". O menu dela oferece o que
+ * [actions] traz: "Estornar", "Ajustar", "Remover a taxa", "Transferir" e "Dividir".
+ */
 @Composable
 private fun PostingLine(
     index: Int,
     row: PostingRow,
-    onReverse: (() -> Unit)?,
+    actions: PostingActions,
 ) {
     Row(
         Modifier
@@ -291,20 +338,44 @@ private fun PostingLine(
         Text(row.quantity)
         Text(row.amount)
         if (row.reversed) Text(FolioText.REVERSED, color = MaterialTheme.colorScheme.secondary)
-        if (onReverse != null) {
-            var open by remember { mutableStateOf(false) }
-            Box {
-                TextButton(onClick = { open = true }, modifier = Modifier.testTag("posting-actions-$index")) {
-                    Text("Ações")
-                }
-                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        if (actions.any) PostingMenu(index, actions)
+    }
+    row.corrects?.let {
+        Text(
+            FolioText.corrects(it),
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(start = CHARGE_INDENT).testTag("posting-corrects-$index"),
+        )
+    }
+}
+
+/** O menu "Ações" da linha [index], com as ações de [actions]. */
+@Composable
+private fun PostingMenu(
+    index: Int,
+    actions: PostingActions,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }, modifier = Modifier.testTag("posting-actions-$index")) {
+            Text("Ações")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            listOf(
+                Triple("Estornar", "posting-reverse-$index", actions.reverse),
+                Triple("Ajustar", "posting-adjust-$index", actions.adjust),
+                Triple("Remover a taxa", "posting-remove-charge-$index", actions.removeServiceCharge),
+                Triple("Transferir", "posting-transfer-$index", actions.transfer),
+                Triple("Dividir", "posting-split-$index", actions.split),
+            ).forEach { (label, tag, action) ->
+                if (action != null) {
                     DropdownMenuItem(
-                        text = { Text("Estornar") },
+                        text = { Text(label) },
                         onClick = {
                             open = false
-                            onReverse()
+                            action()
                         },
-                        modifier = Modifier.testTag("posting-reverse-$index"),
+                        modifier = Modifier.testTag(tag),
                     )
                 }
             }

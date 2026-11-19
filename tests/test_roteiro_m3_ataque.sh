@@ -28,10 +28,11 @@ adapter_kt="$seed_src/sdk/SdkPendingGateway.kt"
 app_res="$ROOT/app/src/main/kotlin/com/zeny/desktop/app/reservations"
 app_rec="$ROOT/app/src/main/kotlin/com/zeny/desktop/app/reception"
 facade_kt="$ROOT/core/src/main/kotlin/com/zeny/desktop/core/facade/ReservationsFacade.kt"
+cancel_test="$ROOT/app/src/test/kotlin/com/zeny/desktop/app/reservations/ReservationCancelStateTest.kt"
 
 missing=0
 for f in "$rot" "$rot2" "$rot1" "$leia_f" "$readme_f" "$docs_test" "$catalog_kt" "$report_kt" "$docs_kt" "$traces_kt" \
-  "$pending_kt" "$future_kt" "$demoseed_kt" "$adapter_kt" "$facade_kt" "$app_res/ReservationSearchText.kt" \
+  "$pending_kt" "$future_kt" "$demoseed_kt" "$adapter_kt" "$facade_kt" "$cancel_test" "$app_res/ReservationSearchText.kt" \
   "$app_res/ReservationSearchState.kt" "$app_res/AvailabilityState.kt" "$app_res/AvailabilityText.kt" \
   "$app_res/QuotePanel.kt" "$app_res/PendingListsState.kt" "$app_res/PendingText.kt" "$app_res/BookingText.kt" \
   "$app_rec/ReceptionText.kt"; do
@@ -667,8 +668,10 @@ while IFS= read -r q; do
     "Reservas do documento $masked") continue ;; # conferido na seção 7.3
     "$in_house$status_sep$example") continue ;;  # conferido na seção 7.6
     "Reserva R-… cancelada. Multa lançada na conta: R\$ ….")
-      grep -qF 'done = if (penalty == null) text else "$text ${penaltyText(penalty.amount, penalty.waived)}".trimEnd()' "$code_f" &&
-        tpl_in_code "Reserva R-… cancelada." && tpl_in_code "Multa lançada na conta: R\$ …." && continue ;;
+      # A frase composta é saída do ReservationCancelState: confere-se a saída, que o teste do estado fixa inteira
+      # (o resumo é exatamente "Reserva R1 cancelada. Multa lançada na conta: R$ 320,00."), e não a linha que a monta.
+      grep -qE '^[[:space:]]*assertEquals\("Reserva R1 cancelada\. Multa lançada na conta: R\$ [0-9.]+,[0-9]{2}\.", state\.done\)$' \
+        "$cancel_test" && tpl_in_code "Reserva R-… cancelada." && tpl_in_code "Multa lançada na conta: R\$ …." && continue ;;
     "mais 30 dias" | "reserva do passo $n_new" | "Rodar o seed de novo depois da demo") continue ;; # texto do próprio roteiro
   esac
   bad_quotes+="$p"$'\n'
