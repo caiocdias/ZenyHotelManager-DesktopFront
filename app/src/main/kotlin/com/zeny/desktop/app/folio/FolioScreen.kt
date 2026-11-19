@@ -282,8 +282,11 @@ private class PostingActions(
     val reverse: (() -> Unit)?,
     val adjust: (() -> Unit)?,
     val removeServiceCharge: (() -> Unit)?,
+    val transfer: (() -> Unit)?,
+    val split: (() -> Unit)?,
 ) {
-    val any: Boolean get() = reverse != null || adjust != null || removeServiceCharge != null
+    val any: Boolean
+        get() = reverse != null || adjust != null || removeServiceCharge != null || transfer != null || split != null
 }
 
 private fun postingActions(
@@ -296,12 +299,14 @@ private fun postingActions(
         adjust = corrections?.takeIf { it.canAdjust(row) }?.let { { it.startAdjustment(row) } },
         removeServiceCharge =
             corrections?.takeIf { it.canRemoveServiceCharge(row) }?.let { { it.startRemoval(row) } },
+        transfer = corrections?.takeIf { it.canTransfer(row) }?.let { { it.startTransfer(row) } },
+        split = corrections?.takeIf { it.canTransfer(row) }?.let { { it.startSplit(row) } },
     )
 }
 
 /**
  * Uma linha da tabela; o ajuste ou o estorno mostra "Corrige: <descrição do original>". O menu dela oferece o que
- * [actions] traz: "Estornar", "Ajustar" e "Remover a taxa".
+ * [actions] traz: "Estornar", "Ajustar", "Remover a taxa", "Transferir" e "Dividir".
  */
 @Composable
 private fun PostingLine(
@@ -348,6 +353,8 @@ private fun PostingMenu(
                 Triple("Estornar", "posting-reverse-$index", actions.reverse),
                 Triple("Ajustar", "posting-adjust-$index", actions.adjust),
                 Triple("Remover a taxa", "posting-remove-charge-$index", actions.removeServiceCharge),
+                Triple("Transferir", "posting-transfer-$index", actions.transfer),
+                Triple("Dividir", "posting-split-$index", actions.split),
             ).forEach { (label, tag, action) ->
                 if (action != null) {
                     DropdownMenuItem(

@@ -27,6 +27,24 @@ data class RemovalCall(
     val intent: Intent,
 )
 
+/** Uma transferência pedida ao falso: a conta, os lançamentos, o destino, o motivo e a `Intent` da tela. */
+data class TransferCall(
+    val folioId: String,
+    val postingIds: List<String>,
+    val targetFolioId: String,
+    val reason: String?,
+    val intent: Intent,
+)
+
+/** Uma divisão pedida ao falso: a conta, o lançamento, as partes, o motivo e a `Intent` da tela. */
+data class SplitCall(
+    val folioId: String,
+    val postingId: String,
+    val parts: List<SplitPart>,
+    val reason: String?,
+    val intent: Intent,
+)
+
 /** O lançamento com o restante [value] do servidor (nulo: ausente). */
 fun PostingResponse.withRemaining(value: String?): PostingResponse =
     copy(remainingAmount = value?.let { Option.Some(it) } ?: Option.Undefined)
@@ -51,6 +69,16 @@ class FakeFolioCorrectionSource : FolioCorrectionSource {
     }
     val removalOutcomes = ArrayDeque<Throwable?>()
     val removalCalls = mutableListOf<RemovalCall>()
+
+    /** A transferência: o próximo de [transferOutcomes] ou [transferred]. */
+    var transferred: suspend (TransferCall) -> TransferResponse = { TransferResponse(emptyList()) }
+    val transferOutcomes = ArrayDeque<Throwable?>()
+    val transferCalls = mutableListOf<TransferCall>()
+
+    /** A divisão: o próximo de [splitOutcomes] ou [splitDone]. */
+    var splitDone: suspend (SplitCall) -> TransferResponse = { TransferResponse(emptyList()) }
+    val splitOutcomes = ArrayDeque<Throwable?>()
+    val splitCalls = mutableListOf<SplitCall>()
 
     override fun adjust(
         folioId: String,
@@ -84,7 +112,12 @@ class FakeFolioCorrectionSource : FolioCorrectionSource {
         targetFolioId: String,
         reason: String?,
         intent: Intent,
-    ): TransferResponse = error("não usado")
+    ): TransferResponse {
+        val call = TransferCall(folioId, postingIds, targetFolioId, reason, intent)
+        transferCalls += call
+        transferOutcomes.removeFirstOrNull()?.let { throw it }
+        return transferred(call)
+    }
 
     override suspend fun split(
         folioId: String,
@@ -92,7 +125,12 @@ class FakeFolioCorrectionSource : FolioCorrectionSource {
         parts: List<SplitPart>,
         reason: String?,
         intent: Intent,
-    ): TransferResponse = error("não usado")
+    ): TransferResponse {
+        val call = SplitCall(folioId, postingId, parts, reason, intent)
+        splitCalls += call
+        splitOutcomes.removeFirstOrNull()?.let { throw it }
+        return splitDone(call)
+    }
 }
 
 /** O portador com a porta das correções; sem [approve], a ação corre sem aprovação. */

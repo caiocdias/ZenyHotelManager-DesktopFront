@@ -12,6 +12,7 @@ import kotlinx.coroutines.SupervisorJob
 private const val CREATE = "billing.postings.create"
 private const val ADJUST = "billing.postings.adjust"
 private const val SERVICE_CHARGE_REMOVE = "billing.servicecharge.remove"
+private const val TRANSFER = "billing.postings.transfer"
 
 /** As recusas que dizem que a conta mudou em outro lugar: a conta é relida. */
 private val REREADS =
@@ -29,8 +30,10 @@ private val REREADS =
  * ([folioOpen]), pela regra da linha (o `rowOf` só oferece o que o servidor deixa: o restante lido diferente de zero
  * e o lançamento não estornado) e pela permissão da casca: o ajuste com `billing.postings.create` ou
  * `billing.postings.adjust` (sem esta, o servidor pede a aprovação, pelo `approve` do [wiring]); a remoção, só numa
- * taxa de serviço, com `billing.servicecharge.remove`. Um diálogo por vez: nunca com outro do painel aberto
- * ([otherDialogOpen]).
+ * taxa de serviço, com `billing.servicecharge.remove`; "Transferir" ([startTransfer]) e "Dividir" ([startSplit]), num
+ * lançamento transferível, com `billing.postings.transfer`. A transferência lista os lançamentos transferíveis da
+ * tabela ([postings]); as duas escolhem as contas entre as abertas da porta da conta. Um diálogo por vez: nunca com
+ * outro do painel aberto ([otherDialogOpen]).
  *
  * O sucesso fecha o diálogo, chama [onChanged] (a conta, os lançamentos, o extrato à vista e a lista das contas) e
  * avisa o painel por [notify]. As recusas que dizem que a conta mudou em outro lugar (`FOLIO_CLOSED`,
@@ -46,6 +49,7 @@ class FolioCorrectionsState(
     private val otherDialogOpen: () -> Boolean,
     private val notify: (String) -> Unit,
     private val onChanged: () -> Unit,
+    private val postings: () -> List<PostingRow> = { emptyList() },
 ) {
     private val jobs = SupervisorJob(scope.coroutineContext[Job])
     private val ownScope = CoroutineScope(scope.coroutineContext + jobs)
@@ -59,11 +63,20 @@ class FolioCorrectionsState(
     var removal by mutableStateOf<ServiceChargeRemovalState?>(null)
         private set
 
+    /** O diálogo "Transferir" aberto. */
+    var transfer by mutableStateOf<TransferState?>(null)
+        private set
+
+    /** O diálogo "Dividir" aberto. */
+    var split by mutableStateOf<SplitState?>(null)
+        private set
+
     private val canAdjustAny =
         wiring.corrections != null && (CREATE in wiring.permissions || ADJUST in wiring.permissions)
     private val canRemoveAny = wiring.corrections != null && SERVICE_CHARGE_REMOVE in wiring.permissions
+    private val canTransferAny = wiring.corrections != null && TRANSFER in wiring.permissions
 
-    val dialogOpen: Boolean get() = adjustment != null || removal != null
+    val dialogOpen: Boolean get() = adjustment != null || removal != null || transfer != null || split != null
 
     /** "Ajustar" na linha: um `REGULAR` não estornado com restante, com uma das duas permissões e a conta aberta. */
     fun canAdjust(row: PostingRow): Boolean = !closed && canAdjustAny && folioOpen() && row.adjustable
@@ -71,6 +84,9 @@ class FolioCorrectionsState(
     /** "Remover a taxa" na linha: só numa taxa não estornada com restante, com a permissão e a conta aberta. */
     fun canRemoveServiceCharge(row: PostingRow): Boolean =
         !closed && canRemoveAny && folioOpen() && row.serviceChargeRemovable
+
+    /** "Transferir" e "Dividir" na linha: um transferível com restante, com a permissão e a conta aberta. */
+    fun canTransfer(row: PostingRow): Boolean = !closed && canTransferAny && folioOpen() && row.transferable
 
     /** Abre "Ajustar" para o lançamento [row]; fora das regras ou com outro diálogo aberto, nada. */
     fun startAdjustment(row: PostingRow) {
@@ -104,11 +120,46 @@ class FolioCorrectionsState(
         if (form.unconfirmed || form.closeOnly) changed()
     }
 
+    /** Abre "Transferir" a partir do lançamento [row]; fora das regras ou com outro diálogo aberto, nada. */
+    fun startTransfer(row: PostingRow) {
+        val source = wiring.corrections
+        if (!canTransfer(row) || !noDialogOpen() || source == null) return
+        transfer =
+            TransferState(source, wiring.source, ownScope, folioId, row, postings(), ::transferred, ::refused)
+    }
+
+    /** "Voltar" ou "Fechar" da transferência; sem resultado conhecido, a conta é relida para conferir. */
+    fun finishTransfer() {
+        val form = transfer ?: return
+        if (form.busy) return
+        form.close()
+        transfer = null
+        if (form.unconfirmed || form.closeOnly) changed()
+    }
+
+    /** Abre "Dividir" o lançamento [row]; fora das regras ou com outro diálogo aberto, nada. */
+    fun startSplit(row: PostingRow) {
+        val source = wiring.corrections
+        if (!canTransfer(row) || !noDialogOpen() || source == null) return
+        split = SplitState(source, wiring.source, ownScope, folioId, row, ::splitDone, ::refused)
+    }
+
+    /** "Voltar" ou "Fechar" da divisão; sem resultado conhecido, a conta é relida para conferir. */
+    fun finishSplit() {
+        val form = split ?: return
+        if (form.busy) return
+        form.close()
+        split = null
+        if (form.unconfirmed || form.closeOnly) changed()
+    }
+
     fun close() {
         closed = true
         jobs.cancel()
         adjustment?.close()
         removal?.close()
+        transfer?.close()
+        split?.close()
     }
 
     /** Um diálogo por vez no painel: nem o daqui nem outro do `FolioState`. */
@@ -129,6 +180,20 @@ class FolioCorrectionsState(
         notify(FolioText.serviceChargeRemoved(reason))
     }
 
+    private fun transferred(number: String) {
+        transfer?.close()
+        transfer = null
+        changed()
+        notify(FolioText.transferredTo(number))
+    }
+
+    private fun splitDone(parts: Int) {
+        split?.close()
+        split = null
+        changed()
+        notify(FolioText.splitAmong(parts))
+    }
+
     /** A recusa definitiva (o texto já está no diálogo): a conta mudou em outro lugar, então é relida. */
     private fun refused(code: String) {
         if (code in REREADS) changed()
@@ -140,5 +205,6 @@ class FolioCorrectionsState(
     }
 
     override fun toString(): String =
-        "FolioCorrectionsState(adjustment=${adjustment != null}, removal=${removal != null})"
+        "FolioCorrectionsState(adjustment=${adjustment != null}, removal=${removal != null}, " +
+            "transfer=${transfer != null}, split=${split != null})"
 }

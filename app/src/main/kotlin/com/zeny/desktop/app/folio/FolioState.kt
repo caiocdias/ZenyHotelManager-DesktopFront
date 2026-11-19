@@ -142,8 +142,9 @@ data class StatementView(
  * Com a mesma porta, as cauções ficam no [preAuthorizations] (o `PreAuthorizationsState`), relido junto da conta e
  * fechado com ela; o diálogo aberto dele conta como diálogo do painel, e o painel não abre outro.
  *
- * Com a porta das correções no [wiring], "Ajustar" e "Remover a taxa" ficam no [corrections] (o
- * `FolioCorrectionsState`), fechado com a conta; os diálogos dele também contam como diálogos do painel.
+ * Com a porta das correções no [wiring], "Ajustar", "Remover a taxa", "Transferir" e "Dividir" ficam no
+ * [corrections] (o `FolioCorrectionsState`), fechado com a conta; os diálogos dele também contam como diálogos do
+ * painel.
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
@@ -281,6 +282,7 @@ class FolioState(
                 },
                 notify = { notice = it },
                 onChanged = ::rereadAfterWrite,
+                postings = { postings },
             )
         }
 

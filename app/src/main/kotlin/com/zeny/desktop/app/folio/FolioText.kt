@@ -100,6 +100,20 @@ object FolioText {
     const val REMOVAL_SERVER_UNCONFIRMED =
         "O servidor não confirmou a remoção da taxa. Feche e confira a conta antes de refazer."
     const val REMOVAL_DONE = "Taxa de serviço removida."
+    const val TRANSFER_NOTHING_CHECKED = "Marque ao menos um lançamento."
+    const val TRANSFER_TARGET_REQUIRED = "Escolha a conta de destino."
+    const val TRANSFER_UNCONFIRMED =
+        "Não foi possível confirmar a transferência. Transfira de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de refazer."
+    const val TRANSFER_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a transferência. Feche e confira a conta antes de refazer."
+    const val SPLIT_PARTS_INVALID = "Confira as partes da divisão."
+    const val SPLIT_THIS_FOLIO = "Esta conta (fica)"
+    const val SPLIT_UNCONFIRMED =
+        "Não foi possível confirmar a divisão. Divida de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de refazer."
+    const val SPLIT_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a divisão. Feche e confira a conta antes de refazer."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -246,6 +260,10 @@ object FolioText {
     fun corrects(description: String): String = "Corrige: $description"
 
     /** O aviso da taxa removida, com o motivo que o servidor registrou (sem ele, só que foi removida). */
+    fun transferredTo(number: String): String = "Transferido para a conta $number."
+
+    fun splitAmong(parts: Int): String = "Dividido entre $parts contas."
+
     fun serviceChargeRemoved(reason: String?): String =
         if (reason == null) REMOVAL_DONE else "Taxa de serviço removida: $reason"
 

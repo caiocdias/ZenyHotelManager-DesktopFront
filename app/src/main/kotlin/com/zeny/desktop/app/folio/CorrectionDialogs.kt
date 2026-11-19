@@ -13,6 +13,7 @@ import com.zeny.desktop.design.input.MoneyField
 internal fun CorrectionDialogs(state: FolioCorrectionsState) {
     state.adjustment?.let { AdjustmentDialog(it, onLeave = state::finishAdjustment) }
     state.removal?.let { RemovalDialog(it, onLeave = state::finishRemoval) }
+    TransferDialogs(state)
 }
 
 /**
