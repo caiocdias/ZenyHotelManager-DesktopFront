@@ -211,6 +211,170 @@ class ExpiringPreAuthorizationsStateTest {
         }
 
     @Test
+    fun businessDayFailureWithUntilFilledReadsWithoutZoneAndShowsUtc() =
+        runTest {
+            payments.businessDay = { throw ApiError.Network(IllegalStateException("fora")) }
+            source.pages = { _, _ -> Page(listOf(preAuthorizationOf(expiresAt = "2026-11-20T02:59:59Z")), null) }
+            val state = state()
+            state.untilText = "30/11/2026"
+
+            state.enter()
+            runCurrent()
+
+            assertNull(state.untilError)
+            assertNull(state.error)
+            assertEquals(listOf(BusinessDate.parse("2026-11-30")), source.calls.map { it.first })
+            assertEquals("30/11/2026", state.untilText)
+            assertEquals("20/11/2026 (UTC)", state.rows.single().expires)
+        }
+
+    @Test
+    fun zoneAlreadyReadSurvivesALaterBusinessDayFailure() =
+        runTest {
+            source.pages = { _, _ -> Page(listOf(preAuthorizationOf(expiresAt = "2026-11-20T02:59:59Z")), null) }
+            val state = entered()
+            assertEquals("19/11/2026 23:59", state.rows.single().expires)
+
+            payments.businessDay = { throw ApiError.Network(IllegalStateException("fora")) }
+            state.enter()
+            runCurrent()
+
+            assertNull(state.untilError)
+            assertEquals("19/11/2026 23:59", state.rows.single().expires)
+        }
+
+    @Test
+    fun searchDropsALoadMoreInFlight() =
+        runTest {
+            val late = LateAnswer<Page<CardPreAuthorizationResponse>>()
+            source.pages = { _, cursor ->
+                when (cursor) {
+                    null -> Page(listOf(preAuthorizationOf(amount = "10.00")), "c-2")
+                    "c-2" -> late.await()
+                    else -> Page(emptyList(), null)
+                }
+            }
+            val state = entered()
+            state.loadMore()
+            runCurrent()
+            assertTrue(late.asked)
+            assertTrue(state.loading)
+
+            source.pages = { _, _ -> Page(listOf(preAuthorizationOf(amount = "99.00")), null) }
+            state.untilText = "30/11/2026"
+            state.search()
+            runCurrent()
+            late.answer(Page(listOf(preAuthorizationOf(amount = "55.00")), "c-late"))
+            runCurrent()
+
+            assertEquals(listOf("R$ 99,00"), state.rows.map { it.amount })
+            assertFalse(state.hasMore)
+            assertFalse(state.loading)
+        }
+
+    @Test
+    fun loadMoreWhileALoadIsInFlightDoesNotReadAgain() =
+        runTest {
+            val late = LateAnswer<Page<CardPreAuthorizationResponse>>()
+            source.pages = { _, _ -> late.await() }
+            val state = state()
+            state.enter()
+            runCurrent()
+            assertTrue(state.loading)
+
+            state.loadMore()
+            state.loadMore()
+            runCurrent()
+
+            assertEquals(1, source.calls.size)
+        }
+
+    @Test
+    fun closeDuringALoadMoreDropsTheLatePage() =
+        runTest {
+            val late = LateAnswer<Page<CardPreAuthorizationResponse>>()
+            source.pages = { _, cursor ->
+                if (cursor == null) Page(listOf(preAuthorizationOf(amount = "10.00")), "c-2") else late.await()
+            }
+            val state = entered()
+            state.loadMore()
+            runCurrent()
+            assertTrue(late.asked)
+
+            state.close()
+            late.answer(Page(listOf(preAuthorizationOf(amount = "77.00")), null))
+            runCurrent()
+
+            assertEquals(listOf("R$ 10,00"), state.rows.map { it.amount })
+            assertTrue(state.hasMore)
+        }
+
+    @Test
+    fun closeDuringTheBusinessDayReadNeverReads() =
+        runTest {
+            val lateDay = LateAnswer<BusinessDay>()
+            payments.businessDay = { lateDay.await() }
+            val state = state()
+            state.enter()
+            runCurrent()
+            assertTrue(lateDay.asked)
+
+            state.close()
+            lateDay.answer(BusinessDay(BusinessDate.parse("2026-11-18"), ZoneId.of("America/Sao_Paulo")))
+            runCurrent()
+
+            assertTrue(source.calls.isEmpty())
+            assertEquals("", state.untilText)
+            assertTrue(state.rows.isEmpty())
+        }
+
+    @Test
+    fun secondEnterDropsTheBusinessDayAnswerOfTheFirst() =
+        runTest {
+            val lateDay = LateAnswer<BusinessDay>()
+            var first = true
+            payments.businessDay = {
+                if (first) {
+                    first = false
+                    lateDay.await()
+                } else {
+                    BusinessDay(BusinessDate.parse("2026-11-18"), ZoneId.of("America/Sao_Paulo"))
+                }
+            }
+            val state = state()
+            state.enter()
+            runCurrent()
+            state.enter()
+            runCurrent()
+            lateDay.answer(BusinessDay(BusinessDate.parse("2026-12-01"), ZoneId.of("UTC")))
+            runCurrent()
+
+            assertEquals("25/11/2026", state.untilText)
+            assertEquals(1, source.calls.size)
+        }
+
+    @Test
+    fun searchDuringTheEnterStillShowsTheHotelZone() =
+        runTest {
+            val lateDay = LateAnswer<BusinessDay>()
+            payments.businessDay = { lateDay.await() }
+            source.pages = { _, _ -> Page(listOf(preAuthorizationOf(expiresAt = "2026-11-20T02:59:59Z")), null) }
+            val state = state()
+            state.enter()
+            runCurrent()
+            assertTrue(lateDay.asked)
+
+            state.untilText = "30/11/2026"
+            state.search()
+            runCurrent()
+            lateDay.answer(BusinessDay(BusinessDate.parse("2026-11-18"), ZoneId.of("America/Sao_Paulo")))
+            runCurrent()
+
+            // O fuso do hotel é o único que a operadora entende: a validade não pode ficar em UTC depois que ele chega.
+            assertEquals("19/11/2026 23:59", state.rows.single().expires)
+        }
+
+    @Test
     fun everyEnterRereads() =
         runTest {
             val state = entered()
@@ -256,13 +420,13 @@ class ExpiringPreAuthorizationsStateTest {
     fun rowsNeverCarryCardData() =
         runTest {
             source.pages = { _, _ ->
-                Page(listOf(preAuthorizationOf(cardBrand = "VISA", cardLast4 = "4242")), null)
+                Page(listOf(preAuthorizationOf(cardBrand = "VISA", cardLast4 = "4242", nsu = "NSU987654")), null)
             }
             val state = entered()
 
             val row = state.rows.single()
             val text = "$row $state"
-            listOf("VISA", "4242", "AUT123").forEach { assertFalse(text.contains(it), it) }
+            listOf("VISA", "4242", "AUT123", "NSU987654").forEach { assertFalse(text.contains(it), it) }
             assertFalse(row.toString().contains(row.folioId))
             assertEquals(
                 setOf("folioId", "expires", "status", "amount", "capturable"),

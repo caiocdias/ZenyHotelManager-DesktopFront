@@ -28,7 +28,7 @@ import kotlin.test.fail
 private const val LOAD_TIMEOUT_MILLIS = 60_000L
 private const val POLL_MILLIS = 100L
 private const val DAYS_AHEAD = 89L
-private const val NEED_SEED = "NEED_SEED: nenhuma caução a vencer; rode a LivePreAuthorizationCheck ou o demo-seed"
+private const val NEED_SEED = "NEED_SEED: nenhuma caução a vencer; rode a verificação das cauções ou o demo-seed"
 private val VALIDITY_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm")
 
 /**
