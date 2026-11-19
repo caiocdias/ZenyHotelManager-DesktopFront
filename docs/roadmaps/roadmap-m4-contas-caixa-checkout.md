@@ -1397,12 +1397,12 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Clone limpo: build, teste e lint verdes.
+- [x] Clone limpo: build, teste e lint verdes.
 - [ ] `smokeTest` verde, e o seed termina em menos de 2 minutos.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
-- [ ] **`B-M4`/`C-M2`:** um teste do `SdkPendingGateway` com um `detail` marcado do servidor prova que o texto marcado não aparece na mensagem nem na causa da exceção que sai do adaptador. O KDoc do `cancelReservation` descreve o que o adaptador devolve.
-- [ ] **`B-M8`:** o `untouched` do `PendingSeeder` tem nome que diz o que guarda, e os testes do seeder seguem verdes. O KDoc do seeder e o `roteiro-m4.md` dizem que o fora de ordem da UH 208 depende da data operacional do dia da recriação. O handoff registra se o planejador mudou o cálculo da data, e por quê.
-- [ ] **`C-M8`:** os opt-ins ao vivo do `demo-seed` são entradas da tarefa de teste do Gradle. Mudar um opt-in invalida o resultado em cache da tarefa, e um teste estático ou de script prova isso.
+- [x] **`B-M4`/`C-M2`:** um teste do `SdkPendingGateway` com um `detail` marcado do servidor prova que o texto marcado não aparece na mensagem nem na causa da exceção que sai do adaptador. O KDoc do `cancelReservation` descreve o que o adaptador devolve.
+- [x] **`B-M8`:** o `untouched` do `PendingSeeder` tem nome que diz o que guarda, e os testes do seeder seguem verdes. O KDoc do seeder e o `roteiro-m4.md` dizem que o fora de ordem da UH 208 depende da data operacional do dia da recriação. O handoff registra se o planejador mudou o cálculo da data, e por quê.
+- [x] **`C-M8`:** os opt-ins ao vivo do `demo-seed` são entradas da tarefa de teste do Gradle. Mudar um opt-in invalida o resultado em cache da tarefa, e um teste estático ou de script prova isso.
 
 **Validação obrigatória:**
 
@@ -1424,12 +1424,42 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **aguardando a revisão humana** (2026-11-19, `Revisão humana: sim`). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `39e435a`, e o clone limpo foi verificado (abaixo). Falta o que só o usuário faz: recriar a demo no dia, rodar o seed (medindo o tempo) e o `smokeTest`, rodar as verificações ao vivo pendentes do marco e executar o `roteiro-m4.md` no Windows com o pacote.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md). Revisão de arquitetura **dispensada** pelo orquestrador (o seed só consome a API existente; o roteiro e o pacote seguem o gate do M3); a revisão final conferiu a dispensa contra o diff e a confirmou.
+- **Commits** (`MERGE_BASE` `e54a5e8`, HEAD de código `39e435a`):
+  - `d04feec`: o início e o plano.
+  - **Task 1** (`2602ec1`, `3a63af1`): o `FolioSeeder` (porta `FolioGateway`, adaptador `SdkFolioGateway`) lança dois consumos "Seed M4: <item>" com taxa de serviço (código "Alimentos e bebidas", `serviceChargeApplies`) nas contas dos hospedados, de forma idempotente; a linha "consumos: N criados, M já existiam" no relatório; a redação do `detail` do servidor numa função única (`ApiError.withoutServerDetail()`). Revisão de fatia: uma rodada (a redação estava duplicada).
+  - **Task 2** (`b3ff918`): `B-M4`/`C-M2` (as 12 operações do `SdkPendingGateway` redigem o `detail`; o KDoc do `cancelReservation`), `B-M8` (o `untouched` virou `movedOnByTheDemo`; o cálculo da data **não mudou**: ela vem do `businessDate()` do servidor, não do relógio, e não havia defeito), `C-M8` (os opt-ins `ZENY_SEED_LIVE`, `ZENY_SEED_LIVE_AVAILABILITY`, `ZENY_SEED_LIVE_RESERVATIONS` e `ZENY_SEED_SERVER` como `inputs.property` da tarefa `test`, sem credenciais; o script `tests/test_seed_live_optins.sh`). Revisão de fatia aprovada.
+  - **Task 3** (`c858746`, `b54092f`): o `docs/demo/roteiro-m4.md` (acumula o do M3; passos 27 a 39 da hospedagem) e o `package.sh` levando-o; os roteiros m1–m3, o `LEIA-ME.md` e o `README.md` citam o m4. O testador estendeu as travas ao M4 em despachos escopados (`81ef477`, `342e2e8`, `25b8241`: `test_roteiro_m4_ataque.sh`, os 31 mutantes e o `test_package_roteiro_m4_ataque.sh`; corrigiu um falso positivo do PIN a partir da linha 1000). Revisão de fatia aprovada.
+  - **Testador de etapa** (`5532acd`, `1a4f73d`): a ligação dos consumos no `DemoSeed`, o vazamento do `detail` em todos os formatos (412, corpo malformado, `fieldErrors`) nos dois adaptadores, a retomada do seed e as travas do opt-in; um teste vermelho documentou um defeito.
+  - **Correção do fim da etapa** (`39e435a`): as quatro leituras do `SdkFolioGateway` redigem o `detail` (o ajudante `redactingServerDetail` em `Redaction.kt`); a conta do consumo vem do `folioId` da própria reserva; três ajustes de redação no roteiro.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `e54a5e8..25b8241`): 0 Críticos, 1 Importante (as leituras do `SdkFolioGateway` sem redação), 10 Menores, "Ready to merge: With fixes".
+  - Re-revisão escopada de `25b8241..`: ver o histórico.
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `25b8241` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
+- **Integridade:** `check_test_integrity.py --base e54a5e8` → exit 1, apontamentos `ASSERCAO_REMOVIDA` todos julgados justificados: a troca `assertNotEquals(null, detail)` → `assertNull` que o `B-M4` exige; o falso positivo do PIN; trocas de m3 por m4 nas travas; e, na correção, as asserções do comportamento antigo da escolha da conta.
+- **Critérios:**
+  1. **Clone limpo: build, teste e lint verdes** — ver "Clone limpo" abaixo.
+  2. **`smokeTest` verde, e o seed em menos de 2 minutos** — pendente (usuário, contra o ambiente recriado).
+  3. **Roteiro executado no Windows e aprovado** — pendente (usuário).
+  4. **`B-M4`/`C-M2`** — `SdkPendingGatewayTest.markedDetailNeverLeavesTheAdapter`, `SdkDetailLeakAtaqueTest` (do testador, nos dois adaptadores e em todos os formatos), `WithoutServerDetailTest`; o KDoc do `cancelReservation`.
+  5. **`B-M8`** — o nome `movedOnByTheDemo`, os testes do seeder verdes, o KDoc do `PendingSeeder` e o cabeçalho do `roteiro-m4.md` (o fora de ordem da UH 208 depende da data operacional do dia da recriação; o cálculo não mudou, como diz o item 2 dos commits).
+  6. **`C-M8`** — `tests/test_seed_live_optins.sh` e o ataque `tests/test_seed_live_optins_ataque.sh` (no Gradle real, mudar `ZENY_SEED_LIVE_RESERVATIONS` refez `:demo-seed:test`).
+- **Clone limpo** (clone novo do branch em pasta temporária, no `39e435a`): `./gradlew build ktlintCheck detekt` → BUILD SUCCESSFUL em 7 min (testes, pulados, falhas: app 3210, 53, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 758, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 72 arquivos, 0 falhas, 5 com casos pulados (no clone não há o repositório do servidor, o `.server/` nem o busybox).
+- **O que o usuário faz para fechar a E05 (e as etapas aguardando a verificação ao vivo):**
+  1. Recriar a demo no dia (`down -v`, `up -d`, o seed), medindo o tempo do seed (menos de 2 minutos).
+  2. `./gradlew smokeTest -PserverUrl=http://127.0.0.1:8088` com os `ZENY_SEED_*`.
+  3. As verificações ao vivo pendentes, nesta ordem (os comandos estão nos handoffs): `LivePaymentCheck` (E03), `LivePreAuthorizationCheck` (E09), `LiveCheckOutCheck` (E04), `LiveFolioCorrectionCheck` (E08), `LiveExpiringPreAuthorizationCheck` (E10), `LiveReservationLifecycleCheck` (E12) e a inspeção da reabertura (E13). Elas escrevem na demo: recrie de novo antes do roteiro.
+  4. Gerar o pacote (`./gradlew :app:desktopJar :demo-seed:seedJar` e `tools/server-env/package.sh`; as imagens com `save-images.sh`) e executar o `roteiro-m4.md` no Windows, do zero.
+  - Aprovando, a E05 e as etapas aguardando fecham `#concluida`; uma reprovação reabre a etapa com uma rodada de correção.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **H2: o turno é aberto à mão no roteiro** (passo 27), e não pelo seed: o turno é pessoal da Recepcionista.
+  2. **Consumos do seed:** dois por conta de hospedado ("Seed M4: <item>", R$ 86,50 e R$ 32,00, com a taxa de 10%), no código "Alimentos e bebidas"; sem um código que aplique a taxa, o seed avisa e segue.
+  3. **O roteiro do M4 acumula o do M3 por inteiro** (passos 0 a 26 iguais, salvo os 5, 6 e 11) e acrescenta os passos 27 a 39.
+  4. **Duas imprecisões de redação ficam no roteiro**, porque as travas do testador fixam o texto: a crase em "à mais 7 dias" no cabeçalho do `B-M8` e, no passo herdado do M3 (~linha 867), "o registro do depósito na conta da reserva só chega no M4".
+- **Notas para a próxima etapa:**
+  - **Diferidos (Menores):** o `AdminContext.folios` é um `var` fora do construtor (não sobrevive a um `copy`; o construtor está travado por um teste do testador); o `FolioSeeder` não usa o parâmetro `seeded`; a idempotência é presa à conta de origem (um consumo do seed transferido seria relançado); o seed repetido entre os passos 36 e 37 mostra "0 criados, 12 já existiam" e um aviso de conta encerrada; o pager do `SdkFolioGateway.reservationId` repete o do `SdkPendingGateway`; o `ZENY_SEED_ADMIN_LOGIN` e as credenciais não são entrada da tarefa `test` (de propósito); duas execuções simultâneas do seed não têm trava.
+  - **Para o testador:** a corrida de duas execuções simultâneas do seed.
 
 ---
 
@@ -1475,3 +1505,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E10 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `298e2a9`; falta a `LiveExpiringPreAuthorizationCheck` (só leitura), que pede as credenciais do usuário.
 - 2026-11-19 — a E12 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `85e8869`; faltam a parte ao vivo do critério 2 e o critério 3 (`LiveReservationLifecycleCheck`), que pedem as credenciais do usuário e do Gerente.
 - 2026-11-19 — a E13 passou a depender da E12, e não da E08: a reabertura ficou na `FolioAccountSource` da E12 (decisão do plano da E13, por coesão; nas "Decisões para o usuário" dela). A E13 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `419f8ba`; falta a inspeção manual da reabertura contra o `zeny-front`.
+- 2026-11-19 — a E05 (gate do marco) fica `#em-andamento`, **aguardando a revisão humana** (`claude --agent orquestrador`): o seed lança consumos nas contas dos hospedados, os achados `B-M4`/`C-M2`, `B-M8` e `C-M8` estão resolvidos, o `roteiro-m4.md` existe e entra no pacote, e o clone limpo está verde. Faltam o seed medido, o `smokeTest`, as verificações ao vivo pendentes do marco e a execução do roteiro no Windows, que ficam com o usuário.
