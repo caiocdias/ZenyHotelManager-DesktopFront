@@ -1424,7 +1424,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **aguardando a revisão humana** (2026-11-19, `Revisão humana: sim`). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `39e435a`, e o clone limpo foi verificado (abaixo). Falta o que só o usuário faz: recriar a demo no dia, rodar o seed (medindo o tempo) e o `smokeTest`, rodar as verificações ao vivo pendentes do marco e executar o `roteiro-m4.md` no Windows com o pacote.
+- **Estado:** `#em-andamento`, **aguardando a revisão humana** (2026-11-19, `Revisão humana: sim`). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `39e435a` (código) e no `d5352f0` (com o rascunho deste handoff), e o clone limpo foi verificado (abaixo). Falta o que só o usuário faz: recriar a demo no dia, rodar o seed (medindo o tempo) e o `smokeTest`, rodar as verificações ao vivo pendentes do marco e executar o `roteiro-m4.md` no Windows com o pacote.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md). Revisão de arquitetura **dispensada** pelo orquestrador (o seed só consome a API existente; o roteiro e o pacote seguem o gate do M3); a revisão final conferiu a dispensa contra o diff e a confirmou.
 - **Commits** (`MERGE_BASE` `e54a5e8`, HEAD de código `39e435a`):
   - `d04feec`: o início e o plano.
@@ -1435,7 +1435,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - **Correção do fim da etapa** (`39e435a`): as quatro leituras do `SdkFolioGateway` redigem o `detail` (o ajudante `redactingServerDetail` em `Redaction.kt`); a conta do consumo vem do `folioId` da própria reserva; três ajustes de redação no roteiro.
 - **Revisões:**
   - Revisão final (`revisor-seguranca`, fable, `e54a5e8..25b8241`): 0 Críticos, 1 Importante (as leituras do `SdkFolioGateway` sem redação), 10 Menores, "Ready to merge: With fixes".
-  - Re-revisão escopada de `25b8241..`: ver o histórico.
+  - Re-revisão escopada de `25b8241..d5352f0` (os testes do testador, a correção e o rascunho deste handoff): o Importante e os Menores da redação do roteiro resolvidos, os testes do testador aprovados por inteiro, nenhum Crítico nem Importante novo, "Ready to merge: Yes".
+- **Gate no `d5352f0`:** `./gradlew build` → BUILD SUCCESSFUL (app 3210, 53, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 758, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 72 arquivos, 0 falhas, 1 com casos pulados (o busybox).
 - **Scanner:** `osv-scanner --recursive --no-ignore ./` no `25b8241` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
 - **Integridade:** `check_test_integrity.py --base e54a5e8` → exit 1, apontamentos `ASSERCAO_REMOVIDA` todos julgados justificados: a troca `assertNotEquals(null, detail)` → `assertNull` que o `B-M4` exige; o falso positivo do PIN; trocas de m3 por m4 nas travas; e, na correção, as asserções do comportamento antigo da escolha da conta.
 - **Critérios:**
@@ -1458,7 +1459,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   3. **O roteiro do M4 acumula o do M3 por inteiro** (passos 0 a 26 iguais, salvo os 5, 6 e 11) e acrescenta os passos 27 a 39.
   4. **Duas imprecisões de redação ficam no roteiro**, porque as travas do testador fixam o texto: a crase em "à mais 7 dias" no cabeçalho do `B-M8` e, no passo herdado do M3 (~linha 867), "o registro do depósito na conta da reserva só chega no M4".
 - **Notas para a próxima etapa:**
-  - **Diferidos (Menores):** o `AdminContext.folios` é um `var` fora do construtor (não sobrevive a um `copy`; o construtor está travado por um teste do testador); o `FolioSeeder` não usa o parâmetro `seeded`; a idempotência é presa à conta de origem (um consumo do seed transferido seria relançado); o seed repetido entre os passos 36 e 37 mostra "0 criados, 12 já existiam" e um aviso de conta encerrada; o pager do `SdkFolioGateway.reservationId` repete o do `SdkPendingGateway`; o `ZENY_SEED_ADMIN_LOGIN` e as credenciais não são entrada da tarefa `test` (de propósito); duas execuções simultâneas do seed não têm trava.
+  - **Diferidos (Menores):** o `AdminContext.folios` é um `var` fora do construtor (não sobrevive a um `copy`; o construtor está travado por um teste do testador); o `FolioSeeder` não usa o parâmetro `seeded`; a idempotência é presa à conta de origem (um consumo do seed transferido seria relançado); **o seed rodado sobre uma demo já usada aborta numa conta encerrada que não tem os consumos do seed** (desde `39e435a` a conta vem do `folioId` da reserva, e o lançamento numa conta encerrada recebe `409 FOLIO_CLOSED`, o seed sai com 1 e os seeders seguintes não rodam; com os consumos já lá, eles contam como mantidos, sem aviso). Só acontece fora do roteiro, que manda recriar a demo do zero; a correção é tratar o `FOLIO_CLOSED` como aviso no `FolioSeeder` ou pular a reserva que não está hospedada; o KDoc do `FolioGateway` ("ou `null` se não há") e o aviso "sem conta aberta" do `FolioSeeder` ficaram desatualizados pela mesma mudança; o pager do `SdkFolioGateway.reservationId` repete o do `SdkPendingGateway`; o `ZENY_SEED_ADMIN_LOGIN` e as credenciais não são entrada da tarefa `test` (de propósito); duas execuções simultâneas do seed não têm trava.
   - **Para o testador:** a corrida de duas execuções simultâneas do seed.
 
 ---
