@@ -102,6 +102,32 @@ class ReopenStateTest {
         }
 
     @Test
+    fun approvalCancelledAfterUnknownClearsUnconfirmed() =
+        runTest {
+            var calls = 0
+            val source =
+                FakeFolioAccountSource().apply {
+                    reopenAction = {
+                        ApprovableAction {
+                            if (calls++ == 0) throw ApiError.Network(IOException("caiu")) else throw approval()
+                        }
+                    }
+                }
+            val state = reopen(source)
+            state.reason = "Engano"
+            state.confirm()
+            runCurrent()
+            assertTrue(state.unconfirmed)
+
+            approver.cancel = true
+            state.confirm()
+            runCurrent()
+
+            assertFalse(state.unconfirmed)
+            assertEquals("Aprovação cancelada. A conta não foi reaberta.", state.message)
+        }
+
+    @Test
     fun doubleConfirmReopensOnce() =
         runTest {
             val gate = CompletableDeferred<Unit>()

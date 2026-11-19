@@ -16,13 +16,17 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runComposeUiTest
+import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.http.ApiResponse
 import com.zeny.desktop.design.theme.ZenyTheme
 import com.zeny.desktop.sdk.model.FolioResponse
+import kotlinx.coroutines.CompletableDeferred
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 private const val READ = "billing.folios.read"
 private const val MANAGE = "billing.folios.manage"
@@ -144,17 +148,101 @@ class FolioReopenScreenTest {
 
             scrollAndClick("folio-reopen")
             onNodeWithTag("reopen-dialog").assertExists()
+            val first = checkNotNull(state.reopen)
             runOnIdle {
                 state.startAccount()
                 state.startPosting()
                 state.startReopen()
             }
             waitForIdle()
+            assertSame(first, state.reopen, "o segundo startReopen não troca o diálogo")
             assertNull(state.account)
             assertNull(state.posting)
 
             click("reopen-back")
             onNodeWithTag("reopen-dialog").assertDoesNotExist()
             assertNull(state.reopen)
+        }
+
+    @Test
+    fun reopenDoesNotOpenOverAnotherDialog() =
+        runComposeUiTest {
+            val folios = FakeFolioSource().apply { folio = { folioOf() } }
+            panel(folios, FakeFolioAccountSource(), setOf(READ, MANAGE, REOPEN))
+            val state = checkNotNull(panelState)
+
+            scrollAndClick("folio-account")
+            onNodeWithTag("account-dialog").assertExists()
+            folios.folio = { folioOf(status = FolioResponse.Status.CLOSED) }
+            runOnIdle { state.reload() }
+            waitForIdle()
+            onNodeWithTag("folio-status").assertTextContains("Conta encerrada", substring = true)
+            assertEquals(true, state.canReopen)
+
+            runOnIdle { state.startReopen() }
+            waitForIdle()
+            assertNull(state.reopen, "com outro diálogo aberto, a reabertura não abre")
+            onNodeWithTag("reopen-dialog").assertDoesNotExist()
+        }
+
+    @Test
+    fun backIsIgnoredWhileBusy() =
+        runComposeUiTest {
+            val gate = CompletableDeferred<Unit>()
+            val account =
+                FakeFolioAccountSource().apply {
+                    reopenAction = { ApprovableAction { gate.await().let { ApiResponse(folioOf(), null, 200) } } }
+                }
+            panel(closedSource(), account)
+            val state = checkNotNull(panelState)
+
+            runOnIdle { state.startReopen() }
+            val form = checkNotNull(state.reopen)
+            runOnIdle {
+                form.reason = "Engano"
+                form.confirm()
+            }
+            waitForIdle()
+            assertEquals(true, form.busy)
+
+            runOnIdle { state.dismissReopen() }
+            waitForIdle()
+            assertSame(form, state.reopen, "Voltar com o envio em voo não faz nada")
+            gate.complete(Unit)
+            waitForIdle()
+        }
+
+    @Test
+    fun backAfterUnknownResultRereadsTheFolio() =
+        runComposeUiTest {
+            var reads = 0
+            val folios =
+                FakeFolioSource().apply {
+                    folio = {
+                        reads++
+                        folioOf(status = FolioResponse.Status.CLOSED)
+                    }
+                }
+            val account =
+                FakeFolioAccountSource().apply {
+                    reopenAction = { ApprovableAction { throw ApiError.Network(IOException("caiu")) } }
+                }
+            panel(folios, account)
+            val state = checkNotNull(panelState)
+
+            runOnIdle { state.startReopen() }
+            val form = checkNotNull(state.reopen)
+            runOnIdle {
+                form.reason = "Engano"
+                form.confirm()
+            }
+            waitForIdle()
+            assertEquals(true, form.unconfirmed)
+            val before = reads
+
+            runOnIdle { state.dismissReopen() }
+            waitForIdle()
+            assertNull(state.reopen)
+            assertEquals(before + 1, reads, "fechar com o resultado desconhecido relê a conta")
         }
 }

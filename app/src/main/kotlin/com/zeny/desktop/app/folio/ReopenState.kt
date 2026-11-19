@@ -102,6 +102,8 @@ class ReopenState(
             }
         currentCoroutineContext().ensureActive()
         if (response == null) {
+            // O servidor respondeu `APPROVAL_REQUIRED` agora: a conta continua encerrada, sem resultado desconhecido.
+            unconfirmed = false
             message = FolioText.REOPEN_APPROVAL_CANCELLED
         } else {
             unconfirmed = false
