@@ -216,7 +216,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
 | E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta | #em-andamento | E02 | Ajustar, dividir, transferir e remover a taxa a pedido |
-| E11 | Duplicação entre o painel do dia e a busca | #em-andamento | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
+| E11 | Duplicação entre o painel do dia e a busca | #concluida | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
 | E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
 | E12 | Pagador, limite de crédito e multa de cancelamento | #pendente | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
 | E13 | Reabrir conta encerrada | #pendente | E02, E08 | Reabrir a conta encerrada, com aprovação de superior |
@@ -1133,7 +1133,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E11 — Duplicação entre o painel do dia e a busca — #em-andamento
+## E11 — Duplicação entre o painel do dia e a busca — #concluida
 
 **Objetivo:** o painel do dia (Recepção) e a busca de reservas montam as colunas da tabela, leem os nomes dos tipos de UH e travam as leituras auxiliares pela mesma função.
 
@@ -1147,7 +1147,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
+- [x] `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
 
 **Validação obrigatória:**
 
@@ -1166,12 +1166,24 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#concluida` (2026-11-19). A etapa não pede verificação ao vivo.
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e11.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e11.md). Revisão de arquitetura **dispensada** pelo orquestrador: refatoração interna ao `app`, sem ADR, contrato, persistência, fronteira de módulo nem runtime novo; a revisão final conferiu a dispensa contra o diff e a confirmou.
+- **Commits** (`MERGE_BASE` `b347973`):
+  - `99d713e`: o início e o plano.
+  - **Task 1** (`259e6e4`): o `reservationColumns`, o `readRoomTypeNames` e o `ReservationRowResolver` (a trava, o cache dos tipos e o `HolderNames`) em `reception/ReservationRows.kt`, usados pelo `DayPanelState` e pelo `ReservationSearchState`. O painel esquece os tipos a cada carga (`forgetRoomTypes`); a busca, não, e continua sem sair à rede quando fechada durante a página. Etapa de uma fatia: sem revisão de fatia, coberta pela revisão final.
+  - **Testador de etapa** (`5725fcf`): `ReservationRowResolverAtaqueTest`, 9 testes (falhas de titular e de tipos, a trava solta depois de falha e de cancelamento, a trava dos tipos com páginas em voo, o cache depois do `forgetRoomTypes`). Nenhum defeito.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `b347973..259e6e4`): 0 Críticos, 0 Importantes, 4 Menores, "Ready to merge: Yes".
+  - Re-revisão escopada dos testes do testador: ver o fechamento no histórico.
+- **Gate no `259e6e4`:** `./gradlew build` → BUILD SUCCESSFUL (app 3073, 51, 0; core 1298, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 66 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `259e6e4` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência.
+- **Integridade:** `check_test_integrity.py --base b347973` no `5725fcf` → exit 0, nenhum apontamento. Nenhum teste existente foi alterado.
+- **Critério:** `grep -rn 'fun readRoomTypeNames' app/src/main` → uma linha (`reception/ReservationRows.kt`); o `DayPanelState` e o `ReservationSearchState` usam `reservationColumns` e `ReservationRowResolver`; os testes existentes das duas telas (`DayPanelState*Test`, `ReservationSearchState*Test`) e de `ReservationRows*Test` verdes no gate, sem mudança.
+- **Decisões para o usuário** (já tomadas, revisáveis):
+  1. **O plano pedia também `Column("code", "Reserva")` com uma linha só**, mas o `reservations/PendingListsState.kt` tem outra tabela (`PendingRow`, cinco colunas). Ruling: defeito do plano; vale o critério do roadmap.
+- **Notas para a próxima etapa:**
+  - **Comportamento herdado, documentado:** uma página da carga anterior do painel, ainda lendo os tipos quando a data muda, regrava o cache com a leitura antiga, e a carga nova não relê (`ReservationRowResolverAtaqueTest.typesReadInFlightWhenTheLoadChangesStayCachedForTheNewLoadToday`). Se a regra mudar, o teste se inverte.
+  - **Diferidos (Menores):** o KDoc do `ReservationRowResolver` não diz que o `forgetRoomTypes()` conta com o confinamento à thread da UI; o `PendingListsState` tem um `HolderNames` próprio e o `ReservationDetailState` um `roomTypeNames()` próprio, duplicações parecidas fora do escopo.
 
 ---
 
@@ -1373,3 +1385,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E08 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação registrada na conferência do contrato do lote anterior: o escopo não cabia em três fatias de até 60 min. A E08, "Correções da conta", fica com ajustar, dividir, transferir, remover a taxa e reabrir, com os critérios dela sem mudança. Entra a **E12, "Pagador, limite de crédito e multa de cancelamento"**, com o `PUT` da conta, o `B-M5` e a isenção ao vivo, e os três critérios deles, que saíram da E08. A E12 depende da E02 e vem antes da E05 no índice; a E05 passa a depender também dela. A E08 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E08.
 - 2026-11-19 — a reabertura da conta encerrada saiu da E08 para a **E13, "Reabrir conta encerrada"** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E08 (I4: as fatias passavam do teto; a reabertura não tinha critério e não depende das correções). A E13 depende da E02 e da E08 (a porta); a E05 passa a depender também dela. Os critérios da E08 não mudaram.
 - 2026-11-19 — a E08 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `756db61`; falta a `LiveFolioCorrectionCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
+- 2026-11-19 — a E11 fecha `#concluida` (`claude --agent orquestrador`): o painel do dia e a busca de reservas montam as colunas, leem os tipos de UH e travam as leituras auxiliares por uma função só (`259e6e4`); revisão final e re-revisão limpas.
