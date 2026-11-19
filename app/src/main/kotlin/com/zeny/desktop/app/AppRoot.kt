@@ -187,7 +187,9 @@ internal fun AppRoot(
                     // A área recebe o conjunto lido por esta casca e o `sessionId` dela (ADR 0013); a de caixa relê o
                     // turno do topo depois de abrir ou fechar um turno.
                     ShellScreen(state, onLogout = { scope.launch { controller.logout() } }) { area, permissions ->
-                        AreaContent(area, connection, sessionId, permissions, state::refreshShift)
+                        AreaContent(area, connection, sessionId, permissions, state::refreshShift) {
+                            state.select(Area.ACCOUNTS)
+                        }
                     }
                     insideShell()
                     ApprovalHost(approvals)
@@ -213,19 +215,22 @@ private fun SessionState.activeSessionId(): String? = (this as? SessionState.Act
  * turno de caixa e, com `billing.folios.read`, a aba das contas abertas; a Governança, o mapa de UHs; as demais ainda
  * mostram só o nome. [sessionId] e [permissions] são os da casca (ADR 0013): a Recepção, as Reservas e o caixa, que os
  * recebem, só desenham quando a sessão ativa da conexão é a mesma [sessionId]. [onShiftChanged] é o que o caixa chama
- * quando o turno muda (a casca relê o topo).
+ * quando o turno muda (a casca relê o topo). [onOpenShift] é o atalho "Abrir turno" da conta na Recepção e nas Reservas
+ * (a casca abre "Contas e caixa"); dentro de "Contas e caixa", o atalho troca para a aba "Caixa".
  */
 @Composable
+@Suppress("LongParameterList") // a área, o que a casca entrega e os dois avisos dela
 internal fun AreaContent(
     area: Area,
     connection: ServerConnection,
     sessionId: String?,
     permissions: Set<String>,
     onShiftChanged: () -> Unit = {},
+    onOpenShift: () -> Unit = {},
 ) {
     when (area) {
-        Area.RECEPTION -> ReceptionArea(connection, sessionId, permissions)
-        Area.RESERVATIONS -> ReservationsArea(connection, sessionId, permissions)
+        Area.RECEPTION -> ReceptionArea(connection, sessionId, permissions, onOpenShift)
+        Area.RESERVATIONS -> ReservationsArea(connection, sessionId, permissions, onOpenShift)
         Area.ACCOUNTS -> CashierArea(connection, sessionId, permissions, onShiftChanged)
         Area.HOUSEKEEPING -> HousekeepingMap(connection)
         else -> EmptyState(area.label)
@@ -235,7 +240,8 @@ internal fun AreaContent(
 /**
  * O turno de caixa e, com o portador da conta, a aba "Contas" vivem enquanto a área está aberta na mesma sessão: nascem
  * com a chave do [sessionId] e das [permissions] da casca e fecham ao sair da área, da casca ou da sessão (o fechamento
- * descarta a leitura ou a abertura em voo). A aba "Caixa" continua a primeira e a padrão.
+ * descarta a leitura ou a abertura em voo). A aba "Caixa" continua a primeira e a padrão; a escolhida é lembrada aqui,
+ * com o [sessionId], para o atalho "Abrir turno" da conta voltar a ela.
  * Enquanto a sessão ativa da conexão não é a [sessionId] da casca, o quadro fica vazio: as [permissions] de uma sessão
  * nunca valem na outra.
  */
@@ -264,10 +270,11 @@ private fun CashierArea(
                 cashier.start()
                 onDispose { cashier.close() }
             }
-            val wiring = rememberFolioWiring(connection, sessionId, permissions, scope)
+            var tab by remember(sessionId) { mutableStateOf(AccountsTab.CASHIER) }
+            val wiring = rememberFolioWiring(connection, sessionId, permissions, scope) { tab = AccountsTab.CASHIER }
             val folios = wiring?.let { remember(it.source, sessionId, permissions) { FolioAccounts(it, scope) } }
             DisposableEffect(folios) { onDispose { folios?.close() } }
-            if (folios == null) CashierScreen(cashier) else AccountsTabs(cashier, folios)
+            if (folios == null) CashierScreen(cashier) else AccountsTabs(cashier, folios, tab) { tab = it }
         }
     }
 }
@@ -279,17 +286,18 @@ private enum class AccountsTab(
     FOLIOS("Contas"),
 }
 
-/** As abas da área: "Caixa" (a primeira e a padrão) e "Contas". Os estados vivem acima delas, na área. */
+/** As abas da área: "Caixa" (a primeira e a padrão) e "Contas". Os estados e a aba escolhida vivem na área. */
 @Composable
 private fun AccountsTabs(
     cashier: CashierState,
     folios: FolioAccounts,
+    selected: AccountsTab,
+    onSelect: (AccountsTab) -> Unit,
 ) {
-    var selected by remember { mutableStateOf(AccountsTab.CASHIER) }
     Column(Modifier.fillMaxSize()) {
         PrimaryTabRow(selectedTabIndex = selected.ordinal) {
             AccountsTab.entries.forEach {
-                Tab(selected = selected == it, onClick = { selected = it }, text = { Text(it.label) })
+                Tab(selected = selected == it, onClick = { onSelect(it) }, text = { Text(it.label) })
             }
         }
         Box(Modifier.weight(1f)) {
@@ -303,7 +311,8 @@ private fun AccountsTabs(
 
 /**
  * O portador da conta de uma área, lembrado com a chave da porta, do [sessionId] e das [permissions] da casca (E06):
- * recompor a área não o recria. Nulo sem a porta ou sem `billing.folios.read`.
+ * recompor a área não o recria. Nulo sem a porta ou sem `billing.folios.read`. O [openShift] mais recente é lido na
+ * hora do atalho, sem entrar na chave.
  */
 @Composable
 private fun rememberFolioWiring(
@@ -311,11 +320,15 @@ private fun rememberFolioWiring(
     sessionId: String,
     permissions: Set<String>,
     scope: CoroutineScope,
+    openShift: () -> Unit,
 ): FolioWiring? {
     val source = remember(connection) { connection.folioSource() }
     val approval = LocalApprovalCoordinatorOrNull.current
     val window = LocalWindowFrame.current
-    return remember(source, sessionId, permissions) { folioWiring(connection, permissions, scope, approval, window) }
+    val latestOpenShift by rememberUpdatedState(openShift)
+    return remember(source, sessionId, permissions) {
+        folioWiring(connection, permissions, scope, approval, window) { latestOpenShift() }
+    }
 }
 
 /**
@@ -333,6 +346,7 @@ private fun ReceptionArea(
     connection: ServerConnection,
     sessionId: String?,
     permissions: Set<String>,
+    onOpenShift: () -> Unit,
 ) {
     val source = remember(connection) { connection.receptionSource() }
     val session by connection.state.collectAsState()
@@ -368,7 +382,8 @@ private fun ReceptionArea(
                 undoCheckIn = undoCheckInFactory(source, scope, approval, panel, detail),
                 traces = traces,
                 registrationCard = registrationCardFactory(connection, scope, LocalWindowFrame.current),
-                folio = rememberFolioWiring(connection, sessionId, permissions, scope),
+                folio = rememberFolioWiring(connection, sessionId, permissions, scope, onOpenShift),
+                checkOut = remember(connection) { connection.checkOutSource() },
             )
         }
     }
@@ -387,6 +402,7 @@ private fun ReservationsArea(
     connection: ServerConnection,
     sessionId: String?,
     permissions: Set<String>,
+    onOpenShift: () -> Unit,
 ) {
     val source = remember(connection) { connection.reservationSearchSource() }
     val receptionSource = remember(connection) { connection.receptionSource() }
@@ -414,7 +430,7 @@ private fun ReservationsArea(
                     if (focused) detail?.reload()
                 }
             }
-            ReservationsContent(connection, search, detail, sessionId, permissions, scope)
+            ReservationsContent(connection, search, detail, sessionId, permissions, scope, onOpenShift)
         }
     }
 }
@@ -433,6 +449,7 @@ private fun ReservationsContent(
     sessionId: String,
     permissions: Set<String>,
     scope: CoroutineScope,
+    onOpenShift: () -> Unit,
 ) {
     val receptionSource = remember(connection) { connection.receptionSource() }
     val availabilitySource = remember(connection) { connection.availabilitySource() }
@@ -441,7 +458,7 @@ private fun ReservationsContent(
     val approval = LocalApprovalCoordinatorOrNull.current
     val frame = LocalWindowFrame.current
     val confirmation = remember(connection, scope, frame) { confirmationCardFactory(connection, scope, frame) }
-    val folio = rememberFolioWiring(connection, sessionId, permissions, scope)
+    val folio = rememberFolioWiring(connection, sessionId, permissions, scope, onOpenShift)
     val refreshDetailAndTable: () -> Unit = {
         detail?.reload()
         scope.launch { search.table.refresh() }
@@ -487,6 +504,7 @@ private fun ReservationsContent(
 private const val AVAILABILITY_READ = "reservations.availability.read"
 private const val RESERVATIONS_MANAGE = "reservations.reservations.manage"
 private const val FOLIOS_READ = "billing.folios.read"
+private const val CASHIER_OPERATE = "billing.cashier.operate"
 
 /** O calendário e a cotação de uma sessão; só existem com a permissão de leitura da disponibilidade. */
 private class ReservationsAvailability(
@@ -725,15 +743,19 @@ private fun confirmationCardFactory(
 
 /**
  * O portador da conta que as três entradas recebem (a aba "Contas", "Conta" na Recepção e nas Reservas), ou nulo sem a
- * porta nesta conexão ou sem `billing.folios.read` nas [permissions] da casca. A aprovação é a do coordenador da sessão
- * e os dois PDFs do extrato abrem no visualizador da ficha, cada um com a audiência e o `PdfKind` dele.
+ * porta nesta conexão ou sem `billing.folios.read` nas [permissions] da casca. A aprovação (do estorno e do reembolso)
+ * é a do coordenador da sessão e os dois PDFs do extrato abrem no visualizador da ficha, cada um com a audiência e o
+ * `PdfKind` dele. Os pagamentos usam a porta deles nesta conexão; o atalho [openShift] só vai com
+ * `billing.cashier.operate` nas [permissions] (a decisão pelo conjunto é daqui, não da tela).
  */
+@Suppress("LongParameterList") // o que a área entrega e o atalho do turno
 internal fun folioWiring(
     connection: ServerConnection,
     permissions: Set<String>,
     scope: CoroutineScope,
     approval: ApprovalCoordinator?,
     window: Frame?,
+    openShift: (() -> Unit)? = null,
 ): FolioWiring? {
     val source = connection.folioSource()
     if (source == null || FOLIOS_READ !in permissions) return null
@@ -743,6 +765,9 @@ internal fun folioWiring(
         approve = { approveAction(approval, it) },
         guestPdf = statementPdfFactory(source, StatementAudience.GUEST, scope, window),
         internalPdf = statementPdfFactory(source, StatementAudience.INTERNAL, scope, window),
+        payments = connection.paymentSource(),
+        approveRefund = { approveAction(approval, it) },
+        openShift = openShift?.takeIf { CASHIER_OPERATE in permissions },
     )
 }
 

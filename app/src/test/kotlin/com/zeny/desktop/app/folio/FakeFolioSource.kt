@@ -278,9 +278,14 @@ class FakeFolioSource : FolioSource {
     }
 }
 
-/** O portador com as duas fábricas de PDF desligadas; sem [approve], a ação corre sem aprovação. */
+/**
+ * O portador com as duas fábricas de PDF desligadas; sem [approve], a ação corre sem aprovação. [payments] e
+ * [openShift] são os dos pagamentos (nulos, sem a seção nem o atalho).
+ */
 fun wiringOf(
     source: FolioSource,
     permissions: Set<String> = setOf("billing.folios.read"),
     approve: suspend (ApprovableAction<PostingResponse>) -> ApiResponse<PostingResponse>? = { it.run(null) },
-) = FolioWiring(source, permissions, approve, null, null)
+    payments: PaymentSource? = null,
+    openShift: (() -> Unit)? = null,
+) = FolioWiring(source, permissions, approve, null, null, payments = payments, openShift = openShift)

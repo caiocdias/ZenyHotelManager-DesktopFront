@@ -34,10 +34,18 @@ object DateInput {
 }
 
 @Composable
+@Suppress("LongParameterList") // `enabled` é opcional e fica no fim, sem quebrar quem já chama
 fun DateField(
     value: String,
     onValueChange: (String) -> Unit,
     label: String,
     error: String? = null,
     modifier: Modifier = Modifier,
-) = ParsedTextField(value, onValueChange, FieldSpec(label, error, DateInput::parse), modifier)
+    enabled: Boolean = true,
+) {
+    val spec = FieldSpec(label, error, DateInput::parse, enabled = enabled, maxLength = MAX_LENGTH)
+    ParsedTextField(value, onValueChange, spec, modifier)
+}
+
+/** Mais que isso numa edição é colagem de texto que não é valor nem data. */
+private const val MAX_LENGTH = 1000

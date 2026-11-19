@@ -212,10 +212,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #concluida | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
-| E03 | Pagamentos e cauções | #pendente | E07, E02 | Receber e reembolsar, registrar, capturar e liberar caução, cauções a vencer |
-| E04 | Check-out | #pendente | E03 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
+| E03 | Pagamentos | #em-andamento | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
+| E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
+| E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
 | E08 | Correções da conta e multa de cancelamento | #pendente | E02 | Ajustar, dividir, transferir, remover a taxa a pedido, pagador e limite de crédito; os textos da multa (`B-M5`) e a isenção ao vivo |
-| E05 | Gate do marco M4 | #pendente | E04, E08 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
+| E11 | Duplicação entre o painel do dia e a busca | #pendente | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
+| E10 | Cauções a vencer | #pendente | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
+| E05 | Gate do marco M4 | #pendente | E04, E08, E10, E11 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
 
@@ -635,9 +638,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Pagamentos e cauções — #pendente
+## E03 — Pagamentos — #em-andamento
 
-**Objetivo:** na conta, a operadora recebe um pagamento manual, com forma e valor, dentro do turno aberto. Ela reembolsa com aprovação, registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra e acompanha as cauções a vencer.
+**Objetivo:** na conta, a operadora recebe um pagamento manual, com forma e valor, dentro do turno aberto, e reembolsa com aprovação. Registrar, capturar e liberar caução e as cauções a vencer passaram à E09 (divisão de 2026-11-18, no histórico).
 
 **Por que agora:** zerar o saldo é a condição do check-out.
 
@@ -646,21 +649,18 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Escopo:**
 
 - **Pagamentos:** `GET`/`POST /api/v1/folios/{folioId}/payments` e `POST /api/v1/folios/{folioId}/payments/{paymentId}/refund`.
-- **Cauções:**
-  - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
-  - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`;
-  - `GET /api/v1/card-pre-authorizations/expiring`.
 - **Campos do `design` (`A-M7` da M3 E06):** o `MoneyField` e o `DateField` passam a aceitar `enabled`, e a colagem acima de 1000 caracteres deixa de ser recusada em silêncio. Esta é a primeira tela que recebe valor em dinheiro. O `enabled` do `MoneyField` já entrou na E01 (`533f98d`); aqui ficam o do `DateField` e a colagem nos dois.
 
-**Fora de escopo:** Pix, TEF e cartão integrados, que não existem no servidor.
+**Fora de escopo:**
+
+- Pix, TEF e cartão integrados, que não existem no servidor;
+- as cauções (E09).
 
 **Critérios de aceite:**
 
 - [ ] Receber sem turno aberto mostra a mensagem do `code` em pt-BR e o atalho "abrir turno".
 - [ ] Receber o saldo de uma conta do seed zera o saldo, e o pagamento aparece no turno.
 - [ ] Teste: repetir o recebimento após falha de rede usa a mesma `Idempotency-Key`, e o servidor não duplica.
-- [ ] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
-- [ ] Liberar a sobra da caução muda a situação e o saldo conforme a API.
 - [ ] **`A-M7`, `enabled`:** com `enabled = false`, o `MoneyField` e o `DateField` não aceitam digitação nem colagem (teste no `design`). O formulário de pagamento os desabilita enquanto `busy` e no resultado desconhecido (teste do *state holder*).
 - [ ] **`A-M7`, colagem:** colar mais de 1000 caracteres no `MoneyField` e no `DateField` deixa um sinal visível em pt-BR, e não só ignora a colagem (teste no `design`). A forma do sinal é decidida no plano.
 
@@ -674,6 +674,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Notas para o plano:**
 
 - Partes independentes, para as ondas do plano: pagamentos (`…/payments`) e cauções (`…/card-pre-authorizations`) usam operações distintas do contrato. O único vínculo é do servidor: a captura da caução gera um pagamento (`capturePaymentIds`), que a lista de pagamentos só lê. A lista de cauções a vencer (`GET /api/v1/card-pre-authorizations/expiring`) é leitura à parte.
+- **Divisão (2026-11-18):** o escopo original não cabia em três fatias de até 60 min e 12 arquivos de produção (os pagamentos com o reembolso, o atalho e os campos do `design` já ocupam três; as cauções somam quatro operações e uma tela de cauções a vencer). As cauções e os critérios delas foram para a E09.
+- **Conferência (2026-11-18):** no `a1cde4b`, nem o `MoneyField` nem o `DateField` têm limite de tamanho: o texto colado entra inteiro e só fica inválido depois que o campo perde o foco. O critério da colagem continua valendo como está: o plano cria o limite de 1000 caracteres com o sinal visível.
 - **`A-M7`:** os campos estão em `design/.../input/MoneyInput.kt` e `DateInput.kt`. A mudança no `design` é usada pelo `app`: a verificação rápida cobre os dois módulos, e as telas do M2 e do M3 que usam os campos continuam verdes. O ajuste dos campos não depende de pagamentos nem de cauções e pode abrir a primeira onda.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
@@ -682,22 +684,183 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-18). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `c4016ce`. Falta a `LivePaymentCheck` contra o `zeny-front`, que pede as credenciais do usuário. Por decisão do usuário neste lote ("pode substituir a revisão humana pela opção recomendada [...] O importante é avançar na entrega do marco"), a espera não trava o lote: para a escolha da próxima etapa, a E03 conta como concluída, como a regra 7 do README faz com o Windows, e as etapas que dependem dela registram que a base ainda não foi verificada ao vivo.
+- Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e03.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e03.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0 (3 Importantes: a assinatura de `folioWiring` sem padrão quebraria um arquivo do testador; o "servidor não duplica" sem prova ao vivo; o limite no ramo com máscara sem consumidor), aprovado com notas na rodada 1 (`d013789`).
+- Commits (`MERGE_BASE` `a1cde4b`, HEAD de código `c4016ce`):
+  - Antes das fatias: `b736771` (divisão E03/E09) e `0a725fe` (testador: a fixture intermitente do `AuthPluginAttackTest`; ver abaixo).
+  - Task 1, os campos do `design` (`A-M7`), a `PaymentsFacade` (`ZenyCore.payments`) e a porta `PaymentSource`: `fd2c6b3`. Revisão de fatia aprovada.
+  - Task 2, a seção "Pagamentos", "Receber" e o atalho "Abrir turno" nas três entradas: `4caaf7d`. Revisão de fatia aprovada.
+  - Task 3, "Reembolsar" com a aprovação da casca e a `LivePaymentCheck`: `a3d86c8`, `7cdc195` e `2077e42`. Revisão de fatia aprovada.
+  - Testador de etapa: `7ec20de`, `80107b4`, `6ffd7f2` e `5a29da7` (trava `tests/test_live_payment_ataque.sh` contra credencial e cartão impressos, com os templates da verificação numa lista fechada; cartão com espaços e traços; bordas do valor e do valor entregue; duplo clique e aprovação perdida no reembolso, com a chave girada e o token no fio; campos desabilitados com `locked` nos dois diálogos; o reembolso pelo `ApprovalCoordinator` real; o atalho pelo `AppRoot` inteiro). Nenhum defeito de produção.
+  - Correção do fim da etapa: `c4016ce` ("Nenhum pagamento nesta conta." só depois da primeira leitura; o motivo do reembolso medido aparado).
+- Revisão final (`revisor-seguranca`, fable, `code-reviewer.md`, `a1cde4b..2077e42`): 0 Críticos, 0 Importantes, 8 Menores, "Ready to merge: Yes". Re-revisão escopada de `2077e42..c4016ce` (os testes do testador e a correção): os dois Menores corrigidos, 3 Menores novos (abaixo), "Ready to merge: Yes".
+- Gate no `c4016ce`: `./gradlew build` → BUILD SUCCESSFUL (app 2851 testes, 48 pulados, 0 falhas; core 1252, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 63 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- Scanner: `osv-scanner --recursive --no-ignore ./` no `2077e42` → 6 lockfiles do Gradle (1429 pacotes), "No issues found"; a etapa não muda dependência (só o opt-in `ZENY_LIVE_PAYMENT` no `app/build.gradle.kts`).
+- Integridade: `check_test_integrity.py --base a1cde4b` no `c4016ce` → exit 0, nenhum apontamento. Na Task 3 (`--base 4caaf7d`), 4 `ASSERCAO_REMOVIDA` da troca de `shiftRequired` por `offersOpenShift`, julgadas trocas 1:1 pela revisão.
+- **Antes da E03 (nota da E02), resolvido:** o testador reproduziu a falha do `AuthPluginAttackTest.refresherUsingTheSameClientNeitherRecursesNorReusesARotatedRefreshToken` em 157 de 2000 repetições. A causa é a fixture, não o `AuthPlugin`: o par inicial tinha `sessionId "s1"`, e o refresh falso devolvia outro, o que o `Authenticator` lê como troca de sessão (o servidor conserva a sessão no refresh). Com a fixture coerente, 0 de 2000, também com a CPU ocupada; um teste novo determinístico fica vermelho com a fixture antiga (`0a725fe`).
+- Critérios (testes com porta falsa; os marcados "ao vivo" esperam a `LivePaymentCheck`):
+  1. **Sem turno: mensagem e atalho** — `PaymentFormStateTest.shiftRequiredShowsMessageAndShortcut`; `FolioPaymentsScreenTest` (a aba "Contas" leva à aba "Caixa", sem diálogo morto; "Conta" na Recepção e nas Reservas leva à área "Contas e caixa"); `PaymentShellAtaqueTest` (pelo `AppRoot` inteiro). **Ao vivo:** o passo 1 da `LivePaymentCheck`, quando a Recepcionista está sem turno.
+  2. **Receber o saldo zera o saldo e entra no turno** — `successReloadsAndShowsChange`, `suggestedAmountIsTheServerBalance`. **Ao vivo:** o saldo relido `0.00`, a tela em "R$ 0,00" e o `cashierShiftId` igual ao turno corrente.
+  3. **Repetir depois de falha de rede usa a mesma chave, sem duplicar** — `PaymentFormStateTest.retryAfterNetworkKeepsTheKey`, `doubleConfirmReceivesOnce`; `PaymentsFacadeTest.sameIntentKeepsTheKey`. **Ao vivo:** a resposta perdida, o `confirm` de novo com a mesma `Intent` e um pagamento só a mais (padrão `recordTwice`).
+  4. **`A-M7`, `enabled`** — `FieldLimitsTest.disabledMoneyFieldRefusesTypingAndPaste` e `disabledDateFieldRefusesTypingAndPaste`; `PaymentFormStateTest.fieldsLockWhileBusyAndUnknown`; `PaymentDialogsAtaqueTest` (campos desabilitados na tela com `locked`).
+  5. **`A-M7`, colagem** — `FieldLimitsTest.pasteOverLimitShowsSignalAndKeepsText` e `pasteAtLimitIsAccepted`; `FieldLimitsAtaqueTest`. O sinal é o erro do campo, na hora: "Texto colado com mais de 1000 caracteres. Ele não foi aceito.".
+- **Como fazer a verificação ao vivo** (escreve na demo e não desfaz: um pagamento em dinheiro que zera uma conta aberta de reserva do seed, um consumo de R$ 10,00 quando a conta não tem saldo e, se a Recepcionista estava sem turno, um turno aberto no ponto "Recepção"): no worktree, com `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` (a Recepcionista) e `ZENY_LIVE_VIEWER_PASSWORD` no ambiente de um subshell, `(set -a; . <arquivo>; set +a; ZENY_LIVE_PAYMENT=1 ./gradlew :app:test --tests '*LivePaymentCheck*' --rerun)`. Confira no relatório de testes que ela não foi pulada. `NEED_SEED` quer dizer que falta conta aberta de reserva com saldo: rode o seed. Passando, a etapa fecha `#concluida`.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **Divisão da E03** (ruling de 2026-11-18). O escopo original não cabia em três fatias de até 60 min e 12 arquivos de produção. A E03 ficou com receber, reembolsar, o atalho e o `A-M7`, com os critérios dela sem mudança. Entrou a **E09, "Cauções"**, com os dois critérios da caução. A E04 passou a depender também da E09. Custo se errado: reorganizar o índice numa sessão do arquiteto.
+  2. **A verificação ao vivo não trava o lote** (instrução do usuário neste lote). Custo se errado: um defeito que só aparece ao vivo pede correção também nas etapas que vieram depois.
+  3. **"Reembolsar" é mais restrito que o servidor** (M6 da revisão de arquitetura): aparece com `billing.payments.receive` ou `billing.payments.refund`, como o estorno da E02. O servidor só exige `billing.folios.read` antes da aprovação.
+  4. **O motivo do reembolso é texto livre e pode levar um número de cartão** (Menor 2 da revisão final). A recusa de sequência com cara de cartão vale só para o NSU e a autorização, como o plano decidiu. A alternativa é recusar uma sequência de 13 a 19 dígitos também no motivo, em `RefundInput.problems()`.
+  5. **O limite de 1000 caracteres** é por edição, nos dois campos, e o sinal fica até a próxima edição aceita. O `A-M7` falava em colagem recusada em silêncio, mas no `a1cde4b` os campos não tinham limite nenhum (conferência registrada nas notas do plano).
+  6. **O `PaymentMethod` foi reaproveitado** do `CashierFacade.kt` (as mesmas seis formas, sem `CITY_LEDGER`). Um `CITY_LEDGER` lido do servidor aparece como "Outro (CITY_LEDGER)".
+- Notas para a próxima etapa:
+  - **Dívidas (antes da E09, que traz o terceiro formulário de escrita):**
+    - o `RefundState` repete quase todo o `PaymentFormState` (`send`, `edit`, `fail`), e o `FolioState.kt` passou de 600 linhas;
+    - o padrão `approveRefund = { null }` do `FolioWiring` existe só para os arquivos do testador compilarem, como o `T3 M1` da E02;
+    - constantes repetidas: o limite do motivo (`REASON_MAX`/`MAX_REASON`, três vezes), o `present()` (três vezes) e o `MAX_LENGTH = 1000` (duas vezes, com "1000" fixo no texto do sinal).
+  - **Diferidos (Menores):**
+    - o `400 PAYMENT_INVALID` mostra o texto genérico, sem o campo;
+    - o motivo acima de 200 caracteres é recusado em silêncio, como no estorno;
+    - NSU, autorização, bandeira e últimos dígitos não têm limite de colagem (o valor longo é recusado na confirmação e nunca enviado);
+    - um `IllegalArgumentException` local vira "resultado desconhecido" (herdado da E02);
+    - dois testes do testador marcados "Hoje:" (`PaymentDialogsAtaqueTest.longPasteInRefundReasonAndCodesIsNeverSent` e `longPasteInPaymentCodesIsRefusedOnConfirmAndNeverSent`) fixam esse comportamento e ficam vermelhos quando o usuário decidir o M8. É decisão, não regressão.
+  - **Para o testador:**
+    - a trava `test_live_payment_ataque.sh` não pega concatenação (`println("x" + payment)`), `error(payment.toString())`, `throw` nem um `assertEquals` com o objeto inteiro;
+    - duas asserções de borda em `PaymentAtaqueTest` aceitam qualquer texto;
+    - continuam abertos os itens da E02: o mutante `replacePending`, a varredura de `.pdf` em `/tmp`, o título de `guestStatementWithoutInternalBlockShowsNoReason` e a troca de sessão com o diálogo "Conta" aberto nas Reservas e nas pendências;
+    - a colagem sem foco não é testável pela API de teste, e o wiring do `CoreConnection` não tem ponto de injeção do engine HTTP.
+  - **E09:** a captura gera um pagamento, que a seção "Pagamentos" já mostra (`PaymentRow`, tipo `PAYMENT` com `cardPreAuthorizationId`), e exige turno: use o `offersOpenShift` e o `closeThenOpenShift` do `FolioState`. A porta `PaymentSource` é a que a E09 amplia.
 
 ---
 
-## E04 — Check-out — #pendente
+## E09 — Cauções — #em-andamento
+
+**Objetivo:** na conta, a operadora registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra. As cauções a vencer passaram à E10 (divisão de 2026-11-18, no histórico).
+
+**Por que agora:** saiu da E03 na divisão de 2026-11-18 (histórico). O check-out (E04) confere e libera as cauções, por isso vem antes dele.
+
+**Dependências:** E07 (a captura exige turno aberto), E02 (a tela da conta) e E03 (a porta dos pagamentos e a lista de pagamentos, onde a captura aparece). O ID é o próximo livre; a posição no índice segue a dependência.
+
+**Escopo:**
+
+- **Cauções:**
+  - `GET`/`POST /api/v1/folios/{folioId}/card-pre-authorizations`;
+  - `POST /api/v1/folios/{folioId}/card-pre-authorizations/{preAuthorizationId}/capture` e `/release`.
+
+**Fora de escopo:**
+
+- Pix, TEF e cartão integrados, que não existem no servidor;
+- as cauções a vencer (E10).
+
+**Critérios de aceite:**
+
+- [ ] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
+- [ ] Liberar a sobra da caução muda a situação e o saldo conforme a API.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- A captura gera um pagamento (`capturePaymentIds`) e exige turno aberto (`CASHIER_SHIFT_REQUIRED`): o atalho "abrir turno" da E03 serve aqui também. A liberação não exige turno e vale com a conta encerrada.
+- A validade (`expiresAt`) é um instante em UTC, de agora até 90 dias; o plano decide como a tela a recebe (o `DateField` ganha o `enabled` na E03).
+- **Divisão (2026-11-18):** a revisão de arquitetura do plano (I5) achou as três fatias acima do teto de 60 min com a lista de cauções a vencer; ela é leitura à parte e o check-out não depende dela, e foi para a E10.
+- **Risco:** autenticação ou autorização, cálculo de valor monetário, concorrência, dado pessoal ou segredo (dados do cartão) e parsing de entrada externa estão na lista fechada (alinhado ao plano, N4 da revisão de arquitetura).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além da idempotência e do cartão, cobertos pelas restrições.
+
+**Evidências e handoff:**
+
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `e3227ee`. Falta a `LivePreAuthorizationCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E09 conta como concluída para a escolha da próxima etapa. **A base (E03) também não foi verificada ao vivo** (`LivePaymentCheck`).
+- Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e09.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e09.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 5 Importantes:
+  - I1: autorização fora do `Riscos:`;
+  - I2: o contrato do ajudante comum em aberto;
+  - I3: a validade às 00:00 sem alternativas;
+  - I4: o relógio e o fuso sem caminho;
+  - I5: as três fatias acima do teto.
+
+  Aprovado com notas na rodada 1 (`aa1332c`), com a divisão da E10.
+- Commits (`MERGE_BASE` `00aa9de`, HEAD de código `e3227ee`):
+  - **Task 1**, as quatro operações de caução na `PaymentsFacade`, a porta `PaymentSource` (com `businessDay()`) e o ajudante comum `FolioWrite`, extraído do recebimento e do reembolso sem mudar o comportamento da E03 (`058f2a0`, `57ccf5c`, `eacd0a7`). Revisão de fatia aprovada.
+  - **Task 2**, a seção "Cauções" (`PreAuthorizationsState`, fora do `FolioState`), registrar e liberar, e duas correções no `FolioWrite`: o `toString` do `Done` sem a resposta e o `onDone` fora do `try` (`252abc2`, `a834065`, `1e2b9ba`). Revisão de fatia aprovada.
+  - **Task 3**, capturar com o atalho "Abrir turno", a repetição com resultado desconhecido reenviando a entrada guardada, sem revalidar a data, e a `LivePreAuthorizationCheck` (`9d476e4`, `7f45429`, `9c37744`). Revisão de fatia aprovada.
+  - **Testador de etapa:** `9555a4c`, `6c53384`, `81bcb7b` e `e3227ee`. Cobriu:
+    - a trava `tests/test_live_preauth_ataque.sh`, com 35 mutantes, que pega também concatenação, `error(...)`, `throw` e o objeto inteiro em `assert*`;
+    - a chave do registro amarrada à `Intent`;
+    - o `ensureActive` depois da escrita, inclusive com `NonCancellable`;
+    - a validade com horário de verão;
+    - um diálogo por vez entre o painel e as cauções;
+    - a troca de sessão com escrita em voo.
+
+    Nenhum defeito de produção.
+  - **Correção do fim da etapa** (`e12378a`):
+    - "Registrar caução" desabilitado até a primeira leitura, o que evita um falso "fuso desconhecido";
+    - o fuso conhecido mantido numa falha transitória;
+    - o "Capturável" do diálogo segue a releitura;
+    - `PRE_AUTHORIZATION_NOT_FOUND` relê as cauções.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `00aa9de..9c37744`): 0 Críticos, 0 Importantes, 8 Menores, "Ready to merge: Yes".
+  - Re-revisão de `9c37744..e12378a`: os 4 Menores corrigidos e 1 Menor novo, um teste do testador com data fixa que ficaria vazio no dia seguinte, corrigido em `e3227ee`.
+  - Re-revisão de `e12378a..e3227ee`: Menor corrigido, "Ready to merge: Yes".
+- **Gate e scanner:**
+  - Gate no `e3227ee`: `./gradlew build` → BUILD SUCCESSFUL (app 2932 testes, 49 pulados, 0 falhas; core 1265, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0); `bash tests/run.sh` → 64 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+  - Scanner: `osv-scanner --recursive --no-ignore ./` no `9c37744` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_PREAUTH`.
+- Integridade: `check_test_integrity.py --base 00aa9de` no `e3227ee` → exit 0, nenhum apontamento.
+- Critérios:
+  1. **Sem campo de número de cartão** — `PreAuthorizationFormStateTest.formOffersNoCardNumberField` (as propriedades públicas por reflexão), `cardLikeCodesAreRefusedWithText`; `PaymentsFacadeTest.cardLikePreAuthorizationCodesNeverReachTheNetwork`; inspeção: o diálogo tem só valor, validade, autorização, NSU, bandeira e os 4 últimos dígitos.
+  2. **Liberar a sobra muda a situação e o saldo conforme a API** — `ReleaseStateTest.releaseSendsOnceAndReloads`, `PreAuthorizationSectionTest` (liberar mostra "Liberada" com o valor da porta), `CaptureStateTest.successReloadsFolioPaymentsAndPreAuthorizations`. **Ao vivo:** os passos 2 e 3 da `LivePreAuthorizationCheck`:
+     - capturar R$ 30,00 de R$ 100,00 dá "Capturada em parte", capturável R$ 70,00 e saldo R$ 30,00 menor;
+     - liberar dá "Liberada", liberado R$ 70,00 e o saldo sem mudança.
+- **Como fazer a verificação ao vivo.** Ela escreve na demo e não desfaz: deixa uma caução de R$ 100,00 com captura de R$ 30,00 e liberação da sobra numa conta aberta de reserva do seed (que pode ficar credora) e, se a Recepcionista estava sem turno, um turno aberto no ponto "Recepção".
+  - No worktree, ponha `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD` no ambiente de um subshell e rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_PREAUTH=1 ./gradlew :app:test --tests '*LivePreAuthorizationCheck' --rerun)`.
+  - Rode antes a `LivePaymentCheck` da E03.
+  - `NEED_SEED` quer dizer que falta conta aberta de reserva: rode o seed.
+  - Passando as duas, a E03 e a E09 fecham `#concluida`.
+- Decisões para o usuário (já tomadas pela opção recomendada, revisáveis):
+  1. **Divisão da E09** (I5 da revisão de arquitetura). A lista das cauções a vencer virou a **E10**, porque o check-out não depende dela. A E05 passou a depender da E10. Custo se errado: reorganizar o índice.
+  2. **Validade da caução** (I3):
+     - a operadora digita a data do comprovante, e o `expiresAt` é o **fim desse dia** (23:59:59) no fuso do hotel;
+     - valem as datas de hoje até 89 dias;
+     - foram descartados o início do dia, que venceria a caução no primeiro instante do dia do comprovante, e data com hora, que pede um campo que o app não tem.
+
+     Num fuso com horário de verão, a borda de 89 dias pode passar uma hora de 90×24 h; o servidor recusa com o texto genérico.
+  3. **Liberar aparece com a conta encerrada e em caução vencida**, como o contrato permite. Registrar e capturar exigem a conta aberta.
+  4. **Textos do implementador:**
+     - "A sobra será liberada na maquininha.", na liberação com capturável zero;
+     - "Informe a validade.", com a data vazia.
+  5. **Termo do catálogo:** os textos do `ErrorCatalog` dizem "pré-autorização" ("A pré-autorização expirou.") dentro de diálogos que falam em "caução". Trocar é uma decisão de redação.
+- Notas para a próxima etapa:
+  - **E04 (check-out):** o assistente libera cauções pela seção "Cauções" (`PreAuthorizationsState.canRelease`/`startRelease`). Cauções `ACTIVE`, `PARTIALLY_CAPTURED` e `EXPIRED` são pendência.
+  - **Dívidas:**
+    - o `PostingFormState` e o `ReversalState` (E02) ainda têm `send`/`fail` próprios: migrar para o `FolioWrite`;
+    - constantes repetidas do motivo e do `present()`;
+    - o `FolioState.kt` grande;
+    - o padrão `approveRefund = { null }`;
+    - o `busy` volta a `false` depois do `close()` do `FolioWrite`, o que é inofensivo.
+  - **Diferidos (Menores):**
+    - a falha da leitura das cauções esvazia a tabela sem "Tentar de novo";
+    - os avisos de formato do registro só aparecem com o valor e a data válidos;
+    - a trava aceita qualquer `FolioText.money(...)` e caminho terminado em `.value` em `assert*`;
+    - `$name` e `$expected` são templates permitidos pelo nome.
+  - **Para o testador:**
+    - um fuso cujo horário de verão vira à meia-noite;
+    - um falso positivo possível da trava com `" + "` dentro de um literal;
+    - os itens da E03 e da E02 que seguem abertos.
+
+---
+
+## E04 — Check-out — #em-andamento
 
 **Objetivo:** a partir de uma saída do painel do dia (M2), um assistente mostra o que falta para sair: saldo, cauções e contas abertas, além da cotação de late check-out se for o caso. Ele leva a operadora a receber, liberar e encerrar, e conclui o check-out. A reserva sai de "hospedados", e a UH fica vaga e suja no mapa em tempo real.
 
 **Por que agora:** fecha o ciclo da hospedagem na demo. Saiu da recepção (M2) porque depende de conta e caixa (design §7.1).
 
-**Dependências:** E03.
+**Dependências:** E03 e E09 (a liberação da caução).
 
 **Escopo:**
 
@@ -705,12 +868,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - leitura das contas da reserva;
   - cotação de late check-out (`GET /api/v1/reservations/{id}/early-late-quote`);
   - recebimento (E03);
-  - liberação de cauções (E03);
-  - encerramento das contas (`POST /api/v1/folios/{id}/close`);
-  - `POST /api/v1/reservations/{id}/check-out`.
+  - liberação de cauções (E09);
+  - `POST /api/v1/reservations/{id}/check-out`, que no servidor encerra as contas, libera as cauções não encerradas e lança o late na mesma transação (conferência de 2026-11-19: o front não chama `POST /api/v1/folios/{id}/close` à parte).
 - **Erros:** com pendências, mensagens em pt-BR por `code`.
-- **Reabrir conta encerrada:** `POST /api/v1/folios/{id}/reopen`, com aprovação.
-- **Duplicação com o `DayPanelState` (estacionado da M3 E01, destino da M3 E06):** o assistente parte de uma saída do painel do dia. Por isso, a duplicação entre o `DayPanelState` e o `ReservationSearchState` sai nesta etapa: as colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares. O destino previsto na M3 E01 era `reservationColumns()` e um leitor de página compartilhado em `ReservationRows.kt`.
 
 **Fora de escopo:**
 
@@ -723,7 +883,6 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - [ ] Check-out com caução ainda capturável mostra a pendência e não conclui até a liberação.
 - [ ] Se o servidor recusar o check-out, a mensagem vem em pt-BR e nada fica pela metade na tela (recarga do estado).
 - [ ] Late check-out cotado aparece como lançamento na conta antes do saldo final, se a política lançar.
-- [ ] **Duplicação:** `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
 
 **Validação obrigatória:**
 
@@ -735,7 +894,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Notas para o plano:**
 
 - A M5 E04 do servidor define o check-out (saldo zero, cauções liberadas, contas encerradas, UH Vago + Sujo, late check-out). Leia o handoff dela e a H14 do roadmap do M5 do servidor.
-- **Duplicação:** no `dbeacff`, `readRoomTypeNames` está em `reception/DayPanelState.kt` e em `reservations/ReservationSearchState.kt`. A origem é a decisão 2 do handoff da M3 E01. Essa extração não depende do assistente e pode ir na primeira onda. Se um teste da tabela procura por texto uma linha que não é a primeira, vale a nota de rolar até a linha.
+- **Duplicação:** passou à E11 em 2026-11-19 (I7 da revisão de arquitetura do plano: as fatias passavam do teto).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -745,12 +904,84 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `2ba7a31`. Falta a `LiveCheckOutCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava a escolha da próxima etapa. **A base (E03 e E09) também não foi verificada ao vivo.**
+- Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 9 Importantes:
+  - `extensions` público;
+  - o `until` contra o contrato;
+  - a falha da leitura das cauções;
+  - as regras do recebimento do devido;
+  - a conta que parece credora depois de receber;
+  - a caixa do late na intenção;
+  - o tamanho das fatias;
+  - o destino da duplicação;
+  - `Riscos:` incompleto.
+
+  Aprovado com notas na rodada 1 (`9b25b52`), com a divisão da E11.
+- **Commits** (`MERGE_BASE` `e3227ee`, HEAD de código `2ba7a31`):
+  - **Task 1:** a `CheckOutFacade` (`ZenyCore.checkOut`): cotação do late e check-out com o resultado tipado `BalanceDue`. Também `ApiError.Problem.extensions` (`internal`) e a porta `CheckOutSource` (`8086cb0`). Sem late, o check-out vai sem corpo, porque o `sdk` mandava o JSON `null` (conferido contra o servidor, `@RequestBody(required = false)`). Revisão de fatia aprovada.
+  - **Task 2:** o `CheckOutState` e o `CheckOutDialog`: pendências por leitura, bloqueio por caução capturável, devido por conta com "Receber", late na intenção, `FolioWrite` (`04acc16`). Revisão de fatia aprovada.
+  - **Task 3:** "Check-out" no detalhe da reserva na Recepção, "Abrir conta" pelo `ReservationFolioDialog`, o aviso no painel e a `LiveCheckOutCheck`. Entraram também os itens da revisão da Task 2 (`f21ba00`, `7d22a2c`, `2ed0126`):
+    - `RESERVATION_CHANGED` no `ErrorCatalog`;
+    - a caução com capturável ilegível bloqueia;
+    - fechar com resultado desconhecido relê o painel.
+
+    Revisão de fatia aprovada.
+  - **Testador de etapa:** `0078ab0`, `ba8c5e0` e `882f487`. Nenhum defeito de produção. Cobriu:
+    - a trava `tests/test_live_checkout_ataque.sh`, com 30 mutantes;
+    - o devido no `core` e a porta sobre um servidor HTTP local;
+    - o assistente e o botão na Recepção, inclusive `CHECKED_OUT`, a aba "Saídas", sair da área e a troca de sessão com o check-out em voo.
+  - **Correção do fim da etapa:** `144666c` e `0bb5f1e`:
+    - o devido velho sai da tela depois de um pagamento com resultado desconhecido ou de um pagamento pelo "Abrir conta" ("Confira a conta e conclua de novo."); era o risco de pagamento em dobro, Importante da revisão final;
+    - "Receber" e "Abrir conta" ficam desabilitados com o check-out em voo ou desconhecido;
+    - o aviso "Check-out concluído." some ao trocar de reserva;
+    - fechar com o check-out em voo relê o painel;
+    - a conferência do late na verificação ao vivo compara por valor e exige um lançamento novo.
+  - **Rodada 2** (`2ba7a31`): a verificação ao vivo decide "conta credora no devido" pelo que o servidor respondeu, e não pelo devido da tela. Antes, ela falharia no caminho feliz com devido.
+- **Revisões:**
+  - Revisão final (`revisor-seguranca`, fable, `e3227ee..2ed0126`): 0 Críticos, 1 Importante, 7 Menores, "Ready to merge: With fixes".
+  - Re-revisão de `2ed0126..0bb5f1e`: o Importante e os Menores corrigidos, os testes do testador sólidos e 1 Importante novo (o falso "conta credora no devido" na verificação ao vivo).
+  - Re-revisão de `0bb5f1e..2ba7a31`: corrigido, "Ready to merge: Yes".
+- **Gate no `7ca42b9`** (o `2ba7a31` mais o rascunho deste handoff):
+  - `./gradlew build` → BUILD SUCCESSFUL. Contagens (testes, pulados, falhas): app 3013, 50, 0; core 1286, 1, 0; design 379, 0, 0; demo-seed 722, 10, 0; sdk 59, 0, 0.
+  - `bash tests/run.sh` → 65 arquivos, 0 falhas, 1 com casos pulados (o busybox).
+- **Scanner:** `osv-scanner --recursive --no-ignore ./` no `2ed0126` → 6 lockfiles do Gradle, "No issues found". A etapa não muda dependência; só entra o opt-in `ZENY_LIVE_CHECKOUT`.
+- **Integridade:** `check_test_integrity.py --base e3227ee` no `2ba7a31` → exit 0. Na Task 3 (`--base 04acc16`), houve 1 `ASSERCAO_REMOVIDA`: uma asserção tautológica trocada pelo texto fixo do catálogo, julgada justificada.
+- **Critérios:**
+  1. **Saída do seed até o saldo zero, com a UH Vaga e Suja em até 2 s.** Testes: `CheckOutStateTest.balanceDueShowsEachFolioAndRetriesWithANewKey`, `receiveDueSuggestsTheServerAmount` e `successCallsOnDoneAndCloses`; `ReceptionCheckOutTest`. **Ao vivo:** os passos 3 a 5 da `LiveCheckOutCheck`, com o mapa assinado em paralelo e os 2 s contados da resposta do servidor.
+  2. **Caução capturável mostra a pendência e não conclui até a liberação.** Testes: `capturablePreAuthorizationBlocksConclude`, `releasingTheCautionUnblocks`, `malformedCapturableBlocksConclude` e `preAuthorizationReadFailureBlocksConclude`; `ReceptionCheckOutTest.openFolioReleasesTheCautionAndTheReloadedAssistantUnlocks`. **Ao vivo:** o passo 2.
+  3. **Recusa em pt-BR, nada pela metade.** Testes: `concurrentChangeShowsTextAndReloads` (texto fixo do catálogo), `alreadyCheckedOutClosesAndReloadsThePanel`, `feeChangedRereadsTheQuoteAndWaits` e `lateNotOfferedUnchecksAndRereads`.
+  4. **Late cotado aparece antes do saldo final.** Testes: `lateLineShowsAboveTheTotal` e `lateIsSentOnlyWhenChecked`. **Ao vivo:** o lançamento do late na conta relida depois do sucesso (passo 3). O servidor só lança o late dentro da transação do check-out; ver a decisão 2.
+- **Como fazer a verificação ao vivo.** Ela escreve na demo e não desfaz: faz o check-out de uma saída do dia do seed, com a caução registrada e liberada e o devido recebido, e abre o turno se a Recepcionista estava sem turno.
+  - No worktree, ponha `ZENY_LIVE_URL`, `ZENY_LIVE_VIEWER_LOGIN` e `ZENY_LIVE_VIEWER_PASSWORD` no ambiente de um subshell e rode `(set -a; . <arquivo>; set +a; ZENY_LIVE_CHECKOUT=1 ./gradlew :app:test --tests '*LiveCheckOutCheck' --rerun)`.
+  - Rode antes a `LivePaymentCheck` (E03) e a `LivePreAuthorizationCheck` (E09).
+  - `NEED_SEED` quer dizer que falta uma saída do dia com conta: recrie a demo e rode o seed no mesmo dia.
+- **Decisões para o usuário** (já tomadas pela opção recomendada, revisáveis):
+  1. **O assistente não encerra as contas à parte.** O check-out do servidor faz isso na mesma transação. Encerrar à parte deixaria contas encerradas numa reserva hospedada se o check-out falhasse.
+  2. **Critério 4 (late):**
+     - a linha "Late check-out: <valor>" aparece acima do total devido do servidor, e o lançamento aparece na conta depois do sucesso;
+     - foi descartado lançar o late à mão antes do check-out, que deixaria o lançamento órfão numa falha e fugiria do `EARLY_LATE_FEE_CHANGED`;
+     - a linha do late ao lado do devido, que já o inclui, pode ser lida como soma; vale decidir uma redação como "(já incluído)".
+  3. **Caução capturável bloqueia "Concluir"** (regra do front). O servidor a liberaria sozinho, mas quem decide entre capturar e liberar é a operadora. `EXPIRED` não é pendência, ao contrário da nota da E09 para esta etapa.
+  4. **Perfil sem `billing.folios.read` conclui sem conferir pendências.** O servidor confere os saldos e libera as cauções capturáveis em silêncio, então para esse perfil o critério 2 não vale. Perfil com `frontdesk.stays.checkout` e sem `billing.payments.receive` vê a pendência e não conclui.
+  5. **`ApiError.Problem.extensions`** é API do `core`, `internal`. A alternativa, tipar no `ProblemMapper`, levaria domínio de conta ao mapeador.
+  6. **Status `IN_HOUSE`.** O plano dizia `CHECKED_IN`, que não existe no contrato.
+  7. **`RESERVATION_CHANGED` entrou no catálogo:** "A reserva mudou enquanto você concluía. Confira e tente de novo.".
+  8. **A reabertura de conta (`…/reopen`) passou à E08**, e **a duplicação entre o painel do dia e a busca passou à E11**.
+- **Notas para a próxima etapa:**
+  - **Dívidas:**
+    - o `withoutBody` da `CheckOutFacade` depende de o `sdk` aplicar o `block` depois do corpo (o teste `checkOutSendsKeyAndNoBodyWithoutLate` pega uma regressão);
+    - o `write.edited()` no `chargeLate` não tem efeito observável hoje;
+    - o `FolioWrite` é usado em `reception` e pode ir para um pacote comum quando o `PostingFormState` migrar.
+  - **Diferidos (Menores):**
+    - a recusa definitiva sem `code` não relê o assistente;
+    - a conta credora aparece sem sinal;
+    - a rolagem do assistente se perde ao voltar do recebimento;
+    - ao reabrir o assistente, o "recebido" se perde e a conta aparece como credora; o aviso "pagamento registrado" no painel é a mitigação;
+    - depois de um pagamento incerto ou feito pela conta, fechar o assistente não avisa;
+    - depois do descarte do devido velho, a seção "Pendências" relida pode mostrar "Conta credora" ao lado de "Confira a conta e conclua de novo.", e a caixa do late não trava; o servidor recusa com devido credor;
+    - o aviso "pagamento registrado" só sai no próximo check-out ou com a troca de sessão;
+    - a cotação que não responde bloqueia "Concluir" até o tempo limite do cliente.
+  - **Para o testador:** o duplo clique pela UI real (coberto no estado e pelo `enabled`); em `ReceptionCheckOutAtaqueTest.sessionSwitchWithTheCheckOutInFlightClosesWithoutNoticeNorReload`, contar as páginas antes da troca, para provar que o próprio dispose não relê.
 
 ---
 
@@ -766,6 +997,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 - **Correções:** `/adjust`, `/split` e `/remove-service-charge` em `POST /api/v1/folios/{id}/postings/{postingId}/…` e `POST /api/v1/folios/{id}/postings/transfer`.
 - **Conta:** `PUT /api/v1/folios/{id}` (pagador e limite de crédito), com `If-Match`.
+- **Reabrir conta encerrada:** `POST /api/v1/folios/{id}/reopen`, com aprovação (veio da E04 em 2026-11-19: ação da conta com aprovação, sem critério na E04).
 - **Aprovação de superior:** diálogo onde o servidor exigir (o ajuste é ação sensível com limite).
 - **Multa de cancelamento (achados da M3 E06, antes destinados à E02):**
   - `B-M5`: os textos da multa numa reserva cancelada mais de uma vez;
@@ -773,7 +1005,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Fora de escopo:**
 
-- encerrar e reabrir a conta (E04);
+- encerrar a conta, que o check-out do servidor faz (E04);
 - cadastro de empresas (M5); o pagador é escolhido entre as empresas que o servidor lista.
 
 **Critérios de aceite:**
@@ -799,6 +1031,16 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - **Fonte do `B-M5`:** a descrição está só na tabela de destinos do plano da M3 E06 (`docs/superpowers/plans/2026-11-17-m3-reservas-e06.md`). O planejador lê o texto da multa no `ReservationCancelState` e no diálogo e o compara com o que a conta mostra. No segundo cancelamento, a M3 E04 viu `penalty.amount` zero, sem `postingId`, e o resumo atual diz "Sem multa.", embora a multa do primeiro cancelamento continue na conta (`penaltiesCharged`). A verificação ao vivo da multa e da reativação é a `LiveReservationLifecycleCheck` (M3 E04), e a isenção pode entrar nela ou numa verificação ao lado. Ela escreve na demo, como a da M3 E04 (decisão 5 do handoff dela).
 - Partes independentes, para as ondas do plano: a troca do pagador e do limite (`PUT`) não depende das correções; a multa não depende de nenhuma das duas.
 - **Risco:** cálculo de valor monetário e concorrência estão na lista fechada.
+- **Recomendação do orquestrador (2026-11-19, conferência do contrato):** o escopo não cabe em três fatias de até 60 min. A divisão recomendada é esta, com os critérios indo junto:
+  - a E08 fica com as correções da conta: ajustar, dividir, transferir, remover a taxa e reabrir;
+  - uma E12 fica com o pagador e o limite de crédito (`PUT`), o `B-M5` e a isenção ao vivo.
+
+  Fatos do contrato para o plano:
+  - **Ajustar:** `adjust` é ação sensível com `X-Approval-Token`, tem limite e devolve `PostingResponse`; o `approve` do `FolioWiring` serve.
+  - **Dividir e transferir:** `split` e `transfer` devolvem `TransferResponse`, exigem `billing.postings.transfer` e levam a taxa junto. O `split` usa `PERCENT` ou `AMOUNT`, com 2 a 10 partes.
+  - **Remover a taxa:** `remove-service-charge` vai sem corpo e não é sensível; exige `billing.servicecharge.remove`.
+  - **Reabrir:** `reopen` é sensível e **não tem `Idempotency-Key`**; o resultado desconhecido quer dizer "confira", como no recado. Devolve `FolioResponse`, então o `FolioWiring` precisa de uma aprovação própria para ele.
+  - **Porta:** as correções cabem melhor numa porta nova (`FolioCorrectionSource`). Arquivos do testador implementam `FolioSource`.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -817,13 +1059,102 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E10 — Cauções a vencer — #pendente
+
+**Objetivo:** na área "Contas e caixa", a operadora acompanha as cauções do hotel que vencem até uma data e abre a conta de cada uma.
+
+**Por que agora:** saiu da E09 na divisão de 2026-11-18 (histórico). O check-out (E04) não depende dela; o gate (E05) espera por ela.
+
+**Dependências:** E09 (as cauções na conta e a porta). O ID é o próximo livre.
+
+**Escopo:**
+
+- `GET /api/v1/card-pre-authorizations/expiring`, paginada pelo `CursorPager`.
+
+**Fora de escopo:** as escritas da caução (E09).
+
+**Critérios de aceite:**
+
+- [ ] A lista mostra as cauções que o servidor devolve até a data escolhida, em ordem de validade, com a situação, os valores e a validade como a API devolve, e "Carregar mais" segue o cursor (teste do *state holder*).
+- [ ] "Abrir conta" numa linha leva à conta dela na aba "Contas" (teste de UI).
+- [ ] A aba só aparece com `billing.folios.read` no conjunto da casca e não muda a aba padrão ("Caixa").
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Notas da revisão de arquitetura do plano da E09 (M3): a aba só com `wiring.payments`; `start()`/`close()` e a chave do `remember` como o `FolioAccounts`; o padrão do "Até" quando o `businessDay()` falha; reler ao entrar na aba; a linha não identifica a conta (o contrato só traz `folioId`), e "Abrir conta" (`FolioAccounts.select`) é a identificação.
+- Sem `from`, o servidor usa a data operacional.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além dos anteriores.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E11 — Duplicação entre o painel do dia e a busca — #pendente
+
+**Objetivo:** o painel do dia (Recepção) e a busca de reservas montam as colunas da tabela, leem os nomes dos tipos de UH e travam as leituras auxiliares pela mesma função.
+
+**Por que agora:** saiu da E04 em 2026-11-19 (I7 da revisão de arquitetura do plano: as fatias passavam do teto). É o achado estacionado da M3 E01, destinado ao M4 pela M3 E06.
+
+**Dependências:** nenhuma. O ID é o próximo livre; a posição no índice segue o valor para a demo.
+
+**Escopo:** as colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares (`lookups.withLock`), hoje copiados em `reception/DayPanelState.kt` e `reservations/ReservationSearchState.kt`.
+
+**Fora de escopo:** funcionalidade nova.
+
+**Critérios de aceite:**
+
+- [ ] `grep -rn 'fun readRoomTypeNames' app/src/main` devolve uma linha só, e o painel do dia e a busca de reservas montam as colunas pela mesma função. Os testes existentes das duas telas continuam verdes, sem afrouxar asserção.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Notas da revisão de arquitetura do plano da E04 (I8): o destino é o `reception/ReservationRows.kt` que já existe (o pacote `reservations` importa `reception`, não o contrário); as assinaturas recebem a leitura como função, porque as duas telas usam portas diferentes (`ReceptionSource` e `ReservationSearchSource`); `ReservationRowsTest` e `ReservationRowsAtaqueTest` passam pela conferência do `C-M6`.
+- Se um teste da tabela procura por texto uma linha que não é a primeira, vale a nota de rolar até a linha.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum além de afrouxar testes, proibido pelo critério.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E05 — Gate do marco M4 — #pendente
 
 **Objetivo:** o M4 entregue como build testável. O seed passa a ter contas com lançamentos e um turno de caixa, o roteiro do M4 existe e a definição de pronto está verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o ciclo completo da hospedagem para a demo.
 
-**Dependências:** E04 e E08 (o gate cobre o marco inteiro).
+**Dependências:** E04, E08, E10 e E11 (o gate cobre o marco inteiro).
 
 **Escopo:**
 
@@ -904,3 +1235,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-18 — a E02 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E02 fica com a leitura da conta (lançamentos, saldo e taxa separada), lançar, estornar e o extrato na tela e em PDF, com os critérios dela sem mudança. Entra a **E08, "Correções da conta e multa de cancelamento"**, com ajustar, dividir, transferir, remover a taxa a pedido, o pagador e o limite de crédito, e os critérios do `B-M5` e da isenção ao vivo, que saíram da E02. A E08 depende da E02 e vem depois da E04 no índice; a E05 passa a depender também dela. A E02 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E02.
 - 2026-11-18 — a E02 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`). O código, o testador de etapa e a revisão final estão limpos no `12ab199`. Faltam os critérios que a `LiveFolioCheck` confere contra o `zeny-front`, que pedem as credenciais do usuário. A E03 e a E08 esperam por ela.
 - 2026-11-18 — a E02 fecha `#concluida` (`claude --agent orquestrador`). A primeira execução da `LiveFolioCheck` mostrou que a demo não tinha taxa de serviço (o padrão do hotel nasce em 0%). O seed passou a defini-la em 10% (`6c4b66d`). Depois de rodar o seed, o usuário rodou a verificação, que passou. A E03 e a E08 ficam elegíveis.
+- 2026-11-18 — a E03 foi dividida pelo orquestrador (`claude --agent orquestrador`), como a E01 e a E02: o escopo não cabia em três fatias de até 60 min e 12 arquivos de produção. A E03, "Pagamentos", fica com receber e reembolsar, o atalho "abrir turno" e o `A-M7`, com os critérios dela sem mudança. Entra a **E09, "Cauções"**, com registrar, capturar e liberar caução e as cauções a vencer, e os dois critérios da caução, que saíram da E03. A E09 depende da E07, da E02 e da E03 e vem logo depois da E03 no índice; a E04 passa a depender também dela. A E03 fica `#em-andamento`. A divisão está nas "Decisões para o usuário" do handoff da E03.
+- 2026-11-18 — a E03 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `c4016ce`; falta a `LivePaymentCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E03 conta como concluída para a escolha da próxima etapa, e a E09 fica elegível.
+- 2026-11-18 — a E09 foi dividida pelo orquestrador (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano (I5): as três fatias passavam do teto de 60 min com a lista de cauções a vencer. Entra a **E10, "Cauções a vencer"**, dependente da E09, antes do gate; a E05 passa a depender também dela. Os critérios da E09 não mudam. A divisão está nas "Decisões para o usuário" do handoff da E09.
+- 2026-11-19 — a E09 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `e3227ee`; falta a `LivePreAuthorizationCheck`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E04 fica elegível.
+- 2026-11-19 — conferência da E04 pelo orquestrador (`claude --agent orquestrador`): o check-out do servidor encerra as contas, libera as cauções e lança o late na mesma transação, então o assistente não chama o encerramento à parte. A reabertura de conta (`…/reopen`, com aprovação) passou à E08, onde ficam as ações da conta com aprovação. Os critérios não mudaram.
+- 2026-11-19 — a duplicação entre o painel do dia e a busca saiu da E04 para a **E11** (`claude --agent orquestrador`), pela recomendação da revisão de arquitetura do plano da E04 (I7: as fatias passavam do teto, e a duplicação não depende do assistente). A E05 passa a depender também da E11. O critério da duplicação foi junto, sem mudança.
+- 2026-11-19 — a E04 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisões limpos no `2ba7a31`; falta a `LiveCheckOutCheck`, que pede as credenciais do usuário.

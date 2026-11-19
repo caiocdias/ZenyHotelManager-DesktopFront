@@ -71,4 +71,10 @@ fun MoneyField(
     error: String? = null,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-) = ParsedTextField(value, onValueChange, FieldSpec(label, error, MoneyInput::parse, enabled = enabled), modifier)
+) {
+    val spec = FieldSpec(label, error, MoneyInput::parse, enabled = enabled, maxLength = MAX_LENGTH)
+    ParsedTextField(value, onValueChange, spec, modifier)
+}
+
+/** Mais que isso numa edição é colagem de texto que não é valor nem data. */
+private const val MAX_LENGTH = 1000

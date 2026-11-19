@@ -1,14 +1,20 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.app.approval.ApprovalCoordinator
 import com.zeny.desktop.app.folioWiring
 import com.zeny.desktop.app.reception.PdfKind
 import com.zeny.desktop.app.reception.RegistrationCardState
+import com.zeny.desktop.core.error.ApiError
+import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.design.pdf.PdfActions
 import com.zeny.desktop.design.pdf.PdfDocumentState
 import com.zeny.desktop.design.pdf.PrintOutcome
+import com.zeny.desktop.sdk.model.PaymentResponse
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -18,9 +24,11 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 private const val READ = "billing.folios.read"
 private const val NUMBER = "F-0001"
+private const val OPERATE = "billing.cashier.operate"
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class FolioWiringTest {
@@ -115,5 +123,45 @@ class FolioWiringTest {
 
             assertEquals(permissions, wiring.permissions)
             assertEquals(source, wiring.source)
+        }
+
+    @Test
+    fun wiringCarriesPaymentsAndApproval() =
+        runTest {
+            val payments = FakePaymentSource()
+            val coordinator = ApprovalCoordinator({ _, _ -> "tok" }, emptyFlow(), backgroundScope)
+            val connection = FolioConnection(FakeFolioSource(), payments = payments)
+            val wiring = assertNotNull(folioWiring(connection, setOf(READ), backgroundScope, coordinator, null))
+            assertSame(payments, wiring.payments)
+            val tokens = mutableListOf<String?>()
+            val action =
+                ApprovableAction<PaymentResponse> { token ->
+                    tokens += token
+                    throw ApiError.ApprovalRequired("PAYMENT_REFUND", "billing.payments.refund", "payment", null, null)
+                }
+
+            backgroundScope.launch { wiring.approveRefund(action) }
+            runCurrent()
+
+            assertEquals(listOf<String?>(null), tokens, "a ação rodou, ao contrário do padrão { null }")
+            assertNotNull(coordinator.dialog, "o coordenador viu o pedido de aprovação")
+            coordinator.cancel()
+        }
+
+    @Test
+    fun openShiftNeedsCashierOperate() =
+        runTest {
+            var opened = 0
+            val connection = FolioConnection(FakeFolioSource())
+
+            val reader = assertNotNull(folioWiring(connection, setOf(READ), backgroundScope, null, null) { opened++ })
+            assertNull(reader.openShift)
+
+            val operator =
+                assertNotNull(folioWiring(connection, setOf(READ, OPERATE), backgroundScope, null, null) { opened++ })
+            assertNotNull(operator.openShift).invoke()
+            assertEquals(1, opened)
+            val withoutShortcut = folioWiring(connection, setOf(READ, OPERATE), backgroundScope, null, null)
+            assertNull(assertNotNull(withoutShortcut).openShift)
         }
 }

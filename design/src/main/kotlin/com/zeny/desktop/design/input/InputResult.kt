@@ -25,7 +25,13 @@ sealed interface InputResult<out T> {
     data object Empty : InputResult<Nothing>
 }
 
-/** Rótulo, erro do formulário, interpretação do texto e habilitação de um [ParsedTextField]. */
+/** Sinal do campo sem máscara quando uma edição passaria do `maxLength` e é recusada. */
+internal const val OVER_LIMIT_SIGNAL = "Texto colado com mais de 1000 caracteres. Ele não foi aceito."
+
+/**
+ * Rótulo, erro do formulário, interpretação do texto e habilitação de um [ParsedTextField]. `maxLength` (só sem
+ * máscara) recusa a edição que deixaria o texto maior e mostra [OVER_LIMIT_SIGNAL] até a próxima edição aceita.
+ */
 internal data class FieldSpec(
     val label: String,
     val error: String?,
@@ -33,7 +39,12 @@ internal data class FieldSpec(
     val mask: ((String) -> String)? = null,
     val significant: (Char) -> Boolean = { true },
     val enabled: Boolean = true,
-)
+    val maxLength: Int? = null,
+) {
+    init {
+        require(mask == null || maxLength == null) { "maxLength não vale em campo com máscara" }
+    }
+}
 
 /**
  * Campo de texto que mostra [error] (o do formulário) ou, depois que o campo perdeu o foco,
@@ -51,8 +62,9 @@ internal fun ParsedTextField(
     val significant = spec.significant
     var touched by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
+    var overLimit by remember { mutableStateOf(false) }
     val localError = if (touched) (parse(value) as? InputResult.Invalid)?.message else null
-    val shown = error ?: localError
+    val shown = if (overLimit) OVER_LIMIT_SIGNAL else error ?: localError
     val focusModifier =
         modifier.onFocusChanged {
             if (hadFocus && !it.isFocused) touched = true
@@ -61,7 +73,7 @@ internal fun ParsedTextField(
     if (mask == null) {
         OutlinedTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = limited(spec.maxLength, onValueChange) { overLimit = it },
             label = { Text(label) },
             singleLine = true,
             enabled = spec.enabled,
@@ -98,6 +110,18 @@ internal fun ParsedTextField(
         )
     }
 }
+
+/** Recusa a edição maior que [maxLength] (avisando por [signal]); a aceita avisa que o sinal saiu. */
+private fun limited(
+    maxLength: Int?,
+    accept: (String) -> Unit,
+    signal: (Boolean) -> Unit,
+): (String) -> Unit =
+    { typed ->
+        val over = maxLength != null && typed.length > maxLength
+        signal(over)
+        if (!over) accept(typed)
+    }
 
 /** Posição logo depois do [count]-ésimo caractere significativo de [masked]. */
 private fun cursorAfter(

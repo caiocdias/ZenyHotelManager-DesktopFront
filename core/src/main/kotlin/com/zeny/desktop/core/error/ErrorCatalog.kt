@@ -60,6 +60,7 @@ object ErrorCatalog {
             "RESERVATION_PERIOD_INVALID" to "O período da reserva está inválido.",
             "RESERVATION_STAY_ENDED" to "A estadia desta reserva já terminou.",
             "RESERVATION_TRANSITION_NOT_ALLOWED" to "Esta ação não é permitida na situação atual da reserva.",
+            "RESERVATION_CHANGED" to "A reserva mudou enquanto você concluía. Confira e tente de novo.",
             "PROVISIONAL_RESERVATION_EXPIRED" to "A reserva provisória expirou.",
             "STAY_INVALID" to "Os dados da estadia estão inválidos.",
             "IN_HOUSE_STAY_FIXED" to IN_HOUSE_STAY_FIXED_MESSAGE,

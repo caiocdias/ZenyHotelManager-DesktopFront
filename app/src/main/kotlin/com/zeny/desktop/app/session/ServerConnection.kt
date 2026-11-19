@@ -2,6 +2,8 @@ package com.zeny.desktop.app.session
 
 import com.zeny.desktop.app.cashier.CashierSource
 import com.zeny.desktop.app.folio.FolioSource
+import com.zeny.desktop.app.folio.PaymentSource
+import com.zeny.desktop.app.reception.CheckOutSource
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
@@ -27,18 +29,24 @@ import com.zeny.desktop.core.facade.ApprovableAction
 import com.zeny.desktop.core.facade.ApprovalInput
 import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.CancelInput
+import com.zeny.desktop.core.facade.CaptureInput
 import com.zeny.desktop.core.facade.CashCount
 import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.facade.CheckInInput
+import com.zeny.desktop.core.facade.CheckOutResult
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.DocumentQuery
 import com.zeny.desktop.core.facade.HotelInfo
+import com.zeny.desktop.core.facade.LateCheckOutQuote
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
+import com.zeny.desktop.core.facade.PaymentInput
 import com.zeny.desktop.core.facade.PdfDocument
 import com.zeny.desktop.core.facade.PostingInput
+import com.zeny.desktop.core.facade.PreAuthorizationInput
+import com.zeny.desktop.core.facade.RefundInput
 import com.zeny.desktop.core.facade.ReservationChangeInput
 import com.zeny.desktop.core.facade.ReservationFilter
 import com.zeny.desktop.core.facade.ReservationVersion
@@ -56,6 +64,7 @@ import com.zeny.desktop.core.session.SessionState
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.Money
 import com.zeny.desktop.sdk.model.AvailabilityResponse
+import com.zeny.desktop.sdk.model.CardPreAuthorizationResponse
 import com.zeny.desktop.sdk.model.CashMovementResponse
 import com.zeny.desktop.sdk.model.CashPointResponse
 import com.zeny.desktop.sdk.model.CashierShiftReportResponse
@@ -65,8 +74,10 @@ import com.zeny.desktop.sdk.model.DepositShortfallResponse
 import com.zeny.desktop.sdk.model.EarlyLateQuoteResponse
 import com.zeny.desktop.sdk.model.FolioResponse
 import com.zeny.desktop.sdk.model.FolioStatementResponse
+import com.zeny.desktop.sdk.model.PaymentResponse
 import com.zeny.desktop.sdk.model.PendingGuaranteeResponse
 import com.zeny.desktop.sdk.model.PostingResponse
+import com.zeny.desktop.sdk.model.PreAuthorizationCaptureResponse
 import com.zeny.desktop.sdk.model.QuoteResponse
 import com.zeny.desktop.sdk.model.ReallocationRequiredResponse
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
@@ -162,6 +173,12 @@ interface ServerConnection : AutoCloseable {
 
     /** As contas da hospedagem; `null` quando a conexão não as oferece. */
     fun folioSource(): FolioSource? = null
+
+    /** Os pagamentos da conta; `null` quando a conexão não os oferece. */
+    fun paymentSource(): PaymentSource? = null
+
+    /** O check-out e a cotação do late check-out; `null` quando a conexão não os oferece. */
+    fun checkOutSource(): CheckOutSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -579,6 +596,67 @@ class CoreConnection(
 
     /** As contas da hospedagem sobre `core.folios` e `core.documents`. */
     override fun folioSource(): FolioSource = folios
+
+    private val payments =
+        object : PaymentSource {
+            override suspend fun payments(folioId: String): List<PaymentResponse> = core.payments.payments(folioId)
+
+            override suspend fun receive(
+                folioId: String,
+                input: PaymentInput,
+                intent: Intent,
+            ): PaymentResponse = core.payments.receive(folioId, input, intent)
+
+            override fun refund(
+                folioId: String,
+                paymentId: String,
+                input: RefundInput,
+                intent: Intent,
+            ): ApprovableAction<PaymentResponse> = core.payments.refund(folioId, paymentId, input, intent)
+
+            override suspend fun preAuthorizations(folioId: String): List<CardPreAuthorizationResponse> =
+                core.payments.preAuthorizations(folioId)
+
+            override suspend fun registerPreAuthorization(
+                folioId: String,
+                input: PreAuthorizationInput,
+                intent: Intent,
+            ): CardPreAuthorizationResponse = core.payments.registerPreAuthorization(folioId, input, intent)
+
+            override suspend fun capturePreAuthorization(
+                folioId: String,
+                preAuthorizationId: String,
+                input: CaptureInput,
+                intent: Intent,
+            ): PreAuthorizationCaptureResponse =
+                core.payments.capturePreAuthorization(folioId, preAuthorizationId, input, intent)
+
+            override suspend fun releasePreAuthorization(
+                folioId: String,
+                preAuthorizationId: String,
+                intent: Intent,
+            ): CardPreAuthorizationResponse = core.payments.releasePreAuthorization(folioId, preAuthorizationId, intent)
+
+            override suspend fun businessDay(): BusinessDay = core.hotel.businessDay()
+        }
+
+    /** Os pagamentos e as cauções da conta sobre `core.payments`, e a data operacional sobre `core.hotel`. */
+    override fun paymentSource(): PaymentSource = payments
+
+    private val checkOut =
+        object : CheckOutSource {
+            override suspend fun lateCheckOutQuote(reservationId: String): LateCheckOutQuote? =
+                core.checkOut.lateCheckOutQuote(reservationId)
+
+            override suspend fun checkOut(
+                reservationId: String,
+                lateFee: Money?,
+                intent: Intent,
+            ): CheckOutResult = core.checkOut.checkOut(reservationId, lateFee, intent)
+        }
+
+    /** O check-out e a cotação do late check-out sobre `core.checkOut`. */
+    override fun checkOutSource(): CheckOutSource = checkOut
 
     override fun close() = core.close()
 }

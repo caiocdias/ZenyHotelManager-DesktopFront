@@ -99,6 +99,14 @@ class ErrorCatalogTest {
     }
 
     @Test
+    fun reservationChangedAsksToCheckAndRetry() {
+        assertEquals(
+            "A reserva mudou enquanto você concluía. Confira e tente de novo.",
+            ErrorCatalog.message("RESERVATION_CHANGED"),
+        )
+    }
+
+    @Test
     fun unknownCodeFallsBackToDetail() {
         assertEquals("Detalhe do servidor.", ErrorCatalog.userMessage(422, "SOMETHING_NEW", "Detalhe do servidor."))
     }

@@ -20,6 +20,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -41,12 +42,17 @@ import com.zeny.desktop.design.feedback.ErrorState
 import com.zeny.desktop.design.feedback.LoadingState
 import com.zeny.desktop.design.table.DataTable
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
 
 private const val EMPTY_LIST = "Nenhuma reserva nesta lista."
 private const val TRACES_READ = "frontdesk.traces.read"
 private const val TRACES_TAB = "TRACES"
+private const val CHECK_OUT = "frontdesk.stays.checkout"
+
+/** A situação da reserva hospedada no contrato. */
+private const val IN_HOUSE = "IN_HOUSE"
 private val WALK_IN_PERMISSIONS =
     listOf(
         "frontdesk.stays.checkin",
@@ -84,6 +90,7 @@ fun ReceptionScreen(
     traces: ReceptionTraces? = null,
     registrationCard: ((reservationId: String, code: String) -> RegistrationCardState)? = null,
     folio: FolioWiring? = null,
+    checkOut: CheckOutSource? = null,
 ) {
     val currentCard by rememberUpdatedState(registrationCard)
     val card = rememberRegistrationCard(detail) { currentCard }
@@ -102,12 +109,14 @@ fun ReceptionScreen(
     val stay = remember { StayDialogs({ currentMove }, { currentUndo }) }
     val tracesUi = rememberReceptionTracesUi(traces, detail)
     val folioUi = remember(detail) { FolioDialogUi(detail) }
+    val checkOutUi = rememberCheckOutUi(panel, detail)
     val canCheckIn =
         checkIn != null &&
             detail.reservation?.reservation?.status == "CONFIRMED" &&
             "frontdesk.stays.checkin" in panel.permissions
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Header(panel, detail, onWalkIn = openWalkIn, onRefreshTraces = tracesUi::refresh)
+        checkOutUi.notice?.let { Text(it, modifier = Modifier.testTag("reception-notice")) }
         val error = panel.error
         if (error != null && panel.day != null) ErrorBand(error, panel::refresh, "panel-error")
         Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -122,6 +131,7 @@ fun ReceptionScreen(
                         onUndo = stay.undoAction(detail, panel.permissions),
                         onCard = card.action(panel.permissions),
                         onFolio = folioUi.action(folio),
+                        onCheckOut = checkOutUi.action(checkOut, folio),
                     ),
                     traces = { tracesUi.Section(detail) },
                 )
@@ -133,6 +143,7 @@ fun ReceptionScreen(
     stay.Show(detail)
     tracesUi.ShowForm()
     folioUi.Show(folio)
+    checkOutUi.Show(folio)
     walkInState?.let { state ->
         WalkInDialog(state) {
             state.close()
@@ -215,6 +226,137 @@ private class FolioDialogUi(
             ReservationFolioDialog(folio, shown.reservationId, shown.code) { current = null }
         }
     }
+}
+
+/** O assistente de check-out aberto, a reserva (id e código) dele e a reserva do detalhe em que abriu. */
+private class OpenCheckOut(
+    val ownerId: String?,
+    val reservationId: String,
+    val code: String,
+) {
+    lateinit var state: CheckOutState
+}
+
+/**
+ * O assistente de check-out e o aviso que ele deixa no painel do dia ("Check-out concluído.", o pagamento sem o
+ * check-out ou a reserva que já saiu), até o próximo check-out. Como o diálogo "Conta", o assistente é da reserva que
+ * estava aberta no detalhe: trocar de reserva, fechar o detalhe ou sair da composição o fecha. Esse fechamento nunca
+ * relê o painel dentro do dispose: a releitura pedida fica para um efeito, que só roda se o holder segue na composição
+ * (a troca de reserva), nunca com a tela saindo. O aviso de sucesso sai com outra reserva no detalhe; o do pagamento
+ * sem check-out fica; todos morrem com o holder (outra sessão, outro conjunto ou outra área). "Abrir conta" abre a
+ * conta da reserva por cima do assistente; quando ela fecha, o assistente descarta o devido velho e relê.
+ */
+@Stable
+private class CheckOutUi(
+    private val panel: DayPanelState,
+    private val detail: ReservationDetailState,
+    private val scope: CoroutineScope,
+) {
+    private var current by mutableStateOf<OpenCheckOut?>(null)
+    private var folioOpen by mutableStateOf(false)
+    private var disposing = false
+
+    /** A releitura pedida por um fechamento no dispose: feita pelo efeito, só se o holder segue na composição. */
+    private var pendingReload by mutableStateOf(false)
+
+    var notice by mutableStateOf<String?>(null)
+        private set
+
+    /** "Check-out": com a porta, `frontdesk.stays.checkout` no conjunto da casca e a reserva hospedada. */
+    fun action(
+        source: CheckOutSource?,
+        folio: FolioWiring?,
+    ): (() -> Unit)? {
+        val reservation =
+            detail.reservation?.reservation?.takeIf { it.status == IN_HOUSE && CHECK_OUT in panel.permissions }
+        if (source == null || reservation == null) return null
+        return { open(source, folio, reservation.id.toString(), reservation.code) }
+    }
+
+    private fun open(
+        source: CheckOutSource,
+        folio: FolioWiring?,
+        reservationId: String,
+        code: String,
+    ) {
+        notice = null
+        folioOpen = false
+        val opened = OpenCheckOut(detail.openId, reservationId, code)
+        opened.state =
+            CheckOutState(source, folio, scope, reservationId) { text, reload ->
+                closed(opened, text, reload)
+            }
+        current = opened
+    }
+
+    private fun closed(
+        opened: OpenCheckOut,
+        text: String?,
+        reloadPanel: Boolean,
+    ) {
+        if (current === opened) {
+            current = null
+            folioOpen = false
+        }
+        notice = text
+        when {
+            !reloadPanel -> Unit
+            disposing -> pendingReload = true
+            else -> reload()
+        }
+    }
+
+    private fun reload() {
+        panel.refresh()
+        detail.reload()
+    }
+
+    @Composable
+    fun Show(folio: FolioWiring?) {
+        val openId = detail.openId
+        LaunchedEffect(openId) {
+            // Outra reserva no detalhe: o aviso de sucesso sai; o do pagamento sem check-out fica.
+            if (notice != CheckOutText.PAID_NOT_CHECKED_OUT) notice = null
+        }
+        LaunchedEffect(pendingReload) {
+            if (pendingReload) {
+                pendingReload = false
+                reload()
+            }
+        }
+        val shown = current?.takeIf { it.ownerId == openId }
+        DisposableEffect(shown) {
+            onDispose {
+                if (shown != null) {
+                    disposing = true
+                    try {
+                        shown.state.close()
+                    } finally {
+                        disposing = false
+                    }
+                    if (current === shown) current = null
+                }
+            }
+        }
+        if (shown == null) return
+        CheckOutDialog(shown.state, onOpenFolio = folio?.let { { folioOpen = true } })
+        if (folioOpen && folio != null) {
+            ReservationFolioDialog(folio, shown.reservationId, shown.code) {
+                folioOpen = false
+                shown.state.folioClosed()
+            }
+        }
+    }
+}
+
+/** O [CheckOutUi] do painel e do detalhe (outra sessão ou outro conjunto, outro holder), com o escopo da tela. */
+@Composable
+private fun rememberCheckOutUi(
+    panel: DayPanelState,
+    detail: ReservationDetailState,
+): CheckOutUi {
+    val scope = rememberCoroutineScope()
+    return remember(panel, detail) { CheckOutUi(panel, detail, scope) }
 }
 
 @Composable

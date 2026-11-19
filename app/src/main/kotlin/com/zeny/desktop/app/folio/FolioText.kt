@@ -1,5 +1,7 @@
 package com.zeny.desktop.app.folio
 
+import com.zeny.desktop.core.facade.PaymentMethod
+import com.zeny.desktop.core.facade.PaymentProblem
 import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.core.types.ExtensibleEnumLabels
@@ -9,8 +11,14 @@ import com.zeny.desktop.design.input.MoneyInput
 import com.zeny.desktop.sdk.model.FolioOwnerDto
 import com.zeny.desktop.sdk.model.FolioResponse
 import java.math.BigDecimal
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.DateTimeParseException
 
 /** Os textos da conta. Os valores vêm do servidor e só são formatados em BRL, nunca calculados; nenhum id. */
+@Suppress("TooManyFunctions") // um rótulo por enum e um texto por regra, num lugar só
 object FolioText {
     const val NO_FOLIO = "Esta reserva ainda não tem conta."
     const val CLOSED = "Conta encerrada"
@@ -36,6 +44,47 @@ object FolioText {
     const val REVERSAL_SERVER_UNCONFIRMED =
         "O servidor não confirmou o estorno. Feche e confira a conta antes de refazer."
     const val APPROVAL_CANCELLED = "Aprovação cancelada. O estorno não foi feito."
+    const val NO_PAYMENTS = "Nenhum pagamento nesta conta."
+    const val PAYMENTS_FAILED = "Não foi possível ler os pagamentos."
+    const val DEPOSIT = "Depósito"
+    const val AMOUNT_REQUIRED = "Informe o valor."
+    const val PAYMENT_UNCONFIRMED =
+        "Não foi possível confirmar o recebimento. Receba de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de receber de novo."
+    const val PAYMENT_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o recebimento. Feche e confira a conta antes de receber de novo."
+    const val PAYMENT_RECORDED = "Pagamento registrado."
+    const val REFUNDED = "Reembolsado"
+    const val REFUND_UNCONFIRMED =
+        "Não foi possível confirmar o reembolso. Reembolse de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de refazer."
+    const val REFUND_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o reembolso. Feche e confira a conta antes de refazer."
+    const val REFUND_APPROVAL_CANCELLED = "Aprovação cancelada. O reembolso não foi feito."
+    const val REFUND_RECORDED = "Reembolso registrado."
+    const val NO_PRE_AUTHORIZATIONS = "Nenhuma caução nesta conta."
+    const val PRE_AUTHORIZATIONS_FAILED = "Não foi possível ler as cauções."
+    const val VALIDITY_REQUIRED = "Informe a validade."
+    const val VALIDITY_RANGE = "A validade vai de hoje até 89 dias."
+    const val ZONE_MISSING = "Não foi possível ler o fuso do hotel. Feche e abra de novo."
+    const val PRE_AUTHORIZATION_UNCONFIRMED =
+        "Não foi possível confirmar o registro da caução. Registre de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de registrar de novo."
+    const val PRE_AUTHORIZATION_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o registro da caução. Feche e confira a conta antes de registrar de novo."
+    const val PRE_AUTHORIZATION_RECORDED = "Caução registrada."
+    const val RELEASE_UNCONFIRMED =
+        "Não foi possível confirmar a liberação. Libere de novo; " +
+            "se fechar, confira a conta antes de liberar de novo."
+    const val RELEASE_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a liberação. Feche e confira a conta antes de liberar de novo."
+    const val RELEASE_DONE = "Sobra liberada."
+    const val CAPTURE_UNCONFIRMED =
+        "Não foi possível confirmar a captura. Capture de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de capturar de novo."
+    const val CAPTURE_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a captura. Feche e confira a conta antes de capturar de novo."
+    const val CAPTURE_DONE = "Caução capturada."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -51,6 +100,24 @@ object FolioText {
         )
 
     private val statementKinds = ExtensibleEnumLabels(mapOf("POSTING" to "Lançamento", "PAYMENT" to "Pagamento"))
+
+    private val paymentTypes = ExtensibleEnumLabels(mapOf("PAYMENT" to "Recebimento", "REFUND" to "Reembolso"))
+
+    private val preAuthorizationStatuses =
+        ExtensibleEnumLabels(
+            mapOf(
+                "ACTIVE" to "Ativa",
+                "PARTIALLY_CAPTURED" to "Capturada em parte",
+                "CAPTURED" to "Capturada",
+                "RELEASED" to "Liberada",
+                "EXPIRED" to "Vencida",
+            ),
+        )
+
+    private val expiresFormat = DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm")
+    private val utcDateFormat = DateTimeFormatter.ofPattern("dd/MM/uuuu")
+
+    private val paymentMethods = ExtensibleEnumLabels(PaymentMethod.entries.associate { it.name to method(it) })
 
     /** O decimal do servidor em BRL (`R$ 1.234,56`); um valor fora do formato do contrato vira "—". */
     fun money(decimal: String): String =
@@ -90,6 +157,75 @@ object FolioText {
 
     /** O tipo da linha do extrato (`x-extensible-enum`): o desconhecido aparece como "Outro (VALOR)". */
     fun statementKind(value: String): String = statementKinds.label(value)
+
+    /** O tipo do pagamento (`x-extensible-enum`): o desconhecido aparece como "Outro (VALOR)". */
+    fun paymentType(value: String): String = paymentTypes.label(value)
+
+    /** A situação da caução (`x-extensible-enum`): a desconhecida aparece como "Outro (VALOR)". */
+    fun preAuthorizationStatus(value: String): String = preAuthorizationStatuses.label(value)
+
+    /**
+     * A validade da caução (um instante do servidor) em `dd/MM/aaaa HH:mm` no fuso do hotel; sem o fuso, só a data UTC
+     * com "(UTC)"; fora do formato, "—".
+     */
+    fun expiresAt(
+        iso: String,
+        zone: ZoneId?,
+    ): String =
+        try {
+            val instant = Instant.parse(iso)
+            if (zone == null) {
+                "${utcDateFormat.format(instant.atZone(ZoneOffset.UTC))} (UTC)"
+            } else {
+                expiresFormat.format(instant.atZone(zone))
+            }
+        } catch (_: DateTimeParseException) {
+            UNKNOWN
+        }
+
+    /** O que a liberação faz, com o capturável que o servidor devolveu, já formatado (sem ele, só o texto). */
+    fun release(capturable: String?): String =
+        if (capturable == null) {
+            "A sobra será liberada na maquininha."
+        } else {
+            "A sobra de $capturable será liberada na maquininha."
+        }
+
+    /** A forma do pagamento lida do servidor (`x-extensible-enum`): a desconhecida aparece como "Outro (VALOR)". */
+    fun paymentMethod(value: String): String = paymentMethods.label(value)
+
+    /** A forma oferecida no recebimento. */
+    fun method(method: PaymentMethod): String =
+        when (method) {
+            PaymentMethod.CASH -> "Dinheiro"
+            PaymentMethod.DEBIT_CARD -> "Cartão de débito"
+            PaymentMethod.CREDIT_CARD -> "Cartão de crédito"
+            PaymentMethod.PIX -> "Pix"
+            PaymentMethod.BANK_TRANSFER -> "Transferência"
+            PaymentMethod.OTHER -> "Outra"
+        }
+
+    /** O texto ao lado do campo com o problema de formato; nunca repete o que foi digitado. */
+    fun problem(problem: PaymentProblem): String =
+        when (problem) {
+            PaymentProblem.AMOUNT -> "O valor deve ser maior que zero."
+            PaymentProblem.TENDERED -> "O valor entregue não pode ser menor que o valor."
+            PaymentProblem.CARD_BRAND -> "A bandeira tem só letras e espaços, até 20."
+            PaymentProblem.CARD_LAST4 -> "Informe os 4 últimos dígitos do cartão."
+            PaymentProblem.NSU -> "O NSU tem até 20 letras e números, no máximo 12 dígitos."
+            PaymentProblem.AUTHORIZATION_CODE -> "A autorização tem até 20 letras e números, no máximo 12 dígitos."
+            PaymentProblem.REASON -> "Informe o motivo, com até 200 caracteres."
+        }
+
+    /** O aviso do recebimento feito, com o troco que o servidor devolveu quando é maior que zero. */
+    fun received(change: String?): String =
+        if (change == null) PAYMENT_RECORDED else "$PAYMENT_RECORDED Troco: $change."
+
+    /** O reembolsável que o servidor devolveu, já formatado. */
+    fun refundable(value: String): String = "Reembolsável: $value"
+
+    /** O capturável que o servidor devolveu, já formatado. */
+    fun capturable(value: String): String = "Capturável: $value"
 
     /** O dono da conta pelo rótulo do tipo, nunca pelo id. */
     fun owner(type: FolioOwnerDto.Type?): String =

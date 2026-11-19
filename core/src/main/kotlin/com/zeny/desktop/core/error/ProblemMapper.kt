@@ -20,6 +20,9 @@ object ProblemMapper {
     private const val APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
     private const val PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED"
 
+    /** Os campos do RFC 9457 e os já tipados no `Problem`; o resto vai para `extensions`. */
+    private val KNOWN_FIELDS = setOf("type", "title", "status", "detail", "instance", "code", "errors")
+
     suspend fun fromResponse(response: HttpResponse): ApiError {
         val text =
             try {
@@ -54,7 +57,13 @@ object ProblemMapper {
     private fun problem(
         status: Int,
         obj: JsonObject,
-    ) = ApiError.Problem(status, obj.string("code"), obj.string("detail"), fieldErrors(obj))
+    ) = ApiError.Problem(
+        status,
+        obj.string("code"),
+        obj.string("detail"),
+        fieldErrors(obj),
+        JsonObject(obj.filterKeys { it !in KNOWN_FIELDS }),
+    )
 
     fun problemCode(bodyText: String): String? = parseObject(bodyText)?.string("code")
 
