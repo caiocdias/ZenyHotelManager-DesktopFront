@@ -85,6 +85,21 @@ object FolioText {
     const val CAPTURE_SERVER_UNCONFIRMED =
         "O servidor não confirmou a captura. Feche e confira a conta antes de capturar de novo."
     const val CAPTURE_DONE = "Caução capturada."
+    const val ADJUSTMENT_REASON_REQUIRED = "Informe o motivo."
+    const val ADJUSTMENT_UNCONFIRMED =
+        "Não foi possível confirmar o ajuste. Ajuste de novo sem mudar nada; " +
+            "se fechar, confira a conta antes de refazer."
+    const val ADJUSTMENT_SERVER_UNCONFIRMED =
+        "O servidor não confirmou o ajuste. Feche e confira a conta antes de refazer."
+    const val ADJUSTMENT_APPROVAL_CANCELLED = "Aprovação cancelada. O ajuste não foi feito."
+    const val ADJUSTMENT_DONE = "Ajuste lançado."
+    const val REMOVAL_TEXT = "O servidor registra o motivo: pedido do cliente."
+    const val REMOVAL_UNCONFIRMED =
+        "Não foi possível confirmar a remoção da taxa. Remova de novo; " +
+            "se fechar, confira a conta antes de refazer."
+    const val REMOVAL_SERVER_UNCONFIRMED =
+        "O servidor não confirmou a remoção da taxa. Feche e confira a conta antes de refazer."
+    const val REMOVAL_DONE = "Taxa de serviço removida."
     private const val UNKNOWN = "—"
 
     private val postingTypes =
@@ -223,6 +238,16 @@ object FolioText {
 
     /** O reembolsável que o servidor devolveu, já formatado. */
     fun refundable(value: String): String = "Reembolsável: $value"
+
+    /** O restante do lançamento que o servidor devolveu, já formatado. */
+    fun remaining(value: String): String = "Resta: $value"
+
+    /** A linha do ajuste ou do estorno: a descrição do lançamento que ele corrige. */
+    fun corrects(description: String): String = "Corrige: $description"
+
+    /** O aviso da taxa removida, com o motivo que o servidor registrou (sem ele, só que foi removida). */
+    fun serviceChargeRemoved(reason: String?): String =
+        if (reason == null) REMOVAL_DONE else "Taxa de serviço removida: $reason"
 
     /** O capturável que o servidor devolveu, já formatado. */
     fun capturable(value: String): String = "Capturável: $value"

@@ -28,7 +28,11 @@ private const val REVERSE = "billing.postings.reverse"
 private const val RECEIVE = "billing.payments.receive"
 private const val REFUND = "billing.payments.refund"
 private const val REGULAR = "REGULAR"
+private const val TRANSFER_IN = "TRANSFER_IN"
 private const val PAYMENT = "PAYMENT"
+
+/** As correções que mostram "Corrige: <descrição do original>". */
+private val LINKED_CORRECTIONS = setOf("ADJUSTMENT", "REVERSAL")
 
 /** O cabeçalho da conta: número, dono (rótulo do tipo), situação, saldo e limite como o servidor os devolve. */
 data class FolioView(
@@ -45,6 +49,12 @@ data class FolioView(
  * Um lançamento na tabela; o [id] serve às ações e nunca aparece. A taxa de serviço vem logo abaixo do item dela.
  * [serviceCharge]: a taxa que vem recuada sob o item dela. [reversible]: um `REGULAR` ainda não estornado (só esse
  * oferece "Estornar").
+ *
+ * As correções, só pelo que o servidor devolveu (a permissão é do estado): [remaining], o restante dele (nulo quando
+ * ausente ou fora do formato, nunca inventado); [adjustable], um `REGULAR` não estornado com restante diferente de
+ * zero; [serviceChargeRemovable], uma taxa de serviço (com o item dela) não estornada com restante diferente de zero;
+ * [transferable], um `REGULAR` ou `TRANSFER_IN` que não é taxa, não estornado, com restante diferente de zero;
+ * [corrects], a descrição do lançamento da conta que este ajuste ou estorno corrige.
  */
 data class PostingRow(
     val id: String,
@@ -56,6 +66,11 @@ data class PostingRow(
     val reversed: Boolean,
     val serviceCharge: Boolean,
     val reversible: Boolean,
+    val remaining: Money? = null,
+    val adjustable: Boolean = false,
+    val serviceChargeRemovable: Boolean = false,
+    val transferable: Boolean = false,
+    val corrects: String? = null,
 )
 
 /**
@@ -126,6 +141,9 @@ data class StatementView(
  *
  * Com a mesma porta, as cauções ficam no [preAuthorizations] (o `PreAuthorizationsState`), relido junto da conta e
  * fechado com ela; o diálogo aberto dele conta como diálogo do painel, e o painel não abre outro.
+ *
+ * Com a porta das correções no [wiring], "Ajustar" e "Remover a taxa" ficam no [corrections] (o
+ * `FolioCorrectionsState`), fechado com a conta; os diálogos dele também contam como diálogos do painel.
  */
 @Suppress("TooManyFunctions") // leitura, extrato, PDF e os diálogos de escrita (abrir, fechar e o resultado)
 class FolioState(
@@ -238,16 +256,38 @@ class FolioState(
                 ownScope,
                 folioId,
                 folioOpen = { view?.closed == false },
-                otherDialogOpen = { posting != null || reversal != null || payment != null || refund != null },
+                otherDialogOpen = {
+                    posting != null || reversal != null || payment != null || refund != null ||
+                        corrections?.dialogOpen == true
+                },
                 notify = { notice = it },
                 onChanged = ::rereadFolio,
+            )
+        }
+
+    /** As correções da conta, com a porta delas: fechadas com a conta e com os diálogos contados no [dialogOpen]. */
+    val corrections: FolioCorrectionsState? =
+        if (wiring.corrections == null) {
+            null
+        } else {
+            FolioCorrectionsState(
+                wiring,
+                ownScope,
+                folioId,
+                folioOpen = { view?.closed == false },
+                otherDialogOpen = {
+                    posting != null || reversal != null || payment != null || refund != null ||
+                        preAuthorizations?.dialogOpen == true
+                },
+                notify = { notice = it },
+                onChanged = ::rereadAfterWrite,
             )
         }
 
     private val dialogOpen: Boolean
         get() =
             posting != null || reversal != null || payment != null || refund != null ||
-                preAuthorizations?.dialogOpen == true
+                preAuthorizations?.dialogOpen == true || corrections?.dialogOpen == true
 
     /** "Lançar": com `billing.postings.create` e a conta aberta. */
     val canPost: Boolean get() = !closed && canCreate && view?.closed == false
@@ -451,6 +491,7 @@ class FolioState(
         payment?.close()
         refund?.close()
         preAuthorizations?.close()
+        corrections?.close()
         closePdf()
     }
 
@@ -558,31 +599,46 @@ private fun viewOf(folio: FolioResponse) =
  */
 private fun rowsOf(postings: List<PostingResponse>): List<PostingRow> {
     val ids = postings.map { it.id }.toSet()
+    val descriptions = postings.associate { it.id.toString() to it.description }
     val items = postings.filter { it.chargedItem() !in ids }.map { it.id }.toSet()
     val charges = postings.filter { it.chargedItem() in items }.groupBy { it.chargedItem() }
     return postings
         .filter { it.chargedItem() !in items }
         .flatMap { item ->
-            listOf(rowOf(item, nested = false)) + charges[item.id].orEmpty().map { rowOf(it, nested = true) }
+            listOf(rowOf(item, nested = false, descriptions)) +
+                charges[item.id].orEmpty().map { rowOf(it, nested = true, descriptions) }
         }
 }
 
 private fun PostingResponse.chargedItem() = (serviceChargeForPostingId as? Option.Some)?.value
 
+/** A linha do lançamento; [descriptions] são as da conta, para o "Corrige: …" do ajuste e do estorno. */
 private fun rowOf(
     posting: PostingResponse,
     nested: Boolean,
-) = PostingRow(
-    id = posting.id.toString(),
-    date = FolioText.date(posting.businessDate),
-    description = posting.description,
-    type = FolioText.postingType(posting.type),
-    quantity = FolioText.quantity(posting.quantity),
-    amount = FolioText.money(posting.amount),
-    reversed = posting.isReversed(),
-    serviceCharge = nested,
-    reversible = posting.type == REGULAR && !posting.isReversed(),
-)
+    descriptions: Map<String, String>,
+): PostingRow {
+    val remaining = (posting.remainingAmount as? Option.Some)?.value?.let(::moneyOrNull)
+    val open = !posting.isReversed() && remaining != null && remaining.amount.signum() != 0
+    val charge = posting.chargedItem() != null
+    val corrected = (posting.correctsId as? Option.Some)?.value?.takeIf { posting.type in LINKED_CORRECTIONS }
+    return PostingRow(
+        id = posting.id.toString(),
+        date = FolioText.date(posting.businessDate),
+        description = posting.description,
+        type = FolioText.postingType(posting.type),
+        quantity = FolioText.quantity(posting.quantity),
+        amount = FolioText.money(posting.amount),
+        reversed = posting.isReversed(),
+        serviceCharge = nested,
+        reversible = posting.type == REGULAR && !posting.isReversed(),
+        remaining = remaining,
+        adjustable = open && posting.type == REGULAR,
+        serviceChargeRemovable = open && charge,
+        transferable = open && !charge && (posting.type == REGULAR || posting.type == TRANSFER_IN),
+        corrects = corrected?.let { descriptions[it.toString()] },
+    )
+}
 
 private fun PostingResponse.isReversed() = (reversedBy as? Option.Some)?.value != null
 

@@ -232,11 +232,18 @@ fun FolioPanel(
             }
         }
     }
+    OpenDialogs(state)
+}
+
+/** Os diálogos abertos do painel (um por vez) e o PDF aberto. */
+@Composable
+private fun OpenDialogs(state: FolioState) {
     state.pdf?.let { RegistrationCardDialog(it, onClose = state::closePdf) }
     state.posting?.let { PostingDialog(it, onLeave = state::dismissPosting) }
     state.payment?.let { PaymentDialog(it, onLeave = state::finishPayment) }
     state.refund?.let { RefundDialog(it, onLeave = state::finishRefund) }
     state.preAuthorizations?.let { PreAuthorizationDialogs(it) }
+    state.corrections?.let { CorrectionDialogs(it) }
     val reversing = state.reversing
     state.reversal?.let { form -> reversing?.let { ReversalDialog(form, it, onLeave = state::dismissReversal) } }
 }
@@ -266,18 +273,41 @@ private fun Postings(state: FolioState) {
     if (rows.isEmpty()) Text(FolioText.NO_POSTINGS)
     rows.forEachIndexed { index, row ->
         // A chave é o lançamento: o menu aberto segue a linha dele quando a tabela relida muda de ordem.
-        key(row.id) {
-            PostingLine(index, row, onReverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null)
-        }
+        key(row.id) { PostingLine(index, row, postingActions(state, row)) }
     }
 }
 
-/** Uma linha da tabela; com [onReverse], o menu dela oferece "Estornar". */
+/** O que o menu de uma linha oferece; cada ação nula fica fora do menu. */
+private class PostingActions(
+    val reverse: (() -> Unit)?,
+    val adjust: (() -> Unit)?,
+    val removeServiceCharge: (() -> Unit)?,
+) {
+    val any: Boolean get() = reverse != null || adjust != null || removeServiceCharge != null
+}
+
+private fun postingActions(
+    state: FolioState,
+    row: PostingRow,
+): PostingActions {
+    val corrections = state.corrections
+    return PostingActions(
+        reverse = if (state.canReverse(row)) ({ state.startReversal(row.id) }) else null,
+        adjust = corrections?.takeIf { it.canAdjust(row) }?.let { { it.startAdjustment(row) } },
+        removeServiceCharge =
+            corrections?.takeIf { it.canRemoveServiceCharge(row) }?.let { { it.startRemoval(row) } },
+    )
+}
+
+/**
+ * Uma linha da tabela; o ajuste ou o estorno mostra "Corrige: <descrição do original>". O menu dela oferece o que
+ * [actions] traz: "Estornar", "Ajustar" e "Remover a taxa".
+ */
 @Composable
 private fun PostingLine(
     index: Int,
     row: PostingRow,
-    onReverse: (() -> Unit)?,
+    actions: PostingActions,
 ) {
     Row(
         Modifier
@@ -291,20 +321,42 @@ private fun PostingLine(
         Text(row.quantity)
         Text(row.amount)
         if (row.reversed) Text(FolioText.REVERSED, color = MaterialTheme.colorScheme.secondary)
-        if (onReverse != null) {
-            var open by remember { mutableStateOf(false) }
-            Box {
-                TextButton(onClick = { open = true }, modifier = Modifier.testTag("posting-actions-$index")) {
-                    Text("Ações")
-                }
-                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        if (actions.any) PostingMenu(index, actions)
+    }
+    row.corrects?.let {
+        Text(
+            FolioText.corrects(it),
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.padding(start = CHARGE_INDENT).testTag("posting-corrects-$index"),
+        )
+    }
+}
+
+/** O menu "Ações" da linha [index], com as ações de [actions]. */
+@Composable
+private fun PostingMenu(
+    index: Int,
+    actions: PostingActions,
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { open = true }, modifier = Modifier.testTag("posting-actions-$index")) {
+            Text("Ações")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            listOf(
+                Triple("Estornar", "posting-reverse-$index", actions.reverse),
+                Triple("Ajustar", "posting-adjust-$index", actions.adjust),
+                Triple("Remover a taxa", "posting-remove-charge-$index", actions.removeServiceCharge),
+            ).forEach { (label, tag, action) ->
+                if (action != null) {
                     DropdownMenuItem(
-                        text = { Text("Estornar") },
+                        text = { Text(label) },
                         onClick = {
                             open = false
-                            onReverse()
+                            action()
                         },
-                        modifier = Modifier.testTag("posting-reverse-$index"),
+                        modifier = Modifier.testTag(tag),
                     )
                 }
             }
