@@ -1,5 +1,7 @@
 package com.zeny.desktop.core.error
 
+import kotlinx.serialization.json.JsonObject
+
 data class FieldError(
     val field: String,
     val code: String,
@@ -17,11 +19,16 @@ sealed class ApiError(
     val userMessage: String,
     cause: Throwable? = null,
 ) : Exception(userMessage, cause) {
+    /**
+     * O problema RFC 9457. [extensions] guarda os campos do corpo que não são do RFC nem os já tipados; só o `core` o
+     * lê (ADR 0008), e ele não aparece em `toString` nem em log.
+     */
     class Problem(
         val status: Int,
         val code: String?,
         val detail: String?,
         val fieldErrors: List<FieldError>,
+        internal val extensions: JsonObject = JsonObject(emptyMap()),
     ) : ApiError(ErrorCatalog.userMessage(status, code, detail))
 
     class ApprovalRequired(

@@ -9,11 +9,14 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ProblemMapperTest {
     private suspend fun respondWith(
@@ -123,5 +126,41 @@ class ProblemMapperTest {
         assertNull(ProblemMapper.problemCode("<html>"))
         assertNull(ProblemMapper.problemCode("[]"))
         assertNull(ProblemMapper.problemCode("{\"code\":3}"))
+    }
+
+    @Test
+    fun extensionsKeepTheExtraFields() {
+        val body =
+            """{"type":"about:blank","title":"t","status":409,"detail":"d","instance":"/x","code":"FOLIO_BALANCE_NOT_ZERO",
+            "errors":[{"field":"f","code":"c","message":"m"}],
+            "folios":[{"folioId":"a","number":"F-1","status":"OPEN","balance":"10.00"}],"total":"10.00"}"""
+        val error = assertIs<ApiError.Problem>(ProblemMapper.fromBody(409, body))
+        assertEquals(setOf("folios", "total"), error.extensions.keys)
+        assertEquals("10.00", error.extensions["total"]?.jsonPrimitive?.content)
+        assertEquals(1, error.extensions["folios"]?.jsonArray?.size)
+        assertEquals("FOLIO_BALANCE_NOT_ZERO", error.code)
+        assertEquals("d", error.detail)
+        assertEquals(1, error.fieldErrors.size)
+    }
+
+    @Test
+    fun problemWithoutExtrasHasEmptyExtensions() {
+        val error =
+            assertIs<ApiError.Problem>(
+                ProblemMapper.fromBody(409, """{"type":"about:blank","title":"t","code":"RESERVATION_CHANGED"}"""),
+            )
+        assertTrue(error.extensions.isEmpty())
+        assertTrue(ApiError.Problem(409, "X", null, emptyList()).extensions.isEmpty())
+    }
+
+    @Test
+    fun extensionsStayOutOfToString() {
+        val body = """{"code":"FOLIO_BALANCE_NOT_ZERO","detail":"d","segredo":"valor-extra-987","total":"4321.09"}"""
+        val error = assertIs<ApiError.Problem>(ProblemMapper.fromBody(409, body))
+        assertEquals(setOf("segredo", "total"), error.extensions.keys)
+        val text = error.toString()
+        assertFalse(text.contains("valor-extra-987"), text)
+        assertFalse(text.contains("4321.09"), text)
+        assertFalse(text.contains("segredo"), text)
     }
 }

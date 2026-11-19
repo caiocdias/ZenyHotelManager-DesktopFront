@@ -3,6 +3,7 @@ package com.zeny.desktop.app.session
 import com.zeny.desktop.app.cashier.CashierSource
 import com.zeny.desktop.app.folio.FolioSource
 import com.zeny.desktop.app.folio.PaymentSource
+import com.zeny.desktop.app.reception.CheckOutSource
 import com.zeny.desktop.app.reception.GuestPick
 import com.zeny.desktop.app.reception.HolderSummary
 import com.zeny.desktop.app.reception.ReceptionSource
@@ -32,10 +33,12 @@ import com.zeny.desktop.core.facade.CaptureInput
 import com.zeny.desktop.core.facade.CashCount
 import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.facade.CheckInInput
+import com.zeny.desktop.core.facade.CheckOutResult
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.DocumentQuery
 import com.zeny.desktop.core.facade.HotelInfo
+import com.zeny.desktop.core.facade.LateCheckOutQuote
 import com.zeny.desktop.core.facade.Me
 import com.zeny.desktop.core.facade.NewGuest
 import com.zeny.desktop.core.facade.NewTrace
@@ -173,6 +176,9 @@ interface ServerConnection : AutoCloseable {
 
     /** Os pagamentos da conta; `null` quando a conexão não os oferece. */
     fun paymentSource(): PaymentSource? = null
+
+    /** O check-out e a cotação do late check-out; `null` quando a conexão não os oferece. */
+    fun checkOutSource(): CheckOutSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -636,6 +642,21 @@ class CoreConnection(
 
     /** Os pagamentos e as cauções da conta sobre `core.payments`, e a data operacional sobre `core.hotel`. */
     override fun paymentSource(): PaymentSource = payments
+
+    private val checkOut =
+        object : CheckOutSource {
+            override suspend fun lateCheckOutQuote(reservationId: String): LateCheckOutQuote? =
+                core.checkOut.lateCheckOutQuote(reservationId)
+
+            override suspend fun checkOut(
+                reservationId: String,
+                lateFee: Money?,
+                intent: Intent,
+            ): CheckOutResult = core.checkOut.checkOut(reservationId, lateFee, intent)
+        }
+
+    /** O check-out e a cotação do late check-out sobre `core.checkOut`. */
+    override fun checkOutSource(): CheckOutSource = checkOut
 
     override fun close() = core.close()
 }

@@ -83,6 +83,21 @@ class CoreConnectionTest {
         }
 
     @Test
+    fun checkOutSourceIsWiredToTheCheckOutFacade() =
+        runTest {
+            val core = ZenyCore(checkNotNull(ServerUrl.parse("http://servidor.teste")), MemorySettings())
+            CoreConnection(core).use { connection ->
+                val source = assertNotNull(connection.checkOutSource())
+
+                // O id é validado pela fachada do `core`, antes de ir à rede.
+                assertFailsWith<IllegalArgumentException> { source.lateCheckOutQuote("não-é-uuid") }
+                assertFailsWith<IllegalArgumentException> {
+                    source.checkOut("não-é-uuid", Money.parse("10.00"), Intent())
+                }
+            }
+        }
+
+    @Test
     fun paymentSourceReadsTheBusinessDayFromTheHotel() {
         val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         server.createContext("/api/v1/hotel/business-date") { exchange ->
