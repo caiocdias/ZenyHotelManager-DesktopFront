@@ -41,6 +41,7 @@ import com.zeny.desktop.core.types.BusinessDate
 import com.zeny.desktop.design.table.TableState
 import com.zeny.desktop.design.theme.ZenyTheme
 import com.zeny.desktop.sdk.model.BookingResponse
+import com.zeny.desktop.sdk.model.CancellationPenaltyResponse
 import com.zeny.desktop.sdk.model.CancellationResponse
 import com.zeny.desktop.sdk.model.PostingResponse
 import com.zeny.desktop.sdk.model.QuoteOfferResponse
@@ -168,9 +169,9 @@ class LiveReservationLifecycleCheck {
 
     /**
      * Critério 3 da E12: uma reserva de ensaio de chegada hoje (o prazo da política vencido, a multa devida) cancelada
-     * com "Isentar a multa", aprovada pelo Gerente se o servidor pedir: o resumo diz "Multa isenta" e a conta da
-     * reserva fica sem lançamento de multa (ou só com o que a API devolver para a isenção). A limpeza é a do
-     * [withRehearsal].
+     * com "Isentar a multa", aprovada pelo Gerente se o servidor pedir: o resumo inteiro é "Reserva <código>
+     * cancelada. Multa isenta: <valor>." e a conta da reserva fica sem cobrança de multa
+     * ([noPenaltyChargedOnTheFolio]). A limpeza é a do [withRehearsal].
      */
     @Test
     fun cancelWithWaiver() =
@@ -562,10 +563,7 @@ class LiveReservationLifecycleCheck {
                 "as multas cobradas de ${created.code} mudaram no 2º cancelamento: ${reservation.penaltiesCharged}",
             )
             val previousText = "$NO_NEW_PENALTY${ReceptionText.money(reservation.penaltiesCharged)}$PREVIOUS_PENALTY"
-            assertTrue(
-                done.contains(previousText),
-                "o resumo do 2º cancelamento é \"$done\"; esperava conter \"$previousText\"",
-            )
+            assertEquals("Reserva ${created.code} cancelada. $previousText", done, "o resumo do 2º cancelamento")
             firstPenaltyStaysOnTheFolio(ports, created, reservation, charged)
             println("LiveReservationLifecycleCheck: reserva ${created.code} cancelada de novo, sem outra multa: $done")
         } finally {
@@ -607,8 +605,8 @@ class LiveReservationLifecycleCheck {
 
     /**
      * Critério 3 da E12: cancela com "Isentar a multa", aprova como o Gerente se o servidor pedir e exige a multa
-     * devida isenta, o resumo "Multa isenta" com o valor do servidor e a conta sem lançamento de multa (ou só com o
-     * que a API devolver para a isenção).
+     * devida isenta, o resumo inteiro "Reserva <código> cancelada. Multa isenta: <valor do servidor>." e a conta sem
+     * cobrança de multa ([noPenaltyChargedOnTheFolio]).
      */
     @Suppress("LongMethod") // um roteiro só: isenção, aprovação, releitura, conta e o texto da multa isenta
     private fun DesktopComposeUiTest.cancelWaived(
@@ -649,19 +647,9 @@ class LiveReservationLifecycleCheck {
                 amountOf(reservation.penaltiesCharged, "as multas cobradas de ${created.code}").signum(),
                 "a isenção de ${created.code} cobrou ${reservation.penaltiesCharged}",
             )
-            val returned = (penalty.postingId as? Option.Some)?.value?.toString()
-            val feeCode = cancellationFeeCode(ports)
-            val fees = postingsOf(ports, reservation).filter { it.transactionCodeId.toString() == feeCode }
-            assertEquals(
-                listOfNotNull(returned),
-                fees.map { it.id.toString() },
-                "a conta de ${created.code} tem lançamento de multa além do que a isenção devolveu",
-            )
+            noPenaltyChargedOnTheFolio(ports, created, reservation, penalty)
             val waivedText = "$PENALTY_WAIVED${ReceptionText.money(penalty.amount)}."
-            assertTrue(
-                done.contains(waivedText),
-                "o resumo da isenção é \"$done\"; esperava conter \"$waivedText\"",
-            )
+            assertEquals("Reserva ${created.code} cancelada. $waivedText", done, "o resumo da isenção")
             println(
                 "LiveReservationLifecycleCheck: reserva ${created.code} cancelada com a multa " +
                     "${ReceptionText.money(penalty.amount)} isenta, sem lançamento de multa na conta; resumo: $done",
@@ -669,6 +657,42 @@ class LiveReservationLifecycleCheck {
         } finally {
             closeCancel(screen, state)
         }
+    }
+
+    /**
+     * A isenção não cobra na conta da reserva relida: o contrato atual devolve o `postingId` nulo, e então não há
+     * lançamento no código da multa (`CANCELLATION_FEE`). Se a API devolver um lançamento, ele tem valor zero ou está
+     * estornado, e o único outro lançamento no código da multa é o estorno dele.
+     */
+    private fun noPenaltyChargedOnTheFolio(
+        ports: LifecyclePorts,
+        created: LifecycleReservation,
+        reservation: ReservationResponse,
+        penalty: CancellationPenaltyResponse,
+    ) {
+        val feeCode = cancellationFeeCode(ports)
+        val fees = postingsOf(ports, reservation).filter { it.transactionCodeId.toString() == feeCode }
+        val returned = (penalty.postingId as? Option.Some)?.value?.toString()
+        if (returned == null) {
+            assertTrue(
+                fees.isEmpty(),
+                "a conta de ${created.code} tem ${fees.size} lançamento(s) de multa depois da isenção",
+            )
+            return
+        }
+        val posting =
+            fees.firstOrNull { it.id.toString() == returned }
+                ?: fail("o lançamento que a isenção de ${created.code} devolveu não está na conta da reserva")
+        val reversal = (posting.reversedBy as? Option.Some)?.value?.toString()
+        assertTrue(
+            amountOf(posting.amount, "o lançamento da isenção de ${created.code}").signum() == 0 || reversal != null,
+            "a isenção de ${created.code} lançou ${posting.amount} na conta, sem estorno",
+        )
+        val others = fees.map { it.id.toString() } - setOfNotNull(returned, reversal)
+        assertTrue(
+            others.isEmpty(),
+            "a conta de ${created.code} tem ${others.size} lançamento(s) de multa além do da isenção",
+        )
     }
 
     /** A limpeza do [withRehearsal]: a reserva do ensaio não fica confirmada na demo. */
