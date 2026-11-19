@@ -15,10 +15,10 @@ import com.zeny.desktop.sdk.model.PostingResponse
  * do `AppRoot`: a porta, o conjunto de permissões da casca, a aprovação da sessão e as fábricas do extrato em PDF de
  * cada audiência (nulas sem visualizador); a porta dos pagamentos (nula, sem a seção "Pagamentos"), a aprovação do
  * reembolso, o atalho "Abrir turno" (nulo sem `billing.cashier.operate`), a porta das correções da conta (nula, sem
- * ajustar, remover a taxa, transferir nem dividir) e a das cauções a vencer (nula sem a porta dos pagamentos). O
- * `AppRoot` monta as três entradas com o coordenador de aprovação da sessão. O padrão de [approveRefund] nunca roda a
- * ação (equivale à aprovação cancelada): existe só para quem monta o portador sem coordenador compilar, e uma entrada
- * assim não reembolsa por engano.
+ * ajustar, remover a taxa, transferir nem dividir), a das cauções a vencer (nula sem a porta dos pagamentos) e a do
+ * pagador e do limite da conta (nula, sem "Pagador e limite"). O `AppRoot` monta as três entradas com o coordenador
+ * de aprovação da sessão. O padrão de [approveRefund] nunca roda a ação (equivale à aprovação cancelada): existe só
+ * para quem monta o portador sem coordenador compilar, e uma entrada assim não reembolsa por engano.
  */
 @Suppress("LongParameterList") // o que as três entradas recebem; os campos novos entram por último, com padrão
 class FolioWiring(
@@ -32,6 +32,7 @@ class FolioWiring(
     val openShift: (() -> Unit)? = null,
     val corrections: FolioCorrectionSource? = null,
     val expiring: ExpiringPreAuthorizationSource? = null,
+    val account: FolioAccountSource? = null,
 )
 
 /**

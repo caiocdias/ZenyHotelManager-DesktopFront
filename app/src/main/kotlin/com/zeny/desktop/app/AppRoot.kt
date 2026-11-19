@@ -811,6 +811,7 @@ internal fun folioWiring(
         openShift = openShift?.takeIf { CASHIER_OPERATE in permissions },
         corrections = connection.folioCorrectionSource(),
         expiring = payments?.let { connection.expiringPreAuthorizationSource() },
+        account = connection.folioAccountSource(),
     )
 }
 

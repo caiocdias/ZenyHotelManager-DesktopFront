@@ -162,6 +162,49 @@ class CoreConnectionTest {
     }
 
     @Test
+    fun folioAccountSourceIsTheFacade() {
+        val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
+        val company = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9c01"
+        val ifMatch = mutableListOf<String?>()
+        val keys = mutableListOf<String?>()
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+        server.createContext("/api/v1/folios/$folio") { exchange ->
+            ifMatch += exchange.requestHeaders.getFirst("If-Match")
+            keys += exchange.requestHeaders.getFirst("Idempotency-Key")
+            val body =
+                (
+                    """{"balance":"0.00","creditLimitExceeded":false,"id":"$folio","number":"F-1",""" +
+                        """"openedAt":"2026-11-18T10:00:00Z","openedOn":"2026-11-18",""" +
+                        """"owner":{"id":"$folio","type":"RESERVATION"},"status":"OPEN",""" +
+                        """"updatedAt":"2026-11-18T10:00:00Z","payerCompanyId":"$company"}"""
+                ).toByteArray()
+            exchange.responseHeaders.add("Content-Type", "application/json")
+            exchange.responseHeaders.add("ETag", "\"4\"")
+            exchange.sendResponseHeaders(200, body.size.toLong())
+            exchange.responseBody.use { it.write(body) }
+        }
+        server.start()
+        try {
+            runTest {
+                val url = checkNotNull(ServerUrl.parse("http://127.0.0.1:${server.address.port}"))
+                CoreConnection(ZenyCore(url, MemorySettings())).use { connection ->
+                    val source = assertNotNull(connection.folioAccountSource())
+                    assertEquals("\"4\"", source.versionedFolio(folio).etag)
+                    val saved = source.updateFolio(folio, "\"4\"", company, Money.parse("10.00"))
+                    assertEquals(folio, saved.folio.id.toString())
+                    assertEquals(listOf(null, "\"4\""), ifMatch)
+                    assertTrue(keys.all { it == null })
+                    // O id é validado pela fachada do `core`, antes de ir à rede.
+                    assertFailsWith<IllegalArgumentException> { source.company("não-é-uuid") }
+                    assertEquals(2, ifMatch.size)
+                }
+            }
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     fun folioCorrectionSourceIsTheFacade() {
         val folio = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f01"
         val posting = "0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9f04"

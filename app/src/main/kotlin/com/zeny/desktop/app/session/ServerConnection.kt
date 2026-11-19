@@ -2,6 +2,7 @@ package com.zeny.desktop.app.session
 
 import com.zeny.desktop.app.cashier.CashierSource
 import com.zeny.desktop.app.folio.ExpiringPreAuthorizationSource
+import com.zeny.desktop.app.folio.FolioAccountSource
 import com.zeny.desktop.app.folio.FolioCorrectionSource
 import com.zeny.desktop.app.folio.FolioSource
 import com.zeny.desktop.app.folio.PaymentSource
@@ -36,6 +37,7 @@ import com.zeny.desktop.core.facade.CashCount
 import com.zeny.desktop.core.facade.CashMovementType
 import com.zeny.desktop.core.facade.CheckInInput
 import com.zeny.desktop.core.facade.CheckOutResult
+import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.DayList
 import com.zeny.desktop.core.facade.Department
 import com.zeny.desktop.core.facade.DocumentQuery
@@ -58,6 +60,7 @@ import com.zeny.desktop.core.facade.StatementAudience
 import com.zeny.desktop.core.facade.TraceChange
 import com.zeny.desktop.core.facade.TraceFilter
 import com.zeny.desktop.core.facade.TraceVersion
+import com.zeny.desktop.core.facade.VersionedFolio
 import com.zeny.desktop.core.facade.WalkInInput
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
@@ -189,6 +192,9 @@ interface ServerConnection : AutoCloseable {
 
     /** As cauções a vencer; `null` quando a conexão não as oferece. */
     fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource? = null
+
+    /** O pagador e o limite da conta (leitura com o `ETag`, `PUT` e empresas); `null` sem a conexão que os ofereça. */
+    fun folioAccountSource(): FolioAccountSource? = null
 }
 
 /** Adaptador sobre o `ZenyCore`: só repassa ao `SessionManager` e às fachadas. Fecha o `core` no `close()`. */
@@ -711,6 +717,29 @@ class CoreConnection(
 
     /** As cauções a vencer sobre `core.payments`. */
     override fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource = expiring
+
+    private val account =
+        object : FolioAccountSource {
+            override suspend fun versionedFolio(folioId: String): VersionedFolio = core.folios.versionedFolio(folioId)
+
+            override suspend fun updateFolio(
+                folioId: String,
+                etag: String,
+                payerCompanyId: String?,
+                creditLimit: Money?,
+            ): VersionedFolio = core.folios.updateFolio(folioId, etag, payerCompanyId, creditLimit)
+
+            override suspend fun activeCompanyPage(
+                name: String?,
+                cursor: String?,
+                limit: Int,
+            ): Page<CompanyChoice> = core.companies.activeCompanyPage(name, cursor, limit)
+
+            override suspend fun company(companyId: String): CompanyChoice = core.companies.company(companyId)
+        }
+
+    /** O pagador e o limite da conta sobre `core.folios` e `core.companies`. */
+    override fun folioAccountSource(): FolioAccountSource = account
 
     override fun close() = core.close()
 }

@@ -26,6 +26,7 @@ class FolioConnection(
     private val checkOut: CheckOutSource? = null,
     private val corrections: FolioCorrectionSource? = null,
     private val expiring: ExpiringPreAuthorizationSource? = null,
+    private val account: FolioAccountSource? = null,
 ) : ServerConnection {
     override val state = MutableStateFlow<SessionState>(SessionState.Active("u-1", sessionId, false))
 
@@ -69,6 +70,8 @@ class FolioConnection(
     override fun folioCorrectionSource(): FolioCorrectionSource? = corrections
 
     override fun expiringPreAuthorizationSource(): ExpiringPreAuthorizationSource? = expiring
+
+    override fun folioAccountSource(): FolioAccountSource? = account
 
     override fun close() = Unit
 }

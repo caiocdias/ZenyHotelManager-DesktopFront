@@ -6,8 +6,10 @@ import com.zeny.desktop.app.reception.PdfKind
 import com.zeny.desktop.app.reception.RegistrationCardState
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.ApprovableAction
+import com.zeny.desktop.core.facade.CompanyChoice
 import com.zeny.desktop.core.facade.SplitPart
 import com.zeny.desktop.core.facade.StatementAudience
+import com.zeny.desktop.core.facade.VersionedFolio
 import com.zeny.desktop.core.http.Intent
 import com.zeny.desktop.core.http.Page
 import com.zeny.desktop.core.types.Money
@@ -215,6 +217,38 @@ class FolioWiringTest {
                 reason: String?,
                 intent: Intent,
             ): TransferResponse = error("não usado")
+        }
+
+    private val account =
+        object : FolioAccountSource {
+            override suspend fun versionedFolio(folioId: String): VersionedFolio = error("não usado")
+
+            override suspend fun updateFolio(
+                folioId: String,
+                etag: String,
+                payerCompanyId: String?,
+                creditLimit: Money?,
+            ): VersionedFolio = error("não usado")
+
+            override suspend fun activeCompanyPage(
+                name: String?,
+                cursor: String?,
+                limit: Int,
+            ): Page<CompanyChoice> = error("não usado")
+
+            override suspend fun company(companyId: String): CompanyChoice = error("não usado")
+        }
+
+    @Test
+    fun wiringCarriesTheAccountSource() =
+        runTest {
+            val with = FolioConnection(FakeFolioSource(), account = account)
+            val wiring = assertNotNull(folioWiring(with, setOf(READ), backgroundScope, null, null))
+            assertSame(account, wiring.account)
+
+            val bare = FolioConnection(FakeFolioSource())
+            val without = assertNotNull(folioWiring(bare, setOf(READ), backgroundScope, null, null))
+            assertNull(without.account)
         }
 
     @Test
