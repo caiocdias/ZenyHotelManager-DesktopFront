@@ -6,9 +6,9 @@ import androidx.compose.runtime.setValue
 import com.zeny.desktop.app.reception.COUNTRY_REQUIRED
 import com.zeny.desktop.app.reception.COUNTRY_SHAPE
 import com.zeny.desktop.app.reception.GUEST_DOCUMENT_TYPES
-import com.zeny.desktop.app.reception.HolderNames
 import com.zeny.desktop.app.reception.ReservationRow
-import com.zeny.desktop.app.reception.toReservationRow
+import com.zeny.desktop.app.reception.ReservationRowResolver
+import com.zeny.desktop.app.reception.reservationColumns
 import com.zeny.desktop.core.error.ApiError
 import com.zeny.desktop.core.facade.BusinessDay
 import com.zeny.desktop.core.facade.DocumentQuery
@@ -29,8 +29,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 private const val DEFAULT_PAGE_SIZE = 50
 private const val DEFAULT_PERIOD_DAYS = 30L
@@ -83,28 +81,12 @@ class ReservationSearchState(
     private val firstQuery = CompletableDeferred<Unit>()
     private var closed = false
 
-    /** O nome (ou "—") de cada titular já lido: só em memória, enquanto o estado vive. */
-    private val holderNames = HolderNames(source::holder)
-
-    /** Os nomes dos tipos de UH; `null` até uma página lê-los. */
-    private var roomTypeNames: Map<String, String>? = null
-
-    /** Uma página por vez resolve titulares e tipos: o [HolderNames] não aceita chamadas em paralelo. */
-    private val lookups = Mutex()
+    /** Os titulares e os tipos de UH, lidos uma vez enquanto o estado vive. */
+    private val resolver = ReservationRowResolver(source::holder, source::roomTypes)
 
     val table = TableState({ CursorPager(pageSize, ::pageOf) }, ReservationRow::id)
 
-    val columns: List<Column<ReservationRow>> =
-        listOf(
-            Column("code", "Reserva") { it.code },
-            Column("holder", "Titular") { it.holder },
-            Column("room", "UH") { it.room },
-            Column("roomType", "Tipo") { it.roomType },
-            Column("arrival", "Chegada") { it.arrival },
-            Column("departure", "Saída") { it.departure },
-            Column("guests", "Hóspedes") { it.guests },
-            Column("status", "Situação") { it.status },
-        )
+    val columns: List<Column<ReservationRow>> = reservationColumns
 
     var number by mutableStateOf("")
     var name by mutableStateOf("")
@@ -296,19 +278,6 @@ class ReservationSearchState(
             }
         // Fechado durante a página: nem titulares nem tipos de UH saem à rede.
         if (closed) return Page(emptyList(), null)
-        val rows =
-            lookups.withLock {
-                val types = roomTypeNames ?: readRoomTypeNames().also { roomTypeNames = it }
-                val holders = holderNames.resolve(page.items.map { it.holderGuestId.toString() })
-                page.items.map { it.toReservationRow(holders.getValue(it.holderGuestId.toString()), types) }
-            }
-        return Page(rows, page.nextCursor)
+        return Page(resolver.rows(page.items), page.nextCursor)
     }
-
-    private suspend fun readRoomTypeNames(): Map<String, String> =
-        try {
-            source.roomTypes().filter { it.name.isNotBlank() }.associate { it.id.toString() to it.name }
-        } catch (_: ApiError.Problem) {
-            emptyMap()
-        }
 }

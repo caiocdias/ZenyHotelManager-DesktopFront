@@ -24,8 +24,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 private const val PAGE_LIMIT = 200
 private const val ROOMS_WINDOW_MS = 2_000L
@@ -73,14 +71,8 @@ class DayPanelState(
      */
     private var currentDate: BusinessDate? = null
 
-    /** O nome (ou "—") de cada titular já lido: só em memória, enquanto o painel vive. */
-    private val holderNames = HolderNames(source::holder)
-
-    /** Os nomes dos tipos de UH da carga vigente; `null` até uma página da carga lê-los. */
-    private var roomTypeNames: Map<String, String>? = null
-
-    /** Uma página por vez resolve titulares e tipos: a mesma leitura não sai duas vezes por abas em paralelo. */
-    private val lookups = Mutex()
+    /** Os titulares (só em memória, enquanto o painel vive) e os tipos de UH da carga vigente. */
+    private val resolver = ReservationRowResolver(source::holder, source::roomTypes)
 
     val tabs: Map<DayList, TableState<ReservationRow>> =
         DayList.entries.associateWith { list -> TableState({ pagerOf(list) }, ReservationRow::id) }
@@ -94,17 +86,7 @@ class DayPanelState(
     var error by mutableStateOf<ApiError?>(null)
         private set
 
-    val columns: List<Column<ReservationRow>> =
-        listOf(
-            Column("code", "Reserva") { it.code },
-            Column("holder", "Titular") { it.holder },
-            Column("room", "UH") { it.room },
-            Column("roomType", "Tipo") { it.roomType },
-            Column("arrival", "Chegada") { it.arrival },
-            Column("departure", "Saída") { it.departure },
-            Column("guests", "Hóspedes") { it.guests },
-            Column("status", "Situação") { it.status },
-        )
+    val columns: List<Column<ReservationRow>> = reservationColumns
 
     private var update: Job? = null
     private var updatePending = false
@@ -179,7 +161,7 @@ class DayPanelState(
             }
         error = null
         day = read
-        roomTypeNames = null
+        resolver.forgetRoomTypes()
         val first = !tabsStarted
         tabsStarted = true
         currentDate = read.date
@@ -220,21 +202,8 @@ class DayPanelState(
         limit: Int,
     ): Page<ReservationRow> {
         val page = source.dayPage(list, date, cursor, limit)
-        val rows =
-            lookups.withLock {
-                val types = roomTypeNames ?: readRoomTypeNames().also { roomTypeNames = it }
-                val holders = holderNames.resolve(page.items.map { it.holderGuestId.toString() })
-                page.items.map { it.toReservationRow(holders.getValue(it.holderGuestId.toString()), types) }
-            }
-        return Page(rows, page.nextCursor)
+        return Page(resolver.rows(page.items), page.nextCursor)
     }
-
-    private suspend fun readRoomTypeNames(): Map<String, String> =
-        try {
-            source.roomTypes().filter { it.name.isNotBlank() }.associate { it.id.toString() to it.name }
-        } catch (_: ApiError.Problem) {
-            emptyMap()
-        }
 
     private suspend fun listen() {
         val topics = topicsFor(permissions)
