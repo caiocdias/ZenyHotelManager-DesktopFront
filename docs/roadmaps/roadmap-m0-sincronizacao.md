@@ -721,12 +721,40 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Estado (2026-11-20, 03:10):** `#em-andamento`, **lote interrompido a pedido do usuário** no meio da Task 3. As Tasks 1 e 2 estão commitadas e com revisão de fatia limpa. Falta a Task 3 inteira, o testador de etapa, a revisão final, o gate e o fechamento. Nada foi integrado na `main`: a etapa ainda não passou pelo testador de etapa nem pela revisão final.
+- **Como retomar** (próximo `claude --agent orquestrador`): retome no worktree `.claude/worktrees/roadmap-m0-sincronizacao` (branch `roadmap/m0-sincronizacao`). O ledger do SDD está em `.superpowers/sdd/2026-11-20-m0-sincronizacao-e04/progress.md` desse worktree (fora do Git), com os relatórios e os briefs. **Não refaça as Tasks 1 e 2.** Comece pela Task 3, com BASE `733671e` e um desenvolvedor novo, a partir do brief `task-3-brief.md` do workspace. Se o workspace tiver se perdido, gere de novo o brief da Task 3 a partir do plano. O `MERGE_BASE` da etapa é `7b3537b`.
+- **Pré-voo (início do lote):** aditivo (código 11), pin `5e06f16d51ff` × `main` `8c563cda0575`, com "Ambiente do servidor sem mudanças". Depois da troca do pin: `igual (código 0)`.
+- **Plano:** [`docs/superpowers/plans/2026-11-20-m0-sincronizacao-e04.md`](../superpowers/plans/2026-11-20-m0-sincronizacao-e04.md), com 3 fatias. A revisão de arquitetura (`revisor-arquitetura`, opus) bloqueou nas rodadas 0 e 1 e aprovou na rodada 2:
+  - rodada 0: a alteração de reserva estava fora do ADR 0014, faltava a escrita destrutiva em `Riscos:`, e havia 6 Menores;
+  - rodada 1: o catálogo ficava vermelho entre a Task 1 e a Task 2, e um hash de senha ia para a saída.
+- **Commits** na branch `roadmap/m0-sincronizacao` (todos com o trailer `Soul:`):
+  - documentação: `d9575be` (início), `9115c75` (plano), `12e6fe7` e `6d1ef04` (correções do plano), `55ba278` (aprovação);
+  - **Task 1**, `55ba278..f9d2a84`: pin, contrato e SDK em `8c563cda0575`, e os campos do ADR 0014 em `Option.Some` (`4940c63`, desenvolvedor). O testador adaptou 6 testes de ataque dele (`f9d2a84`). Revisão de fatia (`revisor-seguranca`, opus): aprovada, 0 Críticos e 0 Importantes;
+  - **Task 2**, `f9d2a84..733671e`: o catálogo de erros passou de 377 para 426 códigos (`CONCURRENT_UPDATE` e 48 da governança), e um teste prova `CONCURRENT_UPDATE` → `DEFINITIVE` (`733671e`, desenvolvedor). Revisão de fatia (`revisor-seguranca`, sonnet): aprovada, 0 Críticos e 0 Importantes.
+- **Já verificado nas fatias:**
+  - pin `commit=8c563cda0575dab697c89f2caba5a1dd9a12782e`;
+  - sha256 `cb90e8633777cab189c061ddd9f799e9ffb08a5f10e77d4bc8a09617ab30e1a5`, igual na cópia, no pin e no `git show` do servidor;
+  - 376 `operationId`, com a classe nova `HousekeepingApi` e o `adjustAssignmentPlan` gerado, sem código à mão;
+  - `ExplicitDefaultFieldsTest` (11 testes) e `SeedExplicitDefaultFieldsTest` (13 testes) verdes;
+  - os 7 `*ErrorCatalog*` verdes depois da Task 2;
+  - `gradlew`, `gradle/wrapper/` e `docker/` iguais entre os pins.
+- **Verificação mecânica:** exit 1 nas duas fatias, julgado justificado pela revisora:
+  - Task 1: `ASSERCAO_REMOVIDA`, a contagem 335 → 376 do `SdkAttackTest`, trocada pelo dono do arquivo;
+  - Task 2: `ASSERCAO_REMOVIDA`, a contagem 377 → 426 do `ErrorCatalogTest`.
+- **Ambiente local, deixado pela Task 3 interrompida:**
+  - o `zeny-front` foi recriado às 03:09 com a imagem `zeny-hotel-manager:8c563cda0575`, readiness `{"status":"UP"}`, **sem seed**;
+  - os segredos novos estão em `.server/seed-secrets.env` e `.server/live-secrets.env` do checkout principal (600, fora do Git): o admin inicial do `.server/zeny-front.env` e senhas geradas;
+  - a Task 3 não deixou relatório nem commit;
+  - recrie de novo (depois das 03:05) antes de semear, se o ambiente tiver atravessado um fechamento.
+- **Servidor só leitura:** `status --porcelain` vazio antes e depois. No `worktree list`, só o `roadmap/m6-operacao-fechamento` avançou (`bbdafcf` → `0a20877`), pelo orquestrador do servidor.
+- **Revisão final:** pendente.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  1. **Branch criada de `7b3537b`** (a análise da rodada 4, que ainda não está na `main`), e não da `main`. A E04 e os ADRs 0014 e 0015 só existem nessa branch. O merge do lote leva a análise junto para a `main`.
+  2. **Segredos novos para a demo do notebook.** O `.server/seed-secrets.env` citado na nota não existia, e a recriação do zero exige seed novo. As senhas da demo do notebook passam a ser as do arquivo 600.
+- **Notas para a próxima etapa (retomada):**
+  - **Lacuna para o testador de etapa:** o `SdkAttackTest` amarra o `adjustAssignmentPlan` só pela contagem, não pelo nome (Menor da revisão da Task 1).
+  - **Menores estacionados:** a redação de `HOUSEKEEPING_TASK_LOCATION_INVALID`, `SCHEDULED_CLEANING_LOCATION_INVALID` e `HOUSEKEEPING_OCCURRENCE_LOCATION_INVALID` é inconsistente entre si. Revisar na M6 e na M7, que exibem essas mensagens.
+  - **Fechamento:** regenerar o pacote `build/demo-package/` sobre o HEAD final. Acrescentar esta etapa à lista "Validações acumuladas no Windows" do README como item 6.
 
 ---
 
