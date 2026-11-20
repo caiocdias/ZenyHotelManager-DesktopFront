@@ -72,19 +72,21 @@ class GuestsFacade internal constructor(
         val request =
             CreateGuestRequest(
                 documents =
-                    listOf(
-                        GuestDocumentRequest(
-                            issuingCountry = country?.let { Option.Some(it) } ?: Option.Undefined,
-                            number = input.documentNumber,
-                            type =
-                                GuestDocumentRequest.Type.fromSerialOrNull(input.documentType)
-                                    ?: throw invalidDocumentType(),
+                    Option.Some(
+                        listOf(
+                            GuestDocumentRequest(
+                                issuingCountry = country?.let { Option.Some(it) } ?: Option.Undefined,
+                                number = input.documentNumber,
+                                type =
+                                    GuestDocumentRequest.Type.fromSerialOrNull(input.documentType)
+                                        ?: throw invalidDocumentType(),
+                            ),
                         ),
                     ),
                 profile =
                     GuestProfileRequest(
                         fullName = input.fullName,
-                        vip = false,
+                        vip = Option.Some(false),
                         nationality = Option.Some(input.nationality),
                         birthDate = Option.Some(input.birthDate.toApi()),
                     ),

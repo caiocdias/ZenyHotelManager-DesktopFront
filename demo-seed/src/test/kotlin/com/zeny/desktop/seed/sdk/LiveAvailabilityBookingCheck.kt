@@ -53,7 +53,10 @@ class LiveAvailabilityBookingCheck {
     }
 
     private fun cancelBody() =
-        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.HOTEL_REQUEST, waivePenalty = false)
+        ReservationCancelRequest(
+            reason = ReservationCancelRequest.Reason.HOTEL_REQUEST,
+            waivePenalty = Option.Some(false),
+        )
 
     private suspend fun cancel(
         seed: SeedCore,
@@ -80,10 +83,10 @@ class LiveAvailabilityBookingCheck {
                 ReservationRequest(
                     adults = 1,
                     arrival = arrival.toApi(),
-                    childAges = emptyList(),
+                    childAges = Option.Some(emptyList()),
                     departure = BusinessDate(arrival.value.plusDays(1)).toApi(),
-                    guests = listOf(StayGuestRequest(guestId = holder, primary = true)),
-                    nightlyRates = emptyList(),
+                    guests = Option.Some(listOf(StayGuestRequest(guestId = holder, primary = Option.Some(true)))),
+                    nightlyRates = Option.Some(emptyList()),
                     ratePlanId = ratePlanId,
                     roomTypeId = roomTypeId,
                     segment = ReservationRequest.Segment.LEISURE,
@@ -170,12 +173,12 @@ class LiveAvailabilityBookingCheck {
         set: RestrictionValuesDto,
         clear: List<RestrictionUpdateRequest.ClearItem>,
     ) = RestrictionUpdateRequest(
-        clear = clear,
+        clear = Option.Some(clear),
         from = Option.Some(date.toApi()),
-        roomTypeIds = emptyList(),
-        `set` = set,
+        roomTypeIds = Option.Some(emptyList()),
+        `set` = Option.Some(set),
         to = Option.Some(date.toApi()),
-        weekdays = emptyList(),
+        weekdays = Option.Some(emptyList()),
     )
 
     @Test

@@ -255,7 +255,7 @@ class ReservationsFacade internal constructor(
         val guests =
             input.guests.map {
                 val guest = Uuid.parseOrNull(it.guestId) ?: throw IllegalArgumentException("id de hóspede inválido")
-                CheckInGuestRequest(guestId = guest, primary = it.primary)
+                CheckInGuestRequest(guestId = guest, primary = Option.Some(it.primary))
             }
         val request =
             CheckInRequest(
@@ -443,7 +443,10 @@ class ReservationsFacade internal constructor(
             ReservationDocumentSearchRequest(
                 issuingCountry = country?.let { Option.Some(it) } ?: Option.Undefined,
                 number = number,
-                statuses = statusesOf(statuses).map { ReservationDocumentSearchRequest.StatusesItem.fromSerial(it) },
+                statuses =
+                    Option.Some(
+                        statusesOf(statuses).map { ReservationDocumentSearchRequest.StatusesItem.fromSerial(it) },
+                    ),
                 type = type,
             )
         val page =
@@ -487,14 +490,14 @@ class ReservationsFacade internal constructor(
             WalkInRequest.Segment.fromSerialOrNull(input.segment) ?: throw IllegalArgumentException("segmento inválido")
         return WalkInRequest(
             adults = input.adults,
-            childAges = input.childAges,
+            childAges = Option.Some(input.childAges),
             departure = input.departure.toApi(),
             guestCount = input.guestCount?.let { Option.Some(it) } ?: Option.Undefined,
             guests =
                 input.guests.map {
                     CheckInGuestRequest(
                         guestId = idOf(it.guestId, "hóspede"),
-                        primary = it.primary,
+                        primary = Option.Some(it.primary),
                     )
                 },
             ratePlanId = idOf(input.ratePlanId, "tarifa"),

@@ -184,7 +184,7 @@ class BookingsFacade internal constructor(
         return ReservationCancelRequest(
             notes = input.notes?.takeIf { it.isNotBlank() }?.let { Option.Some(it) } ?: Option.Undefined,
             reason = reason,
-            waivePenalty = input.waivePenalty,
+            waivePenalty = Option.Some(input.waivePenalty),
         )
     }
 
@@ -202,10 +202,10 @@ class BookingsFacade internal constructor(
                     ReservationRequest(
                         adults = input.adults,
                         arrival = input.arrival.toApi(),
-                        childAges = input.childAges,
+                        childAges = Option.Some(input.childAges),
                         departure = input.departure.toApi(),
-                        guests = emptyList(),
-                        nightlyRates = input.nightlyRates.map(::nightlyRateOf),
+                        guests = Option.Some(emptyList()),
+                        nightlyRates = Option.Some(input.nightlyRates.map(::nightlyRateOf)),
                         ratePlanId = idOf(input.ratePlanId, "tarifa"),
                         roomTypeId = idOf(input.roomTypeId, "tipo"),
                         segment = segment,

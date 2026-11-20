@@ -106,7 +106,8 @@ class SdkBookingGateway(
     ): String {
         val request =
             CreateGuestRequest(
-                documents = listOf(GuestDocumentRequest(number = spec.cpf, type = GuestDocumentRequest.Type.CPF)),
+                documents =
+                    Option.Some(listOf(GuestDocumentRequest(number = spec.cpf, type = GuestDocumentRequest.Type.CPF))),
                 profile =
                     GuestProfileRequest(
                         birthDate = Option.Some(spec.birthDate.toString()),
@@ -114,7 +115,7 @@ class SdkBookingGateway(
                         fullName = spec.fullName,
                         nationality = Option.Some(BRAZIL),
                         residenceCountry = Option.Some(BRAZIL),
-                        vip = false,
+                        vip = Option.Some(false),
                     ),
             )
         return redactingValues(listOf(spec.cpf, spec.fullName)) {
@@ -187,10 +188,11 @@ class SdkBookingGateway(
                         ReservationRequest(
                             adults = spec.adults,
                             arrival = spec.arrival.toString(),
-                            childAges = emptyList(),
+                            childAges = Option.Some(emptyList()),
                             departure = spec.departure.toString(),
-                            guests = listOf(StayGuestRequest(guestId = holder, primary = true)),
-                            nightlyRates = emptyList(),
+                            guests =
+                                Option.Some(listOf(StayGuestRequest(guestId = holder, primary = Option.Some(true)))),
+                            nightlyRates = Option.Some(emptyList()),
                             ratePlanId = Uuid.parse(ratePlanId),
                             roomTypeId = Uuid.parse(roomTypeId),
                             segment = ReservationRequest.Segment.LEISURE,
@@ -231,7 +233,7 @@ class SdkBookingGateway(
                         i,
                         id,
                         ->
-                        CheckInGuestRequest(guestId = Uuid.parse(id), primary = i == 0)
+                        CheckInGuestRequest(guestId = Uuid.parse(id), primary = Option.Some(i == 0))
                     },
                 roomId = Option.Some(Uuid.parse(roomId)),
             )

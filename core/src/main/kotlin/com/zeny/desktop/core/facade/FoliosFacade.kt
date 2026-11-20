@@ -206,7 +206,7 @@ class FoliosFacade internal constructor(
         val request =
             PostingRequest(
                 description = if (description == null) Option.Undefined else Option.Some(description),
-                quantity = input.quantity.toDouble(),
+                quantity = Option.Some(input.quantity.toDouble()),
                 transactionCodeId = codeId,
                 unitPrice = input.unitPrice.toApi(),
             )

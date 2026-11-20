@@ -13,6 +13,7 @@ import com.zeny.desktop.sdk.model.MeResponse
 import com.zeny.desktop.sdk.model.OperationalSettingsDto
 import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
+import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpMethod
@@ -210,7 +211,7 @@ class CoreCriteriaTest {
                 reservationCancelRequest =
                     ReservationCancelRequest(
                         reason = ReservationCancelRequest.Reason.OTHER,
-                        waivePenalty = true,
+                        waivePenalty = Option.Some(true),
                     ),
                 block = o.headers,
             )
