@@ -1,6 +1,6 @@
 # Roadmap — M7 Gestão e cadastros
 
-> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-17
+> Arquivo: `docs/roadmaps/roadmap-m7-gestao-cadastros.md` · branch de execução: `roadmap/m7-gestao-cadastros` · criado em 2026-11-10 · última revisão 2026-11-20
 
 > **Pré-requisito:** a etapa E07 ("Gate do marco M6") de `docs/roadmaps/roadmap-m6-governanca-operacao.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
 
@@ -23,6 +23,7 @@ O administrador e o gerente configuram o hotel inteiro pelo app, sem depender do
 - dados, políticas e impostos do hotel, com o logotipo;
 - pontos de caixa, códigos de lançamento e roteamento;
 - modelos e rotinas de checklist;
+- configuração da governança: tipos de limpeza e faxinas programadas;
 - pessoal e escala;
 - configuração da FNRH e fila de envio;
 - impressoras, agentes de impressão e fila de impressão;
@@ -44,6 +45,7 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
   | Hotel | `/api/v1/hotel`, `/hotel/operational-settings`, `/hotel/policies`, `/hotel/tax-settings`, `/files` |
   | Financeiro | `/api/v1/cash-points`, `/transaction-codes`, `/routing-rules` |
   | Checklists | `/api/v1/checklist-templates` (com `publish` e `versions`), `/checklist-routines` |
+  | Governança (configuração) | `/api/v1/cleaning-types` e `/scheduled-cleanings`, com `deactivate`/`reactivate` (desde o pin `8c563cda0575`, M0 E04) |
   | Pessoal | `/api/v1/departments`, `/employees`, `/shifts`, `/schedule-patterns`, `/schedule/entries`, `/schedule/generate` |
   | FNRH | `/api/v1/fnrh/settings` (com `clear-credentials`), `/fnrh/requesters`, `/fnrh/domains` (com `refresh`), `/fnrh/status`, `/fnrh/submissions` (com `retry` e `dismiss`) |
   | Impressão | `/api/v1/print-agents` (com `deactivate` e `rotate-token`), `/printers` (com `deactivate`), `/print-jobs`, e os `POST …/print` de `/reservations/{id}/registration-card`, `/reservations/{id}/confirmation` e `/folios/{id}/statement` |
@@ -76,7 +78,7 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
 
 ## Escopo
 
-**Incluído:** os onze grupos de cadastro e gestão listados no Objetivo e o roteiro do M7.
+**Incluído:** os doze grupos de cadastro e gestão listados no Objetivo e o roteiro do M7.
 
 **Fora de escopo:**
 
@@ -84,7 +86,7 @@ Ao fim, o front cobre todo o contrato do commit fixado, exceto o que é do mobil
 - o agente de impressão e as rotas dele (`/api/v1/print-agents/me/*`, esquema `printAgentToken`): outro repositório (ADR 0009);
 - fechamento do dia (M6 E08 do front);
 - funcionalidades que o servidor ainda não tem, que entram por rodadas do M0:
-  - tarefas de governança e manutenção (M6 do servidor);
+  - manutenção corretiva, relatórios operacionais e o que mais do M6 do servidor estiver fora do pin `8c563cda0575` (as tarefas de governança chegaram nele e estão no M6 do front, E09 a E11, e nesta E13);
   - pagamentos integrados e fiscal (M7 do servidor);
   - PDV e distribuição (M8 do servidor).
 
@@ -227,7 +229,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E09 | Pessoal e montagem da escala | #pendente | — | Departamentos, funcionários, turnos, padrões e geração da escala |
 | E10 | FNRH e trilha de auditoria | #pendente | E05 | Configuração da FNRH, limpeza da credencial, CPF solicitante, domínios, status, fila de envio e consulta da auditoria |
 | E12 | Impressoras, agentes e fila de impressão | #pendente | E05 | Cadastro de agentes (token exibido uma vez) e impressoras, fila de jobs e "Enviar à impressora do hotel" nas telas de documento |
-| E11 | Gate do marco M7 | #pendente | E03, E04, E06, E07, E08, E09, E10, E12 | Roteiro do M7, cobertura do contrato e definição de pronto verificada |
+| E13 | Tipos de limpeza e faxinas programadas | #pendente | — | Tipos de limpeza com créditos por tipo de UH e modelo de checklist, faxinas programadas por UH ou área |
+| E11 | Gate do marco M7 | #pendente | E03, E04, E06, E07, E08, E09, E10, E12, E13 | Roteiro do M7, cobertura do contrato e definição de pronto verificada |
 
 ---
 
@@ -257,6 +260,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Revisão humana:** não
 
 **Notas para o plano:** partes independentes, para as ondas do plano: áreas e características são cadastros que não referenciam outros no contrato (`AreaResponse`, `RoomFeatureResponse`) e não dependem um do outro. O tipo escolhe características (`featureIds`), e a UH escolhe o tipo e as características (`roomTypeId`, `featureIds`), só por leitura.
+
+Desde o pin `8c563cda0575` (M0 E04), `RoomRequest.featureIds`, `RoomTypeRequest.featureIds` e `RoomTypeRequest.displayOrder` são opcionais no contrato, com valor padrão no servidor. O mesmo DTO serve à criação e à alteração, e no `PUT` o campo omitido volta ao padrão e apaga o valor gravado. A fachada os envia sempre explícitos, com o valor lido na alteração ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)), e um teste da fachada prova isso.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -352,6 +357,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Revisão humana:** não
 
 **Notas para o plano:** partes independentes, para as ondas do plano: pacotes, políticas de cancelamento e políticas de garantia são três cadastros de recursos distintos. Eles não dependem uns dos outros nem das grades de preços e de restrições.
+
+Desde o pin `8c563cda0575` (M0 E04), estes campos são opcionais no contrato, com valor padrão no servidor: `PackageRequest.includedInRate` (DTO de criação e alteração), `RatePlanCreateRequest.packageIds`, `RatePriceUpdateRequest.weekdays`, `RatePriceRemovalRequest.weekdays`, os quatro campos de `RestrictionUpdateRequest` e `LimitRequest.unlimited`. A fachada os envia sempre explícitos ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). No PUT do pacote, o `includedInRate` omitido apagaria o valor gravado. Nas grades, "vazio = todos" precisa ser a escolha da tela, nunca a omissão.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -456,6 +463,8 @@ Todo usuário vê e revoga as próprias sessões.
 
 - Delegação, escopos e limites estão na ARCHITECTURE §8.2 do servidor e na nota `ZenyHotelManager - Segurança, autenticação e autorização`.
 - Partes independentes, para as ondas do plano: as sessões próprias (`/api/v1/auth/sessions`) não dependem dos cadastros de usuários e de roles. O editor de roles não depende do cadastro de usuários, que só lê a lista de roles para atribuir.
+- Desde o pin `8c563cda0575` (M0 E04), o catálogo de permissões traz as dez do `housekeeping` (ADR 0015). `housekeeping.tasks.execute` e `housekeeping.occurrences.report` aceitam `OWN` (a dona é a camareira atribuída ou quem registrou). Aviso do servidor (M6 E06 dele): ao conceder `housekeeping.damages.manage`, o editor avisa que ela lança danos na conta do hóspede sem precisar de `billing.postings.create`.
+- Um usuário com `housekeeping.tasks.execute` só em `OWN` não vê as tarefas no desktop ([ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md)). O editor não esconde a combinação, mas a descrição do escopo `OWN` dessa permissão diz que ela vale no app da camareira.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -546,6 +555,8 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Notas para o plano:** partes independentes, para as ondas do plano: pontos de caixa e códigos de lançamento são cadastros que não se referenciam no contrato (`CashPointResponse`, `TransactionCodeResponse`). As regras de roteamento escolhem códigos de lançamento (`transactionCodeIds`), só por leitura.
 
+Desde o pin `8c563cda0575` (M0 E04), `CashPointRequest.blindClose` e `TransactionCodeCreateRequest.serviceChargeApplies` são opcionais no contrato, com valor padrão no servidor. O `CashPointRequest` serve à criação e à alteração, e no `PUT` o `blindClose` omitido voltaria ao fechamento cego. A fachada os envia sempre explícitos ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). Já o `TransactionCodeUpdateRequest.serviceChargeApplies` é obrigatório.
+
 **Bloqueios:** Nenhum bloqueio conhecido.
 
 **Riscos e mitigação:** nenhum relevante.
@@ -588,7 +599,10 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- Desde o pin `8c563cda0575` (M0 E04), `CreateChecklistTemplateRequest.applicability` e `ChecklistRoutineRequest.weekdays` são opcionais no contrato, com valor padrão no servidor. O `ChecklistRoutineRequest` serve à criação e à alteração, e no `PUT` o `weekdays` omitido apagaria os dias gravados. A fachada os envia sempre explícitos ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). No `UpdateChecklistTemplateRequest`, `sections` e `applicability` são obrigatórios.
+- A governança usa modelos de checklist. O tipo de limpeza vincula um modelo (`checklistTemplateId`, M7 E13), e a inspeção da tarefa usa o modelo de contexto `INSPECTION` que valha para ela (M6 E10). O editor mostra os contextos que o servidor aceita, sem lista fixa no app.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -634,7 +648,10 @@ Todo usuário vê e revoga as próprias sessões.
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- Desde o pin `8c563cda0575` (M0 E04), `CreateSchedulePatternRequest.weekdays` é opcional no contrato, com valor padrão no servidor, e a fachada o envia sempre explícito ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). No `SchedulePatternRequest` da alteração, o `weekdays` é obrigatório.
+- A distribuição das tarefas de governança (M6 E09) só atribui a quem está escalado na data (`422 ASSIGNMENT_EMPLOYEE_NOT_SCHEDULED`). O servidor avisa quem saiu da escala pelo cadastro do `staff` (M6 E03 dele). O roteiro mostra uma camareira escalada aqui e disponível no plano do dia.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -778,13 +795,81 @@ Partes independentes, para as ondas do plano: o envio de documento entra em trê
 
 ---
 
+## E13 — Tipos de limpeza e faxinas programadas — #pendente
+
+**Objetivo:** a governanta e o gerente configuram a governança pelo app:
+- os **tipos de limpeza**: código, nome, prioridade padrão, se exige inspeção, troca de enxoval, o modelo de checklist vinculado e os créditos por tipo de UH;
+- as **faxinas programadas** de cada UH ou área: tipo e frequência, com a próxima data calculada pelo servidor.
+
+Os dois são desativados e reativados sem apagar nada.
+
+**Por que agora:** é a configuração por trás das tarefas do M6 (E09 a E11), que até aqui usam os seis tipos da carga inicial do servidor.
+
+**Dependências:** nenhuma dentro deste roadmap (exige o gate do M6). O vínculo de modelo usa os modelos da E08, só por leitura.
+
+**Escopo:**
+
+- **Tipos de limpeza:**
+  - `GET`/`POST /api/v1/cleaning-types`, `GET`/`PUT …/{id}`, com `If-Match` no `PUT`;
+  - `POST …/{id}/deactivate` e `/reactivate`.
+- **Faxinas programadas:**
+  - `GET`/`POST /api/v1/scheduled-cleanings`, `GET`/`PUT …/{id}`, com `If-Match` no `PUT`;
+  - `POST …/{id}/deactivate` e `/reactivate`.
+- **Permissões:** leitura com `housekeeping.config.read` e escrita com `housekeeping.config.manage`, que, no modelo, são do Gerente e da Governanta (ADR 0015).
+
+**Fora de escopo:**
+
+- as tarefas que esses cadastros geram (M6 E09 a E11);
+- o editor de modelos de checklist (E08).
+
+**Critérios de aceite:**
+
+- [ ] Criar um tipo com créditos para dois tipos de UH o mostra na lista em ordem de código. Repetir um tipo de UH nos créditos mostra em pt-BR a recusa `CLEANING_TYPE_CREDIT_DUPLICATED` no campo.
+- [ ] Desativar um tipo com faxina programada ativa mostra em pt-BR a recusa `CLEANING_TYPE_HAS_ACTIVE_SCHEDULES`. Depois de desativar a faxina, o tipo é desativado.
+- [ ] Programar uma faxina numa UH mostra a próxima data calculada pelo servidor. Editar a frequência a recalcula, e a edição concorrente trata o `412`.
+- [ ] Um `PUT` de tipo de limpeza que tira o vínculo do modelo manda `null`, nunca `""` (teste da fachada; entrada estrita da M6 E20 do servidor).
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Regras do servidor (M6 E01 dele):
+  - créditos de 1 a 100, até 200 linhas, e cada tipo de UH uma vez só;
+  - código repetido, mesmo de um tipo desativado, dá `409 CLEANING_TYPE_CODE_ALREADY_IN_USE`;
+  - o `PUT` do tipo troca os créditos inteiros, e a chave estável (`key`) não muda;
+  - a faxina programada só troca o tipo e a frequência, e o local e a última faxina ficam;
+  - reativar uma faxina mantém a próxima data antiga, mesmo vencida.
+- Os seis tipos da carga inicial têm chave de sistema (`CHECKOUT`, `STAYOVER`, `TOUCH_UP`, `DEEP_CLEAN`, `PRE_ARRIVAL`, `TURNDOWN`), e a abertura de cama vem desativada. A geração automática das tarefas usa essas chaves. A tela mostra a chave, mas não a deixa editar.
+- Desde a entrada estrita (M6 E20 do servidor), `credits: 1.5` ou `frequencyDays: 7.5` dão `400 INVALID_FORMAT`, e a tela só aceita inteiro.
+- Partes independentes, para as ondas do plano: tipos de limpeza e faxinas programadas são cadastros distintos. A faxina escolhe o tipo só por leitura.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** nenhum relevante.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E11 — Gate do marco M7 — #pendente
 
 **Objetivo:** o M7 entregue como build testável. O roteiro do M7 mostra a configuração feita só pelo app. Há uma tabela de cobertura do contrato fixado, com cada operação ligada a uma tela ou marcada como do mobile ou do agente de impressão. A definição de pronto é verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha a cobertura do servidor fixado.
 
-**Dependências:** E03, E04, E06, E07, E08, E09, E10, E12.
+**Dependências:** E03, E04, E06, E07, E08, E09, E10, E12, E13.
 
 **Escopo:**
 
@@ -810,7 +895,7 @@ Partes independentes, para as ondas do plano: o envio de documento entra em trê
 
 **Revisão humana:** sim. É o gate do marco e fecha a cobertura do servidor fixado.
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:** na tabela de cobertura, as 41 operações da tag `housekeeping` (desde o pin `8c563cda0575`) se ligam às telas do M6 (E09 a E11) e desta E13. Os comandos offline `housekeeping.*` e as fontes `housekeeping-tasks` e `housekeeping-inspections` são do `sync`, ou seja, "mobile" ([ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md)).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -833,3 +918,10 @@ Partes independentes, para as ondas do plano: o envio de documento entra em trê
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E10 ganha a fila de envio à FNRH (lista, `retry` e `dismiss`) e a limpeza da credencial. Ficou registrada a ruling de não adotar o WireMock da FNRH no `zeny-front` por ora. Entra a E12 (impressoras, agentes e fila de impressão, com "Enviar à impressora do hotel" nas telas de documento; [ADR 0009](../adr/0009-documentos-pdf-e-impressao.md)), e o gate E11 passa a depender dela e a separar na cobertura as rotas do agente de impressão. O fechamento do dia saiu de "Fora de escopo" e foi para a M6 E08. O marco tem 12 etapas, no limite de referência. Nenhuma tag mudou.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. As etapas E01 a E07, a E10 e a E12 ganharam, em "Notas para o plano", as partes que não dependem uma da outra, para o plano formar ondas; as relações entre cadastros foram conferidas no contrato fixado (`api/openapi.yaml`). Objetivo, escopo e critérios de aceite não mudaram, e nenhuma tag mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A E10 ganhou a nota do no-show na fila da FNRH (`NO_SHOW` e `REMOTE_NO_SHOW`). Nenhuma tag mudou.
+- 2026-11-20 — análise da rodada 4 do M0 (`claude --agent arquiteto`, servidor `8c563cda0575`).
+  - Entra a E13 (tipos de limpeza e faxinas programadas), com as 12 operações de configuração da governança, no bloco C. O gate E11 passa a depender dela.
+  - O marco tem agora 13 etapas.
+  - Objetivo, "Contexto confirmado" e escopo ganharam a configuração da governança, e as tarefas saíram de "Fora de escopo".
+  - A E01, a E03, a E07, a E08 e a E09 ganharam a nota dos campos com padrão sempre explícitos ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md), decidido pelo usuário em entrevista).
+  - A E05 ganhou as permissões do `housekeeping`, com o aviso do `damages.manage` e o [ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md). A E09 ganhou a escala da camareira, e a E11 ganhou a nota da cobertura.
+  - Nenhuma tag mudou.

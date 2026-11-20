@@ -64,7 +64,7 @@ class ErrorCatalogTest {
         println("CONTRACT_CODES_BEGIN")
         codes.sorted().forEach { println(it) }
         println("CONTRACT_CODES_END")
-        assertEquals(377, codes.size)
+        assertEquals(426, codes.size)
         assertTrue(codes.containsAll(common), "faltam comuns: ${common - codes.toSet()}")
     }
 
@@ -104,6 +104,28 @@ class ErrorCatalogTest {
             "A reserva mudou enquanto você concluía. Confira e tente de novo.",
             ErrorCatalog.message("RESERVATION_CHANGED"),
         )
+    }
+
+    @Test
+    fun concurrentUpdateInvitesTheUserToTryAgain() {
+        assertEquals(
+            "Outra operação mexeu neste registro ao mesmo tempo. Tente de novo.",
+            ErrorCatalog.message("CONCURRENT_UPDATE"),
+        )
+    }
+
+    @Test
+    fun locationInvalidMessagesAskForRoomOrCommonAreaNotBoth() {
+        listOf(
+            "HOUSEKEEPING_OCCURRENCE_LOCATION_INVALID",
+            "HOUSEKEEPING_TASK_LOCATION_INVALID",
+            "SCHEDULED_CLEANING_LOCATION_INVALID",
+        ).forEach { code ->
+            val message = ErrorCatalog.message(code).orEmpty()
+            assertTrue(message.contains("área comum"), "$code deve citar a área comum: $message")
+            assertTrue(message.contains("só uma"), "$code deve pedir só uma das duas: $message")
+            assertFalse(message.contains("juntos"), "$code não pode recomendar os dois juntos: $message")
+        }
     }
 
     @Test

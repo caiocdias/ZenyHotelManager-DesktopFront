@@ -153,12 +153,12 @@ class H(BaseHTTPRequestHandler):
         pass
 HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()
 PY
-roda() { # roda NOME URL
-  local nome="$1" url="$2" ini=$SECONDS
+roda() { # roda NOME URL [DESCONTO_S]: DESCONTO_S é a latência do resolvedor DNS da máquina, somada ao limite de 15 s
+  local nome="$1" url="$2" desconto="${3:-0}" ini=$SECONDS limite=$((15 + ${3:-0}))
   saida="$(com_segredos java -jar "$jar" --server "$url" --admin-login admin 2>&1)"; code=$?
   local dur=$((SECONDS - ini))
   assert_eq "1" "$code" "$nome sai 1"
-  [[ "$dur" -lt 15 ]] || _assert_fail "$nome levou ${dur}s (limite 15 s)"
+  [[ "$dur" -lt "$limite" ]] || _assert_fail "$nome levou ${dur}s (limite ${limite} s = 15 s + ${desconto} s de resolvedor)"
   saida="$(sem_slf4j "$saida")"
   assert_eq "1" "$(wc -l <<<"$saida" | tr -d ' ')" "$nome imprime uma linha só" "saída: $saida"
   [[ "$saida" == Falha:* ]] || _assert_fail "$nome não começa com 'Falha:'" "saída: $saida"
@@ -177,6 +177,52 @@ for modo in json erro; do
   kill $! 2>/dev/null
 done
 roda "porta fechada" "http://127.0.0.1:1"
-roda "host inexistente" "http://host-que-nao-existe.invalid"
+# Conexão que nunca completa, sem DNS (ataque da etapa M0 E04): a fila de aceite de um socket local está cheia e o
+# kernel descarta o SYN, então só o timeout de conexão do próprio JAR o faz desistir. Aqui o limite de 15 s vale sem
+# desconto de resolvedor: um JAR com o timeout de conexão regredido (30 s, ou nenhum) reprova, mesmo que o caso do
+# nome inexistente, que soma a latência do DNS da máquina, o deixe passar. O piso de 4 s prova que o JAR esperou a
+# conexão (5 s hoje) em vez de desistir por outro motivo, e o servidor confere antes que o SYN é mesmo descartado.
+cat >"$srv/fila.py" <<'PY'
+import socket, sys, time
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+s.listen(0)
+porta = s.getsockname()[1]
+fila = []
+for _ in range(4):
+    c = socket.socket()
+    c.setblocking(False)
+    try:
+        c.connect(('127.0.0.1', porta))
+    except BlockingIOError:
+        pass
+    fila.append(c)
+time.sleep(0.3)
+try:
+    socket.create_connection(('127.0.0.1', porta), timeout=2)
+    print('SEM_FILA', flush=True)
+except OSError:
+    print(porta, flush=True)
+time.sleep(float(sys.argv[1]))
+PY
+coproc FILA { timeout 70 python3 -I "$srv/fila.py" 60; }
+porta_fila=""
+read -r -t 15 porta_fila <&"${FILA[0]}"
+if [[ "$porta_fila" =~ ^[0-9]+$ ]]; then
+  t_fila=$SECONDS
+  roda "conexão sem resposta" "http://127.0.0.1:$porta_fila"
+  [[ $((SECONDS - t_fila)) -ge 4 ]] || _assert_fail "conexão sem resposta: o JAR desistiu antes do timeout de conexão" \
+    "durou $((SECONDS - t_fila)) s; esperado >= 4 s com a conexão pendurada"
+else
+  _assert_fail "conexão sem resposta: a fila cheia não segurou o SYN neste kernel" "servidor: '$porta_fila'"
+fi
+kill "$FILA_PID" 2>/dev/null
+# Nome inexistente: o tempo para o resolvedor DNS da máquina dizer "não existe" não é do JAR (no WSL pode passar de
+# 40 s). Mede-se esse tempo para o mesmo nome neste run e soma-se ao limite: o JAR continua tendo 15 s próprios para
+# desistir depois da resposta do DNS, então um JAR pendurado (ou sem timeout) ainda reprova.
+t0=$SECONDS
+getent hosts host-que-nao-existe.invalid >/dev/null 2>&1
+dns=$((SECONDS - t0))
+roda "host inexistente" "http://host-que-nao-existe.invalid" "$dns"
 
 finish

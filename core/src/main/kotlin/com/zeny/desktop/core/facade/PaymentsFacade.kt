@@ -184,7 +184,7 @@ class PaymentsFacade internal constructor(
                 authorizationCode = optional(input.authorizationCode),
                 cardBrand = optional(input.cardBrand),
                 cardLast4 = optional(input.cardLast4),
-                deposit = input.deposit,
+                deposit = Option.Some(input.deposit),
                 method = ReceivePaymentRequest.Method.fromSerial(input.method.name),
                 nsu = optional(input.nsu),
                 tendered = input.tendered?.let { Option.Some(it.toApi()) } ?: Option.Undefined,

@@ -153,6 +153,7 @@ dependencies {
 - Resposta: `HttpResponseTyped<T>`, com `status`, `body()` e `raw` (o `HttpResponse` do Ktor), e o `ETag` em `raw.headers[HttpHeaders.ETag]`. Cada operação tem também um `prepare<Operação>`, que devolve um `HttpStatement` (útil para SSE e download).
 - Header por chamada: no `block` final, sempre com `headers[nome] = valor`, por exemplo `api.updateHotel(ifMatch = etag, hotelRequest = req) { headers["X-Approval-Token"] = token }`. Nunca com `header(nome, valor)`, que acrescenta e duplica.
 - Campo opcional: `Option<T?>` (de `de.quati:kotlin-util`), que distingue ausente (`Option.Undefined`) de `null`. O `Json` mantém `encodeDefaults = false` (o padrão), e assim o `Undefined` não vai para o JSON.
+  - *Atualização de 2026-11-20 (rodada 4 do M0):* desde o servidor em `8c563cda0575`, um campo de requisição com valor padrão no servidor sai opcional no contrato. O `core` o envia sempre explícito, em `Option.Some`, conforme o [ADR 0014](0014-campos-com-padrao-sempre-explicitos.md).
 
 ## Alternativas descartadas
 

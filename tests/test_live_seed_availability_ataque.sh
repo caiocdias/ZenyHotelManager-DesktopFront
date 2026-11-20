@@ -45,7 +45,7 @@ assert_not_contains "$kt" 'ReservationSpec' "não usa o ReservationSpec"
 assert_contains "$kt" 'private const val BOOKING_OFFSET_DAYS = 20L' "reserva em d+20"
 assert_contains "$kt" 'private const val RESTRICTION_OFFSET_DAYS = 25L' "restrição em d+25"
 assert_contains "$kt" 'private const val MIN_STAY_NIGHTS = 2' "estadia mínima de 2 noites"
-assert_contains "$kt" 'ReservationCancelRequest.Reason.HOTEL_REQUEST, waivePenalty = false' "cancelamento por HOTEL_REQUEST sem dispensar multa"
+assert_contains "$kt" 'ReservationCancelRequest.Reason.HOTEL_REQUEST, waivePenalty = Option.Some(false)' "cancelamento por HOTEL_REQUEST sem dispensar multa"
 assert_not_contains "$kt" 'If-Match' "o cancelamento não usa If-Match"
 assert_contains "$kt" 'api.cancelReservation(id, it.requireIdempotencyKey(), null, body, it.headers)' "cancelamento com Idempotency-Key própria"
 # O finally cancela se a criação passou e o cancelamento não.

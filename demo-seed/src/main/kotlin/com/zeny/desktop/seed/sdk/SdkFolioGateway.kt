@@ -92,7 +92,7 @@ class SdkFolioGateway(
         val request =
             PostingRequest(
                 description = Option.Some(description),
-                quantity = QUANTITY,
+                quantity = Option.Some(QUANTITY),
                 transactionCodeId = Uuid.parse(codeId),
                 unitPrice = unitPrice,
             )

@@ -8,6 +8,7 @@ import com.zeny.desktop.sdk.client.RoomsApi
 import com.zeny.desktop.sdk.model.ChangePasswordRequest
 import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
+import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -35,7 +36,7 @@ class ApiExecutorTest {
     private val requests = mutableListOf<HttpRequestData>()
     private val executor = ApiExecutor()
     private val cancelBody =
-        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = true)
+        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = Option.Some(true))
 
     private val hotelJson =
         """{"configured":true,"id":"$id","timezone":"America/Sao_Paulo","updatedAt":"2026-11-10T13:00:00Z"}"""

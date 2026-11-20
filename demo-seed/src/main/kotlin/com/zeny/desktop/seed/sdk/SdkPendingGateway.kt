@@ -88,7 +88,7 @@ class SdkPendingGateway(
                 guaranteePolicyId = Uuid.parse(spec.guaranteePolicyId),
                 mealPlan = RatePlanCreateRequest.MealPlan.ROOM_ONLY,
                 name = spec.name,
-                packageIds = emptyList(),
+                packageIds = Option.Some(emptyList()),
                 roomTypeIds = listOf(Uuid.parse(spec.roomTypeId)),
             )
         return redactingServerDetail {
@@ -120,7 +120,7 @@ class SdkPendingGateway(
                     ),
                 roomTypeIds = listOf(Uuid.parse(prices.roomTypeId)),
                 to = Option.Some(prices.to.toString()),
-                weekdays = emptyList(),
+                weekdays = Option.Some(emptyList()),
             )
         redactingServerDetail {
             executor.execute { rates.updateRatePlanPrices(Uuid.parse(ratePlanId), null, request, it.headers) }
@@ -192,10 +192,11 @@ class SdkPendingGateway(
                         ReservationRequest(
                             adults = spec.adults,
                             arrival = spec.arrival.toString(),
-                            childAges = emptyList(),
+                            childAges = Option.Some(emptyList()),
                             departure = spec.departure.toString(),
-                            guests = listOf(StayGuestRequest(guestId = holder, primary = true)),
-                            nightlyRates = emptyList(),
+                            guests =
+                                Option.Some(listOf(StayGuestRequest(guestId = holder, primary = Option.Some(true)))),
+                            nightlyRates = Option.Some(emptyList()),
                             ratePlanId = Uuid.parse(spec.ratePlanId),
                             roomTypeId = Uuid.parse(spec.roomTypeId),
                             segment = ReservationRequest.Segment.LEISURE,
@@ -233,7 +234,10 @@ class SdkPendingGateway(
         reason: String,
     ) {
         val request =
-            ReservationCancelRequest(reason = ReservationCancelRequest.Reason.fromSerial(reason), waivePenalty = false)
+            ReservationCancelRequest(
+                reason = ReservationCancelRequest.Reason.fromSerial(reason),
+                waivePenalty = Option.Some(false),
+            )
         redactingServerDetail {
             executor.execute(Intent()) {
                 reservationsApi.cancelReservation(

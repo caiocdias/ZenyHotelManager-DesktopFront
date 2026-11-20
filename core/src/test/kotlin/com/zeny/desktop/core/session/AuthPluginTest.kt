@@ -13,6 +13,7 @@ import com.zeny.desktop.sdk.model.ChangePasswordRequest
 import com.zeny.desktop.sdk.model.DeviceRequest
 import com.zeny.desktop.sdk.model.LoginRequest
 import com.zeny.desktop.sdk.model.ReservationCancelRequest
+import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpClientOgen
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -235,7 +236,10 @@ class AuthPluginTest {
                     id = Uuid.parse(id),
                     idempotencyKey = "chave-1",
                     reservationCancelRequest =
-                        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = true),
+                        ReservationCancelRequest(
+                            reason = ReservationCancelRequest.Reason.OTHER,
+                            waivePenalty = Option.Some(true),
+                        ),
                 )
 
             assertEquals(401, response.raw.status.value)

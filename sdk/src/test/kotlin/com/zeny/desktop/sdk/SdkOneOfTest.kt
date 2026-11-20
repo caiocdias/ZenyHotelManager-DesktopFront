@@ -5,6 +5,7 @@ import com.zeny.desktop.sdk.model.GuestResponse
 import com.zeny.desktop.sdk.model.GuestWriteSummaryResponse
 import com.zeny.desktop.sdk.model.MergeGuestRequest
 import com.zeny.desktop.sdk.model.RestrictGuestRequest
+import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpClientOgen
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import io.ktor.client.HttpClient
@@ -132,7 +133,7 @@ class SdkOneOfTest {
             val request =
                 MergeGuestRequest(
                     mergedGuestId = Uuid.parse("0199d6b8-1f2e-7a3b-8c4d-5e6f7a8b9c0e"),
-                    takeFromMerged = emptyList(),
+                    takeFromMerged = Option.Some(emptyList()),
                 )
             val full = fullJson()
             val fullResponse: HttpResponseTyped<JsonElement> = api(full).mergeGuests(someId, "W/\"6\"", request)

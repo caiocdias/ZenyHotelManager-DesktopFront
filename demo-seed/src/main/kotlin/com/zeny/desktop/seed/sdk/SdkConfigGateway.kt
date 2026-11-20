@@ -178,8 +178,8 @@ class SdkConfigGateway(
         val request =
             RoomTypeRequest(
                 code = spec.code,
-                displayOrder = spec.displayOrder,
-                featureIds = emptyList(),
+                displayOrder = Option.Some(spec.displayOrder),
+                featureIds = Option.Some(emptyList()),
                 maxAdults = spec.maxAdults,
                 maxChildren = spec.maxChildren,
                 name = spec.name,
@@ -230,7 +230,7 @@ class SdkConfigGateway(
     ): String {
         val request =
             RoomRequest(
-                featureIds = emptyList(),
+                featureIds = Option.Some(emptyList()),
                 floor = Option.Some(spec.floor.toString()),
                 number = spec.number,
                 roomTypeId = Uuid.parse(roomTypeId),
@@ -291,7 +291,7 @@ class SdkConfigGateway(
 
     /** `false` só no `409 CASH_POINT_NAME_ALREADY_IN_USE` (alguém criou entre a leitura e a escrita). */
     override suspend fun createCashPoint(spec: CashPointSpec): Boolean {
-        val request = CashPointRequest(blindClose = spec.blindClose, name = spec.name)
+        val request = CashPointRequest(blindClose = Option.Some(spec.blindClose), name = spec.name)
         return try {
             executor.execute { billing.createCashPoint(request, it.headers) }
             true
@@ -336,7 +336,7 @@ class SdkConfigGateway(
                 guaranteePolicyId = Uuid.parse(guaranteePolicyId),
                 mealPlan = RatePlanCreateRequest.MealPlan.fromSerial(spec.mealPlan),
                 name = spec.name,
-                packageIds = emptyList(),
+                packageIds = Option.Some(emptyList()),
                 roomTypeIds = roomTypeIds.map { Uuid.parse(it) },
             )
         return executor
@@ -371,7 +371,7 @@ class SdkConfigGateway(
                     ),
                 roomTypeIds = listOf(Uuid.parse(roomTypeId)),
                 seasonId = Option.Some(Uuid.parse(seasonId)),
-                weekdays = emptyList(),
+                weekdays = Option.Some(emptyList()),
             )
         executor.execute { rates.updateRatePlanPrices(Uuid.parse(ratePlanId), null, request, it.headers) }
     }

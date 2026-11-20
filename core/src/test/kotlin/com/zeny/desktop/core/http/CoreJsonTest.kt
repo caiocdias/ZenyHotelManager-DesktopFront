@@ -2,6 +2,7 @@ package com.zeny.desktop.core.http
 
 import com.zeny.desktop.sdk.model.CreateGuestRequest
 import com.zeny.desktop.sdk.model.TokenResponse
+import de.quati.kotlin.util.Option
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -23,7 +24,7 @@ class CoreJsonTest {
             )
         assertEquals("a", token.accessToken)
 
-        val encoded = CoreJson.encodeToString(CreateGuestRequest(documents = emptyList(), profile = null))
+        val encoded = CoreJson.encodeToString(CreateGuestRequest(documents = Option.Some(emptyList()), profile = null))
         val obj: JsonObject = CoreJson.parseToJsonElement(encoded).jsonObject
         assertFalse(obj.containsKey("consents"), encoded)
         assertFalse(obj.containsKey("sensitiveData"), encoded)

@@ -1,6 +1,6 @@
 # Roadmap — M6 Governança e operação
 
-> Arquivo: `docs/roadmaps/roadmap-m6-governanca-operacao.md` · branch de execução: `roadmap/m6-governanca-operacao` · criado em 2026-11-10 · última revisão 2026-11-17
+> Arquivo: `docs/roadmaps/roadmap-m6-governanca-operacao.md` · branch de execução: `roadmap/m6-governanca-operacao` · criado em 2026-11-10 · última revisão 2026-11-20
 
 > **Pré-requisito:** a etapa E05 ("Gate do marco M5") de `docs/roadmaps/roadmap-m5-hospedes-empresas.md` está `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3). O M6 do servidor (`housekeeping`, `maintenance`, fechamento) pode já ter avançado nessa altura, e a rodada do M0 decide se este marco ganha etapas.
 
@@ -15,7 +15,8 @@ O desktop passa a fazer tudo o que o mobile fará na governança, e mais (decis�
 - mudar o status de governança das UHs no mapa e registrar observações e sinalizações;
 - abrir e liberar OOO/OOS com aprovação;
 - ver o histórico e as divergências;
-- executar checklists com respostas e fotos, e ver os relatórios de conformidade.
+- executar checklists com respostas e fotos, e ver os relatórios de conformidade;
+- ver as tarefas de governança do dia, distribuí-las entre as camareiras, executá-las e inspecioná-las, e registrar e tratar achados e danos. A Recepção consulta as tarefas, solicita a avulsa, gere os achados e cobra os danos. A Camareira fica no mobile ([ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md)).
 
 Todos os usuários ganham o painel de notificações com contador em tempo real e as preferências. A escala do dia aparece para consulta. O gerente acompanha e dispara o fechamento do dia.
 
@@ -58,6 +59,43 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
       - `advance-business-date`, por último.
 
       O automático fecha a data às 03:00 do dia seguinte, o `endOfDayTime` padrão (regra 5 do README). Snapshot e PDFs do fechamento (M6 E13 do servidor) continuam pendentes.
+- **Tarefas de governança** (desde o pin `8c563cda0575`, M0 E04; M6 E01 a E06 e E19 do servidor, tag `housekeeping`):
+  - **tarefas:**
+    - `GET /api/v1/housekeeping-tasks` (as da data, por padrão a data operacional, primeiro as UHs com chegada) e `GET /api/v1/housekeeping-tasks/{id}`;
+    - `POST /api/v1/housekeeping-tasks`, a tarefa avulsa numa UH ou numa área.
+  - **plano do dia:**
+    - `GET /api/v1/assignment-plans/{date}`;
+    - `POST …/{date}/suggest`, `PATCH /api/v1/assignment-plans/{date}` (o primeiro `PATCH` do contrato) e `POST …/{date}/publish`, todos com `If-Match`.
+  - **execução:** `POST /api/v1/housekeeping-tasks/{id}/start`, `/pause`, `/resume`, `/refuse`, `/retry` e `/complete`, com `If-Match`. A conclusão leva as respostas do checklist da tarefa e conclui o checklist na mesma transação.
+  - **inspeção:**
+    - `POST /api/v1/housekeeping-tasks/{id}/inspection/start` e `/inspection/complete`, com `If-Match`;
+    - `POST /api/v1/room-inspections`, a inspeção voluntária, que só aprova.
+  - **achados e perdidos:**
+    - `GET`/`POST /api/v1/lost-and-found-items` e `GET …/{id}`;
+    - `PUT …/{id}/storage-place`;
+    - `POST …/{id}/return`, `/discard` e `/donate`. Descartar e doar só valem depois do prazo de guarda.
+  - **danos:**
+    - `GET`/`POST /api/v1/damage-reports` e `GET …/{id}`;
+    - `POST …/{id}/review`, `/charge` e `/waive`. A cobrança lança na conta aberta da reserva vinculada.
+  - **permissões e papéis:** os modelos estão no [ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md). Resumo:
+    - a Governanta e o Gerente distribuem, executam e inspecionam;
+    - a Recepção consulta, solicita a avulsa, gere os achados e cobra os danos;
+    - a Camareira (`OWN`) não lê as tarefas online e fica fora das tarefas no desktop (decisão do usuário, ADR 0015).
+  - **tempo real:** o tópico SSE `housekeeping` exige `housekeeping.tasks.read`. Ele leva `housekeeping.assignment-plan` (só na publicação) e `housekeeping.task` (a cada transição e inspeção, com o `id` e a versão, sem dado de hóspede).
+  - **avisos no painel:** `notifications.task-assigned` (à camareira, na publicação), `notifications.room-released` (UH que ficou pronta, a quem tem `housekeeping.tasks.read`), `notifications.inspection-rejected`, `housekeeping.task-conflict` e `housekeeping.lost-found-expired`.
+  - **geração das tarefas:**
+    - o check-out e a troca de UH geram a tarefa de saída;
+    - a virada da data operacional gera as do dia (permanência, pré-chegada, faxinas programadas);
+    - num banco recém-criado, só há tarefas depois de um check-out, de uma troca de UH, de uma avulsa ou de um fechamento.
+
+    A migração do servidor cria os seis tipos de limpeza da SPEC. A configuração deles é da M7 E13.
+  - **regras que a tela mostra:**
+    - a conclusão leva a UH a Limpa, e a inspeção aprovada a Inspecionada;
+    - a inspeção reprovada leva a UH a Suja e a tarefa a `REJECTED`, para refazer;
+    - a recusa por "não perturbe" numa UH ocupada liga o sinal na UH, e numa UH vaga é aceita com `200`;
+    - a tarefa alheia com `OWN` e a inexistente dão o mesmo `403`.
+
+  Fontes: ARCHITECTURE §6.2, §7, §9 e §10 do servidor; capturas do brain `ZenyHotelManager - atualização m6-operacao-fechamento` E01 a E06, E19 e "fim do lote E20-E06".
 - **Regras do servidor:**
   - OOO com aprovação de superior, refletido na disponibilidade e na marca de realocação;
   - OOO recusado em UH ocupada;
@@ -80,13 +118,16 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
 - notificações e preferências;
 - escala do dia (consulta);
 - fechamento do dia (E08, desbloqueada pela rodada 3 do M0: as etapas do fechamento estão no pin `5e06f16d51ff`);
+- tarefas de governança: lista do dia, avulsa e distribuição (E09), execução e inspeção (E10), achados e perdidos e danos (E11), que chegaram na rodada 4 do M0;
 - seed ampliado;
 - roteiro do M6.
 
 **Fora de escopo:**
 
 - modelos e rotinas de checklist, cadastro de pessoal e montagem da escala (M7);
-- tarefas de governança e manutenção corretiva, que pertencem ao M6 do servidor, ainda pendente (E01 a E09 dele), e entram por uma rodada do M0;
+- configuração da governança (tipos de limpeza com créditos e faxinas programadas), na M7 E13;
+- a visão da Camareira sobre as próprias tarefas, que o servidor entrega só pela sincronização offline ([ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md));
+- ordens de serviço da manutenção e OOO aberto pela manutenção (M6 E07 e E08 do servidor), relatórios operacionais e hora prevista de chegada (E09 e E22 dele). Estão fora do pin `8c563cda0575` e entram por uma rodada do M0;
 - snapshot, estatísticas e PDFs do fechamento (M6 E13 do servidor, pendente);
 - a fila de envio à FNRH (M7 E10), embora as falhas dela cheguem ao painel desta E05 como `notifications.integration-failure`;
 - sincronização offline;
@@ -101,6 +142,10 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
   - `ETag` e `If-Match` com `412` tratado;
   - permissões efetivas, com o servidor decidindo.
 - **Aprovação de superior:** ação recusada com `APPROVAL_REQUIRED` passa pelo diálogo do M1.
+- **Escritas** (desde o pin `8c563cda0575`):
+  - campo com valor padrão no servidor vai sempre explícito ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md));
+  - "sem valor" é campo ausente ou `null`, nunca `""` (a entrada estrita da M6 E20 do servidor);
+  - `409 CONCURRENT_UPDATE` mostra a mensagem do catálogo, sem repetição automática.
 - **Fotos:** o app envia o arquivo escolhido e não guarda cópia. A remoção de metadados é do servidor.
 - **Notificações:** o painel mostra só as do usuário logado, e o contador vem do servidor.
 - **Servidor:** é só leitura, e o commit fixado não muda no marco.
@@ -113,6 +158,7 @@ Todos os usuários ganham o painel de notificações com contador em tempo real 
 | H1 | Pelo desktop, o seed consegue criar modelos de checklist publicados e uma rotina, usando a API de modelos que o front só ganha no M7 | O roteiro do M6 usa uma execução avulsa de um modelo criado por `curl` | E03 |
 | H2 | Alguma operação do contrato já dispara notificações para o painel (por exemplo, a diferença de caixa do M4) | O roteiro mostra o painel vazio e o contador zerado; a demonstração fica para depois | E05 |
 | H3 | Na rodada do M0 que vier antes deste marco, o servidor já terá a M6 E11 dele (as etapas do fechamento e o avanço da data) | A E08 continua `#bloqueada`, e essa análise do M0 decide entre esperar ou tirar a E08 das dependências do gate, registrando no histórico | E08 — **confirmada (2026-11-15)** pela análise da rodada 3 do M0: a `main` do servidor em `5e06f16d51ff` tem a M6 E11 dele `#concluida`, e a M0 E03 fixa esse commit. A E08 passou a `#pendente` |
+| H4 | O seed consegue pôr camareiras escaladas na data operacional (funcionários, turnos e escala pelas operações de `staff`), para a distribuição ter a quem atribuir. A distribuição recusa colaborador não escalado na data (`422 ASSIGNMENT_EMPLOYEE_NOT_SCHEDULED`) | A sugestão deixa as tarefas sem camareira, e o roteiro mostra a publicação sem atribuição | E09, E07 |
 
 ## Definição global de pronto
 
@@ -214,7 +260,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E05 | Notificações | #pendente | — | Painel, contador ao vivo, marcar como lida e preferências |
 | E06 | Escala do dia | #pendente | — | Consulta da escala, dos turnos e de quem está trabalhando hoje |
 | E08 | Fechamento do dia | #pendente | — | Execuções do fechamento com etapas e pendências, disparo manual com aprovação, retomada e andamento ao vivo |
-| E07 | Gate do marco M6 | #pendente | E02, E04, E05, E06, E08 | Seed ampliado, roteiro do M6 e definição de pronto verificada |
+| E09 | Tarefas do dia e distribuição | #pendente | — | Lista das tarefas por data, tarefa avulsa, plano do dia sugerido, ajustado e publicado, tópico `housekeeping` |
+| E10 | Execução e inspeção das tarefas | #pendente | E09, E03 | Iniciar, pausar, retomar, recusar, tentar de novo e concluir com checklist; inspeção da tarefa e voluntária |
+| E11 | Achados e perdidos e danos | #pendente | E09 | Registro, guarda, devolução, descarte e doação dos achados; revisão, cobrança na conta e dispensa dos danos |
+| E07 | Gate do marco M6 | #pendente | E02, E04, E05, E06, E08, E10, E11 | Seed ampliado, roteiro do M6 e definição de pronto verificada |
 
 ---
 
@@ -233,7 +282,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - Divergências: `GET /api/v1/rooms/discrepancies`.
 - Ações visíveis só com a permissão correspondente.
 
-**Fora de escopo:** tarefas de governança, que são do M6 do servidor e ainda estão pendentes.
+**Fora de escopo:** tarefas de governança (E09 a E11).
 
 **Critérios de aceite:**
 
@@ -248,7 +297,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** partes independentes, para as ondas do plano: a aba de divergências só lê `GET /api/v1/rooms/discrepancies` e não depende das ações sobre a UH nem do histórico. O histórico (`…/status-history`) é leitura à parte das três ações.
+**Notas para o plano:**
+
+- Partes independentes, para as ondas do plano: a aba de divergências só lê `GET /api/v1/rooms/discrepancies` e não depende das ações sobre a UH nem do histórico. O histórico (`…/status-history`) é leitura à parte das três ações.
+- Desde o pin `8c563cda0575` (M0 E04), o status de governança também muda pelas tarefas. A conclusão leva a UH a Limpa, a inspeção aprovada a Inspecionada, e a reprovada de volta a Suja (E10). O mapa recebe essas mudanças pelo tópico `rooms`, como as manuais, e o histórico mostra o autor que o servidor manda.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -344,7 +396,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Revisão humana:** não
 
-**Notas para o plano:** a semântica de "uma entrada da execução na trilha na conclusão" e a idempotência foram decididas no gate do M2 do servidor (ajuste da E07 dele).
+**Notas para o plano:**
+
+- A semântica de "uma entrada da execução na trilha na conclusão" e a idempotência foram decididas no gate do M2 do servidor (ajuste da E07 dele).
+- Desde o pin `8c563cda0575` (M0 E04), a tarefa de governança e a inspeção abrem execuções de checklist próprias (`checklistExecutionId` na tarefa e na inspeção). Elas são concluídas pela conclusão da tarefa ou da inspeção, na mesma transação (ARCHITECTURE §6.2 do servidor). O plano confere no servidor como essas execuções aparecem na lista de pendentes e o que um `…/complete` direto faz com elas. A tela não pode oferecer a conclusão por aqui, se ela deixar a tarefa para trás.
+- O formulário de respostas, com foto, é reaproveitado pela execução e pela inspeção da tarefa (E10). Faça-o como componente próprio, que recebe a versão do modelo e devolve as respostas.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -435,6 +491,15 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Revisão humana:** não
 
 **Notas para o plano:** o tópico `notifications` é pessoal e não exige permissão (ARCHITECTURE §10 do servidor). Desde o pin `57eb5fac5b8a`, o painel também recebe `notifications.integration-failure` (submissão da FNRH `FAILED` ou `INVALID`, só com o código da reserva) e `notifications.end-of-day-pending`, os dois obrigatórios no painel. O rótulo de cada tipo sai em pt-BR, e um tipo desconhecido não quebra a tela.
+
+Desde o pin `8c563cda0575` (M0 E04), a governança emite cinco tipos:
+- `notifications.task-assigned`, à camareira, na publicação do plano;
+- `notifications.room-released`, a quem tem `housekeeping.tasks.read`, quando uma UH fica pronta;
+- `notifications.inspection-rejected`;
+- `housekeeping.task-conflict`, a quem distribui as tarefas;
+- `housekeeping.lost-found-expired`, a quem gere os achados.
+
+Nenhum deles é obrigatório no painel, e nenhum traz dado de hóspede. A `room-released` é a que a Recepção mais verá: um H2 positivo sem depender do caixa.
 
 Partes independentes, para as ondas do plano: as preferências (`/api/v1/notification-preferences`) não dependem do painel nem do contador.
 
@@ -569,13 +634,211 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 
 ---
 
+## E09 — Tarefas do dia e distribuição — #pendente
+
+**Objetivo:** a área Governança mostra as tarefas de uma data (por padrão, a data operacional), na ordem do servidor: primeiro as UHs com chegada, depois pela prioridade. Cada tarefa mostra a situação, o tipo de limpeza, a UH ou a área, a camareira e os créditos. A tela abre o detalhe e solicita uma tarefa avulsa numa UH ou numa área. A Governanta e o Gerente montam o plano do dia: pedem a sugestão do servidor, ajustam (movem, atribuem ou retiram tarefas) e publicam. A lista e o plano se atualizam ao vivo pelo tópico `housekeeping`.
+
+**Por que agora:** é a rotina da governanta todas as manhãs, e as etapas E10 e E11 partem desta área.
+
+**Dependências:** nenhuma dentro deste roadmap (exige o gate do M5 e o servidor fixado em `8c563cda0575` ou depois, M0 E04).
+
+**Escopo:**
+
+- **Tarefas:** `GET /api/v1/housekeeping-tasks` (com a data) e `GET /api/v1/housekeeping-tasks/{id}`; `POST /api/v1/housekeeping-tasks` (avulsa).
+- **Plano do dia:**
+  - `GET /api/v1/assignment-plans/{date}`, com o `404 ASSIGNMENT_PLAN_NOT_FOUND` tratado como "sem plano";
+  - `POST …/{date}/suggest`, `PATCH /api/v1/assignment-plans/{date}` e `POST …/{date}/publish`, todos com `If-Match`.
+- **Tempo real:** o tópico `housekeeping`, assinado só com `housekeeping.tasks.read`. `housekeeping.task` relê a tarefa, `housekeeping.assignment-plan` relê o plano, e o `reset` recarrega.
+- **Menu:** a área aparece com `housekeeping.tasks.read`. As ações seguem as permissões efetivas: avulsa com `housekeeping.tasks.request`, plano com `housekeeping.assignments.manage`.
+
+**Fora de escopo:**
+
+- execução e inspeção (E10);
+- achados e danos (E11);
+- tipos de limpeza e faxinas programadas (M7 E13);
+- a visão da Camareira ([ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md)).
+
+**Critérios de aceite:**
+
+- [ ] Como Governanta, a lista da data operacional do seed mostra as tarefas na ordem do servidor, e uma situação desconhecida aparece como "Outro (VALOR)".
+- [ ] Uma avulsa criada como Recepcionista aparece na lista dela na hora e na da Governanta ao atualizar. A publicação do plano feita pela Governanta atualiza a lista do Gerente, em outra sessão, em até 2 s, sem recarregar.
+- [ ] Sugerir, mover uma tarefa para outra camareira e publicar deixa as tarefas `ASSIGNED`, com a camareira e a posição do plano. Uma publicação com versão velha trata o `412`, relendo o plano.
+- [ ] Como Recepcionista, a área mostra a lista e a avulsa, sem as ações do plano. Um usuário só com `OWN` em `housekeeping.tasks.execute` (a Camareira do seed) não vê a área (ADR 0015).
+- [ ] As recusas da distribuição aparecem em pt-BR no campo ou na tarefa, sem `code` cru. Entre elas, `ASSIGNMENT_EMPLOYEE_NOT_SCHEDULED` e `ASSIGNMENT_TASK_NOT_ASSIGNABLE`.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front` com duas sessões.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Num banco recém-criado, não há tarefas até um check-out, uma troca de UH, uma avulsa ou um fechamento. Confira o que o seed já faz. Se faltar material, a etapa amplia o seed com check-outs ou avulsas (ver H4 para a distribuição).
+- O tópico `housekeeping` só publica a publicação do plano, as transições da execução e a inspeção (ARCHITECTURE §10 do servidor). A criação da avulsa, a sugestão e o ajuste não publicam, então a lista tem "Atualizar", e quem escreveu segue pelo retorno da escrita.
+- É o primeiro `PATCH` do contrato. A fachada do `core` usa o método gerado pelo ogen, caracterizado na M0 E04.
+- O plano tem `If-Match` em toda escrita, e só a publicação muda as tarefas. A sugestão e o ajuste mexem só no rascunho.
+- A tarefa terminada sai do plano publicado sem aviso (D12 da M6 E04 do servidor).
+- O `employeeId` nulo num item do `PATCH` deixa a tarefa no plano sem camareira (descrição da operação).
+- Partes independentes, para as ondas do plano: a lista com a avulsa e o plano do dia usam operações distintas. O tópico `housekeeping` serve aos dois e vem antes.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- A distribuição sem camareira escalada no seed (H4). O roteiro mostra a publicação sem atribuição, e a lacuna fica registrada.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E10 — Execução e inspeção das tarefas — #pendente
+
+**Objetivo:** no detalhe da tarefa, a Governanta ou o Gerente registra a execução: inicia, pausa, retoma, recusa (não perturbe ou recusa do hóspede), tenta de novo e conclui, respondendo o checklist da tarefa, com foto quando o item pede. Depois, inspeciona a UH: inicia e conclui a inspeção, aprovando ou reprovando com os itens reprovados. Também há a inspeção voluntária de uma UH limpa. O mapa de UHs e a lista mostram o efeito ao vivo.
+
+**Por que agora:** fecha o ciclo da limpeza que o mapa (E01) mostra, e é o que o desktop faz no lugar do mobile, pela Governanta (ADR 0015).
+
+**Dependências:** E09 e E03 (o formulário de respostas do checklist).
+
+**Escopo:**
+
+- **Execução:** `POST /api/v1/housekeeping-tasks/{id}/start`, `/pause`, `/resume`, `/refuse`, `/retry` e `/complete`, com `If-Match`. A conclusão leva as respostas, a observação de ocupação e as fotos enviadas por `POST /api/v1/files`.
+- **Inspeção:** `POST /api/v1/housekeeping-tasks/{id}/inspection/start` e `/inspection/complete`, com `If-Match`; `POST /api/v1/room-inspections`, a voluntária.
+- **Ações por permissão:** execução com `housekeeping.tasks.execute`, inspeção com `housekeeping.inspections.perform`.
+
+**Fora de escopo:**
+
+- comandos offline e o feed da camareira (mobile; ADR 0015);
+- o editor dos modelos de checklist de limpeza e de inspeção (M7 E08).
+
+**Critérios de aceite:**
+
+- [ ] Como Governanta, iniciar e concluir uma tarefa de saída do seed com o checklist respondido leva a tarefa a aguardar inspeção (ou a concluída, se o tipo não exige inspeção) e a UH a Limpa no mapa de outra sessão, em até 2 s.
+- [ ] Concluir com item obrigatório sem resposta mostra o erro no item (`CHECKLIST_REQUIRED_ITEMS_MISSING`), e nada muda.
+- [ ] A inspeção reprovada leva a UH a Suja e a tarefa a `REJECTED`, com os itens reprovados. Iniciar de novo a refaz, e a inspeção aprovada leva a UH a Inspecionada.
+- [ ] Recusar por "não perturbe" uma tarefa de UH ocupada liga o sinal na UH. "Tentar de novo" devolve a tarefa a `ASSIGNED`.
+- [ ] Uma ação com a versão velha trata o `412`, relendo a tarefa. Uma transição que o servidor recusa (`HOUSEKEEPING_TASK_TRANSITION_NOT_ALLOWED`) aparece em pt-BR.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front` com duas sessões.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Decisões do servidor (M6 E04 e E05 dele):
+  - `start` só até a data operacional, e a tarefa de data posterior dá `422 HOUSEKEEPING_TASK_NOT_DUE`;
+  - quando a Governanta inicia a tarefa, ela vira a executora do checklist, e a foto obrigatória é de quem iniciou;
+  - `AWAITING_INSPECTION` só quando a conclusão deixou a inspeção pendente na UH;
+  - `answers` não nulo numa tarefa sem checklist dá `400`;
+  - `foundGuestCount` sem `foundOccupancy` dá `REQUIRED`;
+  - numa tarefa sem modelo de inspeção, o `inspection/complete` abre e conclui numa chamada, e com modelo, sem início, dá `409 HOUSEKEEPING_INSPECTION_NOT_STARTED`;
+  - numa UH limpa com inspeção pendente, a inspeção voluntária dá `409 HOUSEKEEPING_INSPECTION_USE_TASK`.
+- A resposta das ações traz a tarefa com a versão nova: a tela segue com ela, sem reler. O tópico `housekeeping` atualiza as outras sessões.
+- Partes independentes, para as ondas do plano: a execução e a inspeção usam operações distintas. A inspeção voluntária é independente das duas.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- O seed sem modelo de checklist de limpeza ou de inspeção. A tarefa conclui sem checklist, e o critério do item obrigatório usa um modelo criado pelo seed (H1).
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E11 — Achados e perdidos e danos — #pendente
+
+**Objetivo:** na área Governança, a equipe registra um item achado ou um dano numa UH ou numa área. Quem gere os achados define o local de guarda, devolve o item (a quem) ou, depois do prazo de guarda, descarta ou doa. Quem gere os danos revisa (valor final, código de lançamento, reserva vinculada), cobra na conta aberta da reserva ou dispensa, com o motivo.
+
+**Por que agora:** completa a governança com o que mais aparece na operação e liga a governança à conta do hóspede (M4).
+
+**Dependências:** E09 (a área Governança).
+
+**Escopo:**
+
+- **Achados:**
+  - `GET`/`POST /api/v1/lost-and-found-items`, `GET …/{id}` e `PUT …/{id}/storage-place`;
+  - `POST …/{id}/return`, `/discard` e `/donate`, com `If-Match`.
+- **Danos:**
+  - `GET`/`POST /api/v1/damage-reports` e `GET …/{id}`;
+  - `POST …/{id}/review`, `/charge` e `/waive`, com `If-Match`.
+- **Permissões:**
+  - registrar e ver os próprios com `housekeeping.occurrences.report`;
+  - gerir com `housekeeping.lostfound.manage` e `housekeeping.damages.manage`, que, no modelo, são do Gerente e da Recepção, sem a Governanta (ADR 0015).
+
+**Fora de escopo:**
+
+- o registro offline (mobile);
+- o lançamento manual na conta, que é da M4.
+
+**Critérios de aceite:**
+
+- [ ] Registrar um item achado numa UH do seed o mostra `STORED` na lista. Descartar antes do prazo mostra em pt-BR a recusa `HOUSEKEEPING_LOST_FOUND_NOT_EXPIRED` e não muda nada.
+- [ ] Devolver o item grava a quem, e o "a quem" só aparece para quem gere os achados.
+- [ ] Registrar um dano numa UH ocupada, revisar com valor e código de lançamento e cobrar faz o lançamento aparecer na conta da hospedagem (M4), em outra sessão.
+- [ ] Cobrar um dano não revisado mostra em pt-BR a recusa `HOUSEKEEPING_DAMAGE_NOT_REVIEWED`. Dispensar grava o motivo, e o dano não aparece na conta.
+- [ ] As telas de descarte, doação e dispensa avisam que o texto livre fica gravado e não deve levar dado pessoal.
+
+**Validação obrigatória:**
+
+- Comandos oficiais de build, teste e lint → verdes.
+- Inspeção manual contra `zeny-front`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+
+- Avisos do servidor ao front (M6 E06 dele, fim do lote E20–E06):
+  - o custo vai como texto decimal, até 2 casas e `99999.99`;
+  - na revisão do dano, a tela envia o `reservationId` atual;
+  - descarte, doação e dispensa levam o aviso de texto livre.
+- A cobrança lança pela `BillingApi` do servidor só com `housekeeping.damages.manage`. A conta precisa ser uma conta aberta da reserva vinculada: inexistente dá `400 HOUSEKEEPING_DAMAGE_UNKNOWN_FOLIO`, e encerrada ou de outro dono dá `409 HOUSEKEEPING_DAMAGE_FOLIO_INVALID`. Reaproveite a escolha de conta da M4.
+- O dano que vem de uma tarefa de saída ou de troca de UH nunca vincula reserva (ARCHITECTURE §6.2 do servidor). Os achados e danos que um checklist abre (`OPEN_OCCURRENCE`) aparecem com origem `CHECKLIST`.
+- Confira o que a Camareira (`OWN`) consegue com o modelo padrão. Por exemplo, se ela lê as UHs e as áreas para escolher o local. Registre no handoff (ADR 0015, item 2).
+- Partes independentes, para as ondas do plano: achados e danos usam operações distintas e não dependem um do outro.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Um dano cobrado por engano na demo. A cobrança pede confirmação com o valor e a conta, e o roteiro usa um hóspede do seed criado para isso.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E07 — Gate do marco M6 — #pendente
 
-**Objetivo:** o M6 entregue como build testável. O seed passa a ter modelos de checklist com execuções e uma escala. O roteiro do M6 fica escrito, e a definição de pronto é verificada num clone limpo e no Windows.
+**Objetivo:** o M6 entregue como build testável. O seed passa a ter modelos de checklist com execuções, uma escala com camareiras e tarefas de governança na data operacional, com um item achado e um dano. O roteiro do M6 fica escrito, e a definição de pronto é verificada num clone limpo e no Windows.
 
 **Por que agora:** fecha o marco e vira a build de demo.
 
-**Dependências:** E02, E04, E05, E06, E08.
+**Dependências:** E02, E04, E05, E06, E08, E10, E11.
 
 **Escopo:**
 
@@ -600,13 +863,16 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 
 **Revisão humana:** sim. É o gate do marco e a nova build de demo.
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- O roteiro segue a manhã da governanta: tarefas do dia e plano publicado (E09); execução, inspeção reprovada e refeita (E10); achado e dano cobrado na conta (E11). Os passos são feitos pela Governanta, pelo Gerente e pela Recepção, sem passo da Camareira no desktop (ADR 0015). O fechamento do dia continua por último (regra 5).
+- O fechamento também gera as tarefas do dia seguinte (desde a M0 E04): depois dele, a lista da nova data já tem tarefas de permanência.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
 **Riscos e mitigação:**
 
-- O seed passa de 2 minutos com os checklists. Paralelizar as criações ou reduzir o volume.
+- O seed passa de 2 minutos com os checklists, a escala e as tarefas. Paralelizar as criações ou reduzir o volume.
 
 **Evidências e handoff:**
 
@@ -625,3 +891,11 @@ O topo do app passa a mostrar a data operacional nova quando o fechamento avanç
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). Entra a E08 (fechamento do dia), que nasce `#bloqueada`: o motor do servidor ainda não tem etapas, porque a M6 E11 dele está pendente. O gate E07 passa a depender dela. Nasce a H3. A E05 ganha a nota dos tipos de notificação novos (`integration-failure` e `end-of-day-pending`). Nenhuma tag existente mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A E08 sai de `#bloqueada` para `#pendente`, porque a M6 E11 do servidor (as 8 etapas do fechamento e o avanço da data) está no commit que a M0 E03 fixa. A H3 foi confirmada, e o escopo da E08 foi revisto: o contrato do fechamento não mudou. Entraram um critério de no-show e notas com as decisões da E11 do servidor.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E01, a E04 e a E05 ganharam, em "Notas para o plano", as partes que não dependem uma da outra, para o plano formar ondas. Objetivo, escopo e critérios de aceite não mudaram, e nenhuma tag mudou.
+- 2026-11-20 — análise da rodada 4 do M0 (`claude --agent arquiteto`, servidor `8c563cda0575`). A governança do servidor (M6 E01 a E06 e E19 dele) chegou com 41 operações.
+  - Entram três etapas: E09 (tarefas do dia e distribuição), E10 (execução e inspeção; depende da E09 e da E03) e E11 (achados e perdidos e danos). O gate E07 passa a depender da E10 e da E11.
+  - O marco tem agora 11 etapas.
+  - A configuração da governança foi para a M7 E13.
+  - Pelo [ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md), decidido pelo usuário em entrevista, as tarefas no desktop são da Governanta, do Gerente e da Recepção, e a Camareira fica no mobile.
+  - Objetivo, "Contexto confirmado", escopo e restrições ganharam a governança, o [ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md) e a entrada estrita. Nasce a H4 (camareiras escaladas no seed).
+  - A E01, a E03 e a E05 ganharam notas, e o gate ganhou objetivo e notas.
+  - Nenhuma tag existente mudou.
