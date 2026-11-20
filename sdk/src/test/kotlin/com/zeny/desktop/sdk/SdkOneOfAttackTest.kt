@@ -5,6 +5,7 @@ import com.zeny.desktop.sdk.model.GuestResponse
 import com.zeny.desktop.sdk.model.GuestWriteSummaryResponse
 import com.zeny.desktop.sdk.model.MergeGuestRequest
 import com.zeny.desktop.sdk.model.RestrictGuestRequest
+import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpClientOgen
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -66,7 +67,8 @@ class SdkOneOfAttackTest {
         return GuestsApi(HttpClientOgen.Base(http, "http://servidor.teste", {}, json))
     }
 
-    private fun mergeRequest() = MergeGuestRequest(mergedGuestId = Uuid.parse(otherId), takeFromMerged = emptyList())
+    private fun mergeRequest() =
+        MergeGuestRequest(mergedGuestId = Uuid.parse(otherId), takeFromMerged = Option.Some(emptyList()))
 
     @Test
     fun mergeGuestsSendsIfMatchPostPathAndJsonBody() =

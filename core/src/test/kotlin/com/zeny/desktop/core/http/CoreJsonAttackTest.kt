@@ -2,6 +2,7 @@ package com.zeny.desktop.core.http
 
 import com.zeny.desktop.sdk.model.CreateGuestRequest
 import com.zeny.desktop.sdk.model.TokenResponse
+import de.quati.kotlin.util.Option
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.jsonObject
 import java.util.Locale
@@ -34,7 +35,7 @@ class CoreJsonAttackTest {
 
     @Test
     fun encodedRequestDoesNotCarryUnsetOptionals() {
-        val json = CoreJson.encodeToString(CreateGuestRequest(documents = emptyList(), profile = null))
+        val json = CoreJson.encodeToString(CreateGuestRequest(documents = Option.Some(emptyList()), profile = null))
         val encoded = CoreJson.parseToJsonElement(json).jsonObject
         assertTrue(encoded.keys.none { it == "consents" || it == "sensitiveData" }, encoded.toString())
     }

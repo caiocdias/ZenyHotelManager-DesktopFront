@@ -13,6 +13,7 @@ import com.zeny.desktop.core.types.ExtensibleEnumLabels
 import com.zeny.desktop.sdk.model.MeResponse
 import com.zeny.desktop.sdk.model.ReservationCancelRequest
 import com.zeny.desktop.sdk.model.ReservationDetailResponse
+import de.quati.kotlin.util.Option
 import de.quati.ogen.client.ktor.HttpResponseTyped
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -506,7 +507,10 @@ class ZenyCoreAttackTest {
                 idempotencyKey = o.requireIdempotencyKey(),
                 xApprovalToken = o.approvalToken,
                 reservationCancelRequest =
-                    ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = true),
+                    ReservationCancelRequest(
+                        reason = ReservationCancelRequest.Reason.OTHER,
+                        waivePenalty = Option.Some(true),
+                    ),
                 block = o.headers,
             )
         }

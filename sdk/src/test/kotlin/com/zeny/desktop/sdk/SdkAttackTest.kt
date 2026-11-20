@@ -101,7 +101,7 @@ class SdkAttackTest {
     private fun sentBody(request: HttpRequestData) = String((request.body as OutgoingContent.ByteArrayContent).bytes())
 
     private val cancelRequest =
-        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = false)
+        ReservationCancelRequest(reason = ReservationCancelRequest.Reason.OTHER, waivePenalty = Option.Some(false))
 
     // ---- ETag ----
 
@@ -513,7 +513,7 @@ class SdkAttackTest {
     @Test
     fun guestProfileRequestOmitsGenderDescriptionWhenUndefined() {
         val strict = Json { encodeDefaults = false }
-        val profile = GuestProfileRequest(fullName = "Maria", vip = false)
+        val profile = GuestProfileRequest(fullName = "Maria", vip = Option.Some(false))
 
         assertEquals(Option.Undefined, profile.genderDescription)
         assertTrue("genderDescription" !in strict.encodeToString(GuestProfileRequest.serializer(), profile))
@@ -526,7 +526,7 @@ class SdkAttackTest {
         fun encode(value: Option<String?>) =
             strict.encodeToString(
                 GuestProfileRequest.serializer(),
-                GuestProfileRequest(fullName = "Maria", vip = false, genderDescription = value),
+                GuestProfileRequest(fullName = "Maria", vip = Option.Some(false), genderDescription = value),
             )
 
         assertTrue(""""genderDescription":"Não binário"""" in encode(Option.Some("Não binário")))
@@ -580,6 +580,7 @@ class SdkAttackTest {
                 "Files",
                 "Frontdesk",
                 "Guests",
+                "Housekeeping",
                 "Hotel",
                 "Iam",
                 "EndOfDay",
@@ -602,7 +603,7 @@ class SdkAttackTest {
                 .flatMap { it.declaredMethods.toList() }
                 .filter { it.name.startsWith("prepare") && it.name.contains('$').not() }
 
-        assertEquals(335, contract)
+        assertEquals(376, contract)
         assertEquals(contract, methods.size)
         assertEquals(contract, prepares.size)
     }
