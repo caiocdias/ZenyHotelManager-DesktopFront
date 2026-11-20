@@ -115,6 +115,20 @@ class ErrorCatalogTest {
     }
 
     @Test
+    fun locationInvalidMessagesAskForRoomOrCommonAreaNotBoth() {
+        listOf(
+            "HOUSEKEEPING_OCCURRENCE_LOCATION_INVALID",
+            "HOUSEKEEPING_TASK_LOCATION_INVALID",
+            "SCHEDULED_CLEANING_LOCATION_INVALID",
+        ).forEach { code ->
+            val message = ErrorCatalog.message(code).orEmpty()
+            assertTrue(message.contains("área comum"), "$code deve citar a área comum: $message")
+            assertTrue(message.contains("só uma"), "$code deve pedir só uma das duas: $message")
+            assertFalse(message.contains("juntos"), "$code não pode recomendar os dois juntos: $message")
+        }
+    }
+
+    @Test
     fun unknownCodeFallsBackToDetail() {
         assertEquals("Detalhe do servidor.", ErrorCatalog.userMessage(422, "SOMETHING_NEW", "Detalhe do servidor."))
     }
