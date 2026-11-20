@@ -64,7 +64,7 @@ class ErrorCatalogTest {
         println("CONTRACT_CODES_BEGIN")
         codes.sorted().forEach { println(it) }
         println("CONTRACT_CODES_END")
-        assertEquals(377, codes.size)
+        assertEquals(426, codes.size)
         assertTrue(codes.containsAll(common), "faltam comuns: ${common - codes.toSet()}")
     }
 
@@ -103,6 +103,14 @@ class ErrorCatalogTest {
         assertEquals(
             "A reserva mudou enquanto você concluía. Confira e tente de novo.",
             ErrorCatalog.message("RESERVATION_CHANGED"),
+        )
+    }
+
+    @Test
+    fun concurrentUpdateInvitesTheUserToTryAgain() {
+        assertEquals(
+            "Outra operação mexeu neste registro ao mesmo tempo. Tente de novo.",
+            ErrorCatalog.message("CONCURRENT_UPDATE"),
         )
     }
 

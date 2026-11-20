@@ -64,6 +64,11 @@ class WriteFailureTest {
     }
 
     @Test
+    fun concurrentUpdateIsDefinitiveAndNeverRetriedAlone() {
+        assertEquals(WriteFailure.DEFINITIVE, classifyWriteFailure(problem(409, "CONCURRENT_UPDATE")))
+    }
+
+    @Test
     fun approvalRequiredIsDefinitive() {
         val failure = ApiError.ApprovalRequired("DISCOUNT", "folio.discount", "folio/1", null, null)
         assertEquals(WriteFailure.DEFINITIVE, classifyWriteFailure(failure))
