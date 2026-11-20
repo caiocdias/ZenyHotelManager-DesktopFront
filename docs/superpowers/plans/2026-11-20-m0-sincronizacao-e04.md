@@ -49,7 +49,7 @@
 - Um teste novo do `core`, `ExplicitDefaultFieldsTest` (em `core/src/test/kotlin/com/zeny/desktop/core/facade/`), captura pelo `MockEngine` o corpo enviado por cada fachada que constrói um schema afetado — criar hóspede, check-in, walk-in, busca por documento, nova reserva, cancelamento, lançamento e pagamento — e prova que cada campo afetado está no JSON com o valor de antes, inclusive listas vazias e booleanos `false`. Comando: `./gradlew :core:test --tests '*ExplicitDefaultFieldsTest*'`.
 - Um teste novo do `demo-seed`, `SeedExplicitDefaultFieldsTest` (em `demo-seed/src/test/kotlin/com/zeny/desktop/seed/sdk/`), faz o mesmo para os gateways (`SdkBookingGateway`, `SdkConfigGateway`, `SdkPendingGateway`, `SdkFolioGateway`) e **todos** os schemas afetados que eles constroem pela lista completa do ADR 0014 (não pela lista do "Contexto" da etapa, que omite casos), inclusive `CashPointRequest.blindClose` (`SdkConfigGateway`), `StayGuestRequest.primary` (`SdkBookingGateway` e `SdkPendingGateway`), `CheckInGuestRequest.primary` (`SdkBookingGateway`) e `ReservationCancelRequest.waivePenalty` (`SdkPendingGateway`). Comando: `./gradlew :demo-seed:test --tests '*SeedExplicitDefaultFieldsTest*'`.
 - `grep -rn 'Option.Undefined' core/src/main demo-seed/src/main` não mostra nenhum dos campos afetados.
-- A verificação rápida dos módulos tocados verde: `./gradlew :sdk:test :sdk:ktlintCheck :sdk:detekt :core:test :core:ktlintCheck :core:detekt :demo-seed:test :demo-seed:ktlintCheck :demo-seed:detekt :app:compileTestKotlin`.
+- A verificação rápida dos módulos tocados verde: `timeout 1500 ./gradlew :sdk:test :sdk:ktlintCheck :sdk:detekt :core:test --tests 'com.zeny.desktop.core.facade.*' --tests 'com.zeny.desktop.core.http.*' --tests 'com.zeny.desktop.core.session.*' --tests '*CoreCriteriaTest*' --tests '*ZenyCoreAttackTest*' :core:ktlintCheck :core:detekt :demo-seed:test :demo-seed:ktlintCheck :demo-seed:detekt :app:compileTestKotlin`. Os testes do catálogo de erros do `core` (`com.zeny.desktop.core.error.*ErrorCatalog*`) leem o contrato em vigor e ficam **vermelhos de propósito** depois desta tarefa, até a Task 2, que vem logo em seguida; o relatório diz quais falham e por quê (códigos novos sem mensagem, contagem 377).
 
 **Áreas tocadas:** `api/` (por script), `README.md`, `core/src/main/.../core/facade/` (`GuestsFacade`, `ReservationsFacade`, `BookingsFacade`, `FoliosFacade`, `PaymentsFacade`), `demo-seed/src/main/.../seed/sdk/` (os quatro gateways), testes novos em `core` e `demo-seed`, e os testes existentes que constroem os schemas afetados (os do desenvolvedor; os do testador ficam com ele, ver abaixo).
 
@@ -105,7 +105,7 @@
 
 **Tamanho:** ~20 min de construção se nada for recusado (a execução das verificações ao vivo leva mais, e não conta); até 4 arquivos de produção se houver conserto.
 
-**Depende de:** Task 1 (o pin e o SDK novos).
+**Depende de:** Task 1 (o pin e o SDK novos) e Task 2 (o gate desta tarefa só fica verde com as mensagens dos códigos novos).
 
 **Interfaces:**
 - Consumes: o pin e o SDK da Task 1; os comandos e variáveis de cada verificação ao vivo, registrados nos handoffs dos roadmaps do M1 ao M4 (`docs/roadmaps/roadmap-m*.md`, busque `ZENY_LIVE_`) e no `app/build.gradle.kts`.
@@ -113,7 +113,7 @@
 
 **Notas:**
 - **Operação do ambiente:** antes do `up.sh`, confira a memória livre (`free -g`); o build da imagem dentro do Docker conta como o Gradle da vez, então nada de Gradle do front em paralelo com ele. Todo comando leva `timeout` (`down.sh`/`up.sh` 1800, `smokeTest` e cada `Live*Check` 1500). Se não houver memória para o ambiente, pare e relate (`BLOCKED`), sem matar processos alheios.
-- **Seed:** se ele falhar por senha (401 no login do admin), pare e relate, sem repetir. Ao reaproveitar o arquivo de segredos, confira sem imprimir que `ZENY_SEED_ADMIN_PASSWORD` é igual à `ZENY_ADMIN_PASSWORD` de `.server/zeny-front.env` (por exemplo, comparando os `sha256sum` dos dois valores).
+- **Seed:** se ele falhar por senha (401 no login do admin), pare e relate, sem repetir. Ao reaproveitar o arquivo de segredos, confira sem imprimir que `ZENY_SEED_ADMIN_PASSWORD` é igual à `ZENY_ADMIN_PASSWORD` de `.server/zeny-front.env` (compare dentro de um subshell, com as duas variáveis carregadas dos arquivos sem eco, e imprima só o resultado: `[ "$a" = "$b" ] && echo igual || echo diferente`; nunca imprima o valor nem um hash dele).
 - **03:00:** se a rodada for cruzar as 03:00 (hora do hotel), o fechamento automático avança a data e gera tarefas; recrie e semeie de novo antes de continuar, e registre.
 - Verificações que escrevem na demo podem exigir recriação antes da seguinte: siga o handoff de cada uma e registre na tabela.
 - Uma verificação que falha por causa do ambiente (dado do seed consumido, `NEED_SEED`) não é defeito: recrie e repita uma vez. Falha que persiste, ou recusa do servidor (`400`, `409`, `422`) numa escrita do front, é o que a etapa procura.
