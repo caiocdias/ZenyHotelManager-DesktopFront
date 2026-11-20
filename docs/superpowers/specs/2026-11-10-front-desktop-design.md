@@ -20,7 +20,7 @@ Depois da demo, o front acompanha o servidor conforme ele avança.
 
 - App desktop que consome o servidor real pelo contrato `api/openapi.yaml`, dividido em marcos que **terminam numa build testável conectada ao servidor**.
 - Cobrir até 17/11 tudo ou quase tudo que o servidor já entrega, **na ordem de valor para a demo** (§7), de modo que qualquer ponto de corte renda uma demo coerente.
-- O desktop é o **superconjunto** do mobile: tudo que o mobile faz o desktop também faz (decisão do usuário). Governança e checklists entram.
+- O desktop é o **superconjunto** do mobile: tudo que o mobile faz o desktop também faz (decisão do usuário). Governança e checklists entram. Exceção (2026-11-20, [ADR 0015](../../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md)): a visão da Camareira sobre as próprias tarefas fica só no mobile, porque o servidor a entrega só pela sincronização offline.
 - Desenvolver sem conflito com o orquestrador do servidor rodando ao mesmo tempo (§5).
 - Apontar o app para qualquer servidor de forma rápida, sem rebuild (§6.3).
 - Pedidos de mudança na API e notícias de entrega trafegam pelo Second Brain (§8).

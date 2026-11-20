@@ -1,6 +1,6 @@
 # Roadmap — M0 Sincronização com o servidor
 
-> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-17
+> Arquivo: `docs/roadmaps/roadmap-m0-sincronizacao.md` · branch de execução: `roadmap/m0-sincronizacao` · criado em 2026-11-10 · última revisão 2026-11-20
 
 ## Como usar
 
@@ -165,6 +165,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
 | E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #concluida | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
 | E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #concluida | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
+| E04 | Sincronizar com o servidor em `8c563cda0575` (rodada 4) | #pendente | E03 | Pin e contrato em `8c563cda0575`, SDK com 376 operações, campos com padrão enviados explícitos (ADR 0014), catálogo de erros com os códigos novos, `smokeTest` e verificações ao vivo verdes contra o servidor novo |
 
 ---
 
@@ -576,6 +577,159 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
+## E04 — Sincronizar com o servidor em `8c563cda0575` (rodada 4) — #pendente
+
+**Objetivo:** o front passa a apontar para a `main` do servidor em `8c563cda0575dab697c89f2caba5a1dd9a12782e`. O pin e a cópia do contrato são trocados, e o SDK é regenerado com as 376 operações. O `core` e o `demo-seed` voltam a compilar enviando explícitos os campos que deixaram de ser obrigatórios ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). O catálogo de erros cobre os códigos novos. A regressão ao vivo prova que a entrada estrita do servidor novo aceita tudo o que o front já envia. Ao fim, o `smokeTest` e as verificações ao vivo passam contra o servidor novo, e o M5 pode começar.
+
+**Por que agora:** a regra 3 de `docs/roadmaps/README.md` manda sincronizar antes do M5. Três coisas do servidor novo pesam no M5:
+- a regra de `required` da M6 E20 dele, que muda os tipos do SDK que o perfil do hóspede (M5 E01) escreve;
+- a entrada estrita, que vale para toda escrita;
+- o gate do M5 (E05), que vai validar no Windows também o M4 (regra 7) e precisa rodar no servidor que o M6 e o M7 vão usar.
+
+**Dependências:** E03.
+
+**Contexto (análise de 2026-11-20, `claude --agent arquiteto`):**
+
+- **Pré-voo:** aditivo (código 11) em 2026-11-19, registrado pelo terceiro lote do M4. O pin `5e06f16d51ff` está 174 commits atrás da `main` (`git rev-list --count`). A análise não rodou o pré-voo de novo. O diff estrutural abaixo confirma a classificação: nenhuma operação saiu, e nenhuma existente mudou.
+- **Servidor**, de `5e06f16d51ff` a `8c563cda0575` (merges `46dabea` e `9dd7012` da M6 dele):
+  - **Etapas transversais:**
+    - **E18:** faixa do cursor, rollback em toda exceção, datas e instantes estritos no JSON e log dos jobs;
+    - **E20:** entrada estrita no corpo, na query e no caminho, e `required` gerado do DTO;
+    - **E21:** `409 CONCURRENT_UPDATE` e `lock_timeout` de 10 s.
+  - **Governança** (módulo `housekeeping`):
+    - **E01:** tipos de limpeza, créditos e faxinas programadas;
+    - **E02:** geração das tarefas;
+    - **E03:** distribuição sugerida e publicação;
+    - **E04:** máquina de estados e ações online;
+    - **E19:** comandos offline e conflito;
+    - **E05:** inspeção e liberação da UH;
+    - **E06:** achados e perdidos, e danos.
+  - **Fora deste pin:** a E07, E08, E09, E13, E22 e E12 da M6 dele (ordens de serviço, OOO pela manutenção, relatórios, snapshot do fechamento, hora prevista de chegada e o gate dele). Algumas já têm captura na Inbox do brain, mas estão só na branch `roadmap/m6-operacao-fechamento` do servidor, à frente da `main`. Ficam para a próxima rodada.
+- **Contrato**, pelo diff estrutural de `git show <commit>:api/openapi.yaml` entre os dois commits:
+  - **Operações:** de 335 para 376. As 41 novas estão todas na tag nova `housekeeping`. Nenhuma saiu. Nenhuma existente mudou em parâmetros, corpo, respostas ou segurança, nem só na descrição.
+  - **Primeiro `PATCH` do contrato:** `adjustAssignmentPlan`, `PATCH /api/v1/assignment-plans/{date}`.
+  - **Schemas:** 40 novos e nenhum removido.
+  - **`required`:** 26 schemas de requisição perderam 34 campos do `required`, e nenhum campo entrou. A regra é da M6 E20 do servidor: campo com valor padrão no DTO deixa de ser obrigatório. A lista e o tratamento estão no ADR 0014. Os que o front constrói hoje: `CheckInGuestRequest`, `CreateGuestRequest`, `GuestProfileRequest`, `PostingRequest`, `ReceivePaymentRequest`, `ReservationCancelRequest`, `ReservationDocumentSearchRequest`, `ReservationRequest` e `WalkInRequest`, no `core`; e `CreateGuestRequest`, `GuestProfileRequest`, `PostingRequest`, `RatePlanCreateRequest`, `RatePriceUpdateRequest`, `ReservationRequest`, `RoomRequest` e `RoomTypeRequest`, no `demo-seed`.
+  - **Respostas que variam com a permissão:** nenhum `oneOf` novo (os 3 são os do ADR 0010) e nenhum discriminador.
+  - **Enums:** valores novos só nos schemas novos (`x-extensible-enum` de 104 para 120 ocorrências, `enum` de 181 para 187). Nenhum enum existente mudou.
+  - **Códigos de erro novos:**
+    - `CONCURRENT_UPDATE`, nos comuns de `Problem.code`;
+    - 48 da governança, nas descrições das operações novas (`ASSIGNMENT_*`, `CLEANING_TYPE_*`, `HOUSEKEEPING_*`, `SCHEDULED_CLEANING_*`).
+
+    Nenhum saiu. A contagem é desta análise. Quem dá o número exato é o `ContractErrorCodes` do `core`.
+  - **Esquemas de segurança:** iguais (`bearerAuth`, `printAgentToken`).
+- **Comportamento novo, sem mudança no contrato** (avisos do servidor ao front nas capturas da E18, E20, E21, E04 e E06 dele e no fim do lote E20–E06):
+  - **Formatos:**
+    - `""` ou texto em branco em UUID, inteiro ou booleano dá `400 INVALID_FORMAT`;
+    - número fracionário num inteiro dá `400`;
+    - primitivo ausente ou `null` dá `REQUIRED`;
+    - data e instante só valem como texto ISO, no corpo, na query e no caminho; fora do `StorableRange`, dão `400`;
+    - `LocalTime` só vale como `HH:mm` ou `HH:mm:ss`.
+
+    "Sem valor" é omitir o campo ou mandar `null`.
+  - **`409 CONCURRENT_UPDATE`** (deadlock ou espera de trava acima de 10 s): o servidor desfaz a transação e libera a `Idempotency-Key`, então a operação pode ser repetida.
+  - **Tarefas de governança geradas sozinhas:**
+    - o check-out e a troca de UH geram a tarefa de saída;
+    - a virada da data operacional (`BusinessDateAdvanced`, inclusive a do fechamento automático das 03:00) gera as tarefas do dia;
+    - a conclusão e a inspeção mudam o status de governança da UH;
+    - a UH que fica pronta gera o aviso `notifications.room-released` a quem tem `housekeeping.tasks.read`.
+  - **Tempo real e avisos:** o SSE ganhou o tópico `housekeeping`, e os tipos de notificação `housekeeping.task-conflict` e `housekeeping.lost-found-expired` são novos.
+  - **Carga inicial:** a migração cria os seis tipos de limpeza da SPEC (a abertura de cama desativada).
+- **`docker/` do servidor:** `git diff 5e06f16d51ff 8c563cda0575 -- docker/` vazio. O `application.yaml` ganhou o `lock_timeout` da sessão do banco (`options`) e `zeny.housekeeping.*`, os dois com valor no próprio arquivo. Não há variável de ambiente nova.
+- **Pedidos ao servidor:** de PF-01 a PF-06, todos continuam abertos.
+  - Nenhuma captura do brain (Inbox, arquivo e notas) cita "atende PF-NN".
+  - Nenhum commit do intervalo cita um `PF-NN`.
+  - Nenhuma operação existente mudou, então nenhum pedido foi atendido sem citação.
+- **Uso pelo front:**
+  - **M5:** as operações de `guests`, `companies` e `files`, sem operação nova. Mudam a regra do `required` e a entrada estrita.
+  - **M6:** 29 das 41 novas, nas etapas novas E09, E10 e E11 (tarefas, plano do dia, execução, inspeção, achados e danos), e o tópico `housekeeping`.
+  - **M7:** as outras 12, na etapa nova E13 (tipos de limpeza e faxinas programadas).
+
+  A Camareira não lê tarefas online, e o desktop não tem sync. As tarefas no desktop são da Governanta, do Gerente e da Recepção ([ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md)).
+
+**Escopo:**
+
+- **Pin e contrato:** `api/server-pin.properties` e `api/openapi.yaml` em `8c563cda0575`, pelo mecanismo da E01.
+- **SDK:** regenerar e compilar o contrato inteiro (ADR 0007, item 1), com a classe nova da tag `housekeeping`. O teste de cobertura passa a amarrar as 376 operações.
+- **Conserto pelo ADR 0014:** o `core` e o `demo-seed` voltam a compilar. Cada campo afetado vai em `Option.Some`, com o mesmo valor de hoje, e o JSON enviado pelas escritas existentes não muda. Fica fora: mudar o que a tela envia e acrescentar campo.
+- **Catálogo de erros:**
+  - mensagens pt-BR para os códigos novos;
+  - para `CONCURRENT_UPDATE`, uma mensagem que diga que outra operação mexeu no mesmo registro ao mesmo tempo e que dá para tentar de novo.
+
+  A classificação da regra única do resultado desconhecido (`classifyWriteFailure`, M4 E01) fica `DEFINITIVE` para esse código, porque o servidor confirma que nada foi feito. Não há repetição automática (ruling da análise).
+- **Entrada estrita:** a regressão ao vivo (abaixo) é a prova. Se uma escrita do front for recusada pela regra nova, a fachada que manda o valor fora da regra é corrigida nesta etapa, com teste. Fica fora: funcionalidade nova.
+- **Revisão de `tools/server-env/`:** confirmar, arquivo por arquivo, que o override, os scripts e o `.env.example` continuam valendo com `docker/` igual, e registrar o resultado no handoff.
+- **Ambiente e pacote:** subir `zeny-front` em `8c563cda0575` do zero (`down.sh -v` antes) e regenerar `build/demo-package/`.
+- **Verificação:**
+  - o `smokeTest` contra o servidor novo;
+  - todas as verificações ao vivo existentes (`Live*Check` do `app`, do M1 ao M4), contra o `zeny-front` recriado e semeado.
+- **Pedidos:** `docs/pedidos-servidor.md` sem mudança de estado.
+
+**Fora de escopo:**
+
+- telas e fachadas da governança (M6 E09 a E11 e M7 E13) e o tópico `housekeeping` no cliente de tempo real (M6 E09);
+- rótulos dos tipos de notificação novos (M6 E05);
+- pedir ao servidor que separe os DTOs compartilhados entre criação e alteração; o ADR 0014 cobre o risco no front;
+- disparar um fechamento manual no ambiente da etapa;
+- qualquer escrita no repositório do servidor.
+
+**Critérios de aceite:**
+
+- [ ] `api/server-pin.properties` tem `commit=8c563cda0575dab697c89f2caba5a1dd9a12782e`. O `sha256sum api/openapi.yaml` é igual ao `contract_sha256` e ao hash de `git -C <servidor> show 8c563cda0575:api/openapi.yaml`. A análise mediu `cb90e8633777cab189c061ddd9f799e9ffb08a5f10e77d4bc8a09617ab30e1a5`.
+- [ ] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `8c563cda0575`. Se ela tiver andado, a saída vai para o handoff, e o pin fica em `8c563cda0575`.
+- [ ] O SDK compila as 376 operações, inclusive o primeiro `PATCH`, e o teste de cobertura do SDK amarra os 376 `operationId` a métodos gerados.
+- [ ] Um teste das fachadas do `core` que constroem os schemas afetados (criar hóspede, check-in, walk-in, busca por documento, nova reserva, cancelamento, lançamento e pagamento) prova que o corpo enviado traz cada campo afetado, com o valor de antes da troca. Nenhum desses campos sai como `Option.Undefined` no `core` nem no `demo-seed`.
+- [ ] O teste do catálogo de erros cobre todos os códigos do contrato novo. `CONCURRENT_UPDATE` tem mensagem pt-BR, e um teste prova que `classifyWriteFailure` o trata como `DEFINITIVE`.
+- [ ] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde.
+- [ ] `zeny-front` sobe do zero em `8c563cda0575` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele.
+- [ ] Todas as verificações ao vivo existentes passam contra o `zeny-front` recriado e semeado. O handoff lista cada uma, com o resultado e o que foi corrigido, se algo foi.
+- [ ] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
+- [ ] O usuário executou o roteiro acumulado no Windows com o pacote desta etapa, ou um mais recente, e aprovou. Pela regra 7 do README, essa validação fica para o gate do M5 (M5 E05), junto com a da M4 E05.
+- [ ] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`).
+
+**Validação obrigatória:**
+
+- `tools/server-drift.sh` → "igual" (ou o registro da defasagem nova).
+- `./gradlew build` + `bash tests/run.sh` → verdes; `./gradlew ktlintCheck detekt` → verde.
+- `./gradlew smokeTest -PserverUrl=…` contra `zeny-front` em `8c563cda0575` → verde.
+- As verificações ao vivo `Live*Check` contra o mesmo ambiente → verdes.
+- Roteiro acumulado executado pelo usuário no Windows (regra 7, no gate do M5).
+
+**Revisão humana:** sim. A etapa troca o servidor da build de demo, e só o usuário executa o roteiro acumulado. Pela regra 7, a parada no Windows não segura o lote: a etapa fica "Aguardando o Windows" e entra na lista acumulada, para ser executada no gate do M5.
+
+**Notas para o plano:**
+
+- **Primeiro `PATCH`:** o ogen nunca gerou um `PATCH` deste contrato (`adjustAssignmentPlan`). Se a geração ou a compilação falhar por causa dele, ou de qualquer outra operação nova, pare e relate. Trocar de gerador, excluir operação ou escrever código à mão no `sdk` é decisão de arquitetura (ADR 0007, critério 1).
+- **Teste de cobertura do SDK:** o `SdkAttackTest.everyOperationInTheContractHasAGeneratedMethod` lista as classes `<Tag>Api` à mão. A classe da tag `housekeeping` entra na lista, e o total passa a 376.
+- **Onde a compilação quebra:** são os pontos listados em "Contexto", no `core` (`GuestsFacade`, `ReservationsFacade`, `BookingsFacade`, `FoliosFacade`, `PaymentsFacade`) e no `demo-seed` (`SdkBookingGateway`, `SdkConfigGateway`, `SdkPendingGateway`, `SdkFolioGateway`). Também quebram os testes que constroem esses schemas, como o `SdkOneOfTest`, que constrói `MergeGuestRequest` com `takeFromMerged`. Pela regra do `C-M6`, os testes endurecidos pelo testador são mexidos pelo testador.
+- **Catálogo de erros:** o `ErrorCatalogTest` amarra hoje 377 códigos. O número novo sai do `ContractErrorCodes`, e uma mudança na contagem vai para o handoff, com a lista dos códigos novos. A redação das mensagens da governança é revista nas etapas que as exibem (M6 E09 a E11 e M7 E13).
+- **`CONCURRENT_UPDATE` como `DEFINITIVE` (ruling da análise):** o servidor desfez a transação e liberou a chave. Uma nova tentativa do usuário é uma nova intenção, com chave nova, e o servidor a executa normalmente. Uma repetição automática no `core` esconderia até 10 s de espera a mais e mudaria a regra única do M4 E01, sem ganho para a tela.
+- **Verificações ao vivo:** use os comandos e as variáveis registrados nos handoffs do M1 ao M4, com os segredos de `.server/seed-secrets.env` (handoff da M4 E05), sem imprimir valores. Recrie e semeie antes. Uma verificação que altera estado pode exigir uma nova recriação antes da seguinte: siga o que o handoff dela diz.
+- **Recrie do zero.** O `zeny-front` do notebook está em `5e06f16d51ff`. Os volumes antigos não servem: a data operacional ficaria velha, e a imagem é outra. Por isso, `down.sh -v` antes do `up.sh`. Não dispare o fechamento manual. Ele avança a data e, desde este pin, gera também as tarefas de governança do dia.
+- **Papéis do seed:** confira se o seed monta os papéis pelos modelos do servidor ou por lista própria de permissões. Pelos modelos, o Gerente e a Recepção passam a ter as permissões `housekeeping.*` (ver o ADR 0015), sem efeito nas telas atuais. Registre o que encontrar no handoff, para a M6 E09.
+- **Um Gradle por vez no notebook:** o orquestrador do servidor está ativo (worktree `roadmap/m6-operacao-fechamento`).
+- **Lista do README:** na lista "Validações acumuladas no Windows", esta etapa entra como item 6, com a mesma execução da entrada 5 (o `roteiro-m5.md`, no gate do M5).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- **O ogen não gera o `PATCH` ou um schema novo.** Pare e relate (nota acima). O pin não muda sem o SDK compilando.
+- **Uma verificação ao vivo é recusada pela entrada estrita.** É o que a etapa procura. Corrija a fachada que manda o valor fora da regra, com teste, e registre no handoff.
+- **A `main` do servidor anda de novo durante a etapa** (a M6 dele segue com a E22 e a E07). O pin fica em `8c563cda0575`, que foi o analisado, e a próxima rodada trata o resto.
+- **O seed passa de 2 minutos no servidor novo**, por causa das tarefas geradas no check-out. Meça e registre. O limite é critério do gate do M5, não desta etapa.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## Histórico de revisões
 
 - 2026-11-10 — roadmap criado (`claude --agent arquiteto`), com a rodada 1. As rodadas seguintes entram como etapas novas, pelo `development-roadmap` em modo atualização.
@@ -589,3 +743,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-16 — E03 executada pelo `claude --agent orquestrador`: pin e contrato em `5e06f16d51ff`, o primeiro `oneOf` caracterizado como `HttpResponseTyped<JsonElement>` (o ADR 0010 não muda), rótulos do no-show no detalhe da reserva, aviso do fechamento automático no `LEIA-ME` e nos roteiros, `zeny-front` recriado e `smokeTest` verde no notebook, pacote regenerado. Revisão final aprovada com ressalvas, integrada na `main`. Fica `#em-andamento` aguardando o Windows (regra 7, item 3 da lista), e o M3 pode começar.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. Nenhuma etapa mudou.
 - 2026-11-17 — E02 e E03 `#concluida`: o usuário aprovou a execução no Windows do `roteiro-m3.md` (entradas 1 e 3 da lista "Validações acumuladas no Windows" do README) (`claude --agent orquestrador`).
+- 2026-11-20 — análise da rodada 4 (`claude --agent arquiteto`, `development-roadmap` em modo atualização) contra a `main` do servidor em `8c563cda0575`: 174 commits à frente, pré-voo aditivo (código 11, de 2026-11-19).
+  - Entra a E04, a etapa mecânica.
+  - O contrato passa de 335 para 376 operações, as 41 novas na tag `housekeeping`.
+  - 34 campos de requisição deixaram de ser obrigatórios. Pelo [ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md), decidido pelo usuário em entrevista, o `core` os envia sempre explícitos.
+  - O servidor passou a ler a entrada de forma estrita e responde `409 CONCURRENT_UPDATE`.
+  - A governança foi para o M6 (E09 a E11) e para o M7 (E13). O [ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md), decidido pelo usuário em entrevista, tira a Camareira das tarefas no desktop.
+  - De PF-01 a PF-06, todos seguem abertos, e nenhuma captura "atende PF-NN" foi achada.

@@ -1,8 +1,8 @@
 # Roadmap — M5 Hóspedes e empresas
 
-> Arquivo: `docs/roadmaps/roadmap-m5-hospedes-empresas.md` · branch de execução: `roadmap/m5-hospedes-empresas` · criado em 2026-11-10 · última revisão 2026-11-17
+> Arquivo: `docs/roadmaps/roadmap-m5-hospedes-empresas.md` · branch de execução: `roadmap/m5-hospedes-empresas` · criado em 2026-11-10 · última revisão 2026-11-20
 
-> **Pré-requisito:** a etapa E05 ("Gate do marco M4") de `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` precisa estar `#concluida`. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3).
+> **Pré-requisito:** a etapa E05 ("Gate do marco M4") de `docs/roadmaps/roadmap-m4-contas-caixa-checkout.md` precisa estar `#concluida`, ou aguardando o Windows pela regra 7. Se a `main` do servidor avançou desde a fixação, rode antes a rodada do M0 (`docs/roadmaps/README.md`, regra 3). Para este marco, essa rodada é a M0 E04 (servidor em `8c563cda0575`), que precisa estar `#concluida` ou aguardando o Windows antes da E01.
 
 ## Como usar
 
@@ -51,6 +51,15 @@ O app passa a cuidar do cadastro de hóspedes e empresas com LGPD de verdade:
   - o servidor envia à FNRH de forma assíncrona e revalida os hóspedes a cada tentativa: um perfil editado depois do check-in pode deixar a submissão `INVALID` (decisão E08 (d) do servidor). A fila é da M7 E10.
 
   As fontes são a ARCHITECTURE §8.3, a nota do brain `ZenyHotelManager - Módulo files` e as notas de hóspedes ligadas ao hub do servidor, além dos gates do M3 e do M4 do servidor.
+- **Desde o pin `8c563cda0575` (M0 E04)**, nenhuma operação deste marco mudou, mas três regras do servidor (M6 E18, E20 e E21 dele) valem para todas as escritas:
+  - **Campos com valor padrão:** deixaram de ser obrigatórios no contrato, e o SDK os gera como `Option`. Neste marco, são `GuestProfileRequest.vip`, `CreateGuestRequest.documents` e `MergeGuestRequest.takeFromMerged`. O `core` os envia sempre explícitos ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). O `GuestProfileRequest` serve à criação e à alteração, e no `PUT` o `vip` omitido volta a `false`, apagando o valor gravado.
+  - **Entrada estrita:**
+    - `""` ou texto em branco em UUID, inteiro ou booleano dá `400 INVALID_FORMAT`;
+    - primitivo ausente ou `null` dá `REQUIRED`;
+    - data só vale como `YYYY-MM-DD`.
+
+    "Sem valor" é omitir o campo ou mandar `null`, nunca `""`.
+  - **`409 CONCURRENT_UPDATE`:** o servidor desfez a escrita, e uma nova tentativa é possível. A mensagem do catálogo diz isso (M0 E04).
 - **Design:** [`docs/superpowers/specs/2026-11-10-front-desktop-design.md`](../superpowers/specs/2026-11-10-front-desktop-design.md), §6.2 (LGPD no cliente) e §6.4 (`ZENY_STORAGE_PUBLIC_ENDPOINT` para as URLs assinadas).
 
 ## Escopo
@@ -239,6 +248,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 - [ ] O anexo enviado aparece no perfil e abre pelo download assinado contra `zeny-front`.
 - [ ] Os dados sensíveis gravados não aparecem em nenhuma listagem.
 - [ ] Gênero `OTHER` com descrição grava e reaparece no perfil. Mandar descrição com outro gênero mostra em pt-BR a recusa `GENDER_DESCRIPTION_REQUIRES_OTHER_GENDER`, sem `code` cru. A descrição não vai para log nem para cache (teste do *state holder*).
+- [ ] Editar o perfil de um hóspede VIP sem mexer no VIP mantém o VIP. Um teste da fachada prova que o `PUT` reenvia o `vip` lido ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)), e um campo opcional limpo na tela vai como ausente ou `null`, nunca como `""`.
 
 **Validação obrigatória:**
 
@@ -251,6 +261,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 
 - ARCHITECTURE §8.3 do servidor: o documento inteiro sai só por ação própria, com permissão e trilha.
 - Partes independentes, para as ondas do plano: depois da busca e da casca do perfil, as abas usam operações distintas e não dependem umas das outras. São elas: documentos (`…/documents`, com `/remove` e `/reveal`), dados sensíveis (`…/sensitive-data`), anexos (`…/attachments` e `/api/v1/files`) e consentimentos (`…/consents`).
+- Desde a M0 E04, o `GuestsFacade` já envia `vip` e `documents` explícitos na criação (o diálogo de hóspede da M2). A edição segue a mesma regra, com o valor lido do perfil: o `vip` é o caso que apaga dado se for omitido (ADR 0014; handoff da M6 E20 do servidor).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -308,6 +319,7 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 - Desde o pin `5e06f16d51ff` (M0 E03), `restrictGuest`, `liftGuestRestriction` e `mergeGuests` respondem `oneOf: [GuestResponse, GuestWriteSummaryResponse]`, sem discriminador (M6 E17 do servidor; ARCHITECTURE §7 dele). Com `guests.profiles.read` vem o perfil inteiro; sem ela, só `{id, restricted}`. A versão vai no `ETag` nos dois casos.
 - O tratamento está decidido no ADR 0010. O `core` escolhe o ramo pelo `required`: o completo exige `fullName`, e o resumo exige `restricted`. Ele decodifica com o serializer gerado e devolve um resultado tipado, falhando fechado. Esta é a primeira etapa que implementa a regra. Faça a escolha do ramo reaproveitável para as próximas respostas desse tipo.
 - O tipo que o ogen gera para essas respostas está caracterizado no teste do `sdk` da M0 E03 (ver o handoff dela).
+- Desde o pin `8c563cda0575`, o `takeFromMerged` do `MergeGuestRequest` é opcional no contrato, e o padrão do servidor é nenhum dado do absorvido. A fachada o envia sempre explícito, `[]` quando o gerente não escolheu nenhum (ADR 0014).
 - Partes independentes, para as ondas do plano: a escolha do ramo do ADR 0010 é a peça comum das três escritas e vem antes. Depois dela, a mesclagem (com a lista de candidatos) e a restrição não dependem uma da outra.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
@@ -452,6 +464,8 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 **Notas para o plano:**
 
 - **Windows acumulado do M4 (decisão do usuário de 2026-11-20; regra 7 do README, item 5 da lista "Validações acumuladas no Windows"):** a execução no Windows desta etapa cobre também a M4 E05. O `roteiro-m5.md` acumula o `roteiro-m4.md` (passos 27 a 39 da hospedagem: turno, consumo, pagamento, caução, check-out), e o pacote desta etapa substitui o de `b3e9b37`. A aprovação do usuário fecha esta etapa e também a M4 E05 `#concluida`; uma reprovação reabre a etapa de origem do defeito com uma rodada de correção.
+- **Windows acumulado da M0 E04 (item 6 da mesma lista):** a mesma execução cobre a troca do servidor para `8c563cda0575`, e a aprovação fecha também a M0 E04. O pacote desta etapa já roda nesse servidor.
+- **Seed no servidor novo:** desde a M0 E04, o check-out gera a tarefa de saída da governança, e o fechamento automático das 03:00 gera as tarefas do dia. O seed e o roteiro não mostram tarefas (M6), mas o tempo do seed é medido de novo contra o limite de 2 minutos.
 
 
 **Bloqueios:** Nenhum bloqueio conhecido.
@@ -475,3 +489,9 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 - 2026-11-13 — análise da rodada 2 do M0 (`claude --agent arquiteto`, servidor `57eb5fac5b8a`). A E01 ganha a descrição do gênero (`genderDescription`). "Fora de escopo" foi corrigido: o servidor já envia à FNRH, e a fila vai para a M7 E10. A M6 E17 do servidor, ainda pendente, vai reduzir o corpo das respostas de `restrict`, `lift-restriction` e `merge` para quem não tem `guests.profiles.read`. A E02 deve reler o contrato na rodada do M0 que vier antes deste marco. Nenhuma tag mudou.
 - 2026-11-15 — análise da rodada 3 do M0 (`claude --agent arquiteto`, servidor `5e06f16d51ff`). A M6 E17 do servidor chegou: as três escritas de restrição e mesclagem respondem com um `oneOf` (perfil completo ou resumo). A E02 ganhou dois critérios e notas, e o tratamento ficou decidido no [ADR 0010](../adr/0010-resposta-que-varia-com-a-permissao.md), por entrevista com o usuário. Nenhuma tag mudou.
 - 2026-11-17 — revogação do processo acelerado ([ADR 0012](../adr/0012-revoga-o-processo-acelerado.md), `claude --agent arquiteto`): a seção "Prompt acelerado" foi removida. O protocolo e o prompt de execução não mudaram, porque já remetem ao orquestrador para o ciclo por tarefa. A E01, a E02 e a E03 ganharam, em "Notas para o plano", as partes que não dependem uma da outra, para o plano formar ondas. Objetivo, escopo e critérios de aceite não mudaram, e nenhuma tag mudou.
+- 2026-11-20 — análise da rodada 4 do M0 (`claude --agent arquiteto`, servidor `8c563cda0575`).
+  - O pré-requisito passa a citar a M0 E04.
+  - "Contexto confirmado" ganhou as três regras novas do servidor: campos com padrão sempre explícitos ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md), decidido pelo usuário em entrevista), entrada estrita e `409 CONCURRENT_UPDATE`.
+  - A E01 ganhou um critério (o `vip` preservado na edição) e uma nota, e a E02 ganhou uma nota (o `takeFromMerged`).
+  - A E05 também valida no Windows a M0 E04.
+  - Nenhuma tag mudou.
