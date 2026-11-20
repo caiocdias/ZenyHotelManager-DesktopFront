@@ -57,8 +57,8 @@ assert_eq "1" "$n" "written recebe true uma única vez"
 assert_match "$kt" 'if \(hasStored\(seed, planId, date\)\) \{ fail\([^}]*\} written = true val set = update\(date, RestrictionValuesDto\(minStay = Option\.Some\(MIN_STAY_NIGHTS\)\), emptyList\(\)\) seed\.executor\.execute \{ rates\.updateRatePlanRestrictions\(planId, set, it\.headers\) \}' \
   "guarda NEED_SEED, depois written = true, depois a gravação de minStay = MIN_STAY_NIGHTS"
 # A escrita e a retirada cobrem só a data, geral, sem tipo, sem dias da semana: nada além de d+25 é tocado.
-assert_contains "$kt" 'RestrictionUpdateRequest(clear = clear, from = Option.Some(date.toApi()), roomTypeIds = emptyList(), `set` = set, to = Option.Some(date.toApi()), weekdays = emptyList())' \
-  "a gravação e a retirada cobrem só from = to = a data, sem tipo e sem dias da semana"
+assert_contains "$kt" 'RestrictionUpdateRequest(clear = Option.Some(clear), from = Option.Some(date.toApi()), roomTypeIds = Option.Some(emptyList()), `set` = Option.Some(set), to = Option.Some(date.toApi()), weekdays = Option.Some(emptyList()))' \
+  "a gravação e a retirada cobrem só from = to = a data, com tipo e dias da semana vazios, todos explícitos em Option.Some (ADR 0014)"
 n="$(grep -oF 'updateRatePlanRestrictions(' <<<"$kt" | wc -l)"
 assert_eq "2" "$n" "duas chamadas: a gravação e a retirada"
 # A retirada remove só MIN_STAY e confere que a data ficou limpa, relendo.

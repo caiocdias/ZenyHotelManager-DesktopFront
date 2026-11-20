@@ -153,12 +153,12 @@ class H(BaseHTTPRequestHandler):
         pass
 HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()
 PY
-roda() { # roda NOME URL
-  local nome="$1" url="$2" ini=$SECONDS
+roda() { # roda NOME URL [DESCONTO_S]: DESCONTO_S é a latência do resolvedor DNS da máquina, somada ao limite de 15 s
+  local nome="$1" url="$2" desconto="${3:-0}" ini=$SECONDS limite=$((15 + ${3:-0}))
   saida="$(com_segredos java -jar "$jar" --server "$url" --admin-login admin 2>&1)"; code=$?
   local dur=$((SECONDS - ini))
   assert_eq "1" "$code" "$nome sai 1"
-  [[ "$dur" -lt 15 ]] || _assert_fail "$nome levou ${dur}s (limite 15 s)"
+  [[ "$dur" -lt "$limite" ]] || _assert_fail "$nome levou ${dur}s (limite ${limite} s = 15 s + ${desconto} s de resolvedor)"
   saida="$(sem_slf4j "$saida")"
   assert_eq "1" "$(wc -l <<<"$saida" | tr -d ' ')" "$nome imprime uma linha só" "saída: $saida"
   [[ "$saida" == Falha:* ]] || _assert_fail "$nome não começa com 'Falha:'" "saída: $saida"
@@ -177,6 +177,12 @@ for modo in json erro; do
   kill $! 2>/dev/null
 done
 roda "porta fechada" "http://127.0.0.1:1"
-roda "host inexistente" "http://host-que-nao-existe.invalid"
+# Nome inexistente: o tempo para o resolvedor DNS da máquina dizer "não existe" não é do JAR (no WSL pode passar de
+# 40 s). Mede-se esse tempo para o mesmo nome neste run e soma-se ao limite: o JAR continua tendo 15 s próprios para
+# desistir depois da resposta do DNS, então um JAR pendurado (ou sem timeout) ainda reprova.
+t0=$SECONDS
+getent hosts host-que-nao-existe.invalid >/dev/null 2>&1
+dns=$((SECONDS - t0))
+roda "host inexistente" "http://host-que-nao-existe.invalid" "$dns"
 
 finish
