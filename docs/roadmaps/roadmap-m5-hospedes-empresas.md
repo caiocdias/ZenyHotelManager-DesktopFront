@@ -449,7 +449,10 @@ O diálogo de hóspede da M2 passa a abrir o perfil completo.
 
 **Revisão humana:** sim. Gate do marco e nova build da demo.
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+
+- **Windows acumulado do M4 (decisão do usuário de 2026-11-20; regra 7 do README, item 5 da lista "Validações acumuladas no Windows"):** a execução no Windows desta etapa cobre também a M4 E05. O `roteiro-m5.md` acumula o `roteiro-m4.md` (passos 27 a 39 da hospedagem: turno, consumo, pagamento, caução, check-out), e o pacote desta etapa substitui o de `b3e9b37`. A aprovação do usuário fecha esta etapa e também a M4 E05 `#concluida`; uma reprovação reabre a etapa de origem do defeito com uma rodada de correção.
+
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
