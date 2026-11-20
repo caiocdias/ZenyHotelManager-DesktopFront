@@ -103,7 +103,7 @@ Fechar o ciclo da hospedagem no app. A operadora abre o turno de caixa e vê a c
 ## Definição global de pronto
 
 - [ ] Comandos oficiais de build, teste e lint verdes.
-- [ ] `smokeTest` verde contra o ambiente recriado.
+- [x] `smokeTest` verde contra o ambiente recriado.
 - [ ] Roteiro `docs/demo/roteiro-m4.md`, acumulando os anteriores, executado pelo usuário no Windows.
 - [ ] Teste de idempotência em toda operação financeira do marco.
 - [ ] Nenhuma etapa depende de pedido ao servidor.
@@ -212,14 +212,14 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Regra única do resultado desconhecido | #concluida | E06 | Regra única do "resultado desconhecido" no `core` (D1), com os achados da M3 E06 que dependem dela |
 | E07 | Turno de caixa | #concluida | E06, E01 | Abrir, acompanhar, sangria e suprimento, fechar às cegas e relatório; indicador de turno no topo |
 | E02 | Conta da hospedagem | #concluida | E06, E01, E07 | Conta com lançamentos, saldo e taxa de serviço separada, lançar, estornar e extrato na tela e em PDF |
-| E03 | Pagamentos | #em-andamento | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
-| E09 | Cauções | #em-andamento | E07, E02, E03 | Registrar, capturar e liberar caução |
-| E04 | Check-out | #em-andamento | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
-| E08 | Correções da conta | #em-andamento | E02 | Ajustar, dividir, transferir e remover a taxa a pedido |
+| E03 | Pagamentos | #concluida | E07, E02 | Receber e reembolsar no turno, o atalho "abrir turno" e os campos de valor do `design` (`A-M7`) |
+| E09 | Cauções | #concluida | E07, E02, E03 | Registrar, capturar e liberar caução |
+| E04 | Check-out | #concluida | E03, E09 | Assistente de check-out até o saldo zero, contas encerradas e UH liberada |
+| E08 | Correções da conta | #concluida | E02 | Ajustar, dividir, transferir e remover a taxa a pedido |
 | E11 | Duplicação entre o painel do dia e a busca | #concluida | — | As colunas da tabela de reservas, o `readRoomTypeNames` e a trava das leituras auxiliares numa função só (achado da M3 E06) |
-| E10 | Cauções a vencer | #em-andamento | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
-| E12 | Pagador, limite de crédito e multa de cancelamento | #em-andamento | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
-| E13 | Reabrir conta encerrada | #em-andamento | E02, E12 | Reabrir a conta encerrada, com aprovação de superior |
+| E10 | Cauções a vencer | #concluida | E09 | A lista do hotel das cauções a vencer, numa aba da área "Contas e caixa", com "Abrir conta" |
+| E12 | Pagador, limite de crédito e multa de cancelamento | #concluida | E02 | Pagador e limite de crédito da conta; os textos da multa (`B-M5`) e a isenção ao vivo |
+| E13 | Reabrir conta encerrada | #concluida | E02, E12 | Reabrir a conta encerrada, com aprovação de superior |
 | E05 | Gate do marco M4 | #em-andamento | E04, E08, E10, E11, E12, E13 | Seed com contas e turno, roteiro do M4 e definição de pronto verificada |
 
 ---
@@ -640,7 +640,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E03 — Pagamentos — #em-andamento
+## E03 — Pagamentos — #concluida
 
 **Objetivo:** na conta, a operadora recebe um pagamento manual, com forma e valor, dentro do turno aberto, e reembolsa com aprovação. Registrar, capturar e liberar caução e as cauções a vencer passaram à E09 (divisão de 2026-11-18, no histórico).
 
@@ -660,11 +660,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Receber sem turno aberto mostra a mensagem do `code` em pt-BR e o atalho "abrir turno".
-- [ ] Receber o saldo de uma conta do seed zera o saldo, e o pagamento aparece no turno.
-- [ ] Teste: repetir o recebimento após falha de rede usa a mesma `Idempotency-Key`, e o servidor não duplica.
-- [ ] **`A-M7`, `enabled`:** com `enabled = false`, o `MoneyField` e o `DateField` não aceitam digitação nem colagem (teste no `design`). O formulário de pagamento os desabilita enquanto `busy` e no resultado desconhecido (teste do *state holder*).
-- [ ] **`A-M7`, colagem:** colar mais de 1000 caracteres no `MoneyField` e no `DateField` deixa um sinal visível em pt-BR, e não só ignora a colagem (teste no `design`). A forma do sinal é decidida no plano.
+- [x] Receber sem turno aberto mostra a mensagem do `code` em pt-BR e o atalho "abrir turno".
+- [x] Receber o saldo de uma conta do seed zera o saldo, e o pagamento aparece no turno.
+- [x] Teste: repetir o recebimento após falha de rede usa a mesma `Idempotency-Key`, e o servidor não duplica.
+- [x] **`A-M7`, `enabled`:** com `enabled = false`, o `MoneyField` e o `DateField` não aceitam digitação nem colagem (teste no `design`). O formulário de pagamento os desabilita enquanto `busy` e no resultado desconhecido (teste do *state holder*).
+- [x] **`A-M7`, colagem:** colar mais de 1000 caracteres no `MoneyField` e no `DateField` deixa um sinal visível em pt-BR, e não só ignora a colagem (teste no `design`). A forma do sinal é decidida no plano.
 
 **Validação obrigatória:**
 
@@ -686,7 +686,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-18). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `c4016ce`. Falta a `LivePaymentCheck` contra o `zeny-front`, que pede as credenciais do usuário. Por decisão do usuário neste lote ("pode substituir a revisão humana pela opção recomendada [...] O importante é avançar na entrega do marco"), a espera não trava o lote: para a escolha da próxima etapa, a E03 conta como concluída, como a regra 7 do README faz com o Windows, e as etapas que dependem dela registram que a base ainda não foi verificada ao vivo.
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A `LivePaymentCheck` passou contra o `zeny-front` recriado e semeado (servidor `5e06f16d51ff`), rodada pelo orquestrador com as credenciais do usuário: 1 teste, 0 pulados, 0 falhas. Os critérios ao vivo (sem turno, saldo zerado no turno, a repetição sem duplicar) ficam verificados.
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-18). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `c4016ce`. Falta a `LivePaymentCheck` contra o `zeny-front`, que pede as credenciais do usuário. Por decisão do usuário neste lote ("pode substituir a revisão humana pela opção recomendada [...] O importante é avançar na entrega do marco"), a espera não trava o lote: para a escolha da próxima etapa, a E03 conta como concluída, como a regra 7 do README faz com o Windows, e as etapas que dependem dela registram que a base ainda não foi verificada ao vivo.
 - Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e03.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e03.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0 (3 Importantes: a assinatura de `folioWiring` sem padrão quebraria um arquivo do testador; o "servidor não duplica" sem prova ao vivo; o limite no ramo com máscara sem consumidor), aprovado com notas na rodada 1 (`d013789`).
 - Commits (`MERGE_BASE` `a1cde4b`, HEAD de código `c4016ce`):
   - Antes das fatias: `b736771` (divisão E03/E09) e `0a725fe` (testador: a fixture intermitente do `AuthPluginAttackTest`; ver abaixo).
@@ -734,7 +735,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E09 — Cauções — #em-andamento
+## E09 — Cauções — #concluida
 
 **Objetivo:** na conta, a operadora registra uma caução com os dados permitidos (sem número de cartão), captura ou libera a sobra. As cauções a vencer passaram à E10 (divisão de 2026-11-18, no histórico).
 
@@ -755,8 +756,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
-- [ ] Liberar a sobra da caução muda a situação e o saldo conforme a API.
+- [x] O formulário de caução não tem campo de número de cartão (inspeção e teste do *state holder*).
+- [x] Liberar a sobra da caução muda a situação e o saldo conforme a API.
 
 **Validação obrigatória:**
 
@@ -778,7 +779,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `e3227ee`. Falta a `LivePreAuthorizationCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E09 conta como concluída para a escolha da próxima etapa. **A base (E03) também não foi verificada ao vivo** (`LivePaymentCheck`).
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A `LivePreAuthorizationCheck` passou duas vezes contra o `zeny-front` recriado (1 teste, 0 pulados, 0 falhas): caução de R$ 100,00 registrada uma vez só com a resposta perdida, R$ 30,00 capturados e a sobra de R$ 70,00 liberada, com o saldo igual.
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `e3227ee`. Falta a `LivePreAuthorizationCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava: a E09 conta como concluída para a escolha da próxima etapa. **A base (E03) também não foi verificada ao vivo** (`LivePaymentCheck`).
 - Plano: [`docs/superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e09.md`](../superpowers/plans/2026-11-18-m4-contas-caixa-checkout-e09.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 5 Importantes:
   - I1: autorização fora do `Riscos:`;
   - I2: o contrato do ajudante comum em aberto;
@@ -856,7 +858,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E04 — Check-out — #em-andamento
+## E04 — Check-out — #concluida
 
 **Objetivo:** a partir de uma saída do painel do dia (M2), um assistente mostra o que falta para sair: saldo, cauções e contas abertas, além da cotação de late check-out se for o caso. Ele leva a operadora a receber, liberar e encerrar, e conclui o check-out. A reserva sai de "hospedados", e a UH fica vaga e suja no mapa em tempo real.
 
@@ -881,10 +883,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Saída do seed com saldo: o assistente leva até o saldo zero e conclui o check-out. A UH fica vaga e suja no mapa em até 2 s.
-- [ ] Check-out com caução ainda capturável mostra a pendência e não conclui até a liberação.
-- [ ] Se o servidor recusar o check-out, a mensagem vem em pt-BR e nada fica pela metade na tela (recarga do estado).
-- [ ] Late check-out cotado aparece como lançamento na conta antes do saldo final, se a política lançar.
+- [x] Saída do seed com saldo: o assistente leva até o saldo zero e conclui o check-out. A UH fica vaga e suja no mapa em até 2 s.
+- [x] Check-out com caução ainda capturável mostra a pendência e não conclui até a liberação.
+- [x] Se o servidor recusar o check-out, a mensagem vem em pt-BR e nada fica pela metade na tela (recarga do estado).
+- [x] Late check-out cotado aparece como lançamento na conta antes do saldo final, se a política lançar.
 
 **Validação obrigatória:**
 
@@ -906,7 +908,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `2ba7a31`. Falta a `LiveCheckOutCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava a escolha da próxima etapa. **A base (E03 e E09) também não foi verificada ao vivo.**
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A primeira execução da `LiveCheckOutCheck` falhou na captura de tela: o `onRoot()` achou duas raízes, porque o `CheckOutDialog` é uma raiz própria. Os passos 1 e 2 tinham passado. Na rodada de correção, `c469fd0` (desenvolvedor) fez a `capture` escolher a raiz com tamanho; nenhuma asserção mudou, e a re-revisão escopada (`revisor-seguranca`) deu "Ready to merge: Yes", com 2 Menores diferidos: a raiz é consultada duas vezes, e com duas raízes com tamanho pega a primeira. No `c469fd0` a verificação passou (1 teste, 0 pulados, 0 falhas): o devido foi recebido, o check-out foi concluído com a resposta perdida e sem late (a política vigente não ofereceu), a UH 105 ficou vaga e suja no mapa em 4 ms, e a reserva saiu de "Hospedados". O critério do late continua coberto pelos testes com porta falsa.
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e as re-revisões estão limpos no `2ba7a31`. Falta a `LiveCheckOutCheck` contra o `zeny-front`, que pede as credenciais do usuário. Pela instrução do usuário neste lote, a espera não trava a escolha da próxima etapa. **A base (E03 e E09) também não foi verificada ao vivo.**
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e04.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 9 Importantes:
   - `extensions` público;
   - o `until` contra o contrato;
@@ -987,7 +990,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E08 — Correções da conta — #em-andamento
+## E08 — Correções da conta — #concluida
 
 **Objetivo:** na conta aberta pela E02, o usuário ajusta um lançamento, divide-o entre contas, transfere lançamentos para outra conta e remove a taxa de serviço a pedido do cliente. O pagador, o limite de crédito, a multa de cancelamento (`B-M5`) e a isenção ao vivo passaram à E12, e a reabertura da conta encerrada à E13 (divisões de 2026-11-19, no histórico).
 
@@ -1008,10 +1011,10 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Ajustar acima do limite como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, o ajuste aparece como lançamento vinculado, com o original intacto.
-- [ ] Dividir e transferir mostram, nas duas contas, os lançamentos e os saldos que a API devolve, e a taxa de serviço acompanha o item.
-- [ ] Remover a taxa a pedido gera o estorno da taxa com o motivo do servidor; a ação não aparece em lançamento que não é taxa.
-- [ ] Cada escrita repetida depois de erro de rede leva a mesma `Idempotency-Key` (teste), e as escritas usam a função única do resultado desconhecido (D1).
+- [x] Ajustar acima do limite como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, o ajuste aparece como lançamento vinculado, com o original intacto.
+- [x] Dividir e transferir mostram, nas duas contas, os lançamentos e os saldos que a API devolve, e a taxa de serviço acompanha o item.
+- [x] Remover a taxa a pedido gera o estorno da taxa com o motivo do servidor; a ação não aparece em lançamento que não é taxa.
+- [x] Cada escrita repetida depois de erro de rede leva a mesma `Idempotency-Key` (teste), e as escritas usam a função única do resultado desconhecido (D1).
 
 **Validação obrigatória:**
 
@@ -1041,7 +1044,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `756db61` (código) e no `46dac25` (com o rascunho deste handoff). Falta a `LiveFolioCorrectionCheck` contra o `zeny-front`, que pede as credenciais do usuário e do Gerente. Pela instrução do usuário (intervenção só para arquitetura), a espera não trava: a E08 conta como concluída para a escolha da próxima etapa.
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A `LiveFolioCorrectionCheck` passou contra o `zeny-front` recriado (1 teste, 0 pulados, 0 falhas).
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `756db61` (código) e no `46dac25` (com o rascunho deste handoff). Falta a `LiveFolioCorrectionCheck` contra o `zeny-front`, que pede as credenciais do usuário e do Gerente. Pela instrução do usuário (intervenção só para arquitetura), a espera não trava: a E08 conta como concluída para a escolha da próxima etapa.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e08.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e08.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 4 Importantes:
   - I1: o contrato do `ReopenState` com o `FolioWrite` em aberto;
   - I2: a divisão sem teste de idempotência;
@@ -1086,7 +1090,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E10 — Cauções a vencer — #em-andamento
+## E10 — Cauções a vencer — #concluida
 
 **Objetivo:** na área "Contas e caixa", a operadora acompanha as cauções do hotel que vencem até uma data e abre a conta de cada uma.
 
@@ -1102,9 +1106,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] A lista mostra as cauções que o servidor devolve até a data escolhida, em ordem de validade, com a situação, os valores e a validade como a API devolve, e "Carregar mais" segue o cursor (teste do *state holder*).
-- [ ] "Abrir conta" numa linha leva à conta dela na aba "Contas" (teste de UI).
-- [ ] A aba só aparece com `billing.folios.read` no conjunto da casca e não muda a aba padrão ("Caixa").
+- [x] A lista mostra as cauções que o servidor devolve até a data escolhida, em ordem de validade, com a situação, os valores e a validade como a API devolve, e "Carregar mais" segue o cursor (teste do *state holder*).
+- [x] "Abrir conta" numa linha leva à conta dela na aba "Contas" (teste de UI).
+- [x] A aba só aparece com `billing.folios.read` no conjunto da casca e não muda a aba padrão ("Caixa").
 
 **Validação obrigatória:**
 
@@ -1124,7 +1128,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `298e2a9`. Falta a `LiveExpiringPreAuthorizationCheck` (só leitura) contra o `zeny-front`, que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa. **A base (E09) também não foi verificada ao vivo.**
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A `LiveExpiringPreAuthorizationCheck` passou na terceira execução (1 teste, 0 pulados, 0 falhas; 1 linha em ordem, e a conta da primeira linha existe). As duas primeiras deram `NEED_SEED`: a `LivePreAuthorizationCheck` libera a sobra, e nenhuma verificação deixa caução ativa, ao contrário do que dizia o "Como fazer" abaixo. O orquestrador registrou pela API, como a Recepcionista, uma caução de R$ 150,00 com validade de +5 dias na conta `C-2026-000001`, e repetiu. **Para repetir:** registre antes uma caução ativa numa conta aberta (no app, "Registrar caução"), sem capturar nem liberar.
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `298e2a9`. Falta a `LiveExpiringPreAuthorizationCheck` (só leitura) contra o `zeny-front`, que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa. **A base (E09) também não foi verificada ao vivo.**
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e10.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e10.md). Revisão de arquitetura **dispensada** pelo orquestrador (porta nova, campo do wiring e aba nos padrões da E03/E09; sem ADR, contrato público, persistência, fronteira nem runtime novo); a revisão final conferiu a dispensa contra o diff e a confirmou.
 - **Commits** (`MERGE_BASE` `a10f7ec`, HEAD de código `298e2a9`):
   - `73a9e08`: o início e o plano.
@@ -1214,7 +1219,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E12 — Pagador, limite de crédito e multa de cancelamento — #em-andamento
+## E12 — Pagador, limite de crédito e multa de cancelamento — #concluida
 
 **Objetivo:** na conta aberta pela E02, o usuário troca o pagador e o limite de crédito. A multa de uma reserva cancelada mais de uma vez tem texto que bate com a conta (`B-M5`), e a isenção da multa é verificada ao vivo.
 
@@ -1236,9 +1241,9 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Trocar o limite de crédito com uma versão velha (`412`) mostra a mensagem em pt-BR e relê a conta.
-- [ ] **`B-M5`:** cancelar, reativar e cancelar de novo uma reserva do seed. O texto da multa no diálogo de cancelamento e a multa que a conta mostra batem com os lançamentos da API. No segundo cancelamento o servidor não cobrou de novo na verificação ao vivo da M3 E04 (critério 2), e o texto não diz que cobrou. Isso vale num teste do estado e na verificação ao vivo.
-- [ ] **Isenção ao vivo:** uma verificação ao vivo contra o `zeny-front` cancela uma reserva do seed com "Isentar a multa", com a aprovação do Gerente se o servidor pedir. A conta da reserva fica sem a multa, ou com o lançamento que a API devolver para a isenção, e a tela diz o mesmo que a conta.
+- [x] Trocar o limite de crédito com uma versão velha (`412`) mostra a mensagem em pt-BR e relê a conta.
+- [x] **`B-M5`:** cancelar, reativar e cancelar de novo uma reserva do seed. O texto da multa no diálogo de cancelamento e a multa que a conta mostra batem com os lançamentos da API. No segundo cancelamento o servidor não cobrou de novo na verificação ao vivo da M3 E04 (critério 2), e o texto não diz que cobrou. Isso vale num teste do estado e na verificação ao vivo.
+- [x] **Isenção ao vivo:** uma verificação ao vivo contra o `zeny-front` cancela uma reserva do seed com "Isentar a multa", com a aprovação do Gerente se o servidor pedir. A conta da reserva fica sem a multa, ou com o lançamento que a API devolver para a isenção, e a tela diz o mesmo que a conta.
 
 **Validação obrigatória:**
 
@@ -1260,7 +1265,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `85e8869` (código) e no `b907cc3` (com o rascunho deste handoff). Faltam a parte ao vivo do critério 2 e o critério 3, pela `LiveReservationLifecycleCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A `LiveReservationLifecycleCheck` passou (4 testes, 0 pulados, 0 falhas: recancelamento e isenção ao vivo). A inspeção manual do pagador e do limite virou a verificação ao vivo `LiveFolioAccountCheck.changesPayerAndCreditLimit` (`b3e9b37`, desenvolvedor; revisão de tarefa da `revisor-seguranca` conforme e aprovada, com 6 Menores diferidos), porque o WSLg não deixa o `java.awt.Robot` capturar a tela. Ela passou com o formulário real: limite R$ 500,00 e pagador "Alfa Demonstração" relidos e na tela, e o `412` ao vivo com a versão velha mostrou a mensagem e releu. **Para repetir:** `ZENY_LIVE_ACCOUNT=1 timeout 1500 ./gradlew :app:test --tests '*LiveFolioAccountCheck*' --rerun`, com as mesmas `ZENY_LIVE_*` (Recepcionista e Gerente), depois da `LiveCheckOutCheck`.
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `85e8869` (código) e no `b907cc3` (com o rascunho deste handoff). Faltam a parte ao vivo do critério 2 e o critério 3, pela `LiveReservationLifecycleCheck`, que pede as credenciais do usuário e do Gerente. A espera não trava a escolha da próxima etapa.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e12.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e12.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 5 Importantes:
   - I1: o quarto `@Test` contra a trava do testador;
   - I2: a isenção numa reserva do seed, contra o invariante da verificação;
@@ -1305,7 +1311,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E13 — Reabrir conta encerrada — #em-andamento
+## E13 — Reabrir conta encerrada — #concluida
 
 **Objetivo:** na conta encerrada, o usuário com a permissão (ou com a aprovação de um superior) reabre a conta, com o motivo.
 
@@ -1319,7 +1325,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] Reabrir como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, a conta relida aparece aberta, e a reabertura não envia `Idempotency-Key` (teste da fachada).
+- [x] Reabrir como Recepcionista abre o diálogo de aprovação. Aprovado pelo Gerente, a conta relida aparece aberta, e a reabertura não envia `Idempotency-Key` (teste da fachada).
 - [x] O resultado desconhecido da reabertura relê a conta e diz para conferir antes de repetir; repetir numa conta já aberta mostra o texto do `FOLIO_NOT_CLOSED` e relê (teste do *state holder*).
 - [x] Um teste do wiring real prova a aprovação da reabertura ligada ao coordenador da sessão nas três entradas da conta.
 
@@ -1342,7 +1348,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `419f8ba` (código) e no `a6c0863` (com o rascunho deste handoff). Falta a inspeção manual contra o `zeny-front` (uma conta encerrada, reaberta pela Recepcionista com a aprovação do Gerente), que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa.
+- **Estado:** `#concluida` (2026-11-19, terceiro lote). A inspeção manual virou a verificação ao vivo `LiveFolioAccountCheck.reopensAClosedFolioWithTheManagerApproval` (`b3e9b37`; ver a E12). Ela passou contra a conta `C-2026-000010`, encerrada pela `LiveCheckOutCheck`: a reabertura como Recepcionista pediu a aprovação de um superior, o PIN do Gerente aprovou, e a conta relida apareceu aberta com "Conta reaberta." (captura conferida pelo orquestrador). Ela roda uma vez por conta encerrada.
+- **Estado anterior:** `#em-andamento`, **Aguardando verificação ao vivo** (2026-11-19). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `419f8ba` (código) e no `a6c0863` (com o rascunho deste handoff). Falta a inspeção manual contra o `zeny-front` (uma conta encerrada, reaberta pela Recepcionista com a aprovação do Gerente), que pede as credenciais do usuário. A espera não trava a escolha da próxima etapa.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e13.md). Revisão de arquitetura (`revisor-arquitetura`, fable): bloqueado na rodada 0, com 1 Importante (a troca da porta sem registro e com o motivo errado); aprovado com notas na rodada 1 (`aa9ea6b`, registro em `1e8afa8`).
 - **Commits** (`MERGE_BASE` `cac0274`, HEAD de código `419f8ba`):
   - `645068d`: o início e o plano.
@@ -1398,7 +1405,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 **Critérios de aceite:**
 
 - [x] Clone limpo: build, teste e lint verdes.
-- [ ] `smokeTest` verde, e o seed termina em menos de 2 minutos.
+- [x] `smokeTest` verde, e o seed termina em menos de 2 minutos.
 - [ ] O usuário executou o roteiro no Windows, do jeito que está escrito, e aprovou na parada da etapa.
 - [x] **`B-M4`/`C-M2`:** um teste do `SdkPendingGateway` com um `detail` marcado do servidor prova que o texto marcado não aparece na mensagem nem na causa da exceção que sai do adaptador. O KDoc do `cancelReservation` descreve o que o adaptador devolve.
 - [x] **`B-M8`:** o `untouched` do `PendingSeeder` tem nome que diz o que guarda, e os testes do seeder seguem verdes. O KDoc do seeder e o `roteiro-m4.md` dizem que o fora de ordem da UH 208 depende da data operacional do dia da recriação. O handoff registra se o planejador mudou o cálculo da data, e por quê.
@@ -1424,7 +1431,8 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado:** `#em-andamento`, **aguardando a revisão humana** (2026-11-19, `Revisão humana: sim`). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `39e435a` (código) e no `d5352f0` (com o rascunho deste handoff), e o clone limpo foi verificado (abaixo). Falta o que só o usuário faz: recriar a demo no dia, rodar o seed (medindo o tempo) e o `smokeTest`, rodar as verificações ao vivo pendentes do marco e executar o `roteiro-m4.md` no Windows com o pacote.
+- **Estado:** `#em-andamento`, **Aguardando o Windows** (regra 7 do README; 2026-11-19, terceiro lote). O orquestrador fez no notebook tudo o que não é do Windows: recriou a demo (`down -v`, `up -d`, com um `.server/zeny-front.env` local na porta 8088), rodou o seed em 13,2 s e o `smokeTest` verde (1 teste, 0 pulados, 0 falhas) e rodou as verificações ao vivo pendentes do marco, todas verdes no fim: E03, E09, E04 (com a correção `c469fd0`), E08, E10, E12 e E13 (`LiveFolioAccountCheck`, `b3e9b37`). O gate no `b3e9b37` ficou verde: `./gradlew build` BUILD SUCCESSFUL (app 3212, 55, 0; core 1331, 1, 0; design 379, 0, 0; demo-seed 758, 10, 0; sdk 59, 0, 0) e `bash tests/run.sh` com 72 arquivos, 0 falhas e 1 com casos pulados (o busybox). Depois, recriou a demo de novo (seed em 13,1 s) e gerou o pacote em `build/demo-package/` do checkout principal: `VERSAO.txt` com `front_commit=b3e9b37`, servidor `5e06f16d51ff`, `zeny-desktop.jar` sha256 `c31c77c9…` (igual ao do `c858746`, porque a produção não mudou) e as imagens em `images/zeny-server-images.tar`. **Falta só o usuário executar o `roteiro-m4.md` no Windows, do zero, com esse pacote** (entrada 5 de "Validações acumuladas no Windows"). A aprovação fecha a E05 e o M4; uma reprovação reabre a etapa com uma rodada de correção.
+- **Estado anterior:** `#em-andamento`, **aguardando a revisão humana** (2026-11-19, `Revisão humana: sim`). O código, o testador de etapa, a revisão final e a re-revisão estão limpos no `39e435a` (código) e no `d5352f0` (com o rascunho deste handoff), e o clone limpo foi verificado (abaixo). Falta o que só o usuário faz: recriar a demo no dia, rodar o seed (medindo o tempo) e o `smokeTest`, rodar as verificações ao vivo pendentes do marco e executar o `roteiro-m4.md` no Windows com o pacote.
 - Plano: [`docs/superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md`](../superpowers/plans/2026-11-19-m4-contas-caixa-checkout-e05.md). Revisão de arquitetura **dispensada** pelo orquestrador (o seed só consome a API existente; o roteiro e o pacote seguem o gate do M3); a revisão final conferiu a dispensa contra o diff e a confirmou.
 - **Commits** (`MERGE_BASE` `e54a5e8`, HEAD de código `39e435a`):
   - `d04feec`: o início e o plano.
@@ -1458,6 +1466,11 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   2. **Consumos do seed:** dois por conta de hospedado ("Seed M4: <item>", R$ 86,50 e R$ 32,00, com a taxa de 10%), no código "Alimentos e bebidas"; sem um código que aplique a taxa, o seed avisa e segue.
   3. **O roteiro do M4 acumula o do M3 por inteiro** (passos 0 a 26 iguais, salvo os 5, 6 e 11) e acrescenta os passos 27 a 39.
   4. **Duas imprecisões de redação ficam no roteiro**, porque as travas do testador fixam o texto: a crase em "à mais 7 dias" no cabeçalho do `B-M8` e, no passo herdado do M3 (~linha 867), "o registro do depósito na conta da reserva só chega no M4".
+- **Decisões para o usuário do terceiro lote** (já tomadas pela opção recomendada, revisáveis):
+  5. **A demo do Windows foi derrubada com `down -v`** (autorizado pelo usuário). Ela tinha sido subida pelo pacote em `C:\zeny-demo`, e o `.env` de lá é do root com permissão 600, ilegível no WSL. O ambiente do notebook passou a usar `tools/server-env` com um `.server/zeny-front.env` novo (gerado pelo `gen-env.sh` do servidor fixado), com `ZENY_HTTP_PORT=8088`. No Windows, o roteiro recria tudo com o `.env` de lá. Custo se errado: no Windows, rodar `down -v`/`up -d` antes do roteiro, que ele já manda.
+  6. **As credenciais do usuário** ficaram num arquivo `chmod 600` fora do repositório, só no ambiente dos comandos; nenhum log as contém (grep a cada execução). Custo se errado: nenhum no repositório.
+  7. **E10: uma caução ativa foi criada pela API** antes da verificação, e o "Como fazer" da E10 foi corrigido. Custo se errado: nenhum no produto.
+  8. **E12 e E13: a inspeção manual virou a verificação ao vivo `LiveFolioAccountCheck`** (arquivo de teste novo, com o opt-in `ZENY_LIVE_ACCOUNT`), porque esta máquina não consegue dirigir a interface. Custo se errado: um arquivo de teste a mais, que o usuário pode trocar pela inspeção manual.
 - **Notas para a próxima etapa:**
   - **Diferidos (Menores):** o `AdminContext.folios` é um `var` fora do construtor (não sobrevive a um `copy`; o construtor está travado por um teste do testador); o `FolioSeeder` não usa o parâmetro `seeded`; a idempotência é presa à conta de origem (um consumo do seed transferido seria relançado); **o seed rodado sobre uma demo já usada aborta numa conta encerrada que não tem os consumos do seed** (desde `39e435a` a conta vem do `folioId` da reserva, e o lançamento numa conta encerrada recebe `409 FOLIO_CLOSED`, o seed sai com 1 e os seeders seguintes não rodam; com os consumos já lá, eles contam como mantidos, sem aviso). Só acontece fora do roteiro, que manda recriar a demo do zero; a correção é tratar o `FOLIO_CLOSED` como aviso no `FolioSeeder` ou pular a reserva que não está hospedada; o KDoc do `FolioGateway` ("ou `null` se não há") e o aviso "sem conta aberta" do `FolioSeeder` ficaram desatualizados pela mesma mudança; o pager do `SdkFolioGateway.reservationId` repete o do `SdkPendingGateway`; o `ZENY_SEED_ADMIN_LOGIN` e as credenciais não são entrada da tarefa `test` (de propósito); duas execuções simultâneas do seed não têm trava.
   - **Para o testador:** a corrida de duas execuções simultâneas do seed.
@@ -1507,3 +1520,4 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 - 2026-11-19 — a E12 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `85e8869`; faltam a parte ao vivo do critério 2 e o critério 3 (`LiveReservationLifecycleCheck`), que pedem as credenciais do usuário e do Gerente.
 - 2026-11-19 — a E13 passou a depender da E12, e não da E08: a reabertura ficou na `FolioAccountSource` da E12 (decisão do plano da E13, por coesão; nas "Decisões para o usuário" dela). A E13 fica `#em-andamento`, **Aguardando verificação ao vivo** (`claude --agent orquestrador`): código, testador de etapa, revisão final e re-revisão limpos no `419f8ba`; falta a inspeção manual da reabertura contra o `zeny-front`.
 - 2026-11-19 — a E05 (gate do marco) fica `#em-andamento`, **aguardando a revisão humana** (`claude --agent orquestrador`): o seed lança consumos nas contas dos hospedados, os achados `B-M4`/`C-M2`, `B-M8` e `C-M8` estão resolvidos, o `roteiro-m4.md` existe e entra no pacote, e o clone limpo está verde. Faltam o seed medido, o `smokeTest`, as verificações ao vivo pendentes do marco e a execução do roteiro no Windows, que ficam com o usuário.
+- 2026-11-19 — terceiro lote do M4 (`claude --agent orquestrador`), com as credenciais do usuário nesta sessão. Pré-voo aditivo (a `main` do servidor está em `8c563cda0575`, o pin segue em `5e06f16d51ff`). A demo foi recriada, o seed rodou em 13,2 s e o `smokeTest` ficou verde. As verificações ao vivo fecharam `#concluida` a E03, a E09, a E04 (depois da correção da captura, `c469fd0`), a E08, a E10, a E12 e a E13 (estas duas pela verificação nova `LiveFolioAccountCheck`, `b3e9b37`). A E05 fica `#em-andamento`, **aguardando o Windows** (regra 7): pacote de `b3e9b37` em `build/demo-package/`. Falta só o `roteiro-m4.md` no Windows para fechar o M4.

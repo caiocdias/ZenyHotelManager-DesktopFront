@@ -7,7 +7,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.zeny.desktop.app.cashier.CashierSource
 import com.zeny.desktop.app.folio.FolioSource
@@ -354,7 +354,12 @@ class LiveCheckOutCheck {
     private fun DesktopComposeUiTest.capture(name: String) {
         val file = File("build/live/$name.png")
         file.parentFile.mkdirs()
-        ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", file)
+        // o diálogo do assistente é uma raiz própria (a janela de 1280x900); a raiz do setContent fica vazia, com
+        // tamanho zero. Captura a raiz com área, não a de posição fixa na lista.
+        val roots = onAllNodes(isRoot())
+        val sized = roots.fetchSemanticsNodes().indexOfFirst { it.size.width > 0 && it.size.height > 0 }
+        check(sized >= 0) { "nenhuma raiz com tamanho para capturar" }
+        ImageIO.write(roots[sized].captureToImage().toAwtImage(), "png", file)
     }
 
     @Suppress("LongMethod") // as portas, os estados reais e o observador do mapa, montados juntos
