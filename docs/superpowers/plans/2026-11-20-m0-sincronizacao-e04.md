@@ -38,6 +38,12 @@
 
 ---
 
+## Revisão de arquitetura
+
+- **Veredito:** aprovado (2026-11-20), `revisor-arquitetura`, modelo opus.
+- **Rodadas:** 2. Rodada 0: bloqueado (I1, a alteração de reserva fora do ADR 0014; I2, `Riscos:` sem escrita destrutiva; 6 Menores). Rodada 1: bloqueado (I3, o catálogo vermelho entre a Task 1 e a Task 2 e a Task 3 sem depender da Task 2; Menor N1, hash de senha na saída). Rodada 2: aprovado, sem achado aberto.
+- **Notas Menores:** nenhuma aberta; os Menores M1 a M6 e N1 foram corrigidos no texto. Ficaram como "não verificado" pelo revisor (sem `git`): os donos dos testes por trailer, o `required` de `ReservationChangeRequest` no pin novo (conferido pelo orquestrador) e se o ogen reordena parâmetros quando um campo vira opcional (o teste campo a campo do Focus 1 cobre).
+
 ### Task 1: Pin, contrato e SDK em `8c563cda0575`, com os campos explícitos do ADR 0014
 
 **Objetivo:** fixar o servidor em `8c563cda0575`, regenerar o SDK com as 376 operações e devolver a compilação do `core`, do `demo-seed` e dos testes mandando explícito cada campo que saiu do `required`, com o mesmo valor de hoje.
