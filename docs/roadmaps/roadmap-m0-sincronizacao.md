@@ -165,7 +165,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 | E01 | Fixação do servidor e ambiente isolado (rodada 1) | #concluida | — | Commit fixado, contrato copiado, pré-voo, scripts do ambiente `zeny-front`, pacote e `LEIA-ME` do Windows, controle de pedidos |
 | E02 | Sincronizar com o servidor em `57eb5fac5b8a` (rodada 2) | #concluida | E01 | Pin e contrato em `57eb5fac5b8a`, SDK com 335 operações, `tools/server-env/` revisto, `smokeTest` e roteiro do M1 verdes contra o servidor novo |
 | E03 | Sincronizar com o servidor em `5e06f16d51ff` (rodada 3) | #concluida | E02 | Pin e contrato em `5e06f16d51ff`, `oneOf` das escritas de hóspede caracterizado no SDK, rótulos do no-show nas telas existentes, roteiros avisando do fechamento automático, `smokeTest` verde contra o servidor novo |
-| E04 | Sincronizar com o servidor em `8c563cda0575` (rodada 4) | #pendente | E03 | Pin e contrato em `8c563cda0575`, SDK com 376 operações, campos com padrão enviados explícitos (ADR 0014), catálogo de erros com os códigos novos, `smokeTest` e verificações ao vivo verdes contra o servidor novo |
+| E04 | Sincronizar com o servidor em `8c563cda0575` (rodada 4) | #em-andamento | E03 | Pin e contrato em `8c563cda0575`, SDK com 376 operações, campos com padrão enviados explícitos (ADR 0014), catálogo de erros com os códigos novos, `smokeTest` e verificações ao vivo verdes contra o servidor novo |
 
 ---
 
@@ -577,7 +577,7 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 ---
 
-## E04 — Sincronizar com o servidor em `8c563cda0575` (rodada 4) — #pendente
+## E04 — Sincronizar com o servidor em `8c563cda0575` (rodada 4) — #em-andamento
 
 **Objetivo:** o front passa a apontar para a `main` do servidor em `8c563cda0575dab697c89f2caba5a1dd9a12782e`. O pin e a cópia do contrato são trocados, e o SDK é regenerado com as 376 operações. O `core` e o `demo-seed` voltam a compilar enviando explícitos os campos que deixaram de ser obrigatórios ([ADR 0014](../adr/0014-campos-com-padrao-sempre-explicitos.md)). O catálogo de erros cobre os códigos novos. A regressão ao vivo prova que a entrada estrita do servidor novo aceita tudo o que o front já envia. Ao fim, o `smokeTest` e as verificações ao vivo passam contra o servidor novo, e o M5 pode começar.
 
