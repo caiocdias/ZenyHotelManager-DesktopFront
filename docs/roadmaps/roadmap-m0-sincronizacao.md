@@ -675,17 +675,17 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Critérios de aceite:**
 
-- [ ] `api/server-pin.properties` tem `commit=8c563cda0575dab697c89f2caba5a1dd9a12782e`. O `sha256sum api/openapi.yaml` é igual ao `contract_sha256` e ao hash de `git -C <servidor> show 8c563cda0575:api/openapi.yaml`. A análise mediu `cb90e8633777cab189c061ddd9f799e9ffb08a5f10e77d4bc8a09617ab30e1a5`.
-- [ ] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `8c563cda0575`. Se ela tiver andado, a saída vai para o handoff, e o pin fica em `8c563cda0575`.
-- [ ] O SDK compila as 376 operações, inclusive o primeiro `PATCH`, e o teste de cobertura do SDK amarra os 376 `operationId` a métodos gerados.
-- [ ] Um teste das fachadas do `core` que constroem os schemas afetados (criar hóspede, check-in, walk-in, busca por documento, nova reserva, cancelamento, lançamento e pagamento) prova que o corpo enviado traz cada campo afetado, com o valor de antes da troca. Nenhum desses campos sai como `Option.Undefined` no `core` nem no `demo-seed`.
-- [ ] O teste do catálogo de erros cobre todos os códigos do contrato novo. `CONCURRENT_UPDATE` tem mensagem pt-BR, e um teste prova que `classifyWriteFailure` o trata como `DEFINITIVE`.
-- [ ] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde.
-- [ ] `zeny-front` sobe do zero em `8c563cda0575` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele.
-- [ ] Todas as verificações ao vivo existentes passam contra o `zeny-front` recriado e semeado. O handoff lista cada uma, com o resultado e o que foi corrigido, se algo foi.
-- [ ] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
+- [x] `api/server-pin.properties` tem `commit=8c563cda0575dab697c89f2caba5a1dd9a12782e`. O `sha256sum api/openapi.yaml` é igual ao `contract_sha256` e ao hash de `git -C <servidor> show 8c563cda0575:api/openapi.yaml`. A análise mediu `cb90e8633777cab189c061ddd9f799e9ffb08a5f10e77d4bc8a09617ab30e1a5`.
+- [x] `tools/server-drift.sh` sai com "igual" (código 0) logo após a troca, se a `main` do servidor ainda estiver em `8c563cda0575`. Se ela tiver andado, a saída vai para o handoff, e o pin fica em `8c563cda0575`.
+- [x] O SDK compila as 376 operações, inclusive o primeiro `PATCH`, e o teste de cobertura do SDK amarra os 376 `operationId` a métodos gerados.
+- [x] Um teste das fachadas do `core` que constroem os schemas afetados (criar hóspede, check-in, walk-in, busca por documento, nova reserva, cancelamento, lançamento e pagamento) prova que o corpo enviado traz cada campo afetado, com o valor de antes da troca. Nenhum desses campos sai como `Option.Undefined` no `core` nem no `demo-seed`.
+- [x] O teste do catálogo de erros cobre todos os códigos do contrato novo. `CONCURRENT_UPDATE` tem mensagem pt-BR, e um teste prova que `classifyWriteFailure` o trata como `DEFINITIVE`.
+- [x] `./gradlew build` e `bash tests/run.sh` verdes, e `./gradlew ktlintCheck detekt` verde.
+- [x] `zeny-front` sobe do zero em `8c563cda0575` (notebook ou Windows) com readiness `UP`, e o `smokeTest` passa contra ele.
+- [x] Todas as verificações ao vivo existentes passam contra o `zeny-front` recriado e semeado. O handoff lista cada uma, com o resultado e o que foi corrigido, se algo foi.
+- [x] A revisão de `tools/server-env/` está no handoff, arquivo por arquivo, com o resultado e o motivo.
 - [ ] O usuário executou o roteiro acumulado no Windows com o pacote desta etapa, ou um mais recente, e aprovou. Pela regra 7 do README, essa validação fica para o gate do M5 (M5 E05), junto com a da M4 E05.
-- [ ] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`).
+- [x] O repositório do servidor fica igual antes e depois (`status --porcelain` e `worktree list`).
 
 **Validação obrigatória:**
 
@@ -721,16 +721,22 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
 
 **Evidências e handoff:**
 
-- **Estado (2026-11-20, 03:10):** `#em-andamento`, **lote interrompido a pedido do usuário** no meio da Task 3. As Tasks 1 e 2 estão commitadas e com revisão de fatia limpa. Falta a Task 3 inteira, o testador de etapa, a revisão final, o gate e o fechamento. Nada foi integrado na `main`: a etapa ainda não passou pelo testador de etapa nem pela revisão final.
-- **Como retomar** (próximo `claude --agent orquestrador`): retome no worktree `.claude/worktrees/roadmap-m0-sincronizacao` (branch `roadmap/m0-sincronizacao`). O ledger do SDD está em `.superpowers/sdd/2026-11-20-m0-sincronizacao-e04/progress.md` desse worktree (fora do Git), com os relatórios e os briefs. **Não refaça as Tasks 1 e 2.** Comece pela Task 3, com BASE `733671e` e um desenvolvedor novo, a partir do brief `task-3-brief.md` do workspace. Se o workspace tiver se perdido, gere de novo o brief da Task 3 a partir do plano. O `MERGE_BASE` da etapa é `7b3537b`.
+- **Estado (2026-11-20, 15:30): `#em-andamento`, "Aguardando o Windows".** A construção, o testador de etapa e a revisão final estão limpos, e a etapa foi integrada na `main`. Pela regra 7 do README, a única pendência é o usuário executar o roteiro acumulado no Windows. Essa execução fica para o gate do M5 (M5 E05), junto com a da M4 E05, e é o item 6 da lista "Validações acumuladas no Windows". Para a escolha da próxima etapa e para a regra 1, esta etapa conta como concluída: **o M5 pode começar pela M5 E01.** A aprovação no Windows fecha a etapa `#concluida`. Uma reprovação a reabre com uma rodada de correção.
+- **Retomadas:** o primeiro lote foi interrompido a pedido do usuário às 03:10, no meio da Task 3. O segundo lote retomou no mesmo worktree, pelo ledger, sem refazer as Tasks 1 e 2.
 - **Pré-voo (início do lote):** aditivo (código 11), pin `5e06f16d51ff` × `main` `8c563cda0575`, com "Ambiente do servidor sem mudanças". Depois da troca do pin: `igual (código 0)`.
+- **Pré-voo (retomada, 2026-11-20 13:23):** aditivo (código 11), pin `8c563cda0575` × `main` `6f8d3866036b`, com "Ambiente do servidor sem mudanças". A `main` do servidor andou durante a etapa. O pin fica em `8c563cda0575`, o commit analisado (risco previsto). A próxima rodada do M0 trata o resto.
 - **Plano:** [`docs/superpowers/plans/2026-11-20-m0-sincronizacao-e04.md`](../superpowers/plans/2026-11-20-m0-sincronizacao-e04.md), com 3 fatias. A revisão de arquitetura (`revisor-arquitetura`, opus) bloqueou nas rodadas 0 e 1 e aprovou na rodada 2:
   - rodada 0: a alteração de reserva estava fora do ADR 0014, faltava a escrita destrutiva em `Riscos:`, e havia 6 Menores;
   - rodada 1: o catálogo ficava vermelho entre a Task 1 e a Task 2, e um hash de senha ia para a saída.
 - **Commits** na branch `roadmap/m0-sincronizacao` (todos com o trailer `Soul:`):
   - documentação: `d9575be` (início), `9115c75` (plano), `12e6fe7` e `6d1ef04` (correções do plano), `55ba278` (aprovação);
   - **Task 1**, `55ba278..f9d2a84`: pin, contrato e SDK em `8c563cda0575`, e os campos do ADR 0014 em `Option.Some` (`4940c63`, desenvolvedor). O testador adaptou 6 testes de ataque dele (`f9d2a84`). Revisão de fatia (`revisor-seguranca`, opus): aprovada, 0 Críticos e 0 Importantes;
-  - **Task 2**, `f9d2a84..733671e`: o catálogo de erros passou de 377 para 426 códigos (`CONCURRENT_UPDATE` e 48 da governança), e um teste prova `CONCURRENT_UPDATE` → `DEFINITIVE` (`733671e`, desenvolvedor). Revisão de fatia (`revisor-seguranca`, sonnet): aprovada, 0 Críticos e 0 Importantes.
+  - **Task 2**, `f9d2a84..733671e`: o catálogo de erros passou de 377 para 426 códigos (`CONCURRENT_UPDATE` e 48 da governança), e um teste prova `CONCURRENT_UPDATE` → `DEFINITIVE` (`733671e`, desenvolvedor). Revisão de fatia (`revisor-seguranca`, sonnet): aprovada, 0 Críticos e 0 Importantes;
+  - handoff da interrupção: `488ce37`;
+  - **Task 3**, `488ce37..29e5aa6`: ambiente, regressão ao vivo e revisão de `tools/server-env/`. Não houve conserto de produção. Três testes de `tests/` foram adaptados ao `Option.Some` da Task 1 e ao DNS lento do WSL: `19060b5` (desenvolvedor, um teste dele) e `29e5aa6` (testador, dois testes dele). Revisão de fatia (`revisor-seguranca`, sonnet): aprovada, 0 Críticos e 0 Importantes;
+  - **testador de etapa:** `516a56e`, `3b61567` e `7218773` (só testes, detalhes abaixo);
+  - **correção da revisão final:** `f9a2708` (desenvolvedor), com as três mensagens `*_LOCATION_INVALID` corrigidas;
+  - fechamento: o commit deste handoff.
 - **Já verificado nas fatias:**
   - pin `commit=8c563cda0575dab697c89f2caba5a1dd9a12782e`;
   - sha256 `cb90e8633777cab189c061ddd9f799e9ffb08a5f10e77d4bc8a09617ab30e1a5`, igual na cópia, no pin e no `git show` do servidor;
@@ -738,23 +744,76 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - `ExplicitDefaultFieldsTest` (11 testes) e `SeedExplicitDefaultFieldsTest` (13 testes) verdes;
   - os 7 `*ErrorCatalog*` verdes depois da Task 2;
   - `gradlew`, `gradle/wrapper/` e `docker/` iguais entre os pins.
-- **Verificação mecânica:** exit 1 nas duas fatias, julgado justificado pela revisora:
-  - Task 1: `ASSERCAO_REMOVIDA`, a contagem 335 → 376 do `SdkAttackTest`, trocada pelo dono do arquivo;
-  - Task 2: `ASSERCAO_REMOVIDA`, a contagem 377 → 426 do `ErrorCatalogTest`.
-- **Ambiente local, deixado pela Task 3 interrompida:**
-  - o `zeny-front` foi recriado às 03:09 com a imagem `zeny-hotel-manager:8c563cda0575`, readiness `{"status":"UP"}`, **sem seed**;
-  - os segredos novos estão em `.server/seed-secrets.env` e `.server/live-secrets.env` do checkout principal (600, fora do Git): o admin inicial do `.server/zeny-front.env` e senhas geradas;
-  - a Task 3 não deixou relatório nem commit;
-  - recrie de novo (depois das 03:05) antes de semear, se o ambiente tiver atravessado um fechamento.
-- **Servidor só leitura:** `status --porcelain` vazio antes e depois. No `worktree list`, só o `roadmap/m6-operacao-fechamento` avançou (`bbdafcf` → `0a20877`), pelo orquestrador do servidor.
-- **Revisão final:** pendente.
+- **Verificação mecânica:** exit 1 em todas as fatias e na revisão final. A revisora julgou justificados os 4 `ASSERCAO_REMOVIDA` de `--base 7b3537b`:
+  - a contagem 335 → 376 do `SdkAttackTest`, trocada pelo dono do arquivo;
+  - a contagem 377 → 426 do `ErrorCatalogTest`;
+  - dois `assert_contains` de `tests/` trocados pelo texto em `Option.Some`, com o mesmo valor exigido.
+- **Ambiente e regressão ao vivo (Task 3, 2026-11-20 13:25–13:36):**
+  - **Subida:** `down.sh -v` e `up.sh` subiram o `zeny-front` do zero com a imagem `zeny-hotel-manager:8c563cda0575`, readiness `{"status":"UP"}`.
+  - **Seed:** "Concluído em 8,9 s" (22 s com o Gradle). Uma segunda recriação deu 8,7 s. Bem abaixo dos 2 minutos.
+  - **Segredos:** reaproveitados de `.server/seed-secrets.env` e `.server/live-secrets.env` do checkout principal (600, fora do Git), conferidos sem imprimir valores.
+  - **`smokeTest`:** 1 teste, 0 pulados, 0 falhas.
+  - **Verificações ao vivo:** todas passaram, sem nenhuma pulada. São as 22 `Live*Check` do `app`, a `LiveRealtimeCheck` do `core` e as 7 do `demo-seed` (`LiveSeedReservationsCheck`, `LiveAdminCheck`, `LiveConfigCheck`, `LiveUsersCheck`, `LiveBookingCheck`, `LiveAvailabilityBookingCheck` e `LiveCashierNotificationCheck`). Nenhuma escrita do front foi recusada pela entrada estrita, e não houve conserto de produção.
+  - **Dois `NEED_SEED` de ambiente:**
+    - a `LiveReservationLifecycleCheck.pendingListsLoad` encontrou a `DEMO-PEND-P1` já confirmada pela `LivePreReservationConfirmCheck`. Depois de recriar e semear, passou (4/0/0);
+    - a `LiveExpiringPreAuthorizationCheck` não achou caução ativa, porque nenhuma verificação nem o seed deixam uma. Uma caução de R$ 150,00 foi registrada pela API, como o "Para repetir" da M4 E10 manda, e então passou (1/0/0).
+  - **A queda do servidor** (`LiveRoomMapCheck.recoversAfterApiRestart`, `ZENY_LIVE_OUTAGE=1`) foi rodada pelo orquestrador, com o `compose stop api`/`start api` ao ver `PRONTO`: 1/0/0. O `api` respondeu em 51,8 s, o `Live` voltou 13,7 s depois da escrita, e a comparação com `statuses()` bateu.
+  - **Ordem entre as verificações** (nota para quem roda a lista): rode a `LiveReservationLifecycleCheck` antes da `LivePreReservationConfirmCheck`, ou recrie entre elas. Para a `LiveExpiringPreAuthorizationCheck`, registre antes uma caução ativa. O "Como fazer" da M4 E10 ainda diz que a `LivePreAuthorizationCheck` deixa uma caução, o que é falso.
+  - **A demo do notebook ficou com as escritas das verificações** (turnos, caução, reservas de ensaio). Recrie no dia do roteiro (regra 5).
+- **Revisão de `tools/server-env/` (Task 3):** nada mudou. `git diff --stat 5e06f16d51ff 8c563cda0575 -- docker/ gradlew gradle/wrapper/` no servidor sai vazio.
+
+  | Arquivo | Resultado | Motivo |
+  |---|---|---|
+  | `compose.override.yaml` | sem mudança | O `docker/compose.yaml` do servidor é igual. `compose config --images` dá `zeny-hotel-manager:8c563cda0575`, e o projeto é `zeny-front` em `127.0.0.1:8088`. |
+  | `up.sh` | sem mudança | Subiu do zero duas vezes (23 s e 28 s), com readiness `UP`. |
+  | `down.sh` | sem mudança | Só `-p zeny-front`: o `down -v` removeu só os 4 volumes e a rede `zeny-front_*`. O testador passou a exigir o argv exato com ambiente hostil (`tests/test_down_isolamento_ataque.sh`). |
+  | `package.sh` | sem mudança | Regenerou o pacote no fechamento. |
+  | `save-images.sh` | sem mudança | Lê as `image:` do compose, que não mudou: as mesmas 4 de terceiros e `zeny-hotel-manager:8c563cda0575`. |
+  | `gen-env.sh` | sem mudança | Os segredos do `.env.example` e os geradores do README do servidor não mudaram. |
+  | `lib.sh` | sem mudança | A extração do commit fixado e a conferência do `contract_sha256` funcionaram. |
+  | `.env.example` | sem mudança | As 21 chaves são iguais, e na mesma ordem, às de `docker/.env.example` em `8c563cda0575`. |
+  | `LEIA-ME.md` | sem mudança | Os comandos, as variáveis do seed e a nota das 03:00 continuam valendo. |
+- **Papéis do seed (nota para a M6 E09):** o seed monta os papéis pelos modelos do servidor (`SdkUserGateway.roleIdsByTemplate()`). A única lista própria é a role extra "Consulta de setores (demo)" da Recepção (PF-01). No ambiente semeado:
+  - o `gerente` tem as 10 permissões `housekeeping.*` (`ALL`);
+  - a `recepcao` tem 5: `damages.manage`, `lostfound.manage`, `occurrences.report`, `tasks.read` e `tasks.request`, sem `tasks.execute`, `inspections.perform` nem `assignments.manage`;
+  - a `governanta` tem 9.
+
+  As permissões novas chegam sem mudança no seed. A tela da governança tem de ler o conjunto da sessão (ADR 0013).
+- **Testador de etapa** (`testador`, opus): verde, sem defeito de produção.
+  - `516a56e`: `SdkPatchOperationAttackTest` amarra o `adjustAssignmentPlan` pelo nome, prova que ele é o único `PATCH` do contrato e o envia com `If-Match`. `SyncE04AttackTest` cobre a alteração de reserva (`childAges` e `nightlyRates` explícitos, sem `guests`), o documento do hóspede, `quantity` 1000 como `1000.0` e o `409 CONCURRENT_UPDATE`: uma requisição só, a mensagem do catálogo e `DEFINITIVE`, também com `Idempotency-Key`.
+  - `3b61567`: no `tests/test_seed_jar_ataque.sh`, o caso "conexão sem resposta" não passa pelo DNS e tem limite de 15 s. Um mutante de 20 s reprova nele.
+  - `7218773`: no `tests/test_down_isolamento_ataque.sh`, o `down.sh` tem de chamar exatamente `compose -p zeny-front down [-v]`, com ambiente hostil.
+  - **Segredo:** uma varredura dos 13 valores de senha e PIN nas saídas das verificações ao vivo (1576 arquivos) não achou nenhum.
+  - **Fora do ataque:**
+    - uma guarda estática contra construtor futuro que omita um campo do ADR 0014 (sugestão para a M5 E01 e para a M7);
+    - o número e o país do documento no `SeedExplicitDefaultFieldsTest`, que são fixos;
+    - o texto renderizado nos PNGs de `app/build/live/`.
+- **Gate do projeto:**
+  - em `29e5aa6`: `./gradlew build` com BUILD SUCCESSFUL, e `tests/run.sh` com 72 arquivos e 0 falhas;
+  - em `f9a2708`: BUILD SUCCESSFUL, e 73 arquivos com 0 falhas.
+
+  O gate final, no HEAD integrado, está no relatório do lote.
+- **Scanner:** `osv-scanner scan source -r --no-ignore .` leu os 6 `gradle.lockfile` (sdk 190, design 361, app 359, core 194, demo-seed 194 e buildscript 131 pacotes) e deu "No issues found". O diff não muda dependência, catálogo, plugin nem lockfile.
+- **Servidor só leitura:** `status --porcelain` vazio antes e depois, nos dois lotes. Do `worktree list`, só o `roadmap/m6-operacao-fechamento` mudou, pelo orquestrador do servidor (`bbdafcf` → `0a20877` → `a135887` → `aa1bd81`).
+- **Revisão final** (`revisor-seguranca`, opus, `7b3537b..29e5aa6`): **aprovada com ressalvas**, 0 Críticos.
+  - **I1:** as mensagens `HOUSEKEEPING_OCCURRENCE_LOCATION_INVALID`, `HOUSEKEEPING_TASK_LOCATION_INVALID` e `SCHEDULED_CLEANING_LOCATION_INVALID` invertiam a regra do contrato ("os dois juntos ou nenhum", quando o servidor exige exatamente um). Foram corrigidas em `f9a2708` para "Escolha a UH ou a área comum da …, só uma.", com teste.
+  - **I2:** o merge leva junto `main..7b3537b`. Conferido: é um commit do arquiteto, só com 10 arquivos de `docs/`.
+  - **Menores:** o desconto do DNS sem teto e o `adjustAssignmentPlan` amarrado só pela contagem foram fechados pelo testador; o handoff velho é este.
+  - **Re-revisão escopada** (`29e5aa6..f9a2708`, opus): todos os achados resolvidos, sem quebra nova, e os testes do testador aprovados.
+  - **Sugestões que ficaram:**
+    - o `assertEquals` invertido em `SyncE04AttackTest:104`;
+    - `quantity` 9999 (o teto) amarraria melhor a borda;
+    - o `kill` do `coproc` em `tests/test_seed_jar_ataque.sh:219` pode deixar o `python3` vivo até ~70 s;
+    - o teste do `PATCH` único fica vermelho no primeiro pin com outro `PATCH`, de propósito.
 - **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
   1. **Branch criada de `7b3537b`** (a análise da rodada 4, que ainda não está na `main`), e não da `main`. A E04 e os ADRs 0014 e 0015 só existem nessa branch. O merge do lote leva a análise junto para a `main`.
   2. **Segredos novos para a demo do notebook.** O `.server/seed-secrets.env` citado na nota não existia, e a recriação do zero exige seed novo. As senhas da demo do notebook passam a ser as do arquivo 600.
-- **Notas para a próxima etapa (retomada):**
-  - **Lacuna para o testador de etapa:** o `SdkAttackTest` amarra o `adjustAssignmentPlan` só pela contagem, não pelo nome (Menor da revisão da Task 1).
-  - **Menores estacionados:** a redação de `HOUSEKEEPING_TASK_LOCATION_INVALID`, `SCHEDULED_CLEANING_LOCATION_INVALID` e `HOUSEKEEPING_OCCURRENCE_LOCATION_INVALID` é inconsistente entre si. Revisar na M6 e na M7, que exibem essas mensagens.
-  - **Fechamento:** regenerar o pacote `build/demo-package/` sobre o HEAD final. Acrescentar esta etapa à lista "Validações acumuladas no Windows" do README como item 6.
+  3. **Teste de tempo do JAR do seed com o DNS lento.** O resolvedor do WSL (`/etc/resolv.conf`: `nameserver 10.255.255.254`, `search Home 8.8.8.8`) levava 40 s para negar um `.invalid`, e até `github.com` levava 10 s. Por isso, o caso "host inexistente" de `tests/test_seed_jar_ataque.sh` passou a descontar a latência do resolvedor medida no mesmo run. O tempo do JAR passou a ser provado num caso novo, sem DNS. O `search Home 8.8.8.8` parece errado, e consertar o DNS da máquina fica com o usuário.
+  4. **"Um Gradle por vez" relaxado neste lote.** A máquina tinha 39 GB de RAM (33 GB livres). O Gradle do front rodou em paralelo com o build do orquestrador do servidor, sem queda.
+- **Notas para a próxima etapa:**
+  - **Pacote do Windows:** foi regenerado em `build/demo-package/` no fechamento, sobre o HEAD da branch neste commit (`VERSAO.txt`: `server_commit=8c563cda0575…`), com as imagens salvas de novo. A etapa entrou na lista "Validações acumuladas no Windows" do README como item 6.
+  - **M5 E01:** o perfil do hóspede escreve schemas do ADR 0014. Use `Option.Some` em todo campo com padrão e considere a guarda estática sugerida pelo testador.
+  - **M6/M7:** a redação das outras 45 mensagens da governança continua para revisão nas etapas que as exibem. As três `*_LOCATION_INVALID` já estão certas.
 
 ---
 
@@ -778,3 +837,13 @@ Ao parar, responda com: etapas concluídas e o resultado da revisão final de ca
   - O servidor passou a ler a entrada de forma estrita e responde `409 CONCURRENT_UPDATE`.
   - A governança foi para o M6 (E09 a E11) e para o M7 (E13). O [ADR 0015](../adr/0015-tarefas-de-governanca-sem-a-camareira-no-desktop.md), decidido pelo usuário em entrevista, tira a Camareira das tarefas no desktop.
   - De PF-01 a PF-06, todos seguem abertos, e nenhuma captura "atende PF-NN" foi achada.
+- 2026-11-20 — E04 executada pelo `claude --agent orquestrador`, em dois lotes:
+  - o primeiro foi interrompido no meio da Task 3; o segundo retomou pelo ledger;
+  - pin, contrato e SDK estão em `8c563cda0575` (376 operações), com os campos do ADR 0014 explícitos;
+  - o catálogo de erros tem 426 códigos, e `CONCURRENT_UPDATE` é `DEFINITIVE`;
+  - o `zeny-front` foi recriado e semeado, e o `smokeTest`, todas as verificações ao vivo e a queda do servidor passaram;
+  - `tools/server-env/` foi revisto e não mudou;
+  - a revisão final ficou limpa depois de uma rodada de correção;
+  - a etapa foi integrada na `main`.
+
+  Fica `#em-andamento`, aguardando o Windows (regra 7, item 6 da lista), e o M5 pode começar. Não resta etapa elegível no M0 até a próxima rodada: a `main` do servidor já está em `6f8d3866036b`.
